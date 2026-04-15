@@ -1,0 +1,30 @@
+{
+  "name": "@protofire/dia-cardano-oracle-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript CLI for Preview and mainnet operations of the DIA Cardano Oracle project",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "cli": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@lucid-evolution/lucid": "^0.4.29",
+    "@lucid-evolution/provider": "^0.1.90",
+    "@lucid-evolution/wallet": "^0.1.72",
+    "bip39": "^3.1.0",
+    "dotenv": "^16.6.1",
+    "ethers": "^6.15.0",
+    "libsodium-wrappers-sumo": "0.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "libsodium-wrappers-sumo": "0.8.3",
+    "libsodium-sumo": "0.8.3"
+  }
+}
