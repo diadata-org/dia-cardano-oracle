@@ -1,19 +1,15 @@
 {
-  "configUnit": "replace-with-config-policy-id-and-asset-name",
   "validConfigSigners": [
     "replace-with-config-signer-key-hash"
   ],
   "authorizedOraclePublicKeys": [
     "replace-with-dia-authorized-secp256k1-public-key"
   ],
-  "feeAddresses": [
-    "replace-with-preview-fee-address"
-  ],
-  "feeAmount": "2000000",
   "domain": {
     "name": "DIA Oracle",
     "version": "1.0",
     "sourceChainId": "100640",
     "verifyingContract": "0xF8c614A483A0427A13512F52ac72A576678bE317"
-  }
+  },
+  "minUtxoLovelace": "5000000"
 }

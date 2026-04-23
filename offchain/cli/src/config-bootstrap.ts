@@ -1,109 +1,60 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  Constr,
-  applyParamsToScript,
-  getAddressDetails,
-  mintingPolicyToId,
-  validatorToAddress,
-  validatorToScriptHash,
-  type MintingPolicy,
-  type OutRef,
-  type SpendingValidator,
-} from "@lucid-evolution/lucid";
+import { Constr, type OutRef, type UTxO } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
-import { getBlueprintValidator } from "./blueprint.js";
+import {
+  makeConfigStateMintingPolicy,
+  makeConfigStateValidator,
+  makeCoordinatorValidator,
+  makePairStateMintingPolicy,
+  makePairStateValidator,
+  policyIdFromMintingPolicy,
+  scriptAddressFromValidator,
+  scriptCredentialState,
+  scriptHashFromValidator,
+  scriptRewardAddress,
+} from "./contracts.js";
 import {
   normalizeEthereumAddressHex,
   normalizeHex,
+  utf8ToHex,
 } from "./dia-intent.js";
 import { makeConfiguredLucid, selectConfiguredWallet } from "./lucid.js";
+import type { ConfigStateArtifact } from "./state.js";
 import { deriveConfiguredWalletDefaults } from "./wallet.js";
 
 type ConfigBootstrapInput = {
   configAssetName: string;
   validConfigSigners?: string[];
-  authorizedOraclePublicKeys?: string[];
-  feeAddresses?: string[];
-  feeAmount: string;
+  authorizedDiaPublicKeys: string[];
   domain: {
     name: string;
     version: string;
     sourceChainId: number | string;
     verifyingContract: string;
   };
-  lovelace: string;
+  minUtxoLovelace: string;
 };
 
-type ResolvedConfigBootstrapInput = Omit<
-  ConfigBootstrapInput,
-  "validConfigSigners" | "authorizedOraclePublicKeys" | "feeAddresses"
-> & {
+type ResolvedConfigBootstrapInput = {
+  configAssetName: string;
   validConfigSigners: string[];
-  authorizedOraclePublicKeys: string[];
-  feeAddresses: string[];
+  authorizedDiaPublicKeys: string[];
+  domain: {
+    name: string;
+    version: string;
+    sourceChainId: bigint;
+    verifyingContract: string;
+  };
+  minUtxoLovelace: bigint;
 };
-
-type ConfigBootstrapResult = {
-  mode: "build-only" | "submit";
-  inputPath: string;
-  wallet: {
-    source: "seed" | "private-key";
-    address: string;
-  };
-  configState: {
-    validConfigSigners: string[];
-    authorizedOraclePublicKeys: string[];
-    feeAddresses: string[];
-    feeAmount: string;
-    domain: {
-      name: string;
-      version: string;
-      sourceChainId: string;
-      verifyingContract: string;
-    };
-    allowedPairs: Array<{
-      tokenName: string;
-      pairId: string;
-    }>;
-  };
-  bootstrapUtxo: {
-    txHash: string;
-    outputIndex: number;
-  };
-  scripts: {
-    configPolicyId: string;
-    configUnit: string;
-    configValidatorHash: string;
-    configValidatorAddress: string;
-    pairPolicyId: string;
-    oracleReceiverHash: string;
-    oracleReceiverAddress: string;
-  };
-  datum: {
-    cbor: string;
-  };
-  transaction: {
-    unsignedHash: string;
-    unsignedCbor: string;
-    submittedTxHash: string | null;
-    confirmed: boolean;
-  };
-};
-
-const CONFIG_NFT_TITLE = "config_nft.config_nft.mint";
-const CONFIG_VALIDATOR_TITLE = "config_validator.config_validator.spend";
-const PAIR_NFT_TITLE = "pair_nft.pair_nft.mint";
-const ORACLE_RECEIVER_TITLE = "oracle_receiver.oracle_receiver.spend";
 
 export async function configBootstrap(args: {
   inputPath: string;
   buildOnly: boolean;
-}): Promise<ConfigBootstrapResult> {
-  reportProgress(
-    `Loading config bootstrap input from ${path.resolve(args.inputPath)}`,
-  );
+}): Promise<ConfigStateArtifact> {
+  reportProgress(`Loading config bootstrap input from ${path.resolve(args.inputPath)}`);
   const inputPath = path.resolve(args.inputPath);
   const input = await readConfigBootstrapInput(inputPath);
 
@@ -113,17 +64,12 @@ export async function configBootstrap(args: {
   const wallet = lucid.wallet();
   const walletAddress = await wallet.address();
   const walletUtxos = await wallet.getUtxos();
-  const walletDefaults = deriveConfiguredWalletDefaults({
-    source,
-    address: walletAddress,
-  });
+  const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
   const resolvedInput = resolveConfigBootstrapInput(input, walletDefaults);
-
-  reportResolutionDefaults(input, resolvedInput, walletDefaults);
 
   const walletBootstrapUtxo = selectBootstrapUtxo(
     walletUtxos,
-    BigInt(resolvedInput.lovelace),
+    resolvedInput.minUtxoLovelace,
   );
 
   if (!walletBootstrapUtxo) {
@@ -140,57 +86,62 @@ export async function configBootstrap(args: {
     `Selected wallet bootstrap UTxO ${bootstrapOutRef.txHash}#${bootstrapOutRef.outputIndex}`,
   );
 
-  reportProgress("Deriving script parameters and addresses from the current blueprint");
+  reportProgress("Deriving Config, Pair, and Coordinator scripts from the current blueprint");
   const configAssetName = normalizeHex(
     resolvedInput.configAssetName,
     "configAssetName",
   );
-  const configNftPolicy = await makeConfigNftPolicy({
+  const configMintPolicy = await makeConfigStateMintingPolicy({
     bootstrapOutRef,
-    configAssetName,
+    assetName: configAssetName,
   });
-  const configPolicyId = mintingPolicyToId(configNftPolicy);
+  const configPolicyId = policyIdFromMintingPolicy(configMintPolicy);
   const configUnit = `${configPolicyId}${configAssetName}`;
 
-  const configValidator = await makeConfigValidator({
+  const configValidator = await makeConfigStateValidator({
+    bootstrapOutRef,
+    assetName: configAssetName,
+  });
+  const configValidatorHash = scriptHashFromValidator(configValidator);
+  const configValidatorAddress = scriptAddressFromValidator(configValidator);
+
+  const pairMintPolicy = await makePairStateMintingPolicy({
     configPolicyId,
     configAssetName,
   });
-  const configValidatorHash = validatorToScriptHash(configValidator);
-  const configValidatorAddress = validatorToAddress("Preview", configValidator);
+  const pairPolicyId = policyIdFromMintingPolicy(pairMintPolicy);
 
-  const pairNftPolicy = await makePairNftPolicy({
+  const pairValidator = await makePairStateValidator({
     configPolicyId,
     configAssetName,
   });
-  const pairPolicyId = mintingPolicyToId(pairNftPolicy);
+  const pairValidatorHash = scriptHashFromValidator(pairValidator);
+  const pairValidatorAddress = scriptAddressFromValidator(pairValidator);
 
-  const oracleReceiver = await makeOracleReceiver({
+  const coordinatorValidator = await makeCoordinatorValidator({
     configPolicyId,
     configAssetName,
     pairPolicyId,
   });
-  const oracleReceiverHash = validatorToScriptHash(oracleReceiver);
-  const oracleReceiverAddress = validatorToAddress("Preview", oracleReceiver);
+  const coordinatorHash = scriptHashFromValidator(coordinatorValidator);
+  const coordinatorRewardAddress = scriptRewardAddress(coordinatorHash);
 
-  const configDatum = buildConfigDatum(resolvedInput);
-  const configDatumCbor = Data.to(configDatum);
+  const configDatumCbor = buildConfigDatumCbor(resolvedInput);
   const mintRedeemer = Data.to(new Constr(0, []));
-  const outputAssets = {
-    lovelace: BigInt(resolvedInput.lovelace),
-    [configUnit]: 1n,
-  };
 
   reportProgress("Building Preview config bootstrap transaction");
   const txBuilder = lucid
     .newTx()
     .collectFrom([walletBootstrapUtxo])
-    .attach.MintingPolicy(configNftPolicy)
+    .attach.MintingPolicy(configMintPolicy)
     .mintAssets({ [configUnit]: 1n }, mintRedeemer)
     .pay.ToContract(
       configValidatorAddress,
       { kind: "inline", value: configDatumCbor },
-      outputAssets,
+      {
+        lovelace: resolvedInput.minUtxoLovelace,
+        [configUnit]: 1n,
+      },
     );
 
   const txSignBuilder = await txBuilder.complete();
@@ -215,51 +166,69 @@ export async function configBootstrap(args: {
         `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
       );
     }
-
-    reportProgress(`Transaction confirmed on Preview: ${submittedTxHash}`);
-  } else {
-    reportProgress(`Build-only mode: unsigned transaction ready: ${unsignedHash}`);
   }
 
+  const currentConfigUtxo =
+    args.buildOnly || !confirmed
+      ? {
+          txHash: "",
+          outputIndex: 0,
+        }
+      : await waitForUtxoAtUnit(
+          lucid,
+          configValidatorAddress,
+          configUnit,
+          "config",
+        );
+
   return {
-    mode: args.buildOnly ? "build-only" : "submit",
-    inputPath,
     wallet: {
       source,
       address: walletAddress,
     },
-    configState: {
-      validConfigSigners: resolvedInput.validConfigSigners,
-      authorizedOraclePublicKeys: resolvedInput.authorizedOraclePublicKeys,
-      feeAddresses: resolvedInput.feeAddresses,
-      feeAmount: resolvedInput.feeAmount,
-      domain: {
-        name: resolvedInput.domain.name,
-        version: resolvedInput.domain.version,
-        sourceChainId: resolvedInput.domain.sourceChainId.toString(),
-        verifyingContract: normalizeEthereumAddressHex(
-          resolvedInput.domain.verifyingContract,
-          "domain.verifyingContract",
-        ),
-      },
-      allowedPairs: [],
+    bootstrapRefs: {
+      config: bootstrapOutRef,
+      paymentHook: null,
     },
-    bootstrapUtxo: bootstrapOutRef,
     scripts: {
       configPolicyId,
       configUnit,
       configValidatorHash,
       configValidatorAddress,
       pairPolicyId,
-      oracleReceiverHash,
-      oracleReceiverAddress,
+      pairValidatorHash,
+      pairValidatorAddress,
+      coordinatorHash,
+      coordinatorRewardAddress,
+      paymentHookPolicyId: null,
+      paymentHookUnit: null,
+      paymentHookValidatorHash: null,
+      paymentHookValidatorAddress: null,
     },
+    configState: {
+      validConfigSigners: resolvedInput.validConfigSigners,
+      authorizedDiaPublicKeys: resolvedInput.authorizedDiaPublicKeys,
+      domain: {
+        name: resolvedInput.domain.name,
+        version: resolvedInput.domain.version,
+        sourceChainId: resolvedInput.domain.sourceChainId.toString(),
+        verifyingContract: resolvedInput.domain.verifyingContract,
+      },
+      allowedPairs: [],
+      paymentHookRef: null,
+      updateCoordinatorCredential: null,
+      minUtxoLovelace: resolvedInput.minUtxoLovelace.toString(),
+    },
+    configUtxo: {
+      current: currentConfigUtxo,
+    },
+    paymentHookState: null,
+    paymentHookUtxo: null,
     datum: {
-      cbor: configDatumCbor,
+      configCbor: configDatumCbor,
+      paymentHookCbor: null,
     },
     transaction: {
-      unsignedHash,
-      unsignedCbor,
       submittedTxHash,
       confirmed,
     },
@@ -277,233 +246,107 @@ async function readConfigBootstrapInput(
   return JSON.parse(raw) as ConfigBootstrapInput;
 }
 
-async function makeConfigNftPolicy(args: {
-  bootstrapOutRef: OutRef;
-  configAssetName: string;
-}): Promise<MintingPolicy> {
-  const validator = await getBlueprintValidator(CONFIG_NFT_TITLE);
+function resolveConfigBootstrapInput(
+  input: ConfigBootstrapInput,
+  walletDefaults: ReturnType<typeof deriveConfiguredWalletDefaults>,
+): ResolvedConfigBootstrapInput {
+  const validConfigSigners =
+    input.validConfigSigners && input.validConfigSigners.length > 0
+      ? input.validConfigSigners.map((value) =>
+          normalizeHex(value, "validConfigSigners[]"),
+        )
+      : [walletDefaults.paymentKeyHash];
 
   return {
-    type: "PlutusV3",
-    script: applyParamsToScript(validator.compiledCode!, [
-      outRefToData(args.bootstrapOutRef),
-      args.configAssetName,
-    ]),
-  };
-}
-
-async function makeConfigValidator(args: {
-  configPolicyId: string;
-  configAssetName: string;
-}): Promise<SpendingValidator> {
-  const validator = await getBlueprintValidator(CONFIG_VALIDATOR_TITLE);
-
-  return {
-    type: "PlutusV3",
-    script: applyParamsToScript(validator.compiledCode!, [
-      args.configPolicyId,
-      args.configAssetName,
-    ]),
-  };
-}
-
-async function makePairNftPolicy(args: {
-  configPolicyId: string;
-  configAssetName: string;
-}): Promise<MintingPolicy> {
-  const validator = await getBlueprintValidator(PAIR_NFT_TITLE);
-
-  return {
-    type: "PlutusV3",
-    script: applyParamsToScript(validator.compiledCode!, [
-      args.configPolicyId,
-      args.configAssetName,
-    ]),
-  };
-}
-
-async function makeOracleReceiver(args: {
-  configPolicyId: string;
-  configAssetName: string;
-  pairPolicyId: string;
-}): Promise<SpendingValidator> {
-  const validator = await getBlueprintValidator(ORACLE_RECEIVER_TITLE);
-
-  return {
-    type: "PlutusV3",
-    script: applyParamsToScript(validator.compiledCode!, [
-      args.configPolicyId,
-      args.configAssetName,
-      args.pairPolicyId,
-    ]),
-  };
-}
-
-function outRefToData(outRef: OutRef): Constr<PlutusData> {
-  return new Constr<PlutusData>(0, [
-    normalizeHex(outRef.txHash, "bootstrapUtxo.txHash"),
-    BigInt(outRef.outputIndex),
-  ]);
-}
-
-function buildConfigDatum(
-  input: ResolvedConfigBootstrapInput,
-): Constr<PlutusData> {
-  return new Constr<PlutusData>(0, [
-    input.validConfigSigners.map((signer) =>
-      normalizeHex(signer, "validConfigSigners[]"),
+    configAssetName: input.configAssetName,
+    validConfigSigners,
+    authorizedDiaPublicKeys: input.authorizedDiaPublicKeys.map((value) =>
+      normalizeHex(value, "authorizedDiaPublicKeys[]"),
     ),
-    input.authorizedOraclePublicKeys.map((signer) =>
-      normalizeHex(signer, "authorizedOraclePublicKeys[]"),
-    ),
-    input.feeAddresses.map(addressToData),
-    BigInt(input.feeAmount),
-    new Constr<PlutusData>(0, [
-      utf8ToHex(input.domain.name),
-      utf8ToHex(input.domain.version),
-      BigInt(input.domain.sourceChainId),
-      normalizeEthereumAddressHex(
+    domain: {
+      name: input.domain.name.trim(),
+      version: input.domain.version.trim(),
+      sourceChainId: toBigInt(input.domain.sourceChainId, "domain.sourceChainId"),
+      verifyingContract: normalizeEthereumAddressHex(
         input.domain.verifyingContract,
         "domain.verifyingContract",
       ),
-    ]),
-    [],
-  ]);
-}
-
-function addressToData(address: string): Constr<PlutusData> {
-  const details = getAddressDetails(address);
-
-  if (!details.paymentCredential) {
-    throw new Error(`Address is missing a payment credential: ${address}`);
-  }
-
-  return new Constr<PlutusData>(0, [
-    credentialToData(details.paymentCredential),
-    details.stakeCredential
-      ? new Constr<PlutusData>(0, [stakeCredentialToData(details.stakeCredential)])
-      : new Constr<PlutusData>(1, []),
-  ]);
-}
-
-function stakeCredentialToData(
-  credential: { type: "Key" | "Script"; hash: string },
-): Constr<PlutusData> {
-  return new Constr<PlutusData>(0, [credentialToData(credential)]);
-}
-
-function credentialToData(
-  credential: { type: "Key" | "Script"; hash: string },
-): Constr<PlutusData> {
-  return credential.type === "Key"
-    ? new Constr<PlutusData>(0, [normalizeHex(credential.hash, "credential.hash")])
-    : new Constr<PlutusData>(1, [normalizeHex(credential.hash, "credential.hash")]);
-}
-
-function utf8ToHex(value: string): string {
-  return Buffer.from(value, "utf8").toString("hex");
-}
-
-function selectBootstrapUtxo<
-  T extends {
-    txHash: string;
-    outputIndex: number;
-    assets: Record<string, bigint>;
-  },
->(
-  utxos: T[],
-  minimumLovelace: bigint,
-): T | undefined {
-  const sorted = [...utxos].sort(
-    (left, right) =>
-      Number((right.assets.lovelace ?? 0n) - (left.assets.lovelace ?? 0n)),
-  );
-
-  const adaOnly = sorted.filter((utxo) => {
-    const units = Object.keys(utxo.assets);
-    return (
-      (utxo.assets.lovelace ?? 0n) >= minimumLovelace &&
-      units.every((unit) => unit === "lovelace")
-    );
-  });
-
-  if (adaOnly.length > 0) {
-    return adaOnly[0];
-  }
-
-  return sorted.find((utxo) => (utxo.assets.lovelace ?? 0n) >= minimumLovelace);
-}
-
-function resolveConfigBootstrapInput(
-  input: ConfigBootstrapInput,
-  walletDefaults: {
-    paymentKeyHash: string;
-    feeAddress: string;
-  },
-): ResolvedConfigBootstrapInput {
-  const validConfigSigners = sanitizedValues(input.validConfigSigners);
-  const authorizedOraclePublicKeys = sanitizedValues(
-    input.authorizedOraclePublicKeys,
-  );
-  const feeAddresses = sanitizedValues(input.feeAddresses);
-
-  return {
-    ...input,
-    validConfigSigners:
-      validConfigSigners.length > 0
-        ? validConfigSigners
-        : [walletDefaults.paymentKeyHash],
-    authorizedOraclePublicKeys,
-    feeAddresses:
-      feeAddresses.length > 0 ? feeAddresses : [walletDefaults.feeAddress],
+    },
+    minUtxoLovelace: toBigInt(input.minUtxoLovelace, "minUtxoLovelace"),
   };
 }
 
-function reportResolutionDefaults(
-  input: ConfigBootstrapInput,
-  resolvedInput: ResolvedConfigBootstrapInput,
-  walletDefaults: {
-    paymentKeyHash: string;
-    feeAddress: string;
-  },
-): void {
-  if (sanitizedValues(input.validConfigSigners).length === 0) {
-    reportProgress(
-      `Using wallet payment key hash as default config signer: ${walletDefaults.paymentKeyHash}`,
-    );
-  }
-
-  if (sanitizedValues(input.feeAddresses).length === 0) {
-    reportProgress(
-      `Using wallet address as default fee recipient: ${walletDefaults.feeAddress}`,
-    );
-  }
-
-  assertResolvedInput(resolvedInput);
+function buildConfigDatumCbor(input: ResolvedConfigBootstrapInput): string {
+  return Data.to(
+    new Constr<PlutusData>(0, [
+      input.validConfigSigners.map((value) => normalizeHex(value, "validConfigSigners[]")),
+      input.authorizedDiaPublicKeys.map((value) =>
+        normalizeHex(value, "authorizedDiaPublicKeys[]"),
+      ),
+      new Constr<PlutusData>(0, [
+        utf8ToHex(input.domain.name),
+        utf8ToHex(input.domain.version),
+        input.domain.sourceChainId,
+        normalizeHex(input.domain.verifyingContract, "domain.verifyingContract"),
+      ]),
+      [],
+      noneData(),
+      noneData(),
+      input.minUtxoLovelace,
+    ]),
+  );
 }
 
-function assertResolvedInput(input: ResolvedConfigBootstrapInput): void {
-  if (input.validConfigSigners.length === 0) {
-    throw new Error("No config signer was resolved for config bootstrap.");
-  }
-
-  if (input.authorizedOraclePublicKeys.length === 0) {
-    throw new Error(
-      "No authorized DIA oracle public keys were provided for config bootstrap.",
-    );
-  }
-
-  if (input.feeAddresses.length === 0) {
-    throw new Error(
-      "No fee recipient address was resolved for config bootstrap.",
-    );
-  }
+function noneData(): Constr<PlutusData> {
+  return new Constr<PlutusData>(1, []);
 }
 
-function sanitizedValues(values?: string[]): string[] {
-  return (values ?? [])
-    .map((value) => value.trim())
-    .filter(
-      (value) => value.length > 0 && !value.toLowerCase().includes("replace-with-"),
-    );
+function selectBootstrapUtxo(
+  utxos: UTxO[],
+  requiredLovelace: bigint,
+): UTxO | null {
+  return (
+    utxos
+      .filter((utxo) => Object.keys(utxo.assets).length === 1)
+      .filter((utxo) => (utxo.assets.lovelace ?? 0n) >= requiredLovelace)
+      .sort((left, right) => {
+        const leftValue = left.assets.lovelace ?? 0n;
+        const rightValue = right.assets.lovelace ?? 0n;
+        if (leftValue === rightValue) return 0;
+        return leftValue > rightValue ? -1 : 1;
+      })[0] ?? null
+  );
+}
+
+async function waitForUtxoAtUnit(
+  lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>,
+  address: string,
+  unit: string,
+  label: string,
+): Promise<{
+  txHash: string;
+  outputIndex: number;
+}> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const utxos = await lucid.utxosAtWithUnit(address, unit);
+    if (utxos.length === 1) {
+      return {
+        txHash: utxos[0].txHash,
+        outputIndex: utxos[0].outputIndex,
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+  }
+
+  throw new Error(
+    `Unable to observe the current ${label} UTxO at ${address} with unit ${unit}.`,
+  );
+}
+
+function toBigInt(value: string | number, label: string): bigint {
+  const normalized = typeof value === "number" ? value.toString() : value.trim();
+  if (!/^-?\d+$/.test(normalized)) {
+    throw new Error(`Expected ${label} to be an integer.`);
+  }
+  return BigInt(normalized);
 }

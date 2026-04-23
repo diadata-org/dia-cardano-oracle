@@ -1,6 +1,6 @@
 # Off-Chain CLI
 
-This package contains the TypeScript CLI used for the DIA Cardano Oracle project.
+This package contains the TypeScript CLI used to bootstrap and operate the DIA Cardano Oracle contracts.
 
 ## Scope
 
@@ -12,10 +12,11 @@ The current implementation supports:
 - Preview provider verification
 - Preview wallet creation and inspection
 - Config bootstrap transactions
+- PaymentHook bootstrap transactions
 - pair bootstrap transactions
 - oracle update transactions
 
-For price data, the CLI now consumes the official DIA `OracleIntent` shape and treats the Cardano wallet only as the transaction submitter on Cardano.
+Price authority comes from official DIA `OracleIntent` payloads and their `EIP-712` secp256k1 signatures. The Cardano wallet only submits Cardano transactions and authorizes admin actions when it is one of the configured `valid_config_signers`.
 
 ## Commands
 
@@ -28,17 +29,13 @@ npm run cli -- preview:wallet:create
 npm run cli -- preview:wallet
 npm run cli -- preview:wallet:utxos
 npm run cli -- preview:wallet:defaults
-npm run cli -- preview:config:bootstrap --input ./examples/preview/config-bootstrap.example.json
 npm run cli -- preview:config:bootstrap --input ./examples/preview/config-bootstrap.example.json --out ./state/preview/config-bootstrap.json
+npm run cli -- preview:payment-hook:bootstrap --input ./examples/preview/payment-hook-bootstrap.example.json --state ./state/preview/config-bootstrap.json --out ./state/preview/config-bootstrap.json
 npm run cli -- preview:pair:bootstrap --input ./examples/preview/pair-bootstrap.example.json --state ./state/preview/config-bootstrap.json --out ./state/preview/pairs/usdc-usd.json
 npm run cli -- preview:update --input ./examples/preview/update.example.json --state ./state/preview/pairs/usdc-usd.json --out ./state/preview/pairs/usdc-usd.json
 ```
 
-Planned command:
-
-```sh
-npm run cli -- preview:config:update --input ./examples/preview/config-update.example.json
-```
+Each transaction command also supports `--build-only`.
 
 ## Recommended Order
 
@@ -75,19 +72,25 @@ npm run cli -- preview:wallet:utxos
 npm run cli -- preview:wallet:defaults
 ```
 
-7. Bootstrap the Config state:
+7. Bootstrap the unique Config state:
 
 ```sh
 npm run cli -- preview:config:bootstrap --input ./examples/preview/config-bootstrap.example.json --out ./state/preview/config-bootstrap.json
 ```
 
-8. Register the first pair and create its initial oracle state from an official DIA `OracleIntent`:
+8. Bootstrap the unique PaymentHook state, register the coordinator staking credential, and update the Config artifact with the active hook reference:
+
+```sh
+npm run cli -- preview:payment-hook:bootstrap --input ./examples/preview/payment-hook-bootstrap.example.json --state ./state/preview/config-bootstrap.json --out ./state/preview/config-bootstrap.json
+```
+
+9. Register a pair and create its initial Pair UTxO from an official DIA `OracleIntent`:
 
 ```sh
 npm run cli -- preview:pair:bootstrap --input ./examples/preview/pair-bootstrap.example.json --state ./state/preview/config-bootstrap.json --out ./state/preview/pairs/usdc-usd.json
 ```
 
-9. Update an existing pair from a newer DIA `OracleIntent`:
+10. Apply a newer DIA `OracleIntent` to the existing pair:
 
 ```sh
 npm run cli -- preview:update --input ./examples/preview/update.example.json --state ./state/preview/pairs/usdc-usd.json --out ./state/preview/pairs/usdc-usd.json
@@ -98,51 +101,120 @@ npm run cli -- preview:update --input ./examples/preview/update.example.json --s
 The CLI is non-interactive.
 
 - `.env` stores provider configuration and Cardano submitter credentials.
-- JSON files store repeatable execution inputs.
-- `state/preview/` stores generated deployment state.
-- `examples/preview/` stores input templates and fixtures.
+- `examples/preview/` stores human-edited input files.
+- `state/preview/` stores generated state artifacts produced by successful commands.
 
 The Cardano wallet is used for:
 
 - bootstrap and admin transactions
-- pair bootstrap transactions
-- oracle update transaction submission
-- fee payment on Cardano
+- pair registration transactions
+- oracle update submission
+- payment of Cardano transaction fees
 
-The Cardano wallet is not used as the oracle price authority.
+The Cardano wallet is not the oracle price authority.
 
-Price authority comes from the DIA `OracleIntent` signature. The CLI:
+## Architecture Model Reflected by the CLI
 
-- reads the official DIA intent fields
-- reconstructs the EIP-712 digest
-- recovers the secp256k1 public key from the DIA signature
-- verifies that the recovered signer address matches `intent.signer`
-- forwards the intent and recovered public key to Cardano for on-chain verification
+The CLI follows the current Milestone 1 architecture:
 
-## Configuration Model
+- `config_state`
+  unique Config UTxO and Config NFT
+- `payment_hook`
+  unique PaymentHook UTxO and PaymentHook NFT
+- `pair_state`
+  one Pair UTxO and one Pair NFT per pair
+- `update_coordinator`
+  staking validator executed once per update transaction through a withdrawal witness
 
-`preview:config:bootstrap` creates the initial Config NFT and Config UTxO.
+The `Config` artifact stores:
 
-The Config datum stores:
+- `validConfigSigners`
+- `authorizedDiaPublicKeys`
+- the DIA EIP-712 `domain`
+- the registered `allowedPairs`
+- the active `paymentHookRef`
+- the active `updateCoordinatorCredential`
+- `minUtxoLovelace`
 
-- `validConfigSigners`: Cardano key hashes authorized for configuration changes
-- `authorizedOraclePublicKeys`: DIA secp256k1 public keys authorized for oracle intent verification
-- `feeAddresses`
-- `feeAmount`
-- the EIP-712 domain configuration required to reconstruct the DIA intent hash
-- `allowedPairs`
+The `PaymentHook` artifact stores:
+
+- `withdrawAddress`
+- `protocolFeePerTxLovelace`
+- `minUtxoLovelace`
+- `accruedFeesLovelace`
+- `lifetimeFeesCollectedLovelace`
+- `lifetimeFeesWithdrawnLovelace`
+- `feeChargeCount`
+
+The PaymentHook locked lovelace is expected to satisfy:
+
+```text
+locked_lovelace = min_utxo_lovelace + accrued_fees_lovelace
+```
+
+The `preview:payment-hook:bootstrap` command also registers the coordinator staking credential so that later update transactions can execute the coordinator through a `withdraw` witness.
+
+## Input Files
+
+### `config-bootstrap.example.json`
+
+Used by `preview:config:bootstrap`.
+
+```json
+{
+  "configAssetName": "4449415f434f4e464947",
+  "authorizedDiaPublicKeys": [
+    "03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807"
+  ],
+  "domain": {
+    "name": "DIA Oracle",
+    "version": "1.0",
+    "sourceChainId": "100640",
+    "verifyingContract": "0xF8c614A483A0427A13512F52ac72A576678bE317"
+  },
+  "minUtxoLovelace": "5000000"
+}
+```
+
+Field origins:
+
+- `configAssetName`
+  Project-defined Cardano asset name for the Config NFT.
+- `authorizedDiaPublicKeys`
+  Compressed secp256k1 public keys allowed to authorize DIA intents on Cardano.
+- `domain.*`
+  Official DIA EIP-712 domain values.
+- `minUtxoLovelace`
+  Exact lovelace locked in the Config UTxO.
 
 If `validConfigSigners` is omitted, the CLI defaults it to the payment key hash of the configured Cardano wallet.
 
-If `feeAddresses` is omitted, the CLI defaults it to the configured Cardano wallet address.
+### `payment-hook-bootstrap.example.json`
 
-`authorizedOraclePublicKeys` must be provided explicitly.
+Used by `preview:payment-hook:bootstrap`.
 
-## Pair and Update Inputs
+```json
+{
+  "paymentHookAssetName": "4449415f5041594d454e545f484f4f4b",
+  "protocolFeePerTxLovelace": "2000000",
+  "minUtxoLovelace": "3000000"
+}
+```
 
-`preview:pair:bootstrap` and `preview:update` both consume an official DIA-style `OracleIntent`.
+Field origins:
 
-The current fixture format is:
+- `paymentHookAssetName`
+  Project-defined Cardano asset name for the PaymentHook NFT.
+- `protocolFeePerTxLovelace`
+  Fixed protocol fee charged per update transaction.
+- `minUtxoLovelace`
+  Exact lovelace reserved in the PaymentHook UTxO.
+- `withdrawAddress`
+  Optional. If omitted, the CLI defaults it to the configured Cardano wallet address.
+
+### `pair-bootstrap.example.json`
+
+Used by `preview:pair:bootstrap`.
 
 ```json
 {
@@ -158,26 +230,69 @@ The current fixture format is:
     "source": "DIA Oracle",
     "signature": "0x...",
     "signer": "0x..."
+  },
+  "minUtxoLovelace": "5000000"
+}
+```
+
+Field origins:
+
+- `intent`
+  Official DIA `OracleIntent` payload.
+- `pairTokenName`
+  Optional. If omitted, the CLI derives it from `symbol` by replacing `/` with `_` and hex-encoding the result.
+- `minUtxoLovelace`
+  Exact lovelace locked in the Pair UTxO.
+
+### `update.example.json`
+
+Used by `preview:update`.
+
+```json
+{
+  "intent": {
+    "intentType": "OracleUpdate",
+    "version": "1.0",
+    "chainId": "100640",
+    "nonce": "1776186346664217707",
+    "expiry": "1776203290",
+    "symbol": "USDC/USD",
+    "price": "99983970",
+    "timestamp": "1776199690",
+    "source": "DIA Oracle",
+    "signature": "0x...",
+    "signer": "0x..."
   }
 }
 ```
 
-`preview:pair:bootstrap` derives `pairId` from `intent.symbol`. If `pairTokenName` is omitted, the CLI derives it from the symbol by replacing `/` with `_`.
+The update intent must match the pair and be fresher than the currently stored state:
 
-`preview:update` requires a newer intent for the same pair. The incoming DIA intent must have:
+- same `symbol`
+- greater `timestamp`
+- greater `nonce`
 
-- the same symbol as the pair state file
-- a strictly greater `timestamp`
-- a strictly greater `nonce`
+### Hex-Encoded Fields
+
+Some Cardano fields are stored as hex-encoded UTF-8 strings.
+
+- `4449415f434f4e464947` = `DIA_CONFIG`
+- `4449415f5041594d454e545f484f4f4b` = `DIA_PAYMENT_HOOK`
+- `555344432f555344` = `USDC/USD`
+- `555344435f555344` = `USDC_USD`
+
+This is normal for Cardano asset names and datum fields that store bytes instead of plain text.
 
 ## State Files
 
 Generated state belongs under `state/preview/`.
 
-- `state/preview/config-bootstrap.json` stores the resolved Config deployment state
-- `state/preview/pairs/*.json` stores pair-specific deployment state and the latest confirmed oracle state
+- `state/preview/config-bootstrap.json`
+  current Config and PaymentHook deployment state
+- `state/preview/pairs/*.json`
+  pair-specific state, including the latest confirmed oracle value
 
-These files are generated artifacts and should be produced from the current scripts after running the commands above.
+These are generated artifacts, not templates. Recreate them from the commands above when the contracts or CLI change.
 
 ## Environment
 
@@ -187,161 +302,3 @@ Copy `.env.example` to `.env` and set:
 - either `CARDANO_WALLET_SEED` or `CARDANO_PRIVATE_KEY`
 
 `preview:wallet:create` generates a new Preview wallet locally and prints the seed phrase and derived addresses. Store the result outside the repository before using it.
-
-## Example Files
-
-The files under `examples/preview/` do not all have the same status.
-
-- `config-bootstrap.example.json`
-  Current template for `preview:config:bootstrap`.
-  This file is expected to be edited by operators.
-- `pair-bootstrap.example.json`
-  Current runnable fixture for `preview:pair:bootstrap`.
-  It contains a real DIA `OracleIntent` captured from the DIA testnet explorer for `USDC/USD`.
-- `update.example.json`
-  Current runnable fixture for `preview:update`.
-  It contains a newer real DIA `OracleIntent` for the same `USDC/USD` pair.
-- `config-update.example.json`
-  Placeholder template for a planned command.
-  It is not part of the completed flow yet.
-
-The generated files under `state/preview/` are different.
-
-- `examples/preview/` contains human-edited input files.
-- `state/preview/` contains generated artifacts produced by the CLI after a successful transaction.
-
-## Field Origins
-
-### `config-bootstrap.example.json`
-
-```json
-{
-  "configAssetName": "4449415f434f4e464947",
-  "authorizedOraclePublicKeys": [
-    "03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807"
-  ],
-  "feeAmount": "2000000",
-  "domain": {
-    "name": "DIA Oracle",
-    "version": "1.0",
-    "sourceChainId": "100640",
-    "verifyingContract": "0xF8c614A483A0427A13512F52ac72A576678bE317"
-  },
-  "lovelace": "5000000"
-}
-```
-
-- `configAssetName`
-  Project-defined Cardano asset name for the Config NFT.
-  This is a hex-encoded UTF-8 string.
-- `authorizedOraclePublicKeys`
-  DIA secp256k1 public keys allowed to authorize oracle intents on Cardano.
-  These are compressed public keys in hex format.
-- `feeAmount`
-  Lovelace paid to each configured fee address during oracle updates.
-- `domain.name`
-  Comes from the DIA `OracleIntentRegistry` EIP-712 domain.
-- `domain.version`
-  Comes from the DIA `OracleIntentRegistry` EIP-712 domain.
-- `domain.sourceChainId`
-  Source chain id used by DIA when signing the intent.
-- `domain.verifyingContract`
-  The DIA `OracleIntentRegistry` contract address used in the EIP-712 domain.
-- `lovelace`
-  ADA amount locked into the initial Config UTxO.
-
-### `pair-bootstrap.example.json` and `update.example.json`
-
-Both files wrap an official DIA `OracleIntent`:
-
-```json
-{
-  "intent": {
-    "intentType": "OracleUpdate",
-    "version": "1.0",
-    "chainId": "100640",
-    "nonce": "...",
-    "expiry": "...",
-    "symbol": "USDC/USD",
-    "price": "...",
-    "timestamp": "...",
-    "source": "DIA Oracle",
-    "signature": "0x...",
-    "signer": "0x..."
-  }
-}
-```
-
-These fields come from DIA itself, not from Cardano:
-
-- `intentType`
-- `version`
-- `chainId`
-- `nonce`
-- `expiry`
-- `symbol`
-- `price`
-- `timestamp`
-- `source`
-- `signature`
-- `signer`
-
-The CLI reads these values, rebuilds the EIP-712 digest, recovers the signer public key, and verifies that the recovered signer is authorized by the current Config state.
-
-## Hex-Encoded Names
-
-Some Cardano fields are stored as byte arrays on-chain, so the CLI inputs use hex strings instead of plain text.
-
-Examples:
-
-- `configAssetName: "4449415f434f4e464947"`
-  Plain text: `DIA_CONFIG`
-- Pair token name `555344435f555344`
-  Plain text: `USDC_USD`
-- Pair id `555344432f555344`
-  Plain text: `USDC/USD`
-
-Rules used by the CLI:
-
-- `configAssetName`
-  Must be provided as UTF-8 text encoded to hex.
-- `pairId`
-  Derived from `intent.symbol` as UTF-8 hex.
-- `pairTokenName`
-  Derived from `intent.symbol.replace("/", "_")` as UTF-8 hex, unless explicitly provided.
-
-This means:
-
-- symbol `USDC/USD`
-- pair id `555344432f555344`
-- token name `555344435f555344`
-
-## Editing Guidance
-
-To create or edit inputs safely:
-
-1. For `config-bootstrap.example.json`, edit only the project-controlled fields:
-   - `configAssetName`
-   - `authorizedOraclePublicKeys`
-   - `feeAmount`
-   - `domain`
-   - `lovelace`
-2. For `pair-bootstrap.example.json`, replace the `intent` with a real DIA intent for the symbol you want to register.
-3. For `update.example.json`, replace the `intent` with a newer DIA intent for the same symbol already registered on Cardano.
-4. Do not manually edit files under `state/preview/` unless you are repairing a broken local artifact.
-
-## How To Source New DIA Intents
-
-New `OracleIntent` fixtures should be copied from DIA infrastructure, not invented manually.
-
-Recommended sources:
-
-- DIA testnet explorer transaction pages
-- DIA testnet explorer API responses
-- the decoded `registerIntent(...)` call data from `OracleIntentRegistry`
-
-When replacing a fixture:
-
-1. Keep the full official DIA field set unchanged.
-2. Keep `signature` and `signer` exactly as emitted by DIA.
-3. For `update`, ensure the new intent has the same `symbol` and a greater `timestamp` and `nonce` than the current pair state.

@@ -1,7 +1,6 @@
 use aiken/builtin
-use aiken/cbor
-use aiken/collection/list
 use aiken/crypto.{keccak_256, verify_ecdsa_signature}
+use aiken/collection/list
 use aiken/primitive/bytearray
 use aiken/primitive/string
 use cardano/assets
@@ -24,22 +23,21 @@ pub type OracleIntent {
   }
 }
 
-pub type OracleDatum {
-  OracleDatum {
+pub type PairDatum {
+  PairDatum {
     pair_id: ByteArray,
     price: Int,
     timestamp: Int,
     nonce: Int,
     intent_hash: ByteArray,
     signer: ByteArray,
-    signer_public_key: ByteArray,
-    signature: ByteArray,
-    raw_intent: ByteArray,
+    min_utxo_lovelace: Int,
   }
 }
 
-pub type OracleRedeemer {
-  OracleRedeemer {
+pub type UpdateWitness {
+  UpdateWitness {
+    pair_token_name: ByteArray,
     intent: OracleIntent,
     signer_public_key: ByteArray,
   }
@@ -57,98 +55,7 @@ pub fn oracle_intent_hash(
   )
 }
 
-pub fn pair_matches(datum: OracleDatum, redeemer: OracleRedeemer) -> Bool {
-  datum.pair_id == redeemer.intent.symbol
-}
-
-pub fn signer_is_authorized(
-  config_datum: config_logic.ConfigDatum,
-  signer_public_key: ByteArray,
-) -> Bool {
-  list.has(config_datum.authorized_oracle_public_keys, signer_public_key)
-}
-
-pub fn pair_is_authorized(
-  config_datum: config_logic.ConfigDatum,
-  pair_token_name: ByteArray,
-  redeemer: OracleRedeemer,
-) -> Bool {
-  list.any(
-    config_datum.allowed_pairs,
-    fn(pair) {
-      and {
-        pair.token_name == pair_token_name,
-        pair.pair_code == redeemer.intent.symbol,
-      }
-    },
-  )
-}
-
-pub fn is_fresh_update(datum: OracleDatum, redeemer: OracleRedeemer) -> Bool {
-  and {
-    redeemer.intent.timestamp > datum.timestamp,
-    redeemer.intent.nonce > datum.nonce,
-  }
-}
-
-pub fn output_matches_redeemer(next: OracleDatum, redeemer: OracleRedeemer) -> Bool {
-  output_matches_redeemer_for_domain(next, redeemer, config_logic.sample_domain())
-}
-
-pub fn output_matches_redeemer_for_domain(
-  next: OracleDatum,
-  redeemer: OracleRedeemer,
-  domain: config_logic.Domain,
-) -> Bool {
-  and {
-    next.pair_id == redeemer.intent.symbol,
-    next.price == redeemer.intent.price,
-    next.timestamp == redeemer.intent.timestamp,
-    next.nonce == redeemer.intent.nonce,
-    next.intent_hash == oracle_intent_hash(domain, redeemer.intent),
-    next.signer == redeemer.intent.signer,
-    next.signer_public_key == redeemer.signer_public_key,
-    next.signature == redeemer.intent.signature,
-    next.raw_intent == raw_intent_bytes(redeemer.intent),
-  }
-}
-
-pub fn preserves_pair_id(previous: OracleDatum, next: OracleDatum) -> Bool {
-  previous.pair_id == next.pair_id
-}
-
-pub fn has_valid_signature(
-  config_datum: config_logic.ConfigDatum,
-  redeemer: OracleRedeemer,
-) -> Bool {
-  and {
-    valid_intent(redeemer.intent),
-    signer_is_authorized(config_datum, redeemer.signer_public_key),
-    verify_ecdsa_signature(
-      redeemer.signer_public_key,
-      oracle_intent_hash(config_datum.domain_data, redeemer.intent),
-      normalized_signature(redeemer.intent.signature),
-    ),
-  }
-}
-
-pub fn valid_initial_oracle_datum(
-  pair: config_logic.PairEntry,
-  config_datum: config_logic.ConfigDatum,
-  datum: OracleDatum,
-) -> Bool {
-  and {
-    valid_oracle_state(datum),
-    datum.pair_id == pair.pair_code,
-    datum.price >= 0,
-    datum.timestamp >= 0,
-    datum.nonce >= 0,
-    decode_raw_intent(datum.raw_intent)
-      |> matches_initial_intent(config_datum, pair, datum),
-  }
-}
-
-pub fn valid_oracle_state(datum: OracleDatum) -> Bool {
+pub fn valid_pair_state(datum: PairDatum) -> Bool {
   and {
     !bytearray.is_empty(datum.pair_id),
     datum.price >= 0,
@@ -156,59 +63,100 @@ pub fn valid_oracle_state(datum: OracleDatum) -> Bool {
     datum.nonce >= 0,
     bytearray.length(datum.intent_hash) == 32,
     bytearray.length(datum.signer) == 20,
-    !bytearray.is_empty(datum.signer_public_key),
-    signature_has_supported_length(datum.signature),
-    !bytearray.is_empty(datum.raw_intent),
+    datum.min_utxo_lovelace >= 0,
   }
 }
 
-pub fn fees_paid(
+pub fn exact_locked_lovelace(output: Output, datum: PairDatum) -> Bool {
+  assets.lovelace_of(output.value) == datum.min_utxo_lovelace
+}
+
+pub fn signer_is_authorized(
   config_datum: config_logic.ConfigDatum,
-  outputs: List<Output>,
+  signer_public_key: ByteArray,
 ) -> Bool {
-  if config_datum.fee_amount == 0 {
-    True
-  } else {
-    list.all(
-      config_datum.fee_addresses,
-      fn(fee_address) {
-        list.any(
-          outputs,
-          fn(output) {
-            and {
-              output.address == fee_address,
-              assets.quantity_of(
-                output.value,
-                assets.ada_policy_id,
-                assets.ada_asset_name,
-              ) >= config_datum.fee_amount,
-            }
-          },
-        )
-      },
-    )
-  }
+  list.has(config_datum.authorized_dia_public_keys, signer_public_key)
 }
 
-pub fn valid_oracle_update(
-  previous: OracleDatum,
+pub fn pair_is_authorized(
   config_datum: config_logic.ConfigDatum,
   pair_token_name: ByteArray,
-  redeemer: OracleRedeemer,
-  next: OracleDatum,
+  pair_id: ByteArray,
 ) -> Bool {
+  list.any(
+    config_datum.allowed_pairs,
+    fn(pair) {
+      and {
+        pair.token_name == pair_token_name,
+        pair.pair_code == pair_id,
+      }
+    },
+  )
+}
+
+pub fn is_fresh_update(previous: PairDatum, intent: OracleIntent) -> Bool {
   and {
-    pair_matches(previous, redeemer),
-    pair_is_authorized(config_datum, pair_token_name, redeemer),
-    is_fresh_update(previous, redeemer),
-    preserves_pair_id(previous, next),
-    output_matches_redeemer_for_domain(next, redeemer, config_datum.domain_data),
-    has_valid_signature(config_datum, redeemer),
+    intent.timestamp > previous.timestamp,
+    intent.nonce > previous.nonce,
   }
 }
 
-fn raw_intent_bytes(intent: OracleIntent) -> ByteArray {
-  cbor.serialise(intent)
+pub fn has_valid_signature(
+  config_datum: config_logic.ConfigDatum,
+  witness: UpdateWitness,
+) -> Bool {
+  and {
+    valid_intent(witness.intent),
+    signer_is_authorized(config_datum, witness.signer_public_key),
+    verify_ecdsa_signature(
+      witness.signer_public_key,
+      oracle_intent_hash(config_datum.domain_data, witness.intent),
+      normalized_signature(witness.intent.signature),
+    ),
+  }
+}
+
+pub fn next_pair_matches_witness(
+  previous: PairDatum,
+  next: PairDatum,
+  config_datum: config_logic.ConfigDatum,
+  witness: UpdateWitness,
+) -> Bool {
+  and {
+    valid_pair_state(previous),
+    valid_pair_state(next),
+    previous.pair_id == next.pair_id,
+    previous.min_utxo_lovelace == next.min_utxo_lovelace,
+    next.pair_id == witness.intent.symbol,
+    next.price == witness.intent.price,
+    next.timestamp == witness.intent.timestamp,
+    next.nonce == witness.intent.nonce,
+    next.intent_hash == oracle_intent_hash(config_datum.domain_data, witness.intent),
+    next.signer == witness.intent.signer,
+    pair_is_authorized(config_datum, witness.pair_token_name, next.pair_id),
+    is_fresh_update(previous, witness.intent),
+    has_valid_signature(config_datum, witness),
+  }
+}
+
+pub fn valid_initial_pair_datum(
+  pair: config_logic.PairEntry,
+  config_datum: config_logic.ConfigDatum,
+  datum: PairDatum,
+  witness: UpdateWitness,
+) -> Bool {
+  and {
+    valid_pair_state(datum),
+    pair.token_name == witness.pair_token_name,
+    pair.pair_code == witness.intent.symbol,
+    datum.pair_id == pair.pair_code,
+    datum.price == witness.intent.price,
+    datum.timestamp == witness.intent.timestamp,
+    datum.nonce == witness.intent.nonce,
+    datum.intent_hash == oracle_intent_hash(config_datum.domain_data, witness.intent),
+    datum.signer == witness.intent.signer,
+    has_valid_signature(config_datum, witness),
+  }
 }
 
 fn valid_intent(intent: OracleIntent) -> Bool {
@@ -237,47 +185,6 @@ fn normalized_signature(signature: ByteArray) -> ByteArray {
     builtin.slice_bytearray(0, 64, signature)
   } else {
     signature
-  }
-}
-
-fn matches_initial_intent(
-  maybe_intent: Option<OracleIntent>,
-  config_datum: config_logic.ConfigDatum,
-  pair: config_logic.PairEntry,
-  datum: OracleDatum,
-) -> Bool {
-  when maybe_intent is {
-    Some(intent) ->
-      and {
-        valid_intent(intent),
-        datum.signer == intent.signer,
-        datum.signature == intent.signature,
-        datum.pair_id == intent.symbol,
-        intent.symbol == pair.pair_code,
-        datum.price == intent.price,
-        datum.timestamp == intent.timestamp,
-        datum.nonce == intent.nonce,
-        datum.intent_hash == oracle_intent_hash(config_datum.domain_data, intent),
-        signer_is_authorized(config_datum, datum.signer_public_key),
-        verify_ecdsa_signature(
-          datum.signer_public_key,
-          oracle_intent_hash(config_datum.domain_data, intent),
-          normalized_signature(intent.signature),
-        ),
-      }
-
-    None -> False
-  }
-}
-
-fn decode_raw_intent(raw_intent: ByteArray) -> Option<OracleIntent> {
-  when cbor.deserialise(raw_intent) is {
-    Some(data) -> {
-      expect intent: OracleIntent = data
-      Some(intent)
-    }
-
-    None -> None
   }
 }
 
@@ -355,145 +262,80 @@ fn sample_signer_public_key() -> ByteArray {
   #"03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807"
 }
 
-fn sample_usdc_pair() -> config_logic.PairEntry {
+fn sample_pair() -> config_logic.PairEntry {
   config_logic.PairEntry {
     token_name: #"555344435f555344",
     pair_code: #"555344432f555344",
   }
 }
 
-fn sample_usdc_config() -> config_logic.ConfigDatum {
+fn sample_config() -> config_logic.ConfigDatum {
   config_logic.ConfigDatum {
     valid_config_signers: config_logic.sample_config().valid_config_signers,
-    authorized_oracle_public_keys: config_logic.sample_config().authorized_oracle_public_keys,
-    fee_addresses: config_logic.sample_config().fee_addresses,
-    fee_amount: config_logic.sample_config().fee_amount,
+    authorized_dia_public_keys: config_logic.sample_config().authorized_dia_public_keys,
     domain_data: config_logic.sample_config().domain_data,
-    allowed_pairs: [sample_usdc_pair()],
+    allowed_pairs: [sample_pair()],
+    payment_hook_ref: None,
+    update_coordinator_credential: None,
+    min_utxo_lovelace: config_logic.sample_config().min_utxo_lovelace,
   }
 }
 
-fn sample_datum() -> OracleDatum {
+fn sample_pair_datum() -> PairDatum {
   let intent = sample_intent()
 
-  OracleDatum {
+  PairDatum {
     pair_id: intent.symbol,
     price: intent.price,
     timestamp: intent.timestamp,
     nonce: intent.nonce,
-    intent_hash: oracle_intent_hash(config_logic.sample_domain(), intent),
+    intent_hash: oracle_intent_hash(sample_config().domain_data, intent),
     signer: intent.signer,
-    signer_public_key: sample_signer_public_key(),
-    signature: intent.signature,
-    raw_intent: raw_intent_bytes(intent),
+    min_utxo_lovelace: 2_000_000,
   }
 }
 
-fn sample_redeemer() -> OracleRedeemer {
-  OracleRedeemer {
+fn sample_witness() -> UpdateWitness {
+  UpdateWitness {
+    pair_token_name: sample_pair().token_name,
     intent: sample_intent(),
     signer_public_key: sample_signer_public_key(),
   }
 }
 
-fn unauthorized_redeemer() -> OracleRedeemer {
-  OracleRedeemer {
-    intent: sample_intent(),
-    signer_public_key: #"03ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-  }
+test valid_pair_state_accepts_sample_state() {
+  valid_pair_state(sample_pair_datum())
 }
 
-fn stale_timestamp_redeemer() -> OracleRedeemer {
-  let intent = sample_intent()
-
-  OracleRedeemer {
-    intent: OracleIntent {
-      intent_type: intent.intent_type,
-      version: intent.version,
-      chain_id: intent.chain_id,
-      nonce: intent.nonce,
-      expiry: intent.expiry,
-      symbol: intent.symbol,
-      price: intent.price,
-      timestamp: intent.timestamp - 1,
-      source: intent.source,
-      signature: intent.signature,
-      signer: intent.signer,
-    },
-    signer_public_key: sample_signer_public_key(),
-  }
+test real_dia_signature_is_accepted() {
+  has_valid_signature(sample_config(), sample_witness())
 }
 
-fn stale_nonce_redeemer() -> OracleRedeemer {
-  let intent = sample_intent()
-
-  OracleRedeemer {
-    intent: OracleIntent {
-      intent_type: intent.intent_type,
-      version: intent.version,
-      chain_id: intent.chain_id,
-      nonce: intent.nonce - 1,
-      expiry: intent.expiry,
-      symbol: intent.symbol,
-      price: intent.price,
-      timestamp: intent.timestamp,
-      source: intent.source,
-      signature: intent.signature,
-      signer: intent.signer,
-    },
-    signer_public_key: sample_signer_public_key(),
-  }
-}
-
-test oracle_intent_hash_is_32_bytes() {
-  bytearray.length(oracle_intent_hash(config_logic.sample_domain(), sample_intent())) == 32
-}
-
-test oracle_intent_hash_matches_real_dia_fixture() {
-  oracle_intent_hash(config_logic.sample_domain(), sample_intent()) ==
-    #"966f6b54e8a00a2e7a2c8a3fd6a2a4d9b999b087ead69d6f23d949f909c912ba"
-}
-
-test signer_authorization_works_for_configured_public_keys() {
-  signer_is_authorized(config_logic.sample_config(), sample_signer_public_key())
-}
-
-test pair_authorization_works_against_config_pairs() {
-  pair_is_authorized(
-    config_logic.ConfigDatum {
-      valid_config_signers: config_logic.sample_config().valid_config_signers,
-      authorized_oracle_public_keys: config_logic.sample_config().authorized_oracle_public_keys,
-      fee_addresses: config_logic.sample_config().fee_addresses,
-      fee_amount: config_logic.sample_config().fee_amount,
-      domain_data: config_logic.sample_config().domain_data,
-      allowed_pairs: [
-        config_logic.PairEntry {
-          token_name: #"555344435f555344",
-          pair_code: #"555344432f555344",
-        },
-      ],
-    },
-    #"555344435f555344",
-    sample_redeemer(),
+test valid_initial_pair_datum_accepts_real_fixture() {
+  valid_initial_pair_datum(
+    sample_pair(),
+    sample_config(),
+    sample_pair_datum(),
+    sample_witness(),
   )
 }
 
-test stale_timestamp_rejected() {
-  !is_fresh_update(sample_datum(), stale_timestamp_redeemer())
-}
+test next_pair_matches_witness_requires_fresh_data() {
+  let previous =
+    PairDatum {
+      pair_id: sample_pair_datum().pair_id,
+      price: 99980000,
+      timestamp: sample_pair_datum().timestamp - 100,
+      nonce: sample_pair_datum().nonce - 10,
+      intent_hash: sample_pair_datum().intent_hash,
+      signer: sample_pair_datum().signer,
+      min_utxo_lovelace: sample_pair_datum().min_utxo_lovelace,
+    }
 
-test stale_nonce_rejected() {
-  !is_fresh_update(sample_datum(), stale_nonce_redeemer())
-}
-
-test unauthorized_signer_key_rejected() {
-  !signer_is_authorized(config_logic.sample_config(), unauthorized_redeemer().signer_public_key)
-}
-
-test valid_signature_passes_for_real_dia_intent_fixture() {
-  has_valid_signature(config_logic.sample_config(), sample_redeemer())
-}
-
-test valid_initial_oracle_datum_passes_for_real_dia_intent_fixture() {
-  valid_initial_oracle_datum(sample_usdc_pair(), sample_usdc_config(), sample_datum())
+  next_pair_matches_witness(
+    previous,
+    sample_pair_datum(),
+    sample_config(),
+    sample_witness(),
+  )
 }

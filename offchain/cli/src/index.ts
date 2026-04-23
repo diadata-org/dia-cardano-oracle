@@ -29,6 +29,7 @@ function printUsage(): void {
   npm run cli -- preview:wallet:utxos
   npm run cli -- preview:wallet:defaults
   npm run cli -- preview:config:bootstrap --input ./examples/preview/config-bootstrap.example.json [--build-only] [--out ./tmp/config-bootstrap.json]
+  npm run cli -- preview:payment-hook:bootstrap --input ./examples/preview/payment-hook-bootstrap.example.json [--state ./state/preview/config-bootstrap.json] [--build-only] [--out ./tmp/config-bootstrap.json]
   npm run cli -- preview:pair:bootstrap --input ./examples/preview/pair-bootstrap.example.json [--state ./state/preview/config-bootstrap.json] [--build-only] [--out ./tmp/pair-bootstrap.json]
   npm run cli -- preview:update --input ./examples/preview/update.example.json --state ./state/preview/pairs/usdc-usd.json [--build-only] [--out ./state/preview/pairs/usdc-usd.json]`);
 }
@@ -146,6 +147,24 @@ async function run(): Promise<void> {
       getCliConfig();
       const result = await configBootstrap({
         inputPath: requireInputPath(),
+        buildOnly: hasBuildOnlyFlag(),
+      });
+      const outPath = optionalFlagValue("--out");
+      if (outPath) {
+        await writeJsonOutput(outPath, result);
+      }
+      printJson(result);
+      return;
+    }
+
+    case "preview:payment-hook:bootstrap": {
+      const { paymentHookBootstrap } = await import(
+        "./payment-hook-bootstrap.js"
+      );
+      getCliConfig();
+      const result = await paymentHookBootstrap({
+        inputPath: requireInputPath(),
+        statePath: optionalFlagValue("--state"),
         buildOnly: hasBuildOnlyFlag(),
       });
       const outPath = optionalFlagValue("--out");

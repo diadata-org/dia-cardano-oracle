@@ -1,17 +1,10 @@
-import { CML, getAddressDetails } from "@lucid-evolution/lucid";
-import { walletFromSeed } from "@lucid-evolution/wallet";
+import { getAddressDetails } from "@lucid-evolution/lucid";
 
 import { makeConfiguredLucid, selectConfiguredWallet } from "./lucid.js";
 
 export type ConfiguredWalletDefaults = {
   paymentKeyHash: string;
-  oraclePublicKey: string;
   feeAddress: string;
-};
-
-export type ConfiguredWalletOracleSignature = {
-  publicKey: string;
-  signature: string;
 };
 
 export async function walletSummary(): Promise<{
@@ -111,68 +104,6 @@ export function deriveConfiguredWalletDefaults(args: {
 
   return {
     paymentKeyHash: details.paymentCredential.hash,
-    oraclePublicKey: deriveConfiguredWalletOraclePublicKey(args.source),
     feeAddress: args.address,
   };
-}
-
-export function signConfiguredWalletOracleMessage(args: {
-  source: "seed" | "private-key";
-  messageHex: string;
-}): ConfiguredWalletOracleSignature {
-  const message = Buffer.from(normalizeHex(args.messageHex, "messageHex"), "hex");
-  const privateKey = configuredPaymentPrivateKey(args.source);
-  const cmlPrivateKey = CML.PrivateKey.from_bech32(privateKey);
-  const signature = cmlPrivateKey.sign(message);
-
-  return {
-    publicKey: privateKeyToPublicKeyHex(privateKey),
-    signature: Buffer.from(signature.to_raw_bytes()).toString("hex"),
-  };
-}
-
-function deriveConfiguredWalletOraclePublicKey(
-  source: "seed" | "private-key",
-): string {
-  return privateKeyToPublicKeyHex(configuredPaymentPrivateKey(source));
-}
-
-function configuredPaymentPrivateKey(source: "seed" | "private-key"): string {
-  if (source === "seed") {
-    const seed = process.env.CARDANO_WALLET_SEED?.trim();
-
-    if (!seed) {
-      throw new Error(
-        "Missing CARDANO_WALLET_SEED while deriving wallet defaults.",
-      );
-    }
-
-    const derivedWallet = walletFromSeed(seed, { network: "Preview" });
-    return derivedWallet.paymentKey;
-  }
-
-  const privateKey = process.env.CARDANO_PRIVATE_KEY?.trim();
-
-  if (!privateKey) {
-    throw new Error(
-      "Missing CARDANO_PRIVATE_KEY while deriving wallet defaults.",
-    );
-  }
-
-  return privateKey;
-}
-
-function privateKeyToPublicKeyHex(privateKey: string): string {
-  const publicKey = CML.PrivateKey.from_bech32(privateKey).to_public();
-  return Buffer.from(publicKey.to_raw_bytes()).toString("hex");
-}
-
-function normalizeHex(value: string, label: string): string {
-  const trimmed = value.trim().toLowerCase();
-
-  if (!/^[0-9a-f]*$/.test(trimmed) || trimmed.length % 2 !== 0) {
-    throw new Error(`Expected ${label} to be an even-length hex string.`);
-  }
-
-  return trimmed;
 }

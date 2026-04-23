@@ -1,124 +1,69 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  Constr,
-  applyParamsToScript,
-  getAddressDetails,
-  mintingPolicyToId,
-  validatorToAddress,
-  validatorToScriptHash,
-  type MintingPolicy,
-  type SpendingValidator,
-} from "@lucid-evolution/lucid";
+import { Constr, type OutRef, type UTxO } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
-import { getBlueprintValidator } from "./blueprint.js";
+import {
+  makeConfigStateValidator,
+  makePairStateMintingPolicy,
+  makePairStateValidator,
+  policyIdFromMintingPolicy,
+  scriptAddressFromValidator,
+  scriptHashFromValidator,
+} from "./contracts.js";
 import {
   diaIntentTokenNameFromSymbol,
-  diaOracleDatumToCbor,
-  diaOracleRedeemerToCbor,
-  diaPairIdHex,
   diaIntentToState,
+  diaPairIdHex,
   normalizeDiaEip712Domain,
   normalizeDiaOracleIntent,
   normalizeHex,
   recoverDiaOracleIntentWitness,
+  type DiaOracleIntent,
   type DiaOracleIntentInput,
 } from "./dia-intent.js";
+import { getDefaultConfigStatePath, readConfigState, type PairStateArtifact } from "./state.js";
 import { makeConfiguredLucid, selectConfiguredWallet } from "./lucid.js";
-import {
-  getDefaultConfigStatePath,
-  readConfigState,
-  type ConfigState,
-  type OracleState,
-  type PairEntryState,
-} from "./state.js";
 import { deriveConfiguredWalletDefaults } from "./wallet.js";
 
 type PairBootstrapInput = {
   pairTokenName?: string;
   intent: DiaOracleIntentInput;
-  lovelace: string;
+  minUtxoLovelace: string;
 };
-
-type PairBootstrapResult = {
-  mode: "build-only" | "submit";
-  inputPath: string;
-  statePath: string;
-  wallet: {
-    source: "seed" | "private-key";
-    address: string;
-  };
-  scripts: {
-    configPolicyId: string;
-    configUnit: string;
-    configValidatorHash: string;
-    configValidatorAddress: string;
-    pairPolicyId: string;
-    oracleReceiverHash: string;
-    oracleReceiverAddress: string;
-  };
-  configState: ConfigState;
-  configUtxos: {
-    spent: {
-      txHash: string;
-      outputIndex: number;
-    };
-    current: {
-      txHash: string;
-      outputIndex: number;
-    };
-  };
-  pair: {
-    tokenName: string;
-    pairId: string;
-    pairUnit: string;
-    oracleReceiverAddress: string;
-    stateUtxo: {
-      txHash: string;
-      outputIndex: number;
-    };
-  };
-  oracleState: OracleState;
-  datum: {
-    configCbor: string;
-    oracleCbor: string;
-  };
-  transaction: {
-    unsignedHash: string;
-    unsignedCbor: string;
-    submittedTxHash: string | null;
-    confirmed: boolean;
-  };
-};
-
-const CONFIG_VALIDATOR_TITLE = "config_validator.config_validator.spend";
-const PAIR_NFT_TITLE = "pair_nft.pair_nft.mint";
-const ORACLE_RECEIVER_TITLE = "oracle_receiver.oracle_receiver.spend";
 
 export async function pairBootstrap(args: {
   inputPath: string;
   statePath?: string;
   buildOnly: boolean;
-}): Promise<PairBootstrapResult> {
+}): Promise<PairStateArtifact> {
   reportProgress(`Loading pair bootstrap input from ${path.resolve(args.inputPath)}`);
   const inputPath = path.resolve(args.inputPath);
   const input = await readPairBootstrapInput(inputPath);
 
-  const statePath = path.resolve(
-    args.statePath ?? getDefaultConfigStatePath(),
-  );
+  const statePath = path.resolve(args.statePath ?? getDefaultConfigStatePath());
   reportProgress(`Loading config state from ${statePath}`);
   const state = await readConfigState(statePath);
+
+  if (!state.bootstrapRefs.config.txHash.length) {
+    throw new Error("Config state artifact is missing the config bootstrap reference.");
+  }
+
+  if (!state.configState.updateCoordinatorCredential || !state.configState.paymentHookRef) {
+    throw new Error(
+      "Pair bootstrap requires a config state artifact produced after payment-hook bootstrap.",
+    );
+  }
 
   reportProgress("Connecting to Preview and selecting the configured wallet");
   const lucid = await makeConfiguredLucid();
   const source = await selectConfiguredWallet(lucid);
-  const walletAddress = await lucid.wallet().address();
-  const walletDefaults = deriveConfiguredWalletDefaults({
-    source,
-    address: walletAddress,
-  });
+  const wallet = lucid.wallet();
+  const [walletAddress, walletUtxos] = await Promise.all([
+    wallet.address(),
+    wallet.getUtxos(),
+  ]);
+  const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
 
   if (!state.configState.validConfigSigners.includes(walletDefaults.paymentKeyHash)) {
     throw new Error(
@@ -126,23 +71,43 @@ export async function pairBootstrap(args: {
     );
   }
 
-  const intent = normalizeDiaOracleIntent(input.intent);
-  const domain = normalizeDiaEip712Domain({
-    name: state.configState.domain.name,
-    version: state.configState.domain.version,
-    sourceChainId: state.configState.domain.sourceChainId,
-    verifyingContract: state.configState.domain.verifyingContract,
-  });
-  const witness = recoverDiaOracleIntentWitness(domain, intent);
-
-  if (
-    !state.configState.authorizedOraclePublicKeys.includes(witness.signerPublicKey)
-  ) {
-    throw new Error(
-      `Recovered DIA signer public key ${witness.signerPublicKey} is not authorized in the current config state.`,
-    );
+  const currentConfigUtxo = await findSingleUtxoAtUnit(
+    lucid,
+    state.scripts.configValidatorAddress,
+    state.scripts.configUnit,
+    "config",
+  );
+  const walletFundingUtxo = selectFundingUtxo(walletUtxos, [
+    state.bootstrapRefs.config,
+    state.bootstrapRefs.paymentHook!,
+  ]);
+  if (!walletFundingUtxo) {
+    throw new Error("No suitable wallet UTxO is available to cover pair bootstrap fees.");
   }
 
+  const configBootstrapOutRef: OutRef = state.bootstrapRefs.config;
+  const configAssetName = splitUnit(state.scripts.configUnit).assetName;
+  const configValidator = await makeConfigStateValidator({
+    bootstrapOutRef: configBootstrapOutRef,
+    assetName: configAssetName,
+  });
+  const pairMintPolicy = await makePairStateMintingPolicy({
+    configPolicyId: state.scripts.configPolicyId,
+    configAssetName,
+  });
+  const pairPolicyId = policyIdFromMintingPolicy(pairMintPolicy);
+  if (pairPolicyId !== state.scripts.pairPolicyId) {
+    throw new Error("State file pair policy id does not match the current blueprint.");
+  }
+
+  const pairValidator = await makePairStateValidator({
+    configPolicyId: state.scripts.configPolicyId,
+    configAssetName,
+  });
+  const pairValidatorHash = scriptHashFromValidator(pairValidator);
+  const pairValidatorAddress = scriptAddressFromValidator(pairValidator);
+
+  const intent = normalizeDiaOracleIntent(input.intent);
   const pair = {
     tokenName: normalizeHex(
       input.pairTokenName?.trim() && input.pairTokenName.trim().length > 0
@@ -154,86 +119,52 @@ export async function pairBootstrap(args: {
   };
   assertPairIsNew(state.configState.allowedPairs, pair);
 
-  const configUnit = state.scripts.configUnit;
-  reportProgress(`Resolving current Config UTxO by unit ${configUnit}`);
-  const currentConfigUtxo = await findSingleUtxoAtUnit(
-    lucid,
-    state.scripts.configValidatorAddress,
-    configUnit,
-    "config",
-  );
-
-  const { policyId: configPolicyId, assetName: configAssetName } = splitUnit(configUnit);
-  if (configPolicyId !== state.scripts.configPolicyId) {
-    throw new Error("State file config policy id does not match config unit.");
-  }
-
-  const configValidator = await makeConfigValidator({
-    configPolicyId,
-    configAssetName,
+  const domain = normalizeDiaEip712Domain({
+    name: state.configState.domain.name,
+    version: state.configState.domain.version,
+    sourceChainId: state.configState.domain.sourceChainId,
+    verifyingContract: state.configState.domain.verifyingContract,
   });
-  const pairNftPolicy = await makePairNftPolicy({
-    configPolicyId,
-    configAssetName,
-  });
-  const pairPolicyId = mintingPolicyToId(pairNftPolicy);
-  if (pairPolicyId !== state.scripts.pairPolicyId) {
-    throw new Error("State file pair policy id does not match the current blueprint.");
-  }
-
-  const oracleReceiver = await makeOracleReceiver({
-    configPolicyId,
-    configAssetName,
-    pairPolicyId,
-  });
-  const oracleReceiverHash = validatorToScriptHash(oracleReceiver);
-  const oracleReceiverAddress = validatorToAddress("Preview", oracleReceiver);
-  if (oracleReceiverHash !== state.scripts.oracleReceiverHash) {
+  const witness = recoverDiaOracleIntentWitness(domain, intent);
+  if (!state.configState.authorizedDiaPublicKeys.includes(witness.signerPublicKey)) {
     throw new Error(
-      "State file oracle receiver hash does not match the current blueprint.",
+      `Recovered DIA signer public key ${witness.signerPublicKey} is not authorized in the current config state.`,
     );
   }
 
   const pairUnit = `${pairPolicyId}${pair.tokenName}`;
-  const nextConfigState: ConfigState = {
+  const nextConfigState = {
     ...state.configState,
     allowedPairs: [...state.configState.allowedPairs, pair],
   };
-
-  const configRedeemer = Data.to(
-    new Constr(1, [new Constr<PlutusData>(0, [pair.tokenName, pair.pairId])]),
-  );
-  const pairMintRedeemer = Data.to(new Constr(0, []));
-  const nextConfigDatumCbor = Data.to(buildConfigDatum(nextConfigState));
-  const oracleDatumCbor = diaOracleDatumToCbor({
-    intent,
-    signerPublicKey: witness.signerPublicKey,
-    intentHash: witness.intentHash,
-  });
-
-  const oracleState: OracleState = {
+  const pairState = {
+    pairId: pair.pairId,
     price: intent.price.toString(),
     timestamp: intent.timestamp.toString(),
     nonce: intent.nonce.toString(),
     intentHash: witness.intentHash,
     signer: intent.signer,
-    signerPublicKey: witness.signerPublicKey,
-    signature: intent.signature,
-    rawIntent: Data.to(
-      new Constr<PlutusData>(0, [
-        diaOracleRedeemerIntentData(intent),
-      ]),
-    ),
+    minUtxoLovelace: toBigInt(input.minUtxoLovelace, "minUtxoLovelace").toString(),
     intent: diaIntentToState(intent),
   };
+
+  const configRedeemer = Data.to(
+    new Constr<PlutusData>(1, [new Constr<PlutusData>(0, [pair.tokenName, pair.pairId])]),
+  );
+  const pairMintRedeemer = Data.to(
+    new Constr<PlutusData>(0, [updateWitnessData(intent, pair.tokenName, witness.signerPublicKey)]),
+  );
+  const nextConfigDatumCbor = buildConfigDatumCbor(nextConfigState);
+  const pairDatumCbor = buildPairDatumCbor(pairState);
 
   reportProgress("Building Preview pair bootstrap transaction");
   const txBuilder = lucid
     .newTx()
     .collectFrom([currentConfigUtxo], configRedeemer)
+    .collectFrom([walletFundingUtxo])
     .addSignerKey(walletDefaults.paymentKeyHash)
     .attach.SpendingValidator(configValidator)
-    .attach.MintingPolicy(pairNftPolicy)
+    .attach.MintingPolicy(pairMintPolicy)
     .mintAssets({ [pairUnit]: 1n }, pairMintRedeemer)
     .pay.ToContract(
       state.scripts.configValidatorAddress,
@@ -241,109 +172,85 @@ export async function pairBootstrap(args: {
       { ...currentConfigUtxo.assets },
     )
     .pay.ToContract(
-      oracleReceiverAddress,
-      { kind: "inline", value: oracleDatumCbor },
+      pairValidatorAddress,
+      { kind: "inline", value: pairDatumCbor },
       {
-        lovelace: BigInt(input.lovelace),
+        lovelace: BigInt(pairState.minUtxoLovelace),
         [pairUnit]: 1n,
       },
     );
 
   const txSignBuilder = await txBuilder.complete();
   const unsignedHash = txSignBuilder.toHash();
-  const unsignedCbor = txSignBuilder.toCBOR();
-
   let submittedTxHash: string | null = null;
   let confirmed = false;
 
   if (!args.buildOnly) {
     reportProgress(`Unsigned transaction ready: ${unsignedHash}`);
-    reportProgress("Signing transaction with the configured wallet");
     const signedTx = await txSignBuilder.sign.withWallet().complete();
-    reportProgress("Submitting transaction to Preview");
     submittedTxHash = await signedTx.submit();
     reportProgress(`Submitted transaction hash: ${submittedTxHash}`);
-    reportProgress("Waiting for transaction confirmation on Preview");
     confirmed = await lucid.awaitTx(submittedTxHash, 3_000);
-
     if (!confirmed) {
       throw new Error(
         `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
       );
     }
-
-    reportProgress(`Transaction confirmed on Preview: ${submittedTxHash}`);
-  } else {
-    reportProgress(`Build-only mode: unsigned transaction ready: ${unsignedHash}`);
   }
 
   const latestConfigUtxo =
     args.buildOnly || !confirmed
-      ? currentConfigUtxo
-      : await waitForSingleUtxoAtUnit(
+      ? state.configUtxo.current
+      : await findSingleUtxoAtUnit(
           lucid,
           state.scripts.configValidatorAddress,
-          configUnit,
+          state.scripts.configUnit,
           "config",
-          currentConfigUtxo,
         );
   const pairStateUtxo =
     args.buildOnly || !confirmed
-      ? null
-      : await waitForSingleUtxoAtUnit(
+      ? { txHash: "", outputIndex: 0 }
+      : await findSingleUtxoAtUnit(
           lucid,
-          oracleReceiverAddress,
+          pairValidatorAddress,
           pairUnit,
           "pair",
-          null,
         );
 
   return {
-    mode: args.buildOnly ? "build-only" : "submit",
-    inputPath,
-    statePath,
     wallet: {
       source,
       address: walletAddress,
     },
-    scripts: state.scripts,
-    configState: nextConfigState,
-    configUtxos: {
-      spent: {
-        txHash: currentConfigUtxo.txHash,
-        outputIndex: currentConfigUtxo.outputIndex,
-      },
-      current: {
-        txHash: latestConfigUtxo.txHash,
-        outputIndex: latestConfigUtxo.outputIndex,
-      },
+    bootstrapRefs: {
+      config: state.bootstrapRefs.config,
+      paymentHook: state.bootstrapRefs.paymentHook!,
     },
+    scripts: {
+      ...state.scripts,
+      pairValidatorHash,
+      pairValidatorAddress,
+    },
+    configState: nextConfigState,
+    configUtxo: {
+      current: latestConfigUtxo,
+    },
+    paymentHookState: state.paymentHookState!,
+    paymentHookUtxo: state.paymentHookUtxo!,
     pair: {
       tokenName: pair.tokenName,
       pairId: pair.pairId,
       pairUnit,
-      oracleReceiverAddress,
-      stateUtxo: pairStateUtxo
-        ? {
-            txHash: pairStateUtxo.txHash,
-            outputIndex: pairStateUtxo.outputIndex,
-          }
-        : {
-            txHash: "",
-            outputIndex: 0,
-          },
+      pairValidatorAddress,
+      stateUtxo: pairStateUtxo,
     },
-    oracleState: {
-      ...oracleState,
-      rawIntent: diaOracleDatumRawIntent(intent),
-    },
+    pairState,
     datum: {
       configCbor: nextConfigDatumCbor,
-      oracleCbor: oracleDatumCbor,
+      paymentHookCbor: state.datum.paymentHookCbor!,
+      pairCbor: pairDatumCbor,
     },
     transaction: {
-      unsignedHash,
-      unsignedCbor,
       submittedTxHash,
       confirmed,
     },
@@ -354,168 +261,81 @@ function reportProgress(message: string): void {
   console.error(`[preview:pair:bootstrap] ${message}`);
 }
 
-async function readPairBootstrapInput(
-  inputPath: string,
-): Promise<PairBootstrapInput> {
+async function readPairBootstrapInput(inputPath: string): Promise<PairBootstrapInput> {
   const raw = await readFile(inputPath, "utf8");
   return JSON.parse(raw) as PairBootstrapInput;
 }
 
-async function makeConfigValidator(args: {
-  configPolicyId: string;
-  configAssetName: string;
-}): Promise<SpendingValidator> {
-  const validator = await getBlueprintValidator(CONFIG_VALIDATOR_TITLE);
-
-  return {
-    type: "PlutusV3",
-    script: applyParamsToScript(validator.compiledCode!, [
-      args.configPolicyId,
-      args.configAssetName,
-    ]),
-  };
-}
-
-async function makePairNftPolicy(args: {
-  configPolicyId: string;
-  configAssetName: string;
-}): Promise<MintingPolicy> {
-  const validator = await getBlueprintValidator(PAIR_NFT_TITLE);
-
-  return {
-    type: "PlutusV3",
-    script: applyParamsToScript(validator.compiledCode!, [
-      args.configPolicyId,
-      args.configAssetName,
-    ]),
-  };
-}
-
-async function makeOracleReceiver(args: {
-  configPolicyId: string;
-  configAssetName: string;
-  pairPolicyId: string;
-}): Promise<SpendingValidator> {
-  const validator = await getBlueprintValidator(ORACLE_RECEIVER_TITLE);
-
-  return {
-    type: "PlutusV3",
-    script: applyParamsToScript(validator.compiledCode!, [
-      args.configPolicyId,
-      args.configAssetName,
-      args.pairPolicyId,
-    ]),
-  };
-}
-
-function buildConfigDatum(state: ConfigState): Constr<PlutusData> {
-  return new Constr<PlutusData>(0, [
-    state.validConfigSigners.map((signer) =>
-      normalizeHex(signer, "validConfigSigners[]"),
-    ),
-    state.authorizedOraclePublicKeys.map((signer) =>
-      normalizeHex(signer, "authorizedOraclePublicKeys[]"),
-    ),
-    state.feeAddresses.map(addressToData),
-    BigInt(state.feeAmount),
+function buildConfigDatumCbor(state: PairStateArtifact["configState"]): string {
+  return Data.to(
     new Constr<PlutusData>(0, [
-      utf8ToHex(state.domain.name),
-      utf8ToHex(state.domain.version),
-      BigInt(state.domain.sourceChainId),
-      normalizeHex(state.domain.verifyingContract, "domain.verifyingContract"),
-    ]),
-    state.allowedPairs.map(
-      (pair) =>
+      state.validConfigSigners.map((value) => normalizeHex(value, "validConfigSigners[]")),
+      state.authorizedDiaPublicKeys.map((value) =>
+        normalizeHex(value, "authorizedDiaPublicKeys[]"),
+      ),
+      new Constr<PlutusData>(0, [
+        Buffer.from(state.domain.name, "utf8").toString("hex"),
+        Buffer.from(state.domain.version, "utf8").toString("hex"),
+        BigInt(state.domain.sourceChainId),
+        normalizeHex(state.domain.verifyingContract, "domain.verifyingContract"),
+      ]),
+      state.allowedPairs.map((pair) => new Constr<PlutusData>(0, [pair.tokenName, pair.pairId])),
+      new Constr<PlutusData>(0, [
         new Constr<PlutusData>(0, [
-          normalizeHex(pair.tokenName, "allowedPairs[].tokenName"),
-          normalizeHex(pair.pairId, "allowedPairs[].pairId"),
+          state.paymentHookRef!.policyId,
+          state.paymentHookRef!.assetName,
         ]),
-    ),
+      ]),
+      new Constr<PlutusData>(0, [
+        state.updateCoordinatorCredential!.type === "Script"
+          ? new Constr<PlutusData>(1, [state.updateCoordinatorCredential!.hash])
+          : new Constr<PlutusData>(0, [state.updateCoordinatorCredential!.hash]),
+      ]),
+      BigInt(state.minUtxoLovelace),
+    ]),
+  );
+}
+
+function buildPairDatumCbor(state: PairStateArtifact["pairState"]): string {
+  return Data.to(
+    new Constr<PlutusData>(0, [
+      state.pairId,
+      BigInt(state.price),
+      BigInt(state.timestamp),
+      BigInt(state.nonce),
+      normalizeHex(state.intentHash, "intentHash"),
+      normalizeHex(state.signer, "signer"),
+      BigInt(state.minUtxoLovelace),
+    ]),
+  );
+}
+
+function updateWitnessData(
+  intent: DiaOracleIntent,
+  pairTokenName: string,
+  signerPublicKey: string,
+): Constr<PlutusData> {
+  return new Constr<PlutusData>(0, [
+    pairTokenName,
+    diaIntentData(intent),
+    normalizeHex(signerPublicKey, "signerPublicKey"),
   ]);
 }
 
-function diaOracleDatumRawIntent(intent: ReturnType<typeof normalizeDiaOracleIntent>): string {
-  return Data.to(diaOracleRedeemerIntentData(intent));
-}
-
-function diaOracleRedeemerIntentData(
-  intent: ReturnType<typeof normalizeDiaOracleIntent>,
-): Constr<PlutusData> {
+function diaIntentData(intent: DiaOracleIntent): Constr<PlutusData> {
   return new Constr<PlutusData>(0, [
-    utf8ToHex(intent.intentType),
-    utf8ToHex(intent.version),
+    Buffer.from(intent.intentType, "utf8").toString("hex"),
+    Buffer.from(intent.version, "utf8").toString("hex"),
     intent.chainId,
     intent.nonce,
     intent.expiry,
-    utf8ToHex(intent.symbol),
+    Buffer.from(intent.symbol, "utf8").toString("hex"),
     intent.price,
     intent.timestamp,
-    utf8ToHex(intent.source),
-    intent.signature,
-    intent.signer,
+    Buffer.from(intent.source, "utf8").toString("hex"),
+    normalizeHex(intent.signature, "intent.signature"),
+    normalizeHex(intent.signer, "intent.signer"),
   ]);
-}
-
-function addressToData(address: string): Constr<PlutusData> {
-  const details = getAddressDetails(address);
-
-  if (!details.paymentCredential) {
-    throw new Error(`Address is missing a payment credential: ${address}`);
-  }
-
-  return new Constr<PlutusData>(0, [
-    credentialToData(details.paymentCredential),
-    details.stakeCredential
-      ? new Constr<PlutusData>(0, [stakeCredentialToData(details.stakeCredential)])
-      : new Constr<PlutusData>(1, []),
-  ]);
-}
-
-function stakeCredentialToData(
-  credential: { type: "Key" | "Script"; hash: string },
-): Constr<PlutusData> {
-  return new Constr<PlutusData>(0, [credentialToData(credential)]);
-}
-
-function credentialToData(
-  credential: { type: "Key" | "Script"; hash: string },
-): Constr<PlutusData> {
-  return credential.type === "Key"
-    ? new Constr<PlutusData>(0, [normalizeHex(credential.hash, "credential.hash")])
-    : new Constr<PlutusData>(1, [normalizeHex(credential.hash, "credential.hash")]);
-}
-
-function utf8ToHex(value: string): string {
-  return Buffer.from(value, "utf8").toString("hex");
-}
-
-function splitUnit(unit: string): { policyId: string; assetName: string } {
-  const normalizedUnit = normalizeHex(unit, "configUnit");
-
-  if (normalizedUnit.length < 56) {
-    throw new Error("configUnit is shorter than a valid policy id.");
-  }
-
-  return {
-    policyId: normalizedUnit.slice(0, 56),
-    assetName: normalizedUnit.slice(56),
-  };
-}
-
-function assertPairIsNew(
-  allowedPairs: PairEntryState[],
-  nextPair: PairEntryState,
-): void {
-  const conflict = allowedPairs.find(
-    (pair) =>
-      pair.tokenName === nextPair.tokenName || pair.pairId === nextPair.pairId,
-  );
-
-  if (conflict) {
-    throw new Error(
-      "The provided pair already exists in the current config state file.",
-    );
-  }
 }
 
 async function findSingleUtxoAtUnit(
@@ -523,52 +343,71 @@ async function findSingleUtxoAtUnit(
   address: string,
   unit: string,
   label: string,
-) {
-  const utxos = await lucid.utxosAtWithUnit(address, unit);
-
-  if (utxos.length === 0) {
-    throw new Error(`No ${label} UTxO found at ${address} for unit ${unit}.`);
+): Promise<UTxO> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const utxos = await lucid.utxosAtWithUnit(address, unit);
+    if (utxos.length === 1) {
+      return utxos[0];
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
   }
 
-  if (utxos.length > 1) {
-    throw new Error(`Expected exactly one ${label} UTxO at ${address} for unit ${unit}.`);
-  }
-
-  return utxos[0];
+  throw new Error(`Unable to observe a single ${label} UTxO at ${address} with unit ${unit}.`);
 }
 
-async function waitForSingleUtxoAtUnit(
-  lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>,
-  address: string,
-  unit: string,
-  label: string,
-  previous:
-    | {
-        txHash: string;
-        outputIndex: number;
-      }
-    | null,
-): Promise<Awaited<ReturnType<typeof findSingleUtxoAtUnit>>> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    try {
-      const utxo = await findSingleUtxoAtUnit(lucid, address, unit, label);
-      if (
-        previous === null ||
-        utxo.txHash !== previous.txHash ||
-        utxo.outputIndex !== previous.outputIndex
-      ) {
-        return utxo;
-      }
-    } catch (_error) {
-      // The new UTxO may not be indexed yet immediately after confirmation.
-    }
-
-    await new Promise((resolve) => {
-      setTimeout(resolve, 1_500);
-    });
-  }
-
-  throw new Error(
-    `Timed out while waiting for the refreshed ${label} UTxO at ${address} for unit ${unit}.`,
+function assertPairIsNew(
+  allowedPairs: PairStateArtifact["configState"]["allowedPairs"],
+  pair: {
+    tokenName: string;
+    pairId: string;
+  },
+): void {
+  const existing = allowedPairs.find(
+    (entry) => entry.tokenName === pair.tokenName || entry.pairId === pair.pairId,
   );
+  if (existing) {
+    throw new Error(`Pair ${pair.pairId} is already registered in the current config state.`);
+  }
+}
+
+function selectFundingUtxo(
+  utxos: UTxO[],
+  excludedOutRefs: Array<{
+    txHash: string;
+    outputIndex: number;
+  }>,
+): UTxO | null {
+  return (
+    utxos
+      .filter(
+        (utxo) =>
+          !excludedOutRefs.some(
+            (outRef) =>
+              utxo.txHash === outRef.txHash && utxo.outputIndex === outRef.outputIndex,
+          ),
+      )
+      .filter((utxo) => Object.keys(utxo.assets).length === 1)
+      .sort((left, right) => {
+        const leftValue = left.assets.lovelace ?? 0n;
+        const rightValue = right.assets.lovelace ?? 0n;
+        if (leftValue === rightValue) return 0;
+        return leftValue > rightValue ? -1 : 1;
+      })[0] ?? null
+  );
+}
+
+function splitUnit(unit: string): { policyId: string; assetName: string } {
+  const normalizedUnit = normalizeHex(unit, "unit");
+  return {
+    policyId: normalizedUnit.slice(0, 56),
+    assetName: normalizedUnit.slice(56),
+  };
+}
+
+function toBigInt(value: string | number, label: string): bigint {
+  const normalized = typeof value === "number" ? value.toString() : value.trim();
+  if (!/^-?\d+$/.test(normalized)) {
+    throw new Error(`Expected ${label} to be an integer.`);
+  }
+  return BigInt(normalized);
 }

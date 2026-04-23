@@ -17,3 +17,6 @@ CATALYST
 https://projectcatalyst.io/funds/14/cardano-use-cases-concepts/integration-of-dia-price-oracles-on-cardano
 
 https://milestones.projectcatalyst.io/projects/1400073
+
+Spectra (Cross-chain Messaging Layer)
+https://www.diadata.org/docs/dia-stack/architecture/core-components/spectra
