@@ -41,48 +41,25 @@ The repository is organized around the main project areas:
 
 ## Documentation Index
 
-All project documents, grouped by purpose, with their current status.
-Status tags:
+### Source of truth
 
-- `source` — external source of truth, not edited here.
-- `current` — aligned with the latest confirmed architecture.
-- `needs-update` — predates the 2026-04-21 DIA clarifications and conflicts with them.
+- [Cardano Integration Requirement [PF]](specs/requirements/cardano-integration-requirement-pf.md) — DIA requirement document (via Protofire).
+- [Final Cardano Milestones](specs/milestones/final-cardano-milestones.md) — Catalyst milestone text.
 
-### Requirements and milestones (source of truth)
+### Architecture and plan
 
-- [Final Cardano Milestones](specs/milestones/final-cardano-milestones.md) — `source`. Catalyst milestone text.
-- [Cardano Integration Requirement [PF]](specs/requirements/cardano-integration-requirement-pf.md) — `source`. DIA requirement document (via Protofire).
-- [Milestone Mapping](specs/milestone-mapping.md) — `current`. Maps milestones to repository areas.
-
-### Architecture and design (live)
-
-- [Cardano Oracle Integration – Technical Specification](specs/design/20260416-cardano-oracle-integration-technical-specification.md) — `needs-update`. The single architecture spec. Written for a single-tenant model; architecture is under revision (multi-tenant, Config location, signature scheme, pair whitelist, updater model).
-- [Architecture Overview](docs/architecture/overview.md) — `current`. Repository layout only. Does not describe deployment topology.
-
-### Milestone 1 plan (live)
-
-- [Milestone 1 Contract and Transaction Architecture Plan](specs/plans/20260415-142121-milestone1-contract-and-transaction-architecture-plan.md) — `needs-update`. The single implementation plan. Assumes single-tenant model; will be revised together with the spec.
+- [Cardano Oracle Architecture](specs/design/cardano-oracle-architecture.md) — single architecture reference.
+- [Work Plan](specs/plans/work-plan.md) — single work plan for the project.
 
 ### Component docs
 
-- [On-chain contracts (Aiken) README](contracts/aiken/README.md) — `current`. Reflects current on-chain scaffolding; will follow the spec revision.
-- [Off-chain CLI README](offchain/cli/README.md) — `current` for Preview flow; will follow the spec revision.
-- [Deployment evidence README](docs/deployment/evidence/README.md) — `current`. Evidence index skeleton.
+- [On-chain contracts (Aiken) README](contracts/aiken/README.md)
+- [Off-chain CLI README](offchain/cli/README.md)
+- [Deployment evidence README](docs/deployment/evidence/README.md)
 
 ### References
 
-- [Reference Links](specs/references/input-links.md) — `source`. External links (Google Docs, Catalyst, Spectra).
-
-### Known divergences to reconcile
-
-These are the deltas between what is documented today and what DIA confirmed on 2026-04-21.
-
-- **Single-tenant vs multi-tenant.** Current spec is single-tenant. DIA confirmed multi-tenant: one `PushOracleReceiver` per client, one shared `ProtocolFeeHook` per chain.
-- **Config location.** Current spec has a separate Config contract. EVM and DIA guidance: no separate Config; signers, fee params, and domain live inside the Receiver's configuration.
-- **Client identity NFT.** Current spec mints per-client / per-pair NFTs. DIA said the receiver's address is the only client identifier; a per-client identity NFT is not desired. Pair-level state tokens are still required by Cardano's UTxO model to identify "the one live UTxO per pair", but they are not a client-identity mechanism.
-- **Signature scheme.** Current spec uses `Ed25519 + blake2b-256`. DIA uses `secp256k1 ECDSA` with EIP-712-style domain separation. Plutus V2+ supports `verifyEcdsaSecp256k1Signature` natively, so the Cardano port must use `secp256k1` to match DIA signers.
-- **Allowed-pair whitelist.** Current spec enforces `allowed_pairs` on-chain. DIA: not enforced on-chain; any symbol passes if the signature is valid. Pair filtering stays off-chain.
-- **Updater permissioning.** Current spec implies an updater allowlist. DIA: permissionless submitters, authority comes from the signed Intent.
+- [Reference Links](specs/references/input-links.md) — external links (Google Docs, Catalyst, Spectra).
 
 ## Preview Workflow
 
