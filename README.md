@@ -6,7 +6,7 @@ Implementation repository for the DIA oracle integration on Cardano.
 
 This repository is part of the Project Catalyst initiative **Integration of DIA Price Oracles on Cardano** and contains the work required to deliver the Cardano-specific oracle contracts, supporting off-chain components, deployment tooling, validation flows, and project documentation.
 
-The current implementation direction preserves Cardano wallets as configuration authorities and transaction submitters, while oracle price validity is derived from official DIA `OracleIntent` payloads and their `EIP-712` secp256k1 signatures.
+The current implementation uses the final Receiver-based Cardano architecture: DIA admins control Config and client onboarding, each client has an isolated Receiver balance, each client's pairs live under a Receiver-specific Pair script, and oracle price validity is derived from official DIA `OracleIntent` payloads plus their `EIP-712` secp256k1 signatures.
 
 ## Status
 
@@ -102,22 +102,25 @@ npm run cli -- preview:wallet:defaults
 ```
 
 7. Bootstrap the Config state and persist the result under `offchain/cli/state/preview/`.
-   The Config state stores the Cardano config signers, the authorized DIA oracle public keys, the active payment-hook reference, and the `EIP-712` domain parameters required for intent verification.
+   The Config state stores the Cardano config admins, the authorized DIA oracle public keys, the `EIP-712` domain parameters, and the protocol fee charged per updated pair.
 
 8. Bootstrap the PaymentHook state, register the coordinator staking credential, and update the Config artifact with the active hook reference.
 
-9. Bootstrap each pair from that persisted config state and store pair-specific outputs under `offchain/cli/state/preview/pairs/`.
-   Pair bootstrap consumes an official DIA `OracleIntent` fixture and creates the initial Pair state on Cardano.
+9. Bootstrap each client Receiver from the persisted Config state and store client-specific outputs under `offchain/cli/state/preview/clients/`.
+   The Receiver holds the prepaid ADA balance used to pay protocol fees.
 
-10. Submit oracle updates from the persisted pair state files and overwrite them with the latest confirmed on-chain state.
-    Oracle updates consume newer DIA `OracleIntent` payloads for the same symbol, validate the recovered signer against the authorized DIA key set stored in Config, and accumulate protocol fees in the dedicated PaymentHook UTxO.
+10. Bootstrap each subscribed pair from the persisted client Receiver state and store pair-specific outputs under `offchain/cli/state/preview/clients/<client>/pairs/`.
+    Pair bootstrap creates a zeroed Pair UTxO whose Pair NFT asset name is `blake2b_256(pair_id)`.
+
+11. Submit oracle updates from the persisted pair state files and overwrite them with the latest confirmed on-chain state.
+    Oracle updates consume newer DIA `OracleIntent` payloads for the same symbol, validate the recovered signer against the authorized DIA key set stored in Config, move the protocol fee from the client's Receiver to the global PaymentHook, and update the Pair datum.
 
 The CLI model is non-interactive:
 
 - `.env` for secrets and provider configuration
 - JSON input files for repeatable execution commands
 - persisted deployment state under `offchain/cli/state/preview/`
-- explicit commands for config bootstrap, payment-hook bootstrap, pair bootstrap, and oracle update flows
+- explicit commands for config bootstrap, payment-hook bootstrap, receiver bootstrap, pair bootstrap, and oracle update flows
 
 ## Reference Implementations
 

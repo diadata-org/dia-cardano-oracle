@@ -20,6 +20,8 @@ const PAIR_STATE_MINT_TITLE = "pair_state.pair_state.mint";
 const PAIR_STATE_SPEND_TITLE = "pair_state.pair_state.spend";
 const PAYMENT_HOOK_MINT_TITLE = "payment_hook.payment_hook.mint";
 const PAYMENT_HOOK_SPEND_TITLE = "payment_hook.payment_hook.spend";
+const RECEIVER_MINT_TITLE = "receiver.receiver.mint";
+const RECEIVER_SPEND_TITLE = "receiver.receiver.spend";
 const COORDINATOR_WITHDRAW_TITLE = "update_coordinator.update_coordinator.withdraw";
 
 export async function makeConfigStateMintingPolicy(args: {
@@ -53,6 +55,7 @@ export async function makeConfigStateValidator(args: {
 export async function makePairStateMintingPolicy(args: {
   configPolicyId: string;
   configAssetName: string;
+  receiverHash: string;
 }): Promise<MintingPolicy> {
   const validator = await getBlueprintValidator(PAIR_STATE_MINT_TITLE);
   return {
@@ -60,6 +63,7 @@ export async function makePairStateMintingPolicy(args: {
     script: applyParamsToScript(validator.compiledCode!, [
       args.configPolicyId,
       args.configAssetName,
+      args.receiverHash,
     ]),
   };
 }
@@ -67,6 +71,7 @@ export async function makePairStateMintingPolicy(args: {
 export async function makePairStateValidator(args: {
   configPolicyId: string;
   configAssetName: string;
+  receiverHash: string;
 }): Promise<SpendingValidator> {
   const validator = await getBlueprintValidator(PAIR_STATE_SPEND_TITLE);
   return {
@@ -74,6 +79,7 @@ export async function makePairStateValidator(args: {
     script: applyParamsToScript(validator.compiledCode!, [
       args.configPolicyId,
       args.configAssetName,
+      args.receiverHash,
     ]),
   };
 }
@@ -118,10 +124,45 @@ export async function makePaymentHookValidator(args: {
   };
 }
 
+export async function makeReceiverMintingPolicy(args: {
+  bootstrapOutRef: OutRef;
+  assetName: string;
+  configPolicyId: string;
+  configAssetName: string;
+}): Promise<MintingPolicy> {
+  const validator = await getBlueprintValidator(RECEIVER_MINT_TITLE);
+  return {
+    type: "PlutusV3",
+    script: applyParamsToScript(validator.compiledCode!, [
+      outRefToData(args.bootstrapOutRef),
+      args.assetName,
+      args.configPolicyId,
+      args.configAssetName,
+    ]),
+  };
+}
+
+export async function makeReceiverValidator(args: {
+  bootstrapOutRef: OutRef;
+  assetName: string;
+  configPolicyId: string;
+  configAssetName: string;
+}): Promise<SpendingValidator> {
+  const validator = await getBlueprintValidator(RECEIVER_SPEND_TITLE);
+  return {
+    type: "PlutusV3",
+    script: applyParamsToScript(validator.compiledCode!, [
+      outRefToData(args.bootstrapOutRef),
+      args.assetName,
+      args.configPolicyId,
+      args.configAssetName,
+    ]),
+  };
+}
+
 export async function makeCoordinatorValidator(args: {
   configPolicyId: string;
   configAssetName: string;
-  pairPolicyId: string;
 }): Promise<WithdrawalValidator> {
   const validator = await getBlueprintValidator(COORDINATOR_WITHDRAW_TITLE);
   return {
@@ -129,7 +170,6 @@ export async function makeCoordinatorValidator(args: {
     script: applyParamsToScript(validator.compiledCode!, [
       args.configPolicyId,
       args.configAssetName,
-      args.pairPolicyId,
     ]),
   };
 }

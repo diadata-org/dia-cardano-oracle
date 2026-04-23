@@ -1,60 +1,44 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { Constr, type UTxO } from "@lucid-evolution/lucid";
+import { Constr, type OutRef, type UTxO } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
 import {
+  makeReceiverMintingPolicy,
+  makeReceiverValidator,
   makePairStateMintingPolicy,
   makePairStateValidator,
   policyIdFromMintingPolicy,
   scriptAddressFromValidator,
   scriptHashFromValidator,
 } from "./contracts.js";
-import {
-  diaIntentTokenNameFromSymbol,
-  diaIntentToState,
-  diaPairIdHex,
-  normalizeDiaEip712Domain,
-  normalizeDiaOracleIntent,
-  normalizeHex,
-  recoverDiaOracleIntentWitness,
-  type DiaOracleIntentInput,
-} from "./dia-intent.js";
-import { getDefaultConfigStatePath, readConfigState, type PairStateArtifact } from "./state.js";
+import { normalizeHex } from "./dia-intent.js";
+import { getDefaultConfigStatePath, readConfigState, type ConfigStateArtifact } from "./state.js";
 import { makeConfiguredLucid, selectConfiguredWallet } from "./lucid.js";
 import { deriveConfiguredWalletDefaults } from "./wallet.js";
 
-type PairBootstrapInput = {
-  pairTokenName?: string;
-  intent: DiaOracleIntentInput;
+type ReceiverBootstrapInput = {
+  clientId: string;
+  receiverAssetName: string;
+  initialBalanceLovelace: string;
   minUtxoLovelace: string;
 };
 
-export async function pairBootstrap(args: {
+export async function receiverBootstrap(args: {
   inputPath: string;
   statePath?: string;
   buildOnly: boolean;
-}): Promise<PairStateArtifact> {
-  reportProgress(`Loading pair bootstrap input from ${path.resolve(args.inputPath)}`);
-  const inputPath = path.resolve(args.inputPath);
-  const input = await readPairBootstrapInput(inputPath);
+}): Promise<ConfigStateArtifact> {
+  reportProgress(`Loading receiver bootstrap input from ${path.resolve(args.inputPath)}`);
+  const input = await readReceiverBootstrapInput(path.resolve(args.inputPath));
 
   const statePath = path.resolve(args.statePath ?? getDefaultConfigStatePath());
   reportProgress(`Loading config state from ${statePath}`);
   const state = await readConfigState(statePath);
-  if (!("receiver" in state) || !state.receiver) {
-    throw new Error(
-      "Pair bootstrap requires a receiver state artifact produced by receiver bootstrap.",
-    );
-  }
-
-  if (!state.bootstrapRefs.config.txHash.length) {
-    throw new Error("Config state artifact is missing the config bootstrap reference.");
-  }
 
   if (!state.configState.updateCoordinatorCredential || !state.configState.paymentHookRef) {
     throw new Error(
-      "Pair bootstrap requires a config state artifact produced after payment-hook bootstrap.",
+      "Receiver bootstrap requires a config state artifact produced after payment-hook bootstrap.",
     );
   }
 
@@ -80,87 +64,76 @@ export async function pairBootstrap(args: {
     state.scripts.configUnit,
     "config",
   );
-  const walletFundingUtxo = selectFundingUtxo(walletUtxos, [
+  const receiverBootstrapUtxo = selectBootstrapUtxo(walletUtxos, [
     state.bootstrapRefs.config,
     state.bootstrapRefs.paymentHook!,
   ]);
-  if (!walletFundingUtxo) {
-    throw new Error("No suitable wallet UTxO is available to cover pair bootstrap fees.");
+  if (!receiverBootstrapUtxo) {
+    throw new Error("No suitable wallet UTxO is available for receiver bootstrap.");
   }
 
   const configAssetName = splitUnit(state.scripts.configUnit).assetName;
+  const receiverAssetName = normalizeHex(input.receiverAssetName, "receiverAssetName");
+  const receiverBootstrapOutRef: OutRef = {
+    txHash: receiverBootstrapUtxo.txHash,
+    outputIndex: receiverBootstrapUtxo.outputIndex,
+  };
+
+  const receiverMintPolicy = await makeReceiverMintingPolicy({
+    bootstrapOutRef: receiverBootstrapOutRef,
+    assetName: receiverAssetName,
+    configPolicyId: state.scripts.configPolicyId,
+    configAssetName,
+  });
+  const receiverPolicyId = policyIdFromMintingPolicy(receiverMintPolicy);
+  const receiverUnit = `${receiverPolicyId}${receiverAssetName}`;
+
+  const receiverValidator = await makeReceiverValidator({
+    bootstrapOutRef: receiverBootstrapOutRef,
+    assetName: receiverAssetName,
+    configPolicyId: state.scripts.configPolicyId,
+    configAssetName,
+  });
+  const receiverValidatorHash = scriptHashFromValidator(receiverValidator);
+  const receiverValidatorAddress = scriptAddressFromValidator(receiverValidator);
+
   const pairMintPolicy = await makePairStateMintingPolicy({
     configPolicyId: state.scripts.configPolicyId,
     configAssetName,
-    receiverHash: state.receiver.receiverValidatorHash,
+    receiverHash: receiverValidatorHash,
   });
   const pairPolicyId = policyIdFromMintingPolicy(pairMintPolicy);
-  if (state.scripts.pairPolicyId && pairPolicyId !== state.scripts.pairPolicyId) {
-    throw new Error("State file pair policy id does not match the current blueprint.");
-  }
-
   const pairValidator = await makePairStateValidator({
     configPolicyId: state.scripts.configPolicyId,
     configAssetName,
-    receiverHash: state.receiver.receiverValidatorHash,
+    receiverHash: receiverValidatorHash,
   });
   const pairValidatorHash = scriptHashFromValidator(pairValidator);
   const pairValidatorAddress = scriptAddressFromValidator(pairValidator);
 
-  const intent = normalizeDiaOracleIntent(input.intent);
-  const pair = {
-    tokenName: normalizeHex(
-      input.pairTokenName?.trim() && input.pairTokenName.trim().length > 0
-        ? input.pairTokenName
-        : diaIntentTokenNameFromSymbol(intent),
-      "pairTokenName",
-    ),
-    pairId: diaPairIdHex(intent),
-  };
-  const domain = normalizeDiaEip712Domain({
-    name: state.configState.domain.name,
-    version: state.configState.domain.version,
-    sourceChainId: state.configState.domain.sourceChainId,
-    verifyingContract: state.configState.domain.verifyingContract,
-  });
-  const witness = recoverDiaOracleIntentWitness(domain, intent);
-  if (!state.configState.authorizedDiaPublicKeys.includes(witness.signerPublicKey)) {
-    throw new Error(
-      `Recovered DIA signer public key ${witness.signerPublicKey} is not authorized in the current config state.`,
-    );
-  }
-
-  const pairUnit = `${pairPolicyId}${pair.tokenName}`;
-  const pairState = {
-    pairId: pair.pairId,
-    price: "0",
-    timestamp: "0",
-    nonce: "0",
-    intentHash: "00".repeat(32),
-    signer: "00".repeat(20),
+  const receiverState = {
+    balanceLovelace: toBigInt(input.initialBalanceLovelace, "initialBalanceLovelace").toString(),
     minUtxoLovelace: toBigInt(input.minUtxoLovelace, "minUtxoLovelace").toString(),
-    intent: diaIntentToState(intent),
   };
+  const receiverDatumCbor = buildReceiverDatumCbor(receiverState);
+  const mintRedeemer = Data.to(new Constr(0, []));
 
-  const pairMintRedeemer = Data.to(
-    new Constr<PlutusData>(0, [pair.pairId]),
-  );
-  const pairDatumCbor = buildPairDatumCbor(pairState);
-
-  reportProgress("Building Preview pair bootstrap transaction");
+  reportProgress("Building Preview receiver bootstrap transaction");
   const txBuilder = lucid
     .newTx()
     .readFrom([currentConfigUtxo])
-    .collectFrom([walletFundingUtxo])
+    .collectFrom([receiverBootstrapUtxo])
     .addSignerKey(walletDefaults.paymentKeyHash)
-    .attach.MintingPolicy(pairMintPolicy)
-    .mintAssets({ [pairUnit]: 1n }, pairMintRedeemer)
+    .attach.MintingPolicy(receiverMintPolicy)
+    .mintAssets({ [receiverUnit]: 1n }, mintRedeemer)
     .pay.ToContract(
-      pairValidatorAddress,
-      { kind: "inline", value: pairDatumCbor },
+      receiverValidatorAddress,
+      { kind: "inline", value: receiverDatumCbor },
       {
-        lovelace: BigInt(pairState.minUtxoLovelace),
-        [pairUnit]: 1n,
+        lovelace:
+          BigInt(receiverState.minUtxoLovelace) +
+          BigInt(receiverState.balanceLovelace),
+        [receiverUnit]: 1n,
       },
     );
 
@@ -182,33 +155,16 @@ export async function pairBootstrap(args: {
     }
   }
 
-  const latestConfigUtxo =
-    args.buildOnly || !confirmed
-      ? state.configUtxo.current
-      : await findSingleUtxoAtUnit(
-          lucid,
-          state.scripts.configValidatorAddress,
-          state.scripts.configUnit,
-          "config",
-        );
-  const pairStateUtxo =
+  const latestReceiverUtxo =
     args.buildOnly || !confirmed
       ? { txHash: "", outputIndex: 0 }
-      : await findSingleUtxoAtUnit(
-          lucid,
-          pairValidatorAddress,
-          pairUnit,
-          "pair",
-        );
+      : await findSingleUtxoAtUnit(lucid, receiverValidatorAddress, receiverUnit, "receiver");
 
   return {
+    ...state,
     wallet: {
       source,
       address: walletAddress,
-    },
-    bootstrapRefs: {
-      config: state.bootstrapRefs.config,
-      paymentHook: state.bootstrapRefs.paymentHook!,
     },
     scripts: {
       ...state.scripts,
@@ -216,26 +172,25 @@ export async function pairBootstrap(args: {
       pairValidatorHash,
       pairValidatorAddress,
     },
-    configState: state.configState,
-    configUtxo: {
-      current: latestConfigUtxo,
+    receiver: {
+      clientId: input.clientId.trim(),
+      bootstrapRef: receiverBootstrapOutRef,
+      receiverAssetName,
+      receiverPolicyId,
+      receiverUnit,
+      receiverValidatorHash,
+      receiverValidatorAddress,
+      receiverState,
+      receiverUtxo: {
+        current: {
+          txHash: latestReceiverUtxo.txHash,
+          outputIndex: latestReceiverUtxo.outputIndex,
+        },
+      },
     },
-    paymentHookState: state.paymentHookState!,
-    paymentHookUtxo: state.paymentHookUtxo!,
-    receiver: state.receiver,
-    pair: {
-      tokenName: pair.tokenName,
-      pairId: pair.pairId,
-      pairUnit,
-      pairValidatorAddress,
-      stateUtxo: pairStateUtxo,
-    },
-    pairState,
     datum: {
-      configCbor: state.datum.configCbor,
-      paymentHookCbor: state.datum.paymentHookCbor!,
-      receiverCbor: state.datum.receiverCbor,
-      pairCbor: pairDatumCbor,
+      ...state.datum,
+      receiverCbor: receiverDatumCbor,
     },
     transaction: {
       submittedTxHash,
@@ -245,23 +200,21 @@ export async function pairBootstrap(args: {
 }
 
 function reportProgress(message: string): void {
-  console.error(`[preview:pair:bootstrap] ${message}`);
+  console.error(`[preview:receiver:bootstrap] ${message}`);
 }
 
-async function readPairBootstrapInput(inputPath: string): Promise<PairBootstrapInput> {
+async function readReceiverBootstrapInput(inputPath: string): Promise<ReceiverBootstrapInput> {
   const raw = await readFile(inputPath, "utf8");
-  return JSON.parse(raw) as PairBootstrapInput;
+  return JSON.parse(raw) as ReceiverBootstrapInput;
 }
 
-function buildPairDatumCbor(state: PairStateArtifact["pairState"]): string {
+function buildReceiverDatumCbor(state: {
+  balanceLovelace: string;
+  minUtxoLovelace: string;
+}): string {
   return Data.to(
     new Constr<PlutusData>(0, [
-      state.pairId,
-      BigInt(state.price),
-      BigInt(state.timestamp),
-      BigInt(state.nonce),
-      normalizeHex(state.intentHash, "intentHash"),
-      normalizeHex(state.signer, "signer"),
+      BigInt(state.balanceLovelace),
       BigInt(state.minUtxoLovelace),
     ]),
   );
@@ -284,12 +237,9 @@ async function findSingleUtxoAtUnit(
   throw new Error(`Unable to observe a single ${label} UTxO at ${address} with unit ${unit}.`);
 }
 
-function selectFundingUtxo(
+function selectBootstrapUtxo(
   utxos: UTxO[],
-  excludedOutRefs: Array<{
-    txHash: string;
-    outputIndex: number;
-  }>,
+  excludedOutRefs: Array<{ txHash: string; outputIndex: number }>,
 ): UTxO | null {
   return (
     utxos

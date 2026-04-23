@@ -1,5 +1,5 @@
 use aiken/builtin
-use aiken/crypto.{keccak_256, verify_ecdsa_signature}
+use aiken/crypto.{blake2b_256, keccak_256, verify_ecdsa_signature}
 use aiken/collection/list
 use aiken/primitive/bytearray
 use aiken/primitive/string
@@ -37,10 +37,17 @@ pub type PairDatum {
 
 pub type UpdateWitness {
   UpdateWitness {
+    receiver_policy_id: ByteArray,
+    receiver_asset_name: ByteArray,
+    pair_policy_id: ByteArray,
     pair_token_name: ByteArray,
     intent: OracleIntent,
     signer_public_key: ByteArray,
   }
+}
+
+pub fn pair_asset_name(pair_id: ByteArray) -> ByteArray {
+  blake2b_256(pair_id)
 }
 
 pub fn oracle_intent_hash(
@@ -76,22 +83,6 @@ pub fn signer_is_authorized(
   signer_public_key: ByteArray,
 ) -> Bool {
   list.has(config_datum.authorized_dia_public_keys, signer_public_key)
-}
-
-pub fn pair_is_authorized(
-  config_datum: config_logic.ConfigDatum,
-  pair_token_name: ByteArray,
-  pair_id: ByteArray,
-) -> Bool {
-  list.any(
-    config_datum.allowed_pairs,
-    fn(pair) {
-      and {
-        pair.token_name == pair_token_name,
-        pair.pair_code == pair_id,
-      }
-    },
-  )
 }
 
 pub fn is_fresh_update(previous: PairDatum, intent: OracleIntent) -> Bool {
@@ -133,29 +124,23 @@ pub fn next_pair_matches_witness(
     next.nonce == witness.intent.nonce,
     next.intent_hash == oracle_intent_hash(config_datum.domain_data, witness.intent),
     next.signer == witness.intent.signer,
-    pair_is_authorized(config_datum, witness.pair_token_name, next.pair_id),
+    witness.pair_token_name == pair_asset_name(next.pair_id),
     is_fresh_update(previous, witness.intent),
     has_valid_signature(config_datum, witness),
   }
 }
 
 pub fn valid_initial_pair_datum(
-  pair: config_logic.PairEntry,
-  config_datum: config_logic.ConfigDatum,
+  pair_id: ByteArray,
   datum: PairDatum,
-  witness: UpdateWitness,
 ) -> Bool {
   and {
     valid_pair_state(datum),
-    pair.token_name == witness.pair_token_name,
-    pair.pair_code == witness.intent.symbol,
-    datum.pair_id == pair.pair_code,
-    datum.price == witness.intent.price,
-    datum.timestamp == witness.intent.timestamp,
-    datum.nonce == witness.intent.nonce,
-    datum.intent_hash == oracle_intent_hash(config_datum.domain_data, witness.intent),
-    datum.signer == witness.intent.signer,
-    has_valid_signature(config_datum, witness),
+    !bytearray.is_empty(pair_id),
+    datum.pair_id == pair_id,
+    datum.price == 0,
+    datum.timestamp == 0,
+    datum.nonce == 0,
   }
 }
 
@@ -262,19 +247,12 @@ fn sample_signer_public_key() -> ByteArray {
   #"03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807"
 }
 
-fn sample_pair() -> config_logic.PairEntry {
-  config_logic.PairEntry {
-    token_name: #"555344435f555344",
-    pair_code: #"555344432f555344",
-  }
-}
-
 fn sample_config() -> config_logic.ConfigDatum {
   config_logic.ConfigDatum {
-    valid_config_signers: config_logic.sample_config().valid_config_signers,
+    config_admins: config_logic.sample_config().config_admins,
     authorized_dia_public_keys: config_logic.sample_config().authorized_dia_public_keys,
     domain_data: config_logic.sample_config().domain_data,
-    allowed_pairs: [sample_pair()],
+    protocol_fee_lovelace: config_logic.sample_config().protocol_fee_lovelace,
     payment_hook_ref: None,
     update_coordinator_credential: None,
     min_utxo_lovelace: config_logic.sample_config().min_utxo_lovelace,
@@ -297,7 +275,10 @@ fn sample_pair_datum() -> PairDatum {
 
 fn sample_witness() -> UpdateWitness {
   UpdateWitness {
-    pair_token_name: sample_pair().token_name,
+    receiver_policy_id: #"22222222222222222222222222222222222222222222222222222222",
+    receiver_asset_name: #"4449415f5245434549564552",
+    pair_policy_id: #"11111111111111111111111111111111111111111111111111111111",
+    pair_token_name: pair_asset_name(sample_intent().symbol),
     intent: sample_intent(),
     signer_public_key: sample_signer_public_key(),
   }
@@ -311,12 +292,18 @@ test real_dia_signature_is_accepted() {
   has_valid_signature(sample_config(), sample_witness())
 }
 
-test valid_initial_pair_datum_accepts_real_fixture() {
+test valid_initial_pair_datum_accepts_zero_initial_state() {
   valid_initial_pair_datum(
-    sample_pair(),
-    sample_config(),
-    sample_pair_datum(),
-    sample_witness(),
+    sample_pair_datum().pair_id,
+    PairDatum {
+      pair_id: sample_pair_datum().pair_id,
+      price: 0,
+      timestamp: 0,
+      nonce: 0,
+      intent_hash: sample_pair_datum().intent_hash,
+      signer: sample_pair_datum().signer,
+      min_utxo_lovelace: sample_pair_datum().min_utxo_lovelace,
+    },
   )
 }
 

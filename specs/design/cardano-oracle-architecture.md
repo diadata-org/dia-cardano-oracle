@@ -178,7 +178,7 @@ Reference-script UTxOs are typically parked at an address whose spend always fai
 }
 ```
 
-No `allowed_pairs` field.
+Config does not carry a global pair allow-list.
 
 ### 4.2 PaymentHook datum
 
@@ -186,8 +186,8 @@ No `allowed_pairs` field.
 {
   withdraw_address:          Address,   -- payout target for withdrawals
   accrued_fees_lovelace:     Int,       -- current accumulated balance
-  lifetime_collected:        Int,       -- historical collected
-  lifetime_withdrawn:        Int,       -- historical withdrawn
+  lifetime_collected_lovelace: Int,     -- historical collected
+  lifetime_withdrawn_lovelace: Int,     -- historical withdrawn
   min_utxo_lovelace:         Int,
 }
 ```
@@ -575,14 +575,14 @@ flowchart LR
   - Pair UTxO recreated (same NFT, datum updated with new `price`, `timestamp`, `nonce`, `last_intent_hash`, `last_signer`).
   - Receiver UTxO recreated (same NFT, `balance_lovelace -= protocol_fee_lovelace`, `utxo.lovelace -= fee`).
   - PaymentHook UTxO recreated (same NFT, `accrued_fees += fee`, `lifetime_collected += fee`, `utxo.lovelace += fee`).
-- **Coordinator withdraw redeemer:** `ApplySingle { intent }` where `intent = { pair_id, price, timestamp, nonce, signer, signature, raw_payload }`.
+- **Coordinator withdraw redeemer:** `ApplySingle { witness }`, where the witness carries the Receiver NFT id, the Cardano pair policy id, the Pair NFT asset name, the DIA `OracleIntent`, and the recovered DIA signer public key.
 - **Pair spend redeemer:** `ApplyUpdate`.
 - **Receiver spend redeemer:** `PayFee`.
 - **Hook spend redeemer:** `ApplyFee`.
 - **Cardano signers:** none required by the validators (permissionless submission).
 - **Validates (coordinator, once per tx):**
   - Reads Config through the reference input.
-  - DIA Intent signature valid per DIA `OracleIntentUtils` (ECDSA secp256k1 over EIP-712 digest). Signer pubkey ∈ `Config.authorized_dia_public_keys`, `intent.expiry >= tx.valid_to`, `intent.symbol` matches the Pair NFT asset name, `intent.timestamp > old.timestamp`, `intent.nonce > old.nonce`.
+  - DIA Intent signature valid per DIA `OracleIntentUtils` (ECDSA secp256k1 over EIP-712 digest). Signer pubkey ∈ `Config.authorized_dia_public_keys`, Pair NFT asset name = `blake2b_256(intent.symbol)`, `intent.timestamp > old.timestamp`, `intent.nonce > old.nonce`.
   - `fee == Config.protocol_fee_lovelace`.
   - `new_receiver.balance == old_receiver.balance - fee`.
   - `new_hook.accrued_fees == old_hook.accrued_fees + fee`.
@@ -681,10 +681,8 @@ flowchart LR
 
 ---
 
-## 6. Open items pending DIA confirmation
+## 6. Finalized design decisions
 
-1. **Config shared vs inline.** Proposal: shared (one Config UTxO used as reference input by all Receivers). Alternative: duplicate signers, fee and domain inside each Receiver datum.
-2. **Fees.**
-   - Unit on batch update: one fee per pair (proposal) vs one flat fee per tx.
-   - Magnitude: `protocol_fee_lovelace` as a fixed admin-tunable value in Config. Estimation formula to be defined (tx size + execution units + safety margin; possibly scaled by the number of pairs for batch).
-3. **Pair NFT asset name derivation.** Proposal: `blake2b_256(symbol)` truncated to 32 bytes.
+1. **Config is shared.** One global Config UTxO is read as a reference input by Receivers, Pair states, PaymentHook, and the coordinator.
+2. **Fees live in Config.** `protocol_fee_lovelace` is admin-tunable in Config and is charged per updated pair.
+3. **Pair NFT asset names are hashed.** Pair asset name = `blake2b_256(pair_id)`, where `pair_id` is the UTF-8 bytes of the DIA symbol such as `USDC/USD`.

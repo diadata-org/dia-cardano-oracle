@@ -1,5 +1,6 @@
 import { Constr, type Data as PlutusData } from "@lucid-evolution/lucid";
 import { Data } from "@lucid-evolution/plutus";
+import { blake2b } from "@noble/hashes/blake2b";
 import {
   AbiCoder,
   Signature,
@@ -253,7 +254,11 @@ export function diaPairIdHex(intent: DiaOracleIntent): string {
 }
 
 export function diaIntentTokenNameFromSymbol(intent: DiaOracleIntent): string {
-  return utf8ToHex(intent.symbol.replaceAll("/", "_"));
+  return blake2bHex(utf8ToHex(intent.symbol));
+}
+
+export function pairAssetNameFromPairIdHex(pairId: string): string {
+  return blake2bHex(normalizeHex(pairId, "pairId"));
 }
 
 export function diaIntentToState(intent: DiaOracleIntent): DiaOracleIntentInput {
@@ -319,6 +324,10 @@ function toBigInt(value: string | number, label: string): bigint {
 
 function strip0x(value: string): string {
   return value.startsWith("0x") ? value.slice(2).toLowerCase() : value.toLowerCase();
+}
+
+function blake2bHex(hexValue: string): string {
+  return Buffer.from(blake2b(Buffer.from(hexValue, "hex"), { dkLen: 32 })).toString("hex");
 }
 
 function with0x(value: string): string {

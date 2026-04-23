@@ -25,7 +25,6 @@ import { deriveConfiguredWalletDefaults } from "./wallet.js";
 type PaymentHookBootstrapInput = {
   paymentHookAssetName: string;
   withdrawAddress?: string;
-  protocolFeePerTxLovelace: string;
   minUtxoLovelace: string;
 };
 
@@ -127,15 +126,10 @@ export async function paymentHookBootstrap(args: {
     withdrawAddress: input.withdrawAddress?.trim().length
       ? input.withdrawAddress.trim()
       : walletAddress,
-    protocolFeePerTxLovelace: toBigInt(
-      input.protocolFeePerTxLovelace,
-      "protocolFeePerTxLovelace",
-    ).toString(),
     minUtxoLovelace: toBigInt(input.minUtxoLovelace, "minUtxoLovelace").toString(),
     accruedFeesLovelace: "0",
-    lifetimeFeesCollectedLovelace: "0",
-    lifetimeFeesWithdrawnLovelace: "0",
-    feeChargeCount: "0",
+    lifetimeCollectedLovelace: "0",
+    lifetimeWithdrawnLovelace: "0",
   };
 
   const configDatumCbor = buildConfigDatumCbor(nextConfigState);
@@ -263,9 +257,7 @@ function buildConfigDatumCbor(state: ConfigStateArtifact["configState"]): string
         BigInt(state.domain.sourceChainId),
         normalizeHex(state.domain.verifyingContract, "domain.verifyingContract"),
       ]),
-      state.allowedPairs.map(
-        (pair) => new Constr<PlutusData>(0, [pair.tokenName, pair.pairId]),
-      ),
+      BigInt(state.protocolFeeLovelace),
       state.paymentHookRef
         ? new Constr<PlutusData>(0, [
             new Constr<PlutusData>(0, [
@@ -292,12 +284,10 @@ function buildPaymentHookDatumCbor(
   return Data.to(
     new Constr<PlutusData>(0, [
       addressToPlutusData(state.withdrawAddress),
-      BigInt(state.protocolFeePerTxLovelace),
-      BigInt(state.minUtxoLovelace),
       BigInt(state.accruedFeesLovelace),
-      BigInt(state.lifetimeFeesCollectedLovelace),
-      BigInt(state.lifetimeFeesWithdrawnLovelace),
-      BigInt(state.feeChargeCount),
+      BigInt(state.lifetimeCollectedLovelace),
+      BigInt(state.lifetimeWithdrawnLovelace),
+      BigInt(state.minUtxoLovelace),
     ]),
   );
 }

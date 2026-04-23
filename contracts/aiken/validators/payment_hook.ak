@@ -107,12 +107,20 @@ validator payment_hook(
       payment_hook_logic.exact_locked_lovelace(own_input.output, current_datum),
       payment_hook_logic.exact_locked_lovelace(next_output, next_datum),
       when redeemer is {
-        payment_hook_logic.ApplyFee ->
+        payment_hook_logic.ApplyFee -> {
+          let collected_lovelace =
+            next_datum.accrued_fees_lovelace - current_datum.accrued_fees_lovelace
+
           and {
             has_expected_hook_ref(config_datum, own_policy_id, expected_asset_name),
             coordinator_witness_present(self.withdrawals, config_datum),
-            payment_hook_logic.fee_charge_transition(current_datum, next_datum),
+            payment_hook_logic.fee_charge_transition(
+              current_datum,
+              next_datum,
+              collected_lovelace,
+            ),
           }
+        }
 
         payment_hook_logic.AdminUpdate ->
           and {

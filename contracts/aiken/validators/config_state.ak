@@ -40,6 +40,7 @@ validator config_state(
     self: Transaction,
   ) {
     expect Some(current_datum) = maybe_datum
+    let config_logic.AdminUpdate = redeemer
     expect Some(own_input) =
       list.find(self.inputs, fn(input) { input.output_reference == own_ref })
     expect Script(own_policy_id) = own_input.output.address.payment_credential
@@ -63,13 +64,7 @@ validator config_state(
       config_logic.has_config_signer(current_datum, self),
       assets.lovelace_of(own_input.output.value) == current_datum.min_utxo_lovelace,
       assets.lovelace_of(config_output.value) == next_datum.min_utxo_lovelace,
-      when redeemer is {
-        config_logic.AdminUpdate ->
-          config_logic.same_allowed_pairs(current_datum, next_datum)
-
-        config_logic.RegisterPair(pair) ->
-          config_logic.registered_pair_transition(current_datum, next_datum, pair)
-      },
+      config_logic.admin_update_transition(current_datum, next_datum),
     }
   }
 

@@ -7,8 +7,6 @@ import {
   makeConfigStateMintingPolicy,
   makeConfigStateValidator,
   makeCoordinatorValidator,
-  makePairStateMintingPolicy,
-  makePairStateValidator,
   policyIdFromMintingPolicy,
   scriptAddressFromValidator,
   scriptCredentialState,
@@ -34,6 +32,7 @@ type ConfigBootstrapInput = {
     sourceChainId: number | string;
     verifyingContract: string;
   };
+  protocolFeeLovelace: string;
   minUtxoLovelace: string;
 };
 
@@ -47,6 +46,7 @@ type ResolvedConfigBootstrapInput = {
     sourceChainId: bigint;
     verifyingContract: string;
   };
+  protocolFeeLovelace: bigint;
   minUtxoLovelace: bigint;
 };
 
@@ -86,7 +86,7 @@ export async function configBootstrap(args: {
     `Selected wallet bootstrap UTxO ${bootstrapOutRef.txHash}#${bootstrapOutRef.outputIndex}`,
   );
 
-  reportProgress("Deriving Config, Pair, and Coordinator scripts from the current blueprint");
+  reportProgress("Deriving Config and global Coordinator scripts from the current blueprint");
   const configAssetName = normalizeHex(
     resolvedInput.configAssetName,
     "configAssetName",
@@ -105,23 +105,9 @@ export async function configBootstrap(args: {
   const configValidatorHash = scriptHashFromValidator(configValidator);
   const configValidatorAddress = scriptAddressFromValidator(configValidator);
 
-  const pairMintPolicy = await makePairStateMintingPolicy({
-    configPolicyId,
-    configAssetName,
-  });
-  const pairPolicyId = policyIdFromMintingPolicy(pairMintPolicy);
-
-  const pairValidator = await makePairStateValidator({
-    configPolicyId,
-    configAssetName,
-  });
-  const pairValidatorHash = scriptHashFromValidator(pairValidator);
-  const pairValidatorAddress = scriptAddressFromValidator(pairValidator);
-
   const coordinatorValidator = await makeCoordinatorValidator({
     configPolicyId,
     configAssetName,
-    pairPolicyId,
   });
   const coordinatorHash = scriptHashFromValidator(coordinatorValidator);
   const coordinatorRewardAddress = scriptRewardAddress(coordinatorHash);
@@ -195,9 +181,9 @@ export async function configBootstrap(args: {
       configUnit,
       configValidatorHash,
       configValidatorAddress,
-      pairPolicyId,
-      pairValidatorHash,
-      pairValidatorAddress,
+      pairPolicyId: null,
+      pairValidatorHash: null,
+      pairValidatorAddress: null,
       coordinatorHash,
       coordinatorRewardAddress,
       paymentHookPolicyId: null,
@@ -214,7 +200,7 @@ export async function configBootstrap(args: {
         sourceChainId: resolvedInput.domain.sourceChainId.toString(),
         verifyingContract: resolvedInput.domain.verifyingContract,
       },
-      allowedPairs: [],
+      protocolFeeLovelace: resolvedInput.protocolFeeLovelace.toString(),
       paymentHookRef: null,
       updateCoordinatorCredential: null,
       minUtxoLovelace: resolvedInput.minUtxoLovelace.toString(),
@@ -272,6 +258,7 @@ function resolveConfigBootstrapInput(
         "domain.verifyingContract",
       ),
     },
+    protocolFeeLovelace: toBigInt(input.protocolFeeLovelace, "protocolFeeLovelace"),
     minUtxoLovelace: toBigInt(input.minUtxoLovelace, "minUtxoLovelace"),
   };
 }
@@ -289,7 +276,7 @@ function buildConfigDatumCbor(input: ResolvedConfigBootstrapInput): string {
         input.domain.sourceChainId,
         normalizeHex(input.domain.verifyingContract, "domain.verifyingContract"),
       ]),
-      [],
+      input.protocolFeeLovelace,
       noneData(),
       noneData(),
       input.minUtxoLovelace,

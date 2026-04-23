@@ -12,6 +12,7 @@ import {
   makeCoordinatorValidator,
   makePairStateValidator,
   makePaymentHookValidator,
+  makeReceiverValidator,
   scriptAddressFromValidator,
   scriptHashFromValidator,
 } from "./contracts.js";
@@ -48,6 +49,11 @@ export async function submitOracleUpdate(args: {
   if (!state.bootstrapRefs.paymentHook?.txHash) {
     throw new Error("Pair state artifact is missing the payment-hook bootstrap reference.");
   }
+  if (!state.receiver) {
+    throw new Error(
+      "Oracle update requires a pair state artifact created under the final receiver architecture.",
+    );
+  }
 
   reportProgress("Connecting to Preview and selecting the configured wallet");
   const lucid = await makeConfiguredLucid();
@@ -76,6 +82,12 @@ export async function submitOracleUpdate(args: {
     state.scripts.paymentHookUnit!,
     "payment hook",
   );
+  const currentReceiverUtxo = await findSingleUtxoAtUnit(
+    lucid,
+    state.receiver.receiverValidatorAddress,
+    state.receiver.receiverUnit,
+    "receiver",
+  );
   const walletFundingUtxo = selectFundingUtxo(walletUtxos, [
     state.bootstrapRefs.config,
     state.bootstrapRefs.paymentHook,
@@ -88,6 +100,7 @@ export async function submitOracleUpdate(args: {
   const pairValidator = await makePairStateValidator({
     configPolicyId: state.scripts.configPolicyId,
     configAssetName,
+    receiverHash: state.receiver.receiverValidatorHash,
   });
   const pairValidatorHash = scriptHashFromValidator(pairValidator);
   if (pairValidatorHash !== state.scripts.pairValidatorHash) {
@@ -109,8 +122,17 @@ export async function submitOracleUpdate(args: {
   const coordinatorValidator = await makeCoordinatorValidator({
     configPolicyId: state.scripts.configPolicyId,
     configAssetName,
-    pairPolicyId: state.scripts.pairPolicyId,
   });
+  const receiverValidator = await makeReceiverValidator({
+    bootstrapOutRef: state.receiver.bootstrapRef,
+    assetName: state.receiver.receiverAssetName,
+    configPolicyId: state.scripts.configPolicyId,
+    configAssetName,
+  });
+  const receiverValidatorHash = scriptHashFromValidator(receiverValidator);
+  if (receiverValidatorHash !== state.receiver.receiverValidatorHash) {
+    throw new Error("Receiver validator hash does not match the current blueprint.");
+  }
 
   const intent = normalizeDiaOracleIntent(input.intent);
   const domain = normalizeDiaEip712Domain({
@@ -153,31 +175,53 @@ export async function submitOracleUpdate(args: {
     ...state.paymentHookState,
     accruedFeesLovelace: (
       BigInt(state.paymentHookState.accruedFeesLovelace) +
-      BigInt(state.paymentHookState.protocolFeePerTxLovelace)
+      BigInt(state.configState.protocolFeeLovelace)
     ).toString(),
-    lifetimeFeesCollectedLovelace: (
-      BigInt(state.paymentHookState.lifetimeFeesCollectedLovelace) +
-      BigInt(state.paymentHookState.protocolFeePerTxLovelace)
+    lifetimeCollectedLovelace: (
+      BigInt(state.paymentHookState.lifetimeCollectedLovelace) +
+      BigInt(state.configState.protocolFeeLovelace)
     ).toString(),
-    feeChargeCount: (BigInt(state.paymentHookState.feeChargeCount) + 1n).toString(),
   };
+  const nextReceiverState = {
+    ...state.receiver.receiverState,
+    balanceLovelace: (
+      BigInt(state.receiver.receiverState.balanceLovelace) -
+      BigInt(state.configState.protocolFeeLovelace)
+    ).toString(),
+  };
+  if (BigInt(nextReceiverState.balanceLovelace) < 0n) {
+    throw new Error("Receiver balance is not sufficient to pay the protocol fee.");
+  }
 
   const pairRedeemer = Data.to(new Constr(0, []));
   const paymentHookRedeemer = Data.to(new Constr(0, []));
+  const receiverRedeemer = Data.to(new Constr(1, []));
   const coordinatorRedeemer = Data.to(
-    new Constr<PlutusData>(0, [updateWitnessData(intent, state.pair.tokenName, witness.signerPublicKey)]),
+    new Constr<PlutusData>(0, [
+      updateWitnessData(
+        intent,
+        state.receiver.receiverPolicyId,
+        state.receiver.receiverAssetName,
+        splitUnit(state.pair.pairUnit).policyId,
+        state.pair.tokenName,
+        witness.signerPublicKey,
+      ),
+    ]),
   );
   const nextPairDatumCbor = buildPairDatumCbor(nextPairState);
   const nextPaymentHookDatumCbor = buildPaymentHookDatumCbor(nextPaymentHookState);
+  const nextReceiverDatumCbor = buildReceiverDatumCbor(nextReceiverState);
 
   reportProgress("Building Preview oracle update transaction");
   const txBuilder = lucid
     .newTx()
     .readFrom([currentConfigUtxo])
     .collectFrom([currentPairUtxo], pairRedeemer)
+    .collectFrom([currentReceiverUtxo], receiverRedeemer)
     .collectFrom([currentPaymentHookUtxo], paymentHookRedeemer)
     .collectFrom([walletFundingUtxo])
     .attach.SpendingValidator(pairValidator)
+    .attach.SpendingValidator(receiverValidator)
     .attach.SpendingValidator(paymentHookValidator)
     .attach.WithdrawalValidator(coordinatorValidator)
     .withdraw(state.scripts.coordinatorRewardAddress, 0n, coordinatorRedeemer)
@@ -187,6 +231,16 @@ export async function submitOracleUpdate(args: {
       {
         lovelace: BigInt(nextPairState.minUtxoLovelace),
         [state.pair.pairUnit]: 1n,
+      },
+    )
+    .pay.ToContract(
+      state.receiver.receiverValidatorAddress,
+      { kind: "inline", value: nextReceiverDatumCbor },
+      {
+        lovelace:
+          BigInt(nextReceiverState.minUtxoLovelace) +
+          BigInt(nextReceiverState.balanceLovelace),
+        [state.receiver.receiverUnit]: 1n,
       },
     )
     .pay.ToContract(
@@ -236,6 +290,15 @@ export async function submitOracleUpdate(args: {
           state.scripts.paymentHookUnit!,
           "payment hook",
         );
+  const latestReceiverUtxo =
+    args.buildOnly || !confirmed
+      ? state.receiver.receiverUtxo.current
+      : await findSingleUtxoAtUnit(
+          lucid,
+          state.receiver.receiverValidatorAddress,
+          state.receiver.receiverUnit,
+          "receiver",
+        );
 
   return {
     wallet: {
@@ -258,6 +321,16 @@ export async function submitOracleUpdate(args: {
         outputIndex: latestPaymentHookUtxo.outputIndex,
       },
     },
+    receiver: {
+      ...state.receiver,
+      receiverState: nextReceiverState,
+      receiverUtxo: {
+        current: {
+          txHash: latestReceiverUtxo.txHash,
+          outputIndex: latestReceiverUtxo.outputIndex,
+        },
+      },
+    },
     pair: {
       ...state.pair,
       stateUtxo: {
@@ -269,6 +342,7 @@ export async function submitOracleUpdate(args: {
     datum: {
       configCbor: state.datum.configCbor,
       paymentHookCbor: nextPaymentHookDatumCbor,
+      receiverCbor: nextReceiverDatumCbor,
       pairCbor: nextPairDatumCbor,
     },
     transaction: {
@@ -307,12 +381,19 @@ function buildPaymentHookDatumCbor(
   return Data.to(
     new Constr<PlutusData>(0, [
       addressToPlutusData(state.withdrawAddress),
-      BigInt(state.protocolFeePerTxLovelace),
-      BigInt(state.minUtxoLovelace),
       BigInt(state.accruedFeesLovelace),
-      BigInt(state.lifetimeFeesCollectedLovelace),
-      BigInt(state.lifetimeFeesWithdrawnLovelace),
-      BigInt(state.feeChargeCount),
+      BigInt(state.lifetimeCollectedLovelace),
+      BigInt(state.lifetimeWithdrawnLovelace),
+      BigInt(state.minUtxoLovelace),
+    ]),
+  );
+}
+
+function buildReceiverDatumCbor(state: NonNullable<PairStateArtifact["receiver"]>["receiverState"]): string {
+  return Data.to(
+    new Constr<PlutusData>(0, [
+      BigInt(state.balanceLovelace),
+      BigInt(state.minUtxoLovelace),
     ]),
   );
 }
@@ -343,10 +424,16 @@ function addressToPlutusData(address: string): Constr<PlutusData> {
 
 function updateWitnessData(
   intent: DiaOracleIntent,
+  receiverPolicyId: string,
+  receiverAssetName: string,
+  pairPolicyId: string,
   pairTokenName: string,
   signerPublicKey: string,
 ): Constr<PlutusData> {
   return new Constr<PlutusData>(0, [
+    normalizeHex(receiverPolicyId, "receiverPolicyId"),
+    normalizeHex(receiverAssetName, "receiverAssetName"),
+    normalizeHex(pairPolicyId, "pairPolicyId"),
     pairTokenName,
     diaIntentData(intent),
     normalizeHex(signerPublicKey, "signerPublicKey"),

@@ -6,6 +6,7 @@ use cardano/transaction.{InlineDatum, Input, Output, Transaction}
 use dia_cardano_oracle/config_logic
 use dia_cardano_oracle/oracle_logic
 use dia_cardano_oracle/payment_hook_logic
+use dia_cardano_oracle/receiver_logic
 
 pub type CoordinatorRedeemer {
   ApplySingle(oracle_logic.UpdateWitness)
@@ -15,7 +16,6 @@ pub type CoordinatorRedeemer {
 validator update_coordinator(
   config_policy_id: PolicyId,
   config_asset_name: AssetName,
-  pair_policy_id: PolicyId,
 ) {
   withdraw(
     redeemer: CoordinatorRedeemer,
@@ -72,13 +72,38 @@ validator update_coordinator(
       payment_hook_logic.valid_payment_hook_state(next_hook),
       payment_hook_logic.exact_locked_lovelace(hook_input.output, previous_hook),
       payment_hook_logic.exact_locked_lovelace(hook_output, next_hook),
-      payment_hook_logic.fee_charge_transition(previous_hook, next_hook),
       when redeemer is {
         ApplySingle(witness) ->
-          valid_single_update(self, config_datum, pair_policy_id, witness)
+          and {
+            payment_hook_logic.fee_charge_transition(
+              previous_hook,
+              next_hook,
+              config_datum.protocol_fee_lovelace,
+            ),
+            valid_single_update(self, config_datum, witness),
+            valid_receiver_fee(
+              self,
+              witness.receiver_policy_id,
+              witness.receiver_asset_name,
+              config_datum.protocol_fee_lovelace,
+            ),
+          }
 
         ApplyBatch(witnesses) ->
-          valid_batch_update(self, config_datum, pair_policy_id, witnesses)
+          and {
+            witnesses_share_receiver(witnesses),
+            payment_hook_logic.fee_charge_transition(
+              previous_hook,
+              next_hook,
+              config_datum.protocol_fee_lovelace * list.length(witnesses),
+            ),
+            valid_batch_update(self, config_datum, witnesses),
+            valid_batch_receiver_fee(
+              self,
+              witnesses,
+              config_datum.protocol_fee_lovelace * list.length(witnesses),
+            ),
+          }
       },
     }
   }
@@ -88,12 +113,73 @@ validator update_coordinator(
   }
 }
 
+fn valid_batch_receiver_fee(
+  self: Transaction,
+  witnesses: List<oracle_logic.UpdateWitness>,
+  fee_lovelace: Int,
+) -> Bool {
+  when witnesses is {
+    [] -> False
+    [head, ..] ->
+      valid_receiver_fee(
+        self,
+        head.receiver_policy_id,
+        head.receiver_asset_name,
+        fee_lovelace,
+      )
+  }
+}
+
+fn valid_receiver_fee(
+  self: Transaction,
+  receiver_policy_id: PolicyId,
+  receiver_asset_name: AssetName,
+  fee_lovelace: Int,
+) -> Bool {
+  expect Some(receiver_input) =
+    list.find(
+      self.inputs,
+      fn(input) {
+        assets.quantity_of(
+          input.output.value,
+          receiver_policy_id,
+          receiver_asset_name,
+        ) == 1
+      },
+    )
+  expect Some(receiver_output) =
+    list.find(
+      self.outputs,
+      fn(output) {
+        assets.quantity_of(output.value, receiver_policy_id, receiver_asset_name) == 1
+      },
+    )
+
+  expect InlineDatum(receiver_input_datum) = receiver_input.output.datum
+  expect previous_receiver: receiver_logic.ReceiverDatum = receiver_input_datum
+
+  expect InlineDatum(receiver_output_datum) = receiver_output.datum
+  expect next_receiver: receiver_logic.ReceiverDatum = receiver_output_datum
+
+  and {
+    receiver_logic.valid_receiver_state(previous_receiver),
+    receiver_logic.valid_receiver_state(next_receiver),
+    receiver_logic.exact_locked_lovelace(receiver_input.output, previous_receiver),
+    receiver_logic.exact_locked_lovelace(receiver_output, next_receiver),
+    receiver_logic.pay_fee_transition(
+      previous_receiver,
+      next_receiver,
+      fee_lovelace,
+    ),
+  }
+}
+
 fn valid_single_update(
   self: Transaction,
   config_datum: config_logic.ConfigDatum,
-  pair_policy_id: PolicyId,
   witness: oracle_logic.UpdateWitness,
 ) -> Bool {
+  let pair_policy_id = witness.pair_policy_id
   let pair_input_count = count_pair_inputs(self.inputs, pair_policy_id)
   let pair_output_count = count_pair_outputs(self.outputs, pair_policy_id)
 
@@ -122,17 +208,15 @@ fn valid_single_update(
 fn valid_batch_update(
   self: Transaction,
   config_datum: config_logic.ConfigDatum,
-  pair_policy_id: PolicyId,
   witnesses: List<oracle_logic.UpdateWitness>,
 ) -> Bool {
   and {
     list.length(witnesses) > 0,
-    unique_pair_token_names(witnesses),
-    count_pair_inputs(self.inputs, pair_policy_id) == list.length(witnesses),
-    count_pair_outputs(self.outputs, pair_policy_id) == list.length(witnesses),
+    unique_pair_units(witnesses),
     list.all(
       witnesses,
       fn(witness) {
+        let pair_policy_id = witness.pair_policy_id
         expect Some(pair_input) =
           find_pair_input(self.inputs, pair_policy_id, witness.pair_token_name)
         expect Some(pair_output) =
@@ -193,16 +277,37 @@ fn count_pair_outputs(outputs: List<Output>, pair_policy_id: PolicyId) -> Int {
     |> list.length
 }
 
-fn unique_pair_token_names(witnesses: List<oracle_logic.UpdateWitness>) -> Bool {
+fn unique_pair_units(witnesses: List<oracle_logic.UpdateWitness>) -> Bool {
   when witnesses is {
     [] -> True
     [head, ..tail] ->
       and {
         !list.any(
           tail,
-          fn(other) { other.pair_token_name == head.pair_token_name },
+          fn(other) {
+            and {
+              other.pair_policy_id == head.pair_policy_id,
+              other.pair_token_name == head.pair_token_name,
+            }
+          },
         ),
-        unique_pair_token_names(tail),
+        unique_pair_units(tail),
       }
+  }
+}
+
+fn witnesses_share_receiver(witnesses: List<oracle_logic.UpdateWitness>) -> Bool {
+  when witnesses is {
+    [] -> True
+    [head, ..tail] ->
+      list.all(
+        tail,
+        fn(other) {
+          and {
+            other.receiver_policy_id == head.receiver_policy_id,
+            other.receiver_asset_name == head.receiver_asset_name,
+          }
+        },
+      )
   }
 }

@@ -28,7 +28,7 @@ export type ConfigState = {
     sourceChainId: string;
     verifyingContract: string;
   };
-  allowedPairs: PairEntryState[];
+  protocolFeeLovelace: string;
   paymentHookRef: PaymentHookRefState | null;
   updateCoordinatorCredential: CoordinatorCredentialState | null;
   minUtxoLovelace: string;
@@ -36,12 +36,10 @@ export type ConfigState = {
 
 export type PaymentHookState = {
   withdrawAddress: string;
-  protocolFeePerTxLovelace: string;
   minUtxoLovelace: string;
   accruedFeesLovelace: string;
-  lifetimeFeesCollectedLovelace: string;
-  lifetimeFeesWithdrawnLovelace: string;
-  feeChargeCount: string;
+  lifetimeCollectedLovelace: string;
+  lifetimeWithdrawnLovelace: string;
 };
 
 export type DeploymentScripts = {
@@ -49,15 +47,40 @@ export type DeploymentScripts = {
   configUnit: string;
   configValidatorHash: string;
   configValidatorAddress: string;
-  pairPolicyId: string;
-  pairValidatorHash: string;
-  pairValidatorAddress: string;
+  pairPolicyId: string | null;
+  pairValidatorHash: string | null;
+  pairValidatorAddress: string | null;
   coordinatorHash: string;
   coordinatorRewardAddress: string;
   paymentHookPolicyId: string | null;
   paymentHookUnit: string | null;
   paymentHookValidatorHash: string | null;
   paymentHookValidatorAddress: string | null;
+};
+
+export type ReceiverState = {
+  balanceLovelace: string;
+  minUtxoLovelace: string;
+};
+
+export type ReceiverArtifact = {
+  clientId: string;
+  bootstrapRef: {
+    txHash: string;
+    outputIndex: number;
+  };
+  receiverAssetName: string;
+  receiverPolicyId: string;
+  receiverUnit: string;
+  receiverValidatorHash: string;
+  receiverValidatorAddress: string;
+  receiverState: ReceiverState;
+  receiverUtxo: {
+    current: {
+      txHash: string;
+      outputIndex: number;
+    };
+  };
 };
 
 export type ConfigStateArtifact = {
@@ -90,9 +113,11 @@ export type ConfigStateArtifact = {
       outputIndex: number;
     };
   } | null;
+  receiver?: ReceiverArtifact;
   datum: {
     configCbor: string;
     paymentHookCbor: string | null;
+    receiverCbor?: string;
   };
   transaction?: {
     submittedTxHash: string | null;
@@ -141,6 +166,7 @@ export type PairStateArtifact = {
       outputIndex: number;
     };
   };
+  receiver?: ReceiverArtifact;
   pair: {
     tokenName: string;
     pairId: string;
@@ -155,6 +181,7 @@ export type PairStateArtifact = {
   datum: {
     configCbor: string;
     paymentHookCbor: string;
+    receiverCbor?: string;
     pairCbor: string;
   };
   transaction?: {
