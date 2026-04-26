@@ -11,6 +11,7 @@
     "cli": "tsx src/index.ts"
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.4.2",
     "@lucid-evolution/lucid": "^0.4.29",
     "@lucid-evolution/provider": "^0.1.90",
     "@lucid-evolution/wallet": "^0.1.72",

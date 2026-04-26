@@ -29,7 +29,7 @@ export async function publishPaymentHookReferenceScript(args: {
   const state = await readConfigState(path.resolve(args.statePath ?? "state/preview/config-bootstrap.json"));
 
   if (!state.bootstrapRefs.paymentHook || !state.scripts.paymentHookUnit) {
-    throw new Error("PaymentHook reference-script publish requires the PaymentHook one-shot parameterization reference.");
+    throw new Error("PaymentHook reference-script publish requires the selected PaymentHook bootstrap reference.");
   }
 
   reportProgress("Connecting to Preview and selecting the configured wallet");
@@ -87,6 +87,7 @@ export async function publishPaymentHookReferenceScript(args: {
       source,
       address: walletAddress,
     },
+    referenceHolderAddress: referenceAddress,
     referenceScripts: {
       ...state.referenceScripts,
       global: {

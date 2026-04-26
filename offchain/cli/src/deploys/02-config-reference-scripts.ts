@@ -87,6 +87,7 @@ export async function publishConfigReferenceScripts(args: {
       source,
       address: walletAddress,
     },
+    referenceHolderAddress: referenceAddress,
     referenceScripts: {
       ...state.referenceScripts,
       global: {

@@ -7,14 +7,12 @@ import {
   type UnsignedDiaOracleIntentInput,
 } from "../core/dia-intent.js";
 
-type IntentSignInput = {
+export type IntentSignInput = {
   domain: DiaEip712DomainInput;
   intent: UnsignedDiaOracleIntentInput;
 };
 
-export async function signPreviewOracleIntent(args: {
-  inputPath: string;
-}): Promise<{
+type SignedPreviewOracleIntent = {
   intent: ReturnType<typeof signDiaOracleIntentInput>["intent"];
   witness: {
     signerPublicKey: string;
@@ -22,17 +20,23 @@ export async function signPreviewOracleIntent(args: {
     intentHash: string;
     compactSignature: string;
   };
-}> {
+};
+
+function requireIntentSigningPrivateKey(): string {
   const privateKey = process.env.DIA_EVM_PRIVATE_KEY?.trim();
   if (!privateKey) {
     throw new Error("Missing required environment variable: DIA_EVM_PRIVATE_KEY");
   }
+  return privateKey;
+}
 
-  const input = await readIntentSignInput(path.resolve(args.inputPath));
+export function signPreviewOracleIntentFromInput(args: {
+  input: IntentSignInput;
+}): SignedPreviewOracleIntent {
   const signed = signDiaOracleIntentInput({
-    domain: input.domain,
-    intent: input.intent,
-    privateKey,
+    domain: args.input.domain,
+    intent: args.input.intent,
+    privateKey: requireIntentSigningPrivateKey(),
   });
 
   return {
@@ -44,6 +48,13 @@ export async function signPreviewOracleIntent(args: {
       compactSignature: signed.compactSignature,
     },
   };
+}
+
+export async function signPreviewOracleIntent(args: {
+  inputPath: string;
+}): Promise<SignedPreviewOracleIntent> {
+  const input = await readIntentSignInput(path.resolve(args.inputPath));
+  return signPreviewOracleIntentFromInput({ input });
 }
 
 async function readIntentSignInput(inputPath: string): Promise<IntentSignInput> {

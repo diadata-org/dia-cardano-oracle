@@ -51,7 +51,7 @@ export async function submitOracleUpdate(args: {
   const state = await readPairState(statePath);
 
   if (!state.bootstrapRefs.paymentHook?.txHash) {
-    throw new Error("Pair state artifact is missing the PaymentHook one-shot parameterization reference.");
+    throw new Error("Pair state artifact is missing the selected PaymentHook bootstrap reference.");
   }
   if (!state.receiver) {
     throw new Error(
@@ -314,6 +314,7 @@ export async function submitOracleUpdate(args: {
       source,
       address: walletAddress,
     },
+    referenceHolderAddress: state.referenceHolderAddress,
     bootstrapRefs: state.bootstrapRefs,
     scripts: state.scripts,
     configState: state.configState,

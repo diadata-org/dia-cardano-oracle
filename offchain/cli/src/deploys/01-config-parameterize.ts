@@ -5,17 +5,18 @@ import {
   makeConfigStateMintingPolicy,
   makeConfigStateValidator,
   makeCoordinatorValidator,
+  makeReferenceHolderValidator,
   policyIdFromMintingPolicy,
   scriptAddressFromValidator,
   scriptHashFromValidator,
   scriptRewardAddress,
 } from "../core/contracts.js";
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
-import type { ConfigStateArtifact } from "../core/state.js";
+import { readConfigState, type ConfigStateArtifact } from "../core/state.js";
 import {
-  BOOTSTRAP_REF_MIN_LOVELACE,
   buildConfigDatumCbor,
-  selectFundingUtxo,
+  findUtxoByOutRef,
+  selectBootstrapUtxo,
   splitUnit,
   toBigInt,
 } from "../core/chain-helpers.js";
@@ -26,6 +27,10 @@ import {
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 
 type ConfigParameterizeInput = {
+  bootstrapRef?: {
+    txHash: string;
+    outputIndex: number;
+  };
   configAssetName: string;
   validConfigSigners?: string[];
   authorizedDiaPublicKeys: string[];
@@ -41,10 +46,13 @@ type ConfigParameterizeInput = {
 
 export async function parameterizeConfigScripts(args: {
   inputPath: string;
-  buildOnly: boolean;
+  statePath?: string;
 }): Promise<ConfigStateArtifact> {
   reportProgress(`Loading config parameterization input from ${path.resolve(args.inputPath)}`);
   const input = await readInput(path.resolve(args.inputPath));
+  const previousState = args.statePath
+    ? await readConfigState(path.resolve(args.statePath))
+    : null;
 
   reportProgress("Connecting to Preview and selecting the configured wallet");
   const lucid = await makeConfiguredLucid();
@@ -55,41 +63,22 @@ export async function parameterizeConfigScripts(args: {
     wallet.getUtxos(),
   ]);
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
-
-  const fundingUtxo = selectFundingUtxo(
-    walletUtxos,
-    [],
-    BOOTSTRAP_REF_MIN_LOVELACE,
-    "config script parameterization",
-  );
-
-  reportProgress("Building Preview config script parameterization transaction");
-  const txSignBuilder = await lucid
-    .newTx()
-    .collectFrom([fundingUtxo])
-    .pay.ToAddress(walletAddress, { lovelace: BOOTSTRAP_REF_MIN_LOVELACE })
-    .complete();
-  const unsignedHash = txSignBuilder.toHash();
-  let submittedTxHash: string | null = null;
-  let confirmed = false;
-
-  if (!args.buildOnly) {
-    reportProgress(`Unsigned transaction ready: ${unsignedHash}`);
-    const signedTx = await txSignBuilder.sign.withWallet().complete();
-    submittedTxHash = await signedTx.submit();
-    reportProgress(`Submitted transaction hash: ${submittedTxHash}`);
-    confirmed = await lucid.awaitTx(submittedTxHash, 3_000);
-    if (!confirmed) {
-      throw new Error(
-        `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
-      );
-    }
+  const minUtxoLovelace = toBigInt(input.minUtxoLovelace, "minUtxoLovelace");
+  const selectedBootstrapUtxo = input.bootstrapRef
+    ? findUtxoByOutRef(walletUtxos, input.bootstrapRef, "config bootstrap")
+    : selectBootstrapUtxo(walletUtxos);
+  if (!selectedBootstrapUtxo) {
+    throw new Error(
+      "No suitable pure ADA wallet UTxO is available for config script parameterization. Inspect the wallet with 'npm run cli -- preview:wallet:utxos'.",
+    );
   }
 
   const bootstrapRef = {
-    txHash: submittedTxHash ?? "",
-    outputIndex: 0,
+    txHash: selectedBootstrapUtxo.txHash,
+    outputIndex: selectedBootstrapUtxo.outputIndex,
   };
+  reportProgress(`Using wallet bootstrap UTxO ${bootstrapRef.txHash}#${bootstrapRef.outputIndex}`);
+  reportProgress("Deriving parameterized Config and Coordinator scripts offline");
   const configAssetName = normalizeHex(input.configAssetName, "configAssetName");
   const configMintPolicy = await makeConfigStateMintingPolicy({
     bootstrapOutRef: bootstrapRef,
@@ -125,7 +114,7 @@ export async function parameterizeConfigScripts(args: {
     protocolFeeLovelace: toBigInt(input.protocolFeeLovelace, "protocolFeeLovelace").toString(),
     paymentHookRef: null,
     updateCoordinatorCredential: null,
-    minUtxoLovelace: toBigInt(input.minUtxoLovelace, "minUtxoLovelace").toString(),
+    minUtxoLovelace: minUtxoLovelace.toString(),
   };
 
   return {
@@ -133,24 +122,27 @@ export async function parameterizeConfigScripts(args: {
       source,
       address: walletAddress,
     },
+    referenceHolderAddress:
+      previousState?.referenceHolderAddress ??
+      scriptAddressFromValidator(await makeReferenceHolderValidator()),
     bootstrapRefs: {
       config: bootstrapRef,
-      paymentHook: null,
+      paymentHook: previousState?.bootstrapRefs.paymentHook ?? null,
     },
     scripts: {
       configPolicyId,
       configUnit,
       configValidatorHash: scriptHashFromValidator(configValidator),
       configValidatorAddress: scriptAddressFromValidator(configValidator),
-      pairPolicyId: null,
-      pairValidatorHash: null,
-      pairValidatorAddress: null,
+      pairPolicyId: previousState?.scripts.pairPolicyId ?? null,
+      pairValidatorHash: previousState?.scripts.pairValidatorHash ?? null,
+      pairValidatorAddress: previousState?.scripts.pairValidatorAddress ?? null,
       coordinatorHash,
       coordinatorRewardAddress: scriptRewardAddress(coordinatorHash),
-      paymentHookPolicyId: null,
-      paymentHookUnit: null,
-      paymentHookValidatorHash: null,
-      paymentHookValidatorAddress: null,
+      paymentHookPolicyId: previousState?.scripts.paymentHookPolicyId ?? null,
+      paymentHookUnit: previousState?.scripts.paymentHookUnit ?? null,
+      paymentHookValidatorHash: previousState?.scripts.paymentHookValidatorHash ?? null,
+      paymentHookValidatorAddress: previousState?.scripts.paymentHookValidatorAddress ?? null,
     },
     configState,
     configUtxo: {
@@ -159,16 +151,15 @@ export async function parameterizeConfigScripts(args: {
         outputIndex: 0,
       },
     },
-    paymentHookState: null,
-    paymentHookUtxo: null,
+    paymentHookState: previousState?.paymentHookState ?? null,
+    paymentHookUtxo: previousState?.paymentHookUtxo ?? null,
+    referenceScripts: previousState?.referenceScripts,
     datum: {
       configCbor: buildConfigDatumCbor(configState),
-      paymentHookCbor: null,
+      paymentHookCbor: previousState?.datum.paymentHookCbor ?? "",
+      receiverCbor: previousState?.datum.receiverCbor ?? "",
     },
-    transaction: {
-      submittedTxHash,
-      confirmed,
-    },
+    transaction: undefined,
   };
 }
 

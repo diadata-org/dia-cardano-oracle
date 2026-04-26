@@ -55,23 +55,21 @@ Solid arrows are compile-time inputs that change the script hash. Dashed arrows 
 
 **Global setup, done once by DIA.**
 
-1. Reserve a wallet UTxO to be `bootstrap_ref_config` and pick `config_asset_name`.
-2. Compile `config_state` with `(bootstrap_ref_config, config_asset_name)`. Record `config_policy_id` (= the hash of the compiled script, since this is a multivalidator).
-3. Compile `update_coordinator` with `(config_policy_id, config_asset_name)`. Record `coordinator_credential` (the stake credential of this withdraw validator).
-4. Reserve a wallet UTxO to be `bootstrap_ref_hook` and pick `hook_asset_name`.
-5. Compile `payment_hook` with `(bootstrap_ref_hook, hook_asset_name, config_policy_id, config_asset_name, coordinator_credential)`.
-6. Publish the three compiled scripts as reference-script UTxOs so later transactions can cite them instead of embedding the binary.
-7. Submit tx **5.1 Config bootstrap** (consumes `bootstrap_ref_config`, mints the Config NFT, creates the Config UTxO with its initial datum).
-8. Submit tx **5.2 PaymentHook bootstrap** (consumes `bootstrap_ref_hook`, mints the Hook NFT, updates the Config datum to point at the Hook and the coordinator, and carries a stake-registration certificate for `coordinator_credential`).
+1. Initialize the protocol artifact: record the deploy wallet, the `reference_holder` address, and empty protocol deployment slots.
+2. Parameterize Config scripts: select an existing wallet UTxO as `bootstrap_ref_config`, compile `config_state`, compile `update_coordinator`, and record `config_policy_id` plus `coordinator_credential`.
+3. Submit Config bootstrap: consume `bootstrap_ref_config`, mint the Config NFT, and create the Config UTxO with its initial datum.
+4. Publish Config reference scripts: create ReferenceHolder UTxOs for `config_state` spend and `update_coordinator` withdraw.
+5. Parameterize PaymentHook scripts: select an existing wallet UTxO as `bootstrap_ref_hook`, compile `payment_hook`, and record the Hook policy, validator hash, and address.
+6. Submit PaymentHook bootstrap: consume `bootstrap_ref_hook`, mint the Hook NFT, update the Config datum to point at the Hook and the coordinator, and carry a stake-registration certificate for `coordinator_credential`.
+7. Publish PaymentHook reference script: create the ReferenceHolder UTxO for `payment_hook` spend.
 
 **Per-client onboarding, done once per client by DIA.**
 
-1. Reserve a wallet UTxO to be `receiver_ref` for this client and pick `receiver_asset_name`.
-2. Compile `receiver` with `(receiver_ref, receiver_asset_name, config_policy_id, config_asset_name)`. Record `receiver_hash`.
-3. Compile `pair_state` with `(config_policy_id, config_asset_name, receiver_hash)`. Record this client's `pair_policy_id`.
-4. Publish both as reference-script UTxOs for this client.
-5. Submit tx **5.4 Receiver bootstrap** (consumes `receiver_ref`, mints the Receiver NFT, creates the Receiver UTxO with its initial balance).
-6. For each pair the client subscribes to, submit tx **5.7 Pair bootstrap** (mints the Pair NFT for that `pair_id`, creates the initial Pair UTxO).
+1. Initialize the client artifact from the live protocol artifact.
+2. Parameterize client Receiver scripts: select an existing wallet UTxO as `receiver_ref`, compile `receiver`, compile `pair_state`, and record the client's Receiver and Pair script metadata.
+3. Submit Receiver bootstrap: consume `receiver_ref`, mint the Receiver NFT, and create the Receiver UTxO with its initial balance.
+4. Publish client reference scripts: create ReferenceHolder UTxOs for this client's `receiver` spend and `pair_state` spend scripts.
+5. For each pair the client subscribes to, submit Pair bootstrap: mint the Pair NFT for that `pair_id` and create the initial Pair UTxO.
 
 ### 1.4 Reference-script deployment (global)
 
@@ -93,7 +91,7 @@ flowchart LR
   classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
 ```
 
-- **Frequency:** once per chain. Config and Coordinator reference scripts are published after Config parameterization. PaymentHook reference script is published after PaymentHook parameterization.
+- **Frequency:** once per chain. Config and Coordinator reference scripts are published after Config bootstrap. PaymentHook reference script is published after PaymentHook bootstrap.
 - **Inputs:** admin wallet UTxOs funding the min-UTxO of each reference-script output.
 - **Outputs:** three reference-script UTxOs, each carrying the reusable compiled script binary in its `reference_script` field. No datum, no mint, no redeemer.
 - **Address:** the `reference_holder` script address.
@@ -116,7 +114,7 @@ flowchart LR
   classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
 ```
 
-- **Frequency:** once per onboarded client, before **5.4 Receiver bootstrap** for that client.
+- **Frequency:** once per onboarded client, after Receiver bootstrap for that client.
 - **Inputs:** admin wallet UTxOs.
 - **Outputs:** two reference-script UTxOs carrying the client-specific `receiver` and `pair_state` binaries.
 - **Isolation:** the binaries embed `receiver_ref` and `receiver_hash` respectively, so each client has its own pair of reference-script UTxOs with distinct hashes; they cannot be reused across clients.
@@ -153,12 +151,13 @@ With `C` onboarded clients, client `i` subscribed to `N_i` pairs, the on-chain f
 
 Totals:
 
+- **ReferenceHolder UTxOs:** `3` global + `2` per client.
 - **Global state UTxOs:** `1` Config + `1` Hook = `2`.
 - **Per-client state UTxOs:** `1` Receiver + `N_i` Pairs for client `i`.
 - **Total live state UTxOs on the chain:** `2 + sum_i (1 + N_i)`.
 - **Reference-script UTxOs:** `3` global + `2` per client. These are one-off immutable UTxOs, not "live state"; they only exist so consumers can cite the script hash instead of embedding the binary in every tx.
 
-Reference-script UTxOs are typically parked at an address whose spend always fails, so the binary is immutable. That address is a deployment detail, not part of the protocol logic.
+Reference-script UTxOs are created at the `reference_holder` script address. The `reference_holder` validator rejects spend attempts, so these UTxOs are not spendable by the deploy wallet.
 
 ---
 
@@ -332,7 +331,7 @@ Side effect: the same tx carries a stake registration certificate for `update_co
 - **Frequency:** once per chain.
 - **Inputs:**
   - DIA admin wallet.
-  - The parametrized one-shot UTxO.
+  - The selected wallet bootstrap UTxO.
   - Config UTxO.
 - **Reference inputs:** —
 - **Mint:** `+1` PaymentHook NFT.
@@ -409,7 +408,7 @@ flowchart LR
 - **Frequency:** once per client.
 - **Inputs:**
   - DIA admin wallet (pays network fee + min UTxO; may also include `initial_balance` if DIA pre-funds the client).
-  - The parametrized one-shot UTxO for this Receiver.
+  - The selected wallet bootstrap UTxO for this Receiver.
 - **Reference inputs:** Config UTxO (required to check the signer is in `config_admins`).
 - **Mint:** `+1` Receiver NFT (policy = `receiver` parametrized for this client).
 - **Outputs:** Receiver UTxO (address = `receiver<client>` spend, value = `min_utxo_lovelace + initial_balance` + Receiver NFT, datum = `{ balance_lovelace = initial_balance, min_utxo_lovelace }`).

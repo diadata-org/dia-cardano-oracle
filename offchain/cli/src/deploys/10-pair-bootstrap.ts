@@ -49,7 +49,7 @@ export async function pairBootstrap(args: {
   }
 
   if (!state.bootstrapRefs.config.txHash.length) {
-    throw new Error("Config state artifact is missing the Config one-shot parameterization reference.");
+    throw new Error("Config state artifact is missing the selected Config bootstrap reference.");
   }
 
   if (!state.configState.updateCoordinatorCredential || !state.configState.paymentHookRef) {
@@ -206,6 +206,7 @@ export async function pairBootstrap(args: {
       source,
       address: walletAddress,
     },
+    referenceHolderAddress: state.referenceHolderAddress,
     bootstrapRefs: {
       config: state.bootstrapRefs.config,
       paymentHook: state.bootstrapRefs.paymentHook!,
@@ -234,7 +235,7 @@ export async function pairBootstrap(args: {
     pairState,
     datum: {
       configCbor: state.datum.configCbor,
-      paymentHookCbor: state.datum.paymentHookCbor!,
+      paymentHookCbor: state.datum.paymentHookCbor,
       receiverCbor: state.datum.receiverCbor,
       pairCbor: pairDatumCbor,
     },

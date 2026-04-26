@@ -363,6 +363,11 @@ export function normalizeEthereumAddressHex(value: string, label: string): strin
   return normalized;
 }
 
+export function deriveCompressedPublicKeyFromPrivateKey(value: string): string {
+  const signingKey = new SigningKey(with0x(normalizePrivateKey(value)));
+  return strip0x(SigningKey.computePublicKey(signingKey.publicKey, true));
+}
+
 export function utf8ToHex(value: string): string {
   return Buffer.from(value, "utf8").toString("hex");
 }

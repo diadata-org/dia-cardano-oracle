@@ -11,15 +11,19 @@ import {
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import { readConfigState, type ConfigStateArtifact } from "../core/state.js";
 import {
-  BOOTSTRAP_REF_MIN_LOVELACE,
   buildPaymentHookDatumCbor,
-  selectFundingUtxo,
+  findUtxoByOutRef,
+  selectBootstrapUtxo,
   splitUnit,
   toBigInt,
 } from "../core/chain-helpers.js";
 import { normalizeHex } from "../core/dia-intent.js";
 
 type PaymentHookParameterizeInput = {
+  bootstrapRef?: {
+    txHash: string;
+    outputIndex: number;
+  };
   paymentHookAssetName: string;
   withdrawAddress?: string;
   minUtxoLovelace: string;
@@ -28,7 +32,6 @@ type PaymentHookParameterizeInput = {
 export async function parameterizePaymentHookScripts(args: {
   inputPath: string;
   statePath?: string;
-  buildOnly: boolean;
 }): Promise<ConfigStateArtifact> {
   reportProgress(`Loading payment-hook parameterization input from ${path.resolve(args.inputPath)}`);
   const input = await readInput(path.resolve(args.inputPath));
@@ -42,40 +45,24 @@ export async function parameterizePaymentHookScripts(args: {
     wallet.address(),
     wallet.getUtxos(),
   ]);
-  const fundingUtxo = selectFundingUtxo(
-    walletUtxos,
-    [state.bootstrapRefs.config],
-    BOOTSTRAP_REF_MIN_LOVELACE,
-    "payment-hook script parameterization",
-  );
-
-  reportProgress("Building Preview payment-hook script parameterization transaction");
-  const txSignBuilder = await lucid
-    .newTx()
-    .collectFrom([fundingUtxo])
-    .pay.ToAddress(walletAddress, { lovelace: BOOTSTRAP_REF_MIN_LOVELACE })
-    .complete();
-  const unsignedHash = txSignBuilder.toHash();
-  let submittedTxHash: string | null = null;
-  let confirmed = false;
-
-  if (!args.buildOnly) {
-    reportProgress(`Unsigned transaction ready: ${unsignedHash}`);
-    const signedTx = await txSignBuilder.sign.withWallet().complete();
-    submittedTxHash = await signedTx.submit();
-    reportProgress(`Submitted transaction hash: ${submittedTxHash}`);
-    confirmed = await lucid.awaitTx(submittedTxHash, 3_000);
-    if (!confirmed) {
-      throw new Error(
-        `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
-      );
-    }
+  const configuredBootstrapRef = input.bootstrapRef ?? state.bootstrapRefs.paymentHook ?? undefined;
+  const selectedBootstrapUtxo = configuredBootstrapRef
+    ? findUtxoByOutRef(walletUtxos, configuredBootstrapRef, "payment-hook bootstrap")
+    : selectBootstrapUtxo(walletUtxos, 0n, [state.bootstrapRefs.config]);
+  if (!selectedBootstrapUtxo) {
+    throw new Error(
+      "No suitable pure ADA wallet UTxO is available for payment-hook script parameterization. Inspect the wallet with 'npm run cli -- preview:wallet:utxos'.",
+    );
   }
 
   const paymentHookBootstrapRef = {
-    txHash: submittedTxHash ?? "",
-    outputIndex: 0,
+    txHash: selectedBootstrapUtxo.txHash,
+    outputIndex: selectedBootstrapUtxo.outputIndex,
   };
+  reportProgress(
+    `Using wallet bootstrap UTxO ${paymentHookBootstrapRef.txHash}#${paymentHookBootstrapRef.outputIndex}`,
+  );
+  reportProgress("Deriving parameterized PaymentHook scripts offline");
   const configAssetName = splitUnit(state.scripts.configUnit).assetName;
   const paymentHookAssetName = normalizeHex(input.paymentHookAssetName, "paymentHookAssetName");
   const paymentHookMintPolicy = await makePaymentHookMintingPolicy({
@@ -131,11 +118,9 @@ export async function parameterizePaymentHookScripts(args: {
     datum: {
       ...state.datum,
       paymentHookCbor: buildPaymentHookDatumCbor(paymentHookState),
+      receiverCbor: state.datum.receiverCbor,
     },
-    transaction: {
-      submittedTxHash,
-      confirmed,
-    },
+    transaction: undefined,
   };
 }
 

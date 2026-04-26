@@ -47,7 +47,7 @@ export async function paymentHookBootstrap(args: {
   const state = await readConfigState(statePath);
 
   if (state.bootstrapRefs.config.txHash.length === 0) {
-    throw new Error("Config state artifact is missing the Config one-shot parameterization reference.");
+    throw new Error("Config state artifact is missing the selected Config bootstrap reference.");
   }
 
   reportProgress("Connecting to Preview and selecting the configured wallet");
@@ -234,6 +234,7 @@ export async function paymentHookBootstrap(args: {
       source,
       address: walletAddress,
     },
+    referenceHolderAddress: state.referenceHolderAddress,
     bootstrapRefs: {
       config: state.bootstrapRefs.config,
       paymentHook: paymentHookBootstrapOutRef,
@@ -257,6 +258,7 @@ export async function paymentHookBootstrap(args: {
     datum: {
       configCbor: configDatumCbor,
       paymentHookCbor: paymentHookDatumCbor,
+      receiverCbor: state.datum.receiverCbor,
     },
     transaction: {
       submittedTxHash,

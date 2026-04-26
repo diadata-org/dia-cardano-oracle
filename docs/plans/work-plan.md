@@ -32,10 +32,12 @@ Target contract set, per the architecture:
 - `payment_hook` — multivalidator (mint + spend), 1 global.
 - `receiver` — multivalidator (mint + spend), 1 per client.
 - `pair_state` — multivalidator (mint + spend), 1 per client.
+- `reference_holder` — spend validator, 1 global address for reference-script UTxOs.
 
 Tasks:
 
-- [x] Implement the 5 scripts in Aiken.
+- [x] Implement the oracle scripts in Aiken.
+- [x] Implement `reference_holder` for reusable reference-script UTxOs.
 - [x] Implement datum types and redeemers per the architecture (`Config`, `PaymentHook`, `Receiver`, `Pair`).
 - [x] Implement `secp256k1` ECDSA + EIP-712 intent verification against the authorized DIA signer set.
 - [x] Implement continuity rules for Config, Hook, Receiver and Pair UTxOs, including `min_utxo_lovelace` invariants.
@@ -48,14 +50,15 @@ Tasks:
 
 Tasks:
 
-- [x] TypeScript CLI scaffolding with non-interactive execution (`.env`, JSON input files, persisted state under `state/preview/`).
+- [x] TypeScript CLI scaffolding with persisted state under `state/preview/`, guided init commands, and interactive Preview intent prompts.
 - [x] Preview wallet and provider verification commands.
-- [x] Commands for Config bootstrap, PaymentHook bootstrap, Receiver bootstrap, pair bootstrap, single update.
-- [x] Commands for Config update, PaymentHook withdraw.
+- [x] Commands for Config parameterization from an existing wallet UTxO, bootstrap, reference-script publication, and Config update.
+- [x] Commands for PaymentHook parameterization from an existing wallet UTxO, bootstrap, reference-script publication, and withdraw.
+- [x] Commands for Receiver/Pair parameterization from an existing wallet UTxO, Receiver bootstrap, client reference-script publication, pair bootstrap, and single update.
 - [x] Commands for Receiver top-up and Receiver withdraw (per client).
 - [x] Commands for batch update.
 - [x] Per-client state layout under `state/<network>/clients/<client>/`.
-- [x] Scripts to publish reference-script UTxOs for the 3 global scripts and the 2 per-client scripts.
+- [x] Scripts to publish reusable reference-script UTxOs at the `reference_holder` address: 3 global and 2 per client.
 
 ## Workstream C — Data feeder (bridge)
 
@@ -87,8 +90,7 @@ Tasks:
 
 Tasks:
 
-- [x] Preview execution: Config bootstrap, PaymentHook bootstrap, pair bootstrap, single update.
-- [x] Preview execution: Receiver bootstrap, Receiver top-up, batch update, PaymentHook withdraw.
+- [ ] Preview execution evidence regenerated with the clarified init + parameterize + bootstrap + reference-script deployment flow.
 - [ ] Mainnet deployment scripts and evidence (contract addresses, reference-script UTxOs, verified mainnet tx hashes).
 - [x] Operator runbook (onboarding a new client, subscribing a new pair, rotating signers, withdrawing accrued fees).
 - [ ] Developer documentation published via DIA's developer documentation website, covering:

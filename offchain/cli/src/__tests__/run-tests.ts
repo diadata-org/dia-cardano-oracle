@@ -7,13 +7,17 @@ import {
   applyLiveSnapshots,
   ensureCompatibleBatch,
 } from "../transactions/13-update-batch.js";
+import { createProtocolStateArtifact } from "../init/01-protocol-init.js";
+import { createClientStateArtifact } from "../init/02-client-init.js";
 import {
+  deriveCompressedPublicKeyFromPrivateKey,
   recoverDiaOracleIntentWitness,
   normalizeDiaEip712Domain,
   normalizeDiaOracleIntent,
   signDiaOracleIntentInput,
 } from "../core/dia-intent.js";
 import { createEthereumWallet } from "../oracle/01-ethereum-wallet-create.js";
+import { createWallet } from "../wallet/wallet-create.js";
 import type {
   ConfigStateArtifact,
   PairStateArtifact,
@@ -26,10 +30,13 @@ const cliRoot = path.resolve(
 const previewExamples = path.join(cliRoot, "examples/preview");
 
 await testPreviewExampleShapes();
+testCardanoWalletCreate();
 testEthereumWalletCreate();
 testIntentSigning();
 testBatchSnapshotRefresh();
 testCompatibleBatchRules();
+testProtocolStateInit();
+testClientStateInit();
 
 console.log("CLI tests passed");
 
@@ -81,6 +88,15 @@ async function testPreviewExampleShapes(): Promise<void> {
   assertAmountOnly(await readJson(path.join(previewExamples, expectedFiles[14]!)));
   assertAmountOnly(await readJson(path.join(previewExamples, expectedFiles[15]!)));
   assertAmountOnly(await readJson(path.join(previewExamples, expectedFiles[16]!)));
+}
+
+function testCardanoWalletCreate(): void {
+  const wallet = createWallet();
+  assert.equal(typeof wallet.mnemonic, "string");
+  assert(wallet.address.startsWith("addr_test1"));
+  assertHexString(wallet.paymentKeyHash);
+  assert.equal(wallet.paymentKeyHash.length, 56);
+  assert.equal(wallet.env.CARDANO_WALLET_SEED, wallet.mnemonic);
 }
 
 function testEthereumWalletCreate(): void {
@@ -197,6 +213,59 @@ function testCompatibleBatchRules(): void {
       ]),
     /same client deployment/,
   );
+}
+
+function testProtocolStateInit(): void {
+  const state = createProtocolStateArtifact({
+    source: "seed",
+    walletAddress: "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
+    referenceHolderAddress: "addr_test1referenceholder",
+  });
+
+  assert.equal(state.referenceHolderAddress, "addr_test1referenceholder");
+  assert.equal(state.bootstrapRefs.config.txHash, "");
+  assert.equal(state.referenceScripts?.global?.config.txHash, "");
+  assert.equal(state.configState.validConfigSigners.length, 1);
+  const expectedAuthorizedDiaPublicKey = process.env.DIA_EVM_PRIVATE_KEY?.trim()
+    ? deriveCompressedPublicKeyFromPrivateKey(process.env.DIA_EVM_PRIVATE_KEY)
+    : "03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807";
+  assert.equal(state.configState.authorizedDiaPublicKeys[0], expectedAuthorizedDiaPublicKey);
+  assert.equal(state.configState.domain.name, "DIA Oracle");
+  assert.equal(state.configState.protocolFeeLovelace, "2000000");
+  assert.equal(state.datum.configCbor, "");
+  assert.equal(state.datum.paymentHookCbor, "");
+  assert.equal(state.datum.receiverCbor, "");
+}
+
+function testClientStateInit(): void {
+  const protocol = sampleConfigArtifact();
+  protocol.receiver = {
+    ...samplePairArtifact("aa").receiver!,
+  };
+  protocol.referenceScripts = {
+    global: {
+      config: {
+        txHash: "global-config",
+        outputIndex: 0,
+        scriptHash: "11".repeat(28),
+      },
+      coordinator: {
+        txHash: "global-coordinator",
+        outputIndex: 1,
+        scriptHash: "22".repeat(28),
+      },
+      paymentHook: {
+        txHash: "global-hook",
+        outputIndex: 2,
+        scriptHash: "33".repeat(28),
+      },
+    },
+  };
+  const client = createClientStateArtifact(protocol);
+
+  assert.equal(client.receiver, undefined);
+  assert.equal(client.referenceScripts?.client?.receiver.txHash, "");
+  assert.equal(client.scripts.pairPolicyId, null);
 }
 
 async function readJson(filePath: string): Promise<unknown> {
@@ -366,6 +435,7 @@ function sampleConfigArtifact(): ConfigStateArtifact {
       source: "seed",
       address: "addr_test1sample",
     },
+    referenceHolderAddress: "addr_test1referenceholder",
     bootstrapRefs: {
       config: {
         txHash: "config-bootstrap",
@@ -394,6 +464,7 @@ function sampleConfigArtifact(): ConfigStateArtifact {
     datum: {
       configCbor: "config-cbor",
       paymentHookCbor: "hook-cbor",
+      receiverCbor: "",
     },
   };
 }

@@ -1,3 +1,4 @@
+import { input as promptInput } from "@inquirer/prompts";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -30,14 +31,18 @@ function printUsage(): void {
   npm run cli -- preview:wallet:utxos
   npm run cli -- preview:wallet:defaults
   npm run cli -- preview:ethereum-wallet:create
-  npm run cli -- preview:intent:sign --input ./examples/preview/01-oracle-intent-sign.example.json [--out ./tmp/usdc-usd.update.json]
-  npm run cli -- preview:config:parameterize --input ./examples/preview/02-config-parameterize.example.json [--build-only] [--out ./state/preview/config-bootstrap.json]
+  npm run cli -- preview:protocol:init [--out ./state/preview/config-bootstrap.json]
+  npm run cli -- preview:client:init [--state ./state/preview/config-bootstrap.json] [--client-id client-a] [--out ./state/preview/clients/client-a.json]
+  npm run cli -- preview:intent:create [--state ./state/preview/config-bootstrap.json] [--out ./tmp/preview-intent.unsigned.json]
+  npm run cli -- preview:intent:sign [--input ./examples/preview/01-oracle-intent-sign.example.json] [--out ./tmp/usdc-usd.update.json]
+  npm run cli -- preview:intent:create-and-sign [--state ./state/preview/config-bootstrap.json] [--out ./tmp/preview-intent.signed.json]
+  npm run cli -- preview:config:parameterize --input ./examples/preview/02-config-parameterize.example.json [--state ./state/preview/config-bootstrap.json] [--out ./state/preview/config-bootstrap.json]
   npm run cli -- preview:config:reference-scripts --input ./examples/preview/03-config-reference-scripts.example.json --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]
   npm run cli -- preview:config:bootstrap --input ./examples/preview/04-config-bootstrap.example.json --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]
-  npm run cli -- preview:payment-hook:parameterize --input ./examples/preview/05-payment-hook-parameterize.example.json --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]
+  npm run cli -- preview:payment-hook:parameterize --input ./examples/preview/05-payment-hook-parameterize.example.json --state ./state/preview/config-bootstrap.json [--out ./state/preview/config-bootstrap.json]
   npm run cli -- preview:payment-hook:reference-script --input ./examples/preview/06-payment-hook-reference-script.example.json --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]
   npm run cli -- preview:payment-hook:bootstrap --input ./examples/preview/07-payment-hook-bootstrap.example.json --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]
-  npm run cli -- preview:receiver:parameterize --input ./examples/preview/08-receiver-parameterize.example.json --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/clients/client-a.json]
+  npm run cli -- preview:receiver:parameterize --input ./examples/preview/08-receiver-parameterize.example.json --state ./state/preview/config-bootstrap.json [--out ./state/preview/clients/client-a.json]
   npm run cli -- preview:reference-scripts:publish-client --input ./examples/preview/09-client-reference-scripts.example.json --state ./state/preview/clients/client-a.json [--build-only] [--out ./state/preview/clients/client-a.json]
   npm run cli -- preview:receiver:bootstrap --input ./examples/preview/10-receiver-bootstrap.example.json --state ./state/preview/clients/client-a.json [--build-only] [--out ./state/preview/clients/client-a.json]
   npm run cli -- preview:pair:bootstrap --input ./examples/preview/11-pair-bootstrap.example.json --state ./state/preview/clients/client-a.json [--build-only] [--out ./state/preview/clients/client-a/pairs/usdc-usd.json]
@@ -64,6 +69,10 @@ function hasBuildOnlyFlag(): boolean {
   return process.argv.slice(3).includes("--build-only");
 }
 
+function hasFlag(flag: string): boolean {
+  return process.argv.slice(3).includes(flag);
+}
+
 function optionalFlagValue(flag: string): string | undefined {
   const args = process.argv.slice(3);
   const index = args.findIndex((arg) => arg === flag);
@@ -77,6 +86,26 @@ function optionalFlagValue(flag: string): string | undefined {
   }
 
   return args[index + 1];
+}
+
+async function promptForText(args: {
+  message: string;
+  defaultValue?: string;
+}): Promise<string> {
+  return promptInput({
+    message: args.message,
+    default: args.defaultValue,
+    validate: (value) => value.trim().length > 0 || "Value is required.",
+    transformer: (value) => value.trim(),
+  });
+}
+
+async function resolveTextFlag(args: {
+  flag: string;
+  message: string;
+  defaultValue?: string;
+}): Promise<string> {
+  return optionalFlagValue(args.flag) ?? promptForText(args);
 }
 
 async function writeJsonOutput(outPath: string, value: unknown): Promise<void> {
@@ -181,15 +210,88 @@ async function run(): Promise<void> {
       return;
     }
 
+    case "preview:protocol:init": {
+      const { initializeProtocolState } = await import("./init/01-protocol-init.js");
+      getCliConfig();
+      const result = await initializeProtocolState();
+      const outPath = optionalFlagValue("--out") ??
+        await promptForText({
+          message: "Protocol artifact output path",
+          defaultValue: "./state/preview/config-bootstrap.json",
+        });
+      await writeJsonOutput(outPath, result);
+      printJson(result);
+      return;
+    }
+
+    case "preview:client:init": {
+      const { initializeClientState } = await import("./init/02-client-init.js");
+      getCliConfig();
+      const statePath = await resolveTextFlag({
+        flag: "--state",
+        message: "Protocol state path",
+        defaultValue: "./state/preview/config-bootstrap.json",
+      });
+      const clientId = await resolveTextFlag({
+        flag: "--client-id",
+        message: "Client id",
+        defaultValue: "client-a",
+      });
+      const outPath = optionalFlagValue("--out") ??
+        await promptForText({
+          message: "Client artifact output path",
+          defaultValue: `./state/preview/clients/${clientId}.json`,
+        });
+      const result = await initializeClientState({
+        statePath,
+      });
+      await writeJsonOutput(outPath, result);
+      printJson(result);
+      return;
+    }
+
+    case "preview:intent:create": {
+      const { createPreviewOracleIntent } = await import("./oracle/03-intent-create.js");
+      const result = await createPreviewOracleIntent({
+        statePath: optionalFlagValue("--state"),
+      });
+      const outPath = optionalFlagValue("--out") ??
+        await promptForText({
+          message: "Unsigned intent output path",
+          defaultValue: "./tmp/preview-intent.unsigned.json",
+        });
+      await writeJsonOutput(outPath, result);
+      printJson(result);
+      return;
+    }
+
     case "preview:intent:sign": {
       const { signPreviewOracleIntent } = await import("./oracle/02-intent-sign.js");
-      const result = await signPreviewOracleIntent({
-        inputPath: requireInputPath(),
-      });
+      const { signPreviewOracleIntentInteractive } = await import("./oracle/03-intent-create.js");
+      const result = hasFlag("--input")
+        ? await signPreviewOracleIntent({
+            inputPath: requireInputPath(),
+          })
+        : await signPreviewOracleIntentInteractive();
       const outPath = optionalFlagValue("--out");
       if (outPath) {
         await writeJsonOutput(outPath, result);
       }
+      printJson(result);
+      return;
+    }
+
+    case "preview:intent:create-and-sign": {
+      const { createAndSignPreviewOracleIntent } = await import("./oracle/03-intent-create.js");
+      const result = await createAndSignPreviewOracleIntent({
+        statePath: optionalFlagValue("--state"),
+      });
+      const outPath = optionalFlagValue("--out") ??
+        await promptForText({
+          message: "Signed intent output path",
+          defaultValue: "./tmp/preview-intent.signed.json",
+        });
+      await writeJsonOutput(outPath, result);
       printJson(result);
       return;
     }
@@ -201,7 +303,7 @@ async function run(): Promise<void> {
       getCliConfig();
       const result = await parameterizeConfigScripts({
         inputPath: requireInputPath(),
-        buildOnly: hasBuildOnlyFlag(),
+        statePath: optionalFlagValue("--state"),
       });
       const outPath = optionalFlagValue("--out");
       if (outPath) {
@@ -289,7 +391,6 @@ async function run(): Promise<void> {
       const result = await parameterizePaymentHookScripts({
         inputPath: requireInputPath(),
         statePath: optionalFlagValue("--state"),
-        buildOnly: hasBuildOnlyFlag(),
       });
       const outPath = optionalFlagValue("--out");
       if (outPath) {
@@ -361,7 +462,6 @@ async function run(): Promise<void> {
       const result = await parameterizeReceiverScripts({
         inputPath: requireInputPath(),
         statePath: optionalFlagValue("--state"),
-        buildOnly: hasBuildOnlyFlag(),
       });
       const outPath = optionalFlagValue("--out");
       if (outPath) {

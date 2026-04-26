@@ -4,7 +4,7 @@ Source of truth: [`final-cardano-milestones.md`](./final-cardano-milestones.md)
 
 Scope: Milestone 1 validation on Cardano Preview. Cardano mainnet deployment and final mainnet evidence are not included in this Preview evidence file.
 
-Verification date: 2026-04-25T10:23:34Z; updated 2026-04-25T10:41:00Z
+Verification date: 2026-04-25T10:23:34Z; updated 2026-04-26
 
 Network: Cardano Preview
 
@@ -14,7 +14,7 @@ Network: Cardano Preview
 | --- | --- |
 | Aiken oracle smart contract ported to Cardano UTxO model | Complete |
 | Compiled contract | Complete: `contracts/aiken/plutus.json` |
-| Unit/integration test coverage | Complete for current repository scope: `aiken check` passes 23/23 tests; CLI tests pass; Preview transaction coverage is recorded below |
+| Unit/integration test coverage | Complete for current repository scope: `aiken check` passes 23/23 tests; CLI tests pass |
 | Deployment scripts | Complete: `offchain/cli` runbook and CLI commands |
 | Documentation for Cardano developers | Complete in repository: root README, Aiken README, CLI runbook, architecture document |
 | Verified Cardano mainnet deployment and execution hashes | Pending: mainnet not executed yet |
@@ -25,42 +25,50 @@ Network: Cardano Preview
 - `npm run test`: passed in `offchain/cli`.
 - `npm run typecheck`: passed in `offchain/cli`.
 - `npm run build`: passed in `offchain/cli`.
-- Preview transactions were verified through Blockfrost Preview.
+- Preview transactions must be regenerated with the clarified init + parameterize + bootstrap + reference-script deployment flow before this evidence is marked complete.
 
 ## Milestone 1 Coverage
 
 | Official requirement | Evidence |
 | --- | --- |
 | Cardano UTxO oracle contracts | `contracts/aiken/validators/`, `contracts/aiken/lib/dia_cardano_oracle/`, `aiken check` |
-| DIA signed price updates | `real_dia_signature_is_accepted`, `next_pair_matches_witness_requires_fresh_data`, Preview transactions: Oracle update, Batch oracle update |
+| DIA signed price updates | `real_dia_signature_is_accepted`, `next_pair_matches_witness_requires_fresh_data`, single and batch update CLI commands |
 | Reject stale or replayed updates | `stale_timestamp_is_rejected`, `stale_nonce_is_rejected` |
 | Reject invalid signer or pair mismatch | `unauthorized_dia_signer_is_rejected`, `wrong_pair_symbol_is_rejected`, `wrong_pair_nft_is_rejected` |
 | Reject invalid price state | `negative_price_pair_state_is_rejected`, `negative_price_intent_signature_is_rejected` |
-| Protocol fee accounting | `fee_charge_transition_increments_balances`, `fee_charge_transition_rejects_wrong_fee_amount`, Preview transactions: Oracle update, Batch oracle update, PaymentHook withdraw |
-| Receiver balance accounting | `pay_fee_transition_decrements_balance`, `pay_fee_transition_rejects_wrong_fee_amount`, `pay_fee_transition_rejects_balance_underflow`, Preview transactions: Oracle update, Receiver top-up, Receiver withdraw, Batch oracle update |
-| PaymentHook withdrawal accounting | `withdraw_transition_decrements_accrued_balance`, `withdraw_transition_rejects_above_accrued_fees`, Preview step 9 |
-| Protocol and client deployment flow | Preview transactions: Config bootstrap, PaymentHook bootstrap, reference scripts, Receiver bootstrap, Pair bootstrap |
+| Protocol fee accounting | `fee_charge_transition_increments_balances`, `fee_charge_transition_rejects_wrong_fee_amount`, update, batch update, and PaymentHook withdraw CLI commands |
+| Receiver balance accounting | `pay_fee_transition_decrements_balance`, `pay_fee_transition_rejects_wrong_fee_amount`, `pay_fee_transition_rejects_balance_underflow`, update, batch update, Receiver top-up, and Receiver withdraw CLI commands |
+| PaymentHook withdrawal accounting | `withdraw_transition_decrements_accrued_balance`, `withdraw_transition_rejects_above_accrued_fees`, PaymentHook withdraw CLI command |
+| Protocol and client deployment flow | CLI runbook steps 7-22: initialize protocol/client artifacts, parameterize with existing wallet UTxOs, bootstrap Config, PaymentHook, Receiver, and Pair, publish reference scripts at ReferenceHolder, and create/sign Preview intents |
 | CLI example, signer, intent, and state artifact checks | `npm run test` in `offchain/cli` |
 | Developer documentation | `README.md`, `contracts/aiken/README.md`, `offchain/cli/README.md`, `docs/architecture/cardano-oracle-architecture.md` |
 | Mainnet deployment hashes | Pending |
 
-## Preview Transactions
+## Required Preview Transaction Evidence
 
-| Step | Operation | Transaction hash | Block | Fee lovelace |
-| --- | --- | --- | ---: | ---: |
-| 1 | Config bootstrap | `c66dca4248ebeb8097f5c9c87cecdaf86acea71b871fbaf7411d21e606b2d1e9` | 4220889 | 294367 |
-| 2 | PaymentHook bootstrap | `9d4278bcfd864ee816c2abe98dff4462d4d70669084dfd5569c775ca6f50e4bd` | 4220908 | 536662 |
-| 3 | Global reference scripts | `71d1c8a46d5e4a57fa9377a105356ca95f4de366df7adad22880bef84a079fa5` | 4220911 | 692973 |
-| 4 | Receiver bootstrap | `bac345681154b473e64ea7901cc9efdc2720ba9268613f9485cb9ba8a26bb440` | 4220914 | 361475 |
-| 5 | Client reference scripts | `f808e5adb3c4412e1490ae1d5d681b398bef52911f7706704d5386cb847ef6c5` | 4220917 | 455329 |
-| 6 | Pair bootstrap | `a9e4e01d0b1fd2cb67f44deacaa86cdcbd7b7f5d3af79f90bb48396970fd9e10` | 4220918 | 342748 |
-| 7 | Oracle update | `0fcffb20d7a394d1172ce51c604395eaf2006c46159da2b7ad65a42b5eece42c` | 4220925 | 860434 |
-| 8 | Receiver top-up | `5207c7e3d6f6a4e944725fd6dd189a68396c1ae0416300d24222a72c267d6745` | 4220932 | 352982 |
-| 9 | PaymentHook withdraw | `472e37062846a4ade466e52bdd93576a2dd63351ff74ed1a4902da49fc8b1fb7` | 4220934 | 342675 |
-| 10 | Receiver withdraw | `caac8c2fb9c06f70eb5acb2d58f69ab5aa35ede37747e45d51be9a8fefbc8064` | 4220935 | 335606 |
-| 11 | Config update | `1012e3161a2cc8f25c99af5d987212eddea569381b58a793c239da55b043c965` | 4221019 | 324120 |
-| 12 | Batch oracle update | `ee155d70cc2a0cc6c005dea3551449ab76d696db04d9af5970c923fc1460dcae` | 4221025 | 846313 |
-| 13 | Batch oracle update, artifact sync validation | `46ff601dc1018c76218acacc5b44d68d431e4822d64cd6157fd14f7176a487cf` | 4221034 | 841627 |
+| CLI step | Operation | Evidence status |
+| --- | --- | --- |
+| 7 | Initialize protocol artifact | N/A: local artifact init |
+| 8 | Parameterize Config scripts from an existing wallet UTxO | Pending Preview re-run |
+| 9 | Bootstrap Config | Pending Preview re-run |
+| 10 | Publish Config and Coordinator reference scripts at ReferenceHolder | Pending Preview re-run |
+| 11 | Parameterize PaymentHook scripts from an existing wallet UTxO | Pending Preview re-run |
+| 12 | Bootstrap PaymentHook | Pending Preview re-run |
+| 13 | Publish PaymentHook reference script at ReferenceHolder | Pending Preview re-run |
+| 14 | Initialize client artifact | N/A: local artifact init |
+| 15 | Parameterize client Receiver and Pair scripts from an existing wallet UTxO | Pending Preview re-run |
+| 16 | Bootstrap Receiver | Pending Preview re-run |
+| 17 | Publish client Receiver and Pair reference scripts at ReferenceHolder | Pending Preview re-run |
+| 18 | Bootstrap Pair | Pending Preview re-run |
+| 19 | Create unsigned intent | N/A: local prompt workflow |
+| 20 | Sign unsigned intent | N/A: local prompt workflow |
+| 21 | Create and sign intent | N/A: local prompt workflow |
+| 22 | Oracle update | Pending Preview re-run |
+| 23 | Config update | Pending Preview re-run |
+| 24 | Batch oracle update | Pending Preview re-run |
+| 25 | Receiver top-up | Pending Preview re-run |
+| 26 | Receiver withdraw | Pending Preview re-run |
+| 27 | PaymentHook withdraw | Pending Preview re-run |
 
 ## Local State Artifacts
 
@@ -71,5 +79,7 @@ Network: Cardano Preview
 ## Notes
 
 Each DIA `OracleIntent` signature is valid only for the exact payload it signs, including `symbol`, `price`, `timestamp`, and `nonce`. The first Preview update uses the available DIA fixture intent and signature for one `USDC/USD` update. Later updates require newer `timestamp` and `nonce` values, so the batch update validation uses an Ethereum/EIP-712 test signer that was added to the authorized signer set through the Config update transaction for Preview validation.
+
+Reference-script UTxOs must be created at the `reference_holder` script address derived from `contracts/aiken/plutus.json`. The deploy wallet funds those outputs but cannot spend them.
 
 Mainnet evidence must be recorded after the final transaction flow is executed on Cardano mainnet.

@@ -571,8 +571,7 @@ export function applyLiveSnapshots(
         datum: {
           ...artifact.datum,
           configCbor: protocolState.datum.configCbor,
-          paymentHookCbor:
-            protocolState.datum.paymentHookCbor ?? artifact.datum.paymentHookCbor,
+          paymentHookCbor: protocolState.datum.paymentHookCbor,
         },
       }
     : {};
@@ -582,7 +581,7 @@ export function applyLiveSnapshots(
         receiver: clientState.receiver,
         datum: {
           ...(protocolSnapshot.datum ?? artifact.datum),
-          receiverCbor: clientState.datum.receiverCbor ?? artifact.datum.receiverCbor,
+          receiverCbor: clientState.datum.receiverCbor,
         },
       }
     : {};

@@ -13,15 +13,19 @@ import {
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import { readConfigState, type ConfigStateArtifact } from "../core/state.js";
 import {
-  BOOTSTRAP_REF_MIN_LOVELACE,
   buildReceiverDatumCbor,
-  selectFundingUtxo,
+  findUtxoByOutRef,
+  selectBootstrapUtxo,
   splitUnit,
   toBigInt,
 } from "../core/chain-helpers.js";
 import { normalizeHex } from "../core/dia-intent.js";
 
 type ReceiverParameterizeInput = {
+  bootstrapRef?: {
+    txHash: string;
+    outputIndex: number;
+  };
   clientId: string;
   receiverAssetName: string;
   initialBalanceLovelace: string;
@@ -31,7 +35,6 @@ type ReceiverParameterizeInput = {
 export async function parameterizeReceiverScripts(args: {
   inputPath: string;
   statePath?: string;
-  buildOnly: boolean;
 }): Promise<ConfigStateArtifact> {
   reportProgress(`Loading receiver parameterization input from ${path.resolve(args.inputPath)}`);
   const input = await readInput(path.resolve(args.inputPath));
@@ -49,40 +52,27 @@ export async function parameterizeReceiverScripts(args: {
     wallet.address(),
     wallet.getUtxos(),
   ]);
-  const fundingUtxo = selectFundingUtxo(
-    walletUtxos,
-    [state.bootstrapRefs.config, state.bootstrapRefs.paymentHook],
-    BOOTSTRAP_REF_MIN_LOVELACE,
-    "receiver script parameterization",
-  );
-
-  reportProgress("Building Preview receiver script parameterization transaction");
-  const txSignBuilder = await lucid
-    .newTx()
-    .collectFrom([fundingUtxo])
-    .pay.ToAddress(walletAddress, { lovelace: BOOTSTRAP_REF_MIN_LOVELACE })
-    .complete();
-  const unsignedHash = txSignBuilder.toHash();
-  let submittedTxHash: string | null = null;
-  let confirmed = false;
-
-  if (!args.buildOnly) {
-    reportProgress(`Unsigned transaction ready: ${unsignedHash}`);
-    const signedTx = await txSignBuilder.sign.withWallet().complete();
-    submittedTxHash = await signedTx.submit();
-    reportProgress(`Submitted transaction hash: ${submittedTxHash}`);
-    confirmed = await lucid.awaitTx(submittedTxHash, 3_000);
-    if (!confirmed) {
-      throw new Error(
-        `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
-      );
-    }
+  const configuredBootstrapRef = input.bootstrapRef ?? state.receiver?.bootstrapRef;
+  const selectedBootstrapUtxo = configuredBootstrapRef
+    ? findUtxoByOutRef(walletUtxos, configuredBootstrapRef, "receiver bootstrap")
+    : selectBootstrapUtxo(walletUtxos, 0n, [
+        state.bootstrapRefs.config,
+        state.bootstrapRefs.paymentHook!,
+      ]);
+  if (!selectedBootstrapUtxo) {
+    throw new Error(
+      "No suitable pure ADA wallet UTxO is available for receiver script parameterization. Inspect the wallet with 'npm run cli -- preview:wallet:utxos'.",
+    );
   }
 
   const receiverBootstrapRef = {
-    txHash: submittedTxHash ?? "",
-    outputIndex: 0,
+    txHash: selectedBootstrapUtxo.txHash,
+    outputIndex: selectedBootstrapUtxo.outputIndex,
   };
+  reportProgress(
+    `Using wallet bootstrap UTxO ${receiverBootstrapRef.txHash}#${receiverBootstrapRef.outputIndex}`,
+  );
+  reportProgress("Deriving parameterized Receiver and Pair scripts offline");
   const configAssetName = splitUnit(state.scripts.configUnit).assetName;
   const receiverAssetName = normalizeHex(input.receiverAssetName, "receiverAssetName");
   const receiverMintPolicy = await makeReceiverMintingPolicy({
@@ -149,10 +139,7 @@ export async function parameterizeReceiverScripts(args: {
       ...state.datum,
       receiverCbor: buildReceiverDatumCbor(receiverState),
     },
-    transaction: {
-      submittedTxHash,
-      confirmed,
-    },
+    transaction: undefined,
   };
 }
 

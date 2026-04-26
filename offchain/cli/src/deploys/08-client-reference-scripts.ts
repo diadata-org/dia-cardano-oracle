@@ -124,6 +124,7 @@ export async function publishClientReferenceScripts(args: {
       source,
       address: walletAddress,
     },
+    referenceHolderAddress: referenceAddress,
     scripts: {
       ...state.scripts,
       pairPolicyId: state.scripts.pairPolicyId ?? receiver.pairPolicyId,

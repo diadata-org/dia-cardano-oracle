@@ -106,6 +106,7 @@ export type ConfigStateArtifact = {
     source: "seed" | "private-key";
     address: string;
   };
+  referenceHolderAddress?: string;
   bootstrapRefs: {
     config: {
       txHash: string;
@@ -135,8 +136,8 @@ export type ConfigStateArtifact = {
   receiver?: ReceiverArtifact;
   datum: {
     configCbor: string;
-    paymentHookCbor: string | null;
-    receiverCbor?: string;
+    paymentHookCbor: string;
+    receiverCbor: string;
   };
   transaction?: {
     submittedTxHash: string | null;
@@ -160,6 +161,7 @@ export type PairStateArtifact = {
     source: "seed" | "private-key";
     address: string;
   };
+  referenceHolderAddress?: string;
   bootstrapRefs: {
     config: {
       txHash: string;
@@ -201,7 +203,7 @@ export type PairStateArtifact = {
   datum: {
     configCbor: string;
     paymentHookCbor: string;
-    receiverCbor?: string;
+    receiverCbor: string;
     pairCbor: string;
   };
   transaction?: {

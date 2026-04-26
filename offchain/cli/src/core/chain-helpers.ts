@@ -103,6 +103,21 @@ export function selectFundingUtxo(
   return utxo;
 }
 
+export function selectBootstrapUtxo(
+  utxos: UTxO[],
+  minimumLovelace: bigint = 0n,
+  excludedOutRefs: OutRefLike[] = [],
+): UTxO | null {
+  return selectablePureLovelaceUtxos(utxos, excludedOutRefs)
+    .filter((candidate) => (candidate.assets.lovelace ?? 0n) >= minimumLovelace)
+    .sort((left, right) => {
+      const leftValue = left.assets.lovelace ?? 0n;
+      const rightValue = right.assets.lovelace ?? 0n;
+      if (leftValue === rightValue) return 0;
+      return leftValue > rightValue ? -1 : 1;
+    })[0] ?? null;
+}
+
 function selectablePureLovelaceUtxos(
   utxos: UTxO[],
   excludedOutRefs: OutRefLike[],

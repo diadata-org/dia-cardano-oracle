@@ -205,6 +205,7 @@ export async function configBootstrap(args: {
       source,
       address: walletAddress,
     },
+    referenceHolderAddress: previousState?.referenceHolderAddress,
     bootstrapRefs: {
       config: bootstrapOutRef,
       paymentHook: previousState?.bootstrapRefs.paymentHook ?? null,
@@ -245,7 +246,8 @@ export async function configBootstrap(args: {
     paymentHookUtxo: previousState?.paymentHookUtxo ?? null,
     datum: {
       configCbor: configDatumCbor,
-      paymentHookCbor: null,
+      paymentHookCbor: previousState?.datum.paymentHookCbor ?? "",
+      receiverCbor: previousState?.datum.receiverCbor ?? "",
     },
     referenceScripts: previousState?.referenceScripts,
     transaction: {
