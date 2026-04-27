@@ -1,6 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { Constr, type OutRef } from "@lucid-evolution/lucid";
+import { Constr, type OutRef, type UTxO } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
 import {
@@ -47,6 +47,8 @@ import {
   buildPairDatumCbor,
   buildPaymentHookDatumCbor,
   buildReceiverDatumCbor,
+  decodePaymentHookDatum,
+  decodeReceiverDatum,
   findSingleUtxoAtUnit,
   splitUnit,
   updateWitnessData,
@@ -211,6 +213,13 @@ export async function submitBatchOracleUpdate(args: {
         "receiver",
       ),
     ]);
+  const currentPaymentHookState = decodePaymentHookDatum(
+    requireInlineDatum(currentPaymentHookUtxo, "payment hook"),
+    state.paymentHookState.withdrawAddress,
+  );
+  const currentReceiverState = decodeReceiverDatum(
+    requireInlineDatum(currentReceiverUtxo, "receiver"),
+  );
 
   const pairValidatorHash = scriptHashFromValidator(pairValidator);
   if (pairValidatorHash !== state.scripts.pairValidatorHash) {
@@ -307,9 +316,9 @@ export async function submitBatchOracleUpdate(args: {
     BigInt(state.configState.protocolFeeLovelace) *
     BigInt(preparedUpdates.length);
   const nextReceiverState = {
-    ...state.receiver.receiverState,
+    ...currentReceiverState,
     balanceLovelace: (
-      BigInt(state.receiver.receiverState.balanceLovelace) - totalFee
+      BigInt(currentReceiverState.balanceLovelace) - totalFee
     ).toString(),
   };
   if (BigInt(nextReceiverState.balanceLovelace) < 0n) {
@@ -317,12 +326,12 @@ export async function submitBatchOracleUpdate(args: {
   }
 
   const nextPaymentHookState = {
-    ...state.paymentHookState,
+    ...currentPaymentHookState,
     accruedFeesLovelace: (
-      BigInt(state.paymentHookState.accruedFeesLovelace) + totalFee
+      BigInt(currentPaymentHookState.accruedFeesLovelace) + totalFee
     ).toString(),
     lifetimeCollectedLovelace: (
-      BigInt(state.paymentHookState.lifetimeCollectedLovelace) + totalFee
+      BigInt(currentPaymentHookState.lifetimeCollectedLovelace) + totalFee
     ).toString(),
   };
 
@@ -767,4 +776,11 @@ async function loadReferenceScriptUtxos(
     { txHash: clientRefs.receiver.txHash, outputIndex: clientRefs.receiver.outputIndex },
     { txHash: clientRefs.pair.txHash, outputIndex: clientRefs.pair.outputIndex },
   ]);
+}
+
+function requireInlineDatum(utxo: UTxO, label: string): string {
+  if (!utxo.datum) {
+    throw new Error(`Current ${label} UTxO is missing its inline datum.`);
+  }
+  return utxo.datum;
 }

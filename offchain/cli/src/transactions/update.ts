@@ -45,7 +45,11 @@ import {
   type PairStateArtifact,
 } from "../core/state.js";
 import { readClientContext } from "../core/artifact-context.js";
-import { waitForWalletSettlement } from "../core/chain-helpers.js";
+import {
+  decodePaymentHookDatum,
+  decodeReceiverDatum,
+  waitForWalletSettlement,
+} from "../core/chain-helpers.js";
 
 export async function submitOracleUpdate(args: {
   intentPath: string;
@@ -198,6 +202,13 @@ export async function submitOracleUpdate(args: {
     state.receiver.receiverUnit,
     "receiver",
   );
+  const currentPaymentHookState = decodePaymentHookDatum(
+    requireInlineDatum(currentPaymentHookUtxo, "payment hook"),
+    state.paymentHookState.withdrawAddress,
+  );
+  const currentReceiverState = decodeReceiverDatum(
+    requireInlineDatum(currentReceiverUtxo, "receiver"),
+  );
   const walletFundingUtxo = selectFundingUtxo(walletUtxos, [
     state.bootstrapRefs.config,
     state.bootstrapRefs.paymentHook,
@@ -277,20 +288,20 @@ export async function submitOracleUpdate(args: {
     intent: diaIntentToState(intent),
   };
   const nextPaymentHookState = {
-    ...state.paymentHookState,
+    ...currentPaymentHookState,
     accruedFeesLovelace: (
-      BigInt(state.paymentHookState.accruedFeesLovelace) +
+      BigInt(currentPaymentHookState.accruedFeesLovelace) +
       BigInt(state.configState.protocolFeeLovelace)
     ).toString(),
     lifetimeCollectedLovelace: (
-      BigInt(state.paymentHookState.lifetimeCollectedLovelace) +
+      BigInt(currentPaymentHookState.lifetimeCollectedLovelace) +
       BigInt(state.configState.protocolFeeLovelace)
     ).toString(),
   };
   const nextReceiverState = {
-    ...state.receiver.receiverState,
+    ...currentReceiverState,
     balanceLovelace: (
-      BigInt(state.receiver.receiverState.balanceLovelace) -
+      BigInt(currentReceiverState.balanceLovelace) -
       BigInt(state.configState.protocolFeeLovelace)
     ).toString(),
   };
@@ -616,6 +627,13 @@ function selectFundingUtxo(
         return leftValue > rightValue ? -1 : 1;
       })[0] ?? null
   );
+}
+
+function requireInlineDatum(utxo: UTxO, label: string): string {
+  if (!utxo.datum) {
+    throw new Error(`Current ${label} UTxO is missing its inline datum.`);
+  }
+  return utxo.datum;
 }
 
 async function loadReferenceScriptUtxos(
