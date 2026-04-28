@@ -329,6 +329,313 @@ because the `OracleIntent` signature is bound to the registry domain.
 Everything else can move forward against the registry interface, with fixtures
 used only for tests and reproducible evidence.
 
+## Live verification of the DIA endpoints
+
+Before assuming the configuration above is current, we tested both RPC
+endpoints directly. Some details do not match what is documented.
+
+**Both servers are alive and respond.** The mainnet endpoint identifies
+itself as chain `1050`, which matches the table. The testnet endpoint
+identifies itself as chain `10050`, **not** `100640` as listed above. These
+are two different numbers for the same testnet, and it matters because every
+signed intent embeds that number in its signature; signer and verifier must
+use the same value or signature checks will fail.
+
+**The two testnet registry addresses listed above are not in use, but they
+are real DIA-published addresses.** Both come from the public
+`diadata-org/Spectra-interoperability` repository, where they are explicitly
+labeled as `OracleIntentRegistry` for testnet chain `100640`:
+
+- `0xC1ca83b5df6ce7e21Fb462C86f0C90E182d6db5d` is documented in
+  [`state.md`](https://github.com/diadata-org/Spectra-interoperability/blob/fa4292db7330b8595a1b4709ae4c0df9138fece9/state.md)
+  as the `OracleIntentRegistry` deployment, and is used as `oracle_registry`
+  for chain `100640` ("DIA Testnet") in
+  [`services/hyperlane-monitor/config/config.json`](https://github.com/diadata-org/Spectra-interoperability/blob/fa4292db7330b8595a1b4709ae4c0df9138fece9/services/hyperlane-monitor/config/config.json).
+- `0xd2313dcabB0E9447d800546b953E05dD47EB2eB9` is used as the
+  `Registry.Address` in
+  [`services/attestor/test/integration_test.go`](https://github.com/diadata-org/Spectra-interoperability/blob/fa4292db7330b8595a1b4709ae4c0df9138fece9/services/attestor/test/integration_test.go)
+  against `https://testnet-rpc.diadata.org`, and is hardcoded as the
+  `OracleIntentRegistry` constant for chain id `100640` in
+  [`services/hyperlane-monitor/internal/blockchain/decoder.go`](https://github.com/diadata-org/Spectra-interoperability/blob/fa4292db7330b8595a1b4709ae4c0df9138fece9/services/hyperlane-monitor/internal/blockchain/decoder.go).
+
+So DIA's own repository contains **two different addresses, both labeled
+`OracleIntentRegistry`, for the same testnet chain `100640`**. This is an
+internal inconsistency in the Spectra repository itself, not a discrepancy
+we introduced. Neither address has any contract code on
+`https://testnet-rpc.diadata.org` today.
+
+**A third contract is live and active on testnet, and we cannot trace it
+back to any public DIA source.** The address
+`0xf8c614a483a0427a13512f52ac72a576678be317` does have deployed bytecode on
+the testnet RPC and is currently emitting `IntentRegistered` events. We
+verified in step 9 below that calling `getIntent(bytes32)` on it returns
+fully decoded `OracleIntent` structs, so it implements the same interface
+DIA documents. However, no public DIA source identifies this address:
+
+- A GitHub code search across all public repositories returns no hits. The
+  address does not appear in
+  [`diadata-org/Spectra-interoperability`](https://github.com/diadata-org/Spectra-interoperability)
+  on any of its branches (`main`, `logging`, `auditfix`, `auditfix-bridge`,
+  `deploy`, `intentbased`, `metrics`, `mixbytes-fix`, `optimizeworkerpool`),
+  nor in any of the other 37 repositories in the `diadata-org` organization.
+- It does not appear in the four Solidity reference files DIA cites in the
+  [Cardano Integration Requirement](../requirements/cardano-integration-requirement-pf.md)
+  (`PushOracleReceiverV2.sol`, `ProtocolFeeHook.sol`, `OracleIntentRegistry.sol`,
+  `OracleIntentUtils.sol` on the `logging` branch).
+- It does not appear on the
+  [DIA Spectra documentation page](https://www.diadata.org/docs/dia-stack/architecture/core-components/spectra)
+  or in the Google Docs DIA shared as input
+  (Final Milestones, Cardano Integration Requirement, Technical
+  Specification, Presentation), per a manual inspection of those documents.
+- The example transaction the requirement document offers as a reference
+  for retrieving an intent
+  (`0x82af92bdfb51bc1049cf832b1d85f219b033aea6c1cc38cd1857872c0a3cea55`,
+  via `testnet-explorer.diadata.org/tx/...`) is no longer available: both
+  the testnet RPC and the testnet explorer return "not found" for that
+  hash. The historical chain that produced the example appears to have
+  been retired.
+
+The address must therefore have been provided to the team through a
+private channel (chat, email, or meeting) before the live contract was
+later deployed. We do not have any written reference linking this address
+to a DIA-published source, and DIA needs to confirm both its provenance
+and its current authoritative status.
+
+**The chain id reported by the live RPC differs from what DIA's own
+configuration files state.** DIA's `config.json`, integration test, and
+chain decoder all say `https://testnet-rpc.diadata.org` is chain
+`100640`. The same RPC, queried today (step 2 below), returns chain id
+`10050`. Live `OracleIntent` structs returned by `getIntent` (step 9
+below) sign with `sourceChainId = 10050`. So the discrepancy is not
+between our code and DIA — it is between **DIA's own published
+configuration and DIA's own live RPC**. Our M1 fixtures and Config datum
+were generated against the documented value (`100640`), so they would have
+to be regenerated with `10050` before our Cardano contracts can validate
+signatures from the live DIA testnet.
+
+**Mainnet has no DIA registry deployed yet.** None of the addresses we know
+about — neither the Spectra examples nor the contract that is alive on
+testnet — has any code at the same address on mainnet. Until DIA deploys
+the mainnet registry, the feeder cannot run end-to-end against mainnet.
+
+### Commands used to verify this
+
+These are the exact requests we ran against the live RPCs to produce the
+findings above. They can be re-run by anyone with `curl` and an internet
+connection. Hex results are annotated with their decimal value where useful.
+
+**1. Mainnet RPC is alive, reports chain id `1050`, current block ~23M.**
+
+```sh
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+  https://rpc.diadata.org/
+# => {"jsonrpc":"2.0","result":"0x41a","id":1}        (0x41a = 1050)
+
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
+  https://rpc.diadata.org/
+# => {"jsonrpc":"2.0","result":"0x15ee0d6","id":1}    (~22,995,158)
+```
+
+**2. Testnet RPC is alive, reports chain id `10050` (not `100640`), current block ~2.46M.**
+
+```sh
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
+  https://testnet-rpc.diadata.org
+# => {"jsonrpc":"2.0","result":"0x2742","id":1}       (0x2742 = 10050)
+
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
+  https://testnet-rpc.diadata.org
+# => {"jsonrpc":"2.0","result":"0x25a5ed","id":1}     (~2,467,309)
+```
+
+**3. Both RPCs are fully synced.**
+
+```sh
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}' \
+  https://rpc.diadata.org/
+# => {"jsonrpc":"2.0","result":false,"id":1}
+
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}' \
+  https://testnet-rpc.diadata.org
+# => {"jsonrpc":"2.0","result":false,"id":1}
+```
+
+**4. The two registry addresses listed in the Spectra config are empty on testnet.**
+
+```sh
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_getCode","params":["0xC1ca83b5df6ce7e21Fb462C86f0C90E182d6db5d","latest"],"id":1}' \
+  https://testnet-rpc.diadata.org
+# => {"jsonrpc":"2.0","result":"0x","id":1}           (no contract at this address)
+
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_getCode","params":["0xd2313dcabB0E9447d800546b953E05dD47EB2eB9","latest"],"id":1}' \
+  https://testnet-rpc.diadata.org
+# => {"jsonrpc":"2.0","result":"0x","id":1}           (no contract at this address)
+```
+
+**5. The Milestone 1 fixture verifying contract is alive on testnet (real bytecode returned).**
+
+```sh
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_getCode","params":["0xf8c614a483a0427a13512f52ac72a576678be317","latest"],"id":1}' \
+  https://testnet-rpc.diadata.org
+# => {"jsonrpc":"2.0","result":"0x60806040526004361015...","id":1}  (long bytecode)
+```
+
+**6. The same address has no contract on mainnet.**
+
+```sh
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_getCode","params":["0xf8c614a483a0427a13512f52ac72a576678be317","latest"],"id":1}' \
+  https://rpc.diadata.org/
+# => {"jsonrpc":"2.0","result":"0x","id":1}           (no contract at this address)
+```
+
+**7. Reading recent events from the live testnet contract — confirms HTTP polling works.**
+
+```sh
+# fromBlock = roughly the last ~2000 blocks before "latest"; adjust as needed.
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_getLogs","params":[{"fromBlock":"0x259f0b","toBlock":"latest","address":"0xf8c614a483a0427a13512f52ac72a576678be317"}],"id":1}' \
+  https://testnet-rpc.diadata.org
+# => {"jsonrpc":"2.0","result":[ { ...real event entry... }, ... ],"id":1}
+```
+
+**8. WebSocket endpoint exists but rejects unauthenticated connections.**
+
+```sh
+curl -i -s \
+  -H "Connection: Upgrade" -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  https://rpc.diadata.org/ws
+# => HTTP/2 401   (the /ws endpoint exists; credentials are required to subscribe)
+```
+
+**9. Fetching a full intent by its hash (`getIntent(bytes32)`).**
+
+The `OracleIntentRegistry` exposes a view function `getIntent(bytes32)` that
+returns the full signed intent for a given intent hash (the same value the
+event indexes as `topic1` of `IntentRegistered`). The 4-byte function
+selector is the first four bytes of `keccak256("getIntent(bytes32)")`:
+
+```sh
+node -e "console.log(require('ethers').id('getIntent(bytes32)').slice(0, 10))"
+# => 0xf13c46aa
+```
+
+The `eth_call` request concatenates that selector with the 32-byte intent
+hash. Using a real hash observed in the testnet logs above
+(`0x813ba9ea1b439f755ac2bf104cd854afa47c4ca6f5019647ee07746b8b2f2ff6`):
+
+```sh
+curl -s -X POST -H "Content-Type: application/json" \
+  --data '{"jsonrpc":"2.0","method":"eth_call","params":[{"to":"0xf8c614a483a0427a13512f52ac72a576678be317","data":"0xf13c46aa813ba9ea1b439f755ac2bf104cd854afa47c4ca6f5019647ee07746b8b2f2ff6"},"latest"],"id":1}' \
+  https://testnet-rpc.diadata.org
+# => {"jsonrpc":"2.0","result":"0x0000...long ABI-encoded struct...","id":1}
+```
+
+The returned bytes are an ABI-encoded `OracleIntent` struct. Decoded with
+`ethers`:
+
+```sh
+node -e "
+const { AbiCoder } = require('ethers');
+const data = '<the result hex string from the eth_call above>';
+const [intent] = AbiCoder.defaultAbiCoder().decode(
+  ['tuple(string intentType, string version, uint256 sourceChainId, uint256 price, uint256 expiry, string symbol, uint256 nonce, uint256 timestamp, string source, bytes signature, address signer)'],
+  data
+);
+console.log(intent);
+"
+```
+
+For the example hash above, the decoded fields are:
+
+| Field | Value |
+| --- | --- |
+| intentType | `OracleUpdate` |
+| version | `1.0` |
+| sourceChainId | `10050` |
+| price | `1777292303280293532` |
+| expiry | `1777365980` (unix seconds) |
+| symbol | `XVG/USD` |
+| nonce | `3286397304062500` |
+| timestamp | `1777362380` (unix seconds) |
+| source | `DIA Oracle` |
+| signature | `0xda599e61…1b` (65 bytes) |
+| signer | `0xf64D333c19B007519C7B9316680ED26578f98C08` |
+
+This confirms the registry interface advertised in the Spectra docs is the
+one in use (`IntentRegistered` event + `getIntent(bytes32)` view), and it
+also confirms that live DIA testnet intents are being signed with
+`sourceChainId = 10050`.
+
+### How events can be read
+
+There are two ways to read intents from the registry:
+
+- **Polling over HTTP.** The feeder asks the RPC every few seconds for new
+  events in the recent block range. This is verified working today against
+  the live testnet contract, with no special access required. It is enough
+  to run the feeder.
+- **Real-time subscription over WebSocket.** The RPC exposes a WebSocket
+  endpoint at `/ws`, but unauthenticated connections are rejected. If
+  real-time delivery is desired instead of polling, DIA needs to provide
+  credentials.
+
+The feeder will start with polling. Real-time subscription is an
+optimization that can be added later if DIA grants access.
+
+### Open questions for DIA
+
+Before the feeder targets mainnet, the following items need confirmation
+from DIA:
+
+1. **Testnet chain id mismatch inside DIA's own infra**: DIA's published
+   configuration files
+   ([`config.json`](https://github.com/diadata-org/Spectra-interoperability/blob/fa4292db7330b8595a1b4709ae4c0df9138fece9/services/hyperlane-monitor/config/config.json),
+   [`integration_test.go`](https://github.com/diadata-org/Spectra-interoperability/blob/fa4292db7330b8595a1b4709ae4c0df9138fece9/services/attestor/test/integration_test.go),
+   [`decoder.go`](https://github.com/diadata-org/Spectra-interoperability/blob/fa4292db7330b8595a1b4709ae4c0df9138fece9/services/hyperlane-monitor/internal/blockchain/decoder.go))
+   all state that `https://testnet-rpc.diadata.org` is chain `100640`. The
+   same RPC live today returns `10050`, and live signed intents use
+   `sourceChainId = 10050`. Please confirm which value is authoritative,
+   and update the corresponding Spectra files (or the RPC) so they agree.
+2. **Two different `OracleIntentRegistry` addresses inside DIA's own repo**:
+   `state.md` and the hyperlane-monitor config use
+   `0xC1ca83b5df6ce7e21Fb462C86f0C90E182d6db5d`; the attestor integration
+   test and the decoder use `0xd2313dcabB0E9447d800546b953E05dD47EB2eB9`.
+   Neither has code on the live testnet RPC. Please confirm the canonical
+   testnet `OracleIntentRegistry` address.
+3. **Provenance of `0xf8c614a483a0427a13512f52ac72a576678be317`**: this is
+   the only address that is actually live on testnet and implements the
+   expected interface, yet it does not appear in any public DIA repository
+   or documentation, and the example transaction DIA itself referenced as
+   the way to retrieve an intent (testnet tx `0x82af92bd…`) is no longer
+   available on either the RPC or the explorer. Please confirm whether
+   this address is the current testnet `OracleIntentRegistry`, who
+   deployed it, and where it should be documented going forward so future
+   readers do not have to rediscover it from chain data.
+4. **Mainnet registry**: has the registry been deployed on mainnet? If not,
+   when, and at what address?
+5. **Real-time access**: are credentials available for the WebSocket
+   endpoint, or is HTTP polling the only supported access path?
+6. **Authorized signer set**: please confirm that
+   `0xf64D333c19B007519C7B9316680ED26578f98C08` (the `signer` returned by
+   the example `getIntent` call) is an authorized DIA signer on testnet,
+   and share the full authorized signer set we should configure on the
+   Cardano `Config` for both testnet and mainnet.
+7. **Change notification**: how will DIA communicate future changes to
+   chain ids, registry addresses, or authorized signer sets, so the feeder
+   does not run against stale values?
+
 ## Cardano destination concerns
 
 The source-side picture is clear: registry, scanner, enricher, router. The
