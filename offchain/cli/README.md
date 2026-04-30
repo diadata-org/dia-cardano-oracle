@@ -153,8 +153,7 @@ Selects a pure ADA wallet UTxO and derives the Config and Coordinator scripts of
 
 ```sh
 npm run cli -- preview:config:parameterize \
-  --state ./state/preview/config-bootstrap.json \
-  --out ./state/preview/config-bootstrap.json
+  --state ./state/preview/config-bootstrap.json
 ```
 
 No transaction is submitted here.
@@ -165,8 +164,7 @@ Consumes the selected wallet UTxO, mints the Config NFT, and creates the Config 
 
 ```sh
 npm run cli -- preview:config:bootstrap \
-  --state ./state/preview/config-bootstrap.json \
-  --out ./state/preview/config-bootstrap.json
+  --state ./state/preview/config-bootstrap.json
 ```
 
 ### 9. Publish Config reference scripts
@@ -176,8 +174,7 @@ Creates the Config and Coordinator reference scripts at `reference_holder`.
 ```sh
 npm run cli -- preview:config:reference-scripts \
   --lovelace-per-output 3000000 \
-  --state ./state/preview/config-bootstrap.json \
-  --out ./state/preview/config-bootstrap.json
+  --state ./state/preview/config-bootstrap.json
 ```
 
 ### 10. Parameterize PaymentHook scripts
@@ -186,8 +183,7 @@ Selects a pure ADA wallet UTxO and derives the PaymentHook scripts offline.
 
 ```sh
 npm run cli -- preview:payment-hook:parameterize \
-  --state ./state/preview/config-bootstrap.json \
-  --out ./state/preview/config-bootstrap.json
+  --state ./state/preview/config-bootstrap.json
 ```
 
 No transaction is submitted here.
@@ -198,8 +194,7 @@ Consumes the selected wallet UTxO, mints the PaymentHook NFT, updates Config, an
 
 ```sh
 npm run cli -- preview:payment-hook:bootstrap \
-  --state ./state/preview/config-bootstrap.json \
-  --out ./state/preview/config-bootstrap.json
+  --state ./state/preview/config-bootstrap.json
 ```
 
 ### 12. Publish PaymentHook reference script
@@ -207,8 +202,7 @@ npm run cli -- preview:payment-hook:bootstrap \
 ```sh
 npm run cli -- preview:payment-hook:reference-script \
   --lovelace-per-output 3000000 \
-  --state ./state/preview/config-bootstrap.json \
-  --out ./state/preview/config-bootstrap.json
+  --state ./state/preview/config-bootstrap.json
 ```
 
 ## Client Deployment
@@ -232,8 +226,7 @@ Selects a pure ADA wallet UTxO and derives Receiver and Pair scripts offline.
 ```sh
 npm run cli -- preview:receiver:parameterize \
   --protocol-state ./state/preview/config-bootstrap.json \
-  --state ./state/preview/clients/client-a.json \
-  --out ./state/preview/clients/client-a.json
+  --state ./state/preview/clients/client-a.json
 ```
 
 No transaction is submitted here.
@@ -245,8 +238,7 @@ Creates the on-chain Receiver UTxO with `balanceLovelace = 0`. The client funds 
 ```sh
 npm run cli -- preview:receiver:bootstrap \
   --protocol-state ./state/preview/config-bootstrap.json \
-  --state ./state/preview/clients/client-a.json \
-  --out ./state/preview/clients/client-a.json
+  --state ./state/preview/clients/client-a.json
 ```
 
 ### 16. Publish client reference scripts
@@ -257,8 +249,7 @@ Publishes the Receiver and Pair validators at `reference_holder`.
 npm run cli -- preview:reference-scripts:publish-client \
   --lovelace-per-output 3000000 \
   --protocol-state ./state/preview/config-bootstrap.json \
-  --state ./state/preview/clients/client-a.json \
-  --out ./state/preview/clients/client-a.json
+  --state ./state/preview/clients/client-a.json
 ```
 
 ### 17. Top up the Receiver
@@ -269,8 +260,7 @@ This is the client funding step. The Receiver was bootstrapped with `balanceLove
 npm run cli -- preview:receiver:top-up \
   --amount-lovelace 5000000 \
   --protocol-state ./state/preview/config-bootstrap.json \
-  --state ./state/preview/clients/client-a.json \
-  --out ./state/preview/clients/client-a.json
+  --state ./state/preview/clients/client-a.json
 ```
 
 ## Oracle Intent Flow
@@ -328,8 +318,7 @@ npm run cli -- preview:update \
   --min-utxo-lovelace 5000000 \
   --protocol-state ./state/preview/config-bootstrap.json \
   --client-state ./state/preview/clients/client-a.json \
-  --state ./state/preview/clients/client-a/pairs/usdc-usd.json \
-  --out ./state/preview/clients/client-a/pairs/usdc-usd.json
+  --state ./state/preview/clients/client-a/pairs/usdc-usd.json
 ```
 
 ### 22. Create a Config update draft
@@ -347,8 +336,7 @@ npm run cli -- preview:config:update:create \
 ```sh
 npm run cli -- preview:config:update \
   --input ./state/preview/config-updates/config-update.preview.json \
-  --state ./state/preview/config-bootstrap.json \
-  --out ./state/preview/config-bootstrap.json
+  --state ./state/preview/config-bootstrap.json
 ```
 
 ### 24. Create a batch manifest
@@ -391,8 +379,7 @@ npm run cli -- preview:receiver:withdraw \
   --amount-lovelace 2000000 \
   --recipient-address <addr_test...> \
   --protocol-state ./state/preview/config-bootstrap.json \
-  --state ./state/preview/clients/client-a.json \
-  --out ./state/preview/clients/client-a.json
+  --state ./state/preview/clients/client-a.json
 ```
 
 If `--recipient-address` is omitted, the configured wallet address is used.
@@ -402,15 +389,21 @@ If `--recipient-address` is omitted, the configured wallet address is used.
 ```sh
 npm run cli -- preview:payment-hook:withdraw \
   --amount-lovelace 2000000 \
-  --state ./state/preview/config-bootstrap.json \
-  --out ./state/preview/config-bootstrap.json
+  --state ./state/preview/config-bootstrap.json
 ```
 
 ## Build Only
 
-Every transaction-submitting command supports `--build-only`.
+Every transaction-submitting command supports `--build-only`. In this mode the
+CLI builds the transaction, runs all validators locally, and prints the
+result, but **does not submit it to the network**. The state file (`--state`)
+is **not** overwritten in this mode, since the result is a build artifact and
+not the new on-chain state.
 
-Example:
+Use it for inspection, offline auditing, or signing flows where the build,
+the signing, and the submission happen on different machines.
+
+If you want to capture the build output to a file, redirect stdout:
 
 ```sh
 npm run cli -- preview:update \
@@ -420,10 +413,11 @@ npm run cli -- preview:update \
   --client-state ./state/preview/clients/client-a.json \
   --state ./state/preview/clients/client-a/pairs/usdc-usd.json \
   --build-only \
-  --out ./state/preview/builds/update.build-only.json
+  > ./state/preview/builds/update.build-only.json
 ```
 
-Parameterization commands remain offline and never submit transactions.
+Parameterization commands are offline by design and never submit transactions,
+so they do not take `--build-only`.
 
 ## Artifact Notes
 

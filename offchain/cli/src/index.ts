@@ -3,10 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { getCliConfig } from "./core/config.js";
-import {
-  signedIntentPathForSymbol,
-  unsignedIntentPathForSymbol,
-} from "./core/intent-paths.js";
+import { signedIntentPathForSymbol } from "./core/intent-paths.js";
 import {
   getDefaultBlueprintPath,
   listBlueprintValidators,
@@ -41,22 +38,22 @@ function printUsage(): void {
   npm run cli -- preview:intent:sign [--input ./state/preview/intents/usdc-usd.unsigned.json] [--out ./state/preview/intents/usdc-usd.signed.json]
   npm run cli -- preview:intent:create-and-sign [--state ./state/preview/config-bootstrap.json] [--out ./state/preview/intents/usdc-usd.signed.json]
   npm run cli -- preview:config:update:create [--state ./state/preview/config-bootstrap.json] [--out ./state/preview/config-updates/config-update.preview.json]
-  npm run cli -- preview:config:parameterize [--state ./state/preview/config-bootstrap.json] [--out ./state/preview/config-bootstrap.json]
-  npm run cli -- preview:config:reference-scripts --lovelace-per-output 3000000 --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]
-  npm run cli -- preview:config:bootstrap --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]
-  npm run cli -- preview:payment-hook:parameterize --state ./state/preview/config-bootstrap.json [--out ./state/preview/config-bootstrap.json]
-  npm run cli -- preview:payment-hook:reference-script --lovelace-per-output 3000000 --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]
-  npm run cli -- preview:payment-hook:bootstrap --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]
-  npm run cli -- preview:receiver:parameterize --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--out ./state/preview/clients/client-a.json]
-  npm run cli -- preview:reference-scripts:publish-client --lovelace-per-output 3000000 --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only] [--out ./state/preview/clients/client-a.json]
-  npm run cli -- preview:receiver:bootstrap --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only] [--out ./state/preview/clients/client-a.json]
-  npm run cli -- preview:update --intent ./state/preview/intents/usdc-usd.signed.json --min-utxo-lovelace 5000000 --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json --state ./state/preview/clients/client-a/pairs/usdc-usd.json [--build-only] [--out ./state/preview/clients/client-a/pairs/usdc-usd.json]
-  npm run cli -- preview:config:update --input ./state/preview/config-updates/config-update.preview.json --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]
+  npm run cli -- preview:config:parameterize --state ./state/preview/config-bootstrap.json
+  npm run cli -- preview:config:reference-scripts --lovelace-per-output 3000000 --state ./state/preview/config-bootstrap.json [--build-only]
+  npm run cli -- preview:config:bootstrap --state ./state/preview/config-bootstrap.json [--build-only]
+  npm run cli -- preview:payment-hook:parameterize --state ./state/preview/config-bootstrap.json
+  npm run cli -- preview:payment-hook:reference-script --lovelace-per-output 3000000 --state ./state/preview/config-bootstrap.json [--build-only]
+  npm run cli -- preview:payment-hook:bootstrap --state ./state/preview/config-bootstrap.json [--build-only]
+  npm run cli -- preview:receiver:parameterize --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json
+  npm run cli -- preview:reference-scripts:publish-client --lovelace-per-output 3000000 --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
+  npm run cli -- preview:receiver:bootstrap --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
+  npm run cli -- preview:update --intent ./state/preview/intents/usdc-usd.signed.json --min-utxo-lovelace 5000000 --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json --state ./state/preview/clients/client-a/pairs/usdc-usd.json [--build-only]
+  npm run cli -- preview:config:update --input ./state/preview/config-updates/config-update.preview.json --state ./state/preview/config-bootstrap.json [--build-only]
   npm run cli -- preview:update:batch:create [--pairs-dir ./state/preview/clients/client-a/pairs] [--intents-dir ./state/preview/intents] [--out ./state/preview/update-batches/update-batch.manifest.json]
   npm run cli -- preview:update:batch --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json --manifest ./state/preview/update-batches/update-batch.manifest.json [--min-utxo-lovelace 5000000] [--build-only] [--out ./state/preview/update-batches/update-batch.result.json]
-  npm run cli -- preview:receiver:top-up --amount-lovelace 5000000 --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only] [--out ./state/preview/clients/client-a.json]
-  npm run cli -- preview:receiver:withdraw --amount-lovelace 2000000 [--recipient-address <addr>] --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only] [--out ./state/preview/clients/client-a.json]
-  npm run cli -- preview:payment-hook:withdraw --amount-lovelace 2000000 --state ./state/preview/config-bootstrap.json [--build-only] [--out ./state/preview/config-bootstrap.json]`);
+  npm run cli -- preview:receiver:top-up --amount-lovelace 5000000 --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
+  npm run cli -- preview:receiver:withdraw --amount-lovelace 2000000 [--recipient-address <addr>] --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
+  npm run cli -- preview:payment-hook:withdraw --amount-lovelace 2000000 --state ./state/preview/config-bootstrap.json [--build-only]`);
 }
 
 function requireInputPath(): string {
@@ -341,12 +338,10 @@ async function run(): Promise<void> {
         "./deploys/config-parameterize.js"
       );
       getCliConfig();
-      const result = await parameterizeConfigScripts({
-        statePath: optionalFlagValue("--state"),
-      });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      const statePath = optionalFlagValue("--state");
+      const result = await parameterizeConfigScripts({ statePath });
+      if (statePath) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -357,14 +352,15 @@ async function run(): Promise<void> {
         "./deploys/config-reference-scripts.js"
       );
       getCliConfig();
+      const statePath = optionalFlagValue("--state");
+      const buildOnly = hasBuildOnlyFlag();
       const result = await publishConfigReferenceScripts({
         lovelacePerOutput: requireFlagValue("--lovelace-per-output"),
-        statePath: optionalFlagValue("--state"),
-        buildOnly: hasBuildOnlyFlag(),
+        statePath,
+        buildOnly,
       });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      if (statePath && !buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -375,13 +371,11 @@ async function run(): Promise<void> {
         "./deploys/config-bootstrap.js"
       );
       getCliConfig();
-      const result = await configBootstrap({
-        statePath: optionalFlagValue("--state"),
-        buildOnly: hasBuildOnlyFlag(),
-      });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      const statePath = optionalFlagValue("--state");
+      const buildOnly = hasBuildOnlyFlag();
+      const result = await configBootstrap({ statePath, buildOnly });
+      if (statePath && !buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -390,14 +384,15 @@ async function run(): Promise<void> {
     case "preview:config:update": {
       const { configUpdate } = await import("./transactions/config-update.js");
       getCliConfig();
+      const statePath = optionalFlagValue("--state");
+      const buildOnly = hasBuildOnlyFlag();
       const result = await configUpdate({
         inputPath: requireInputPath(),
-        statePath: optionalFlagValue("--state"),
-        buildOnly: hasBuildOnlyFlag(),
+        statePath,
+        buildOnly,
       });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      if (statePath && !buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -408,13 +403,11 @@ async function run(): Promise<void> {
         "./deploys/payment-hook-bootstrap.js"
       );
       getCliConfig();
-      const result = await paymentHookBootstrap({
-        statePath: optionalFlagValue("--state"),
-        buildOnly: hasBuildOnlyFlag(),
-      });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      const statePath = optionalFlagValue("--state");
+      const buildOnly = hasBuildOnlyFlag();
+      const result = await paymentHookBootstrap({ statePath, buildOnly });
+      if (statePath && !buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -425,12 +418,10 @@ async function run(): Promise<void> {
         "./deploys/payment-hook-parameterize.js"
       );
       getCliConfig();
-      const result = await parameterizePaymentHookScripts({
-        statePath: optionalFlagValue("--state"),
-      });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      const statePath = optionalFlagValue("--state");
+      const result = await parameterizePaymentHookScripts({ statePath });
+      if (statePath) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -441,14 +432,15 @@ async function run(): Promise<void> {
         "./deploys/payment-hook-reference-script.js"
       );
       getCliConfig();
+      const statePath = optionalFlagValue("--state");
+      const buildOnly = hasBuildOnlyFlag();
       const result = await publishPaymentHookReferenceScript({
         lovelacePerOutput: requireFlagValue("--lovelace-per-output"),
-        statePath: optionalFlagValue("--state"),
-        buildOnly: hasBuildOnlyFlag(),
+        statePath,
+        buildOnly,
       });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      if (statePath && !buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -459,14 +451,15 @@ async function run(): Promise<void> {
         "./transactions/payment-hook-withdraw.js"
       );
       getCliConfig();
+      const statePath = optionalFlagValue("--state");
+      const buildOnly = hasBuildOnlyFlag();
       const result = await paymentHookWithdraw({
         amountLovelace: requireFlagValue("--amount-lovelace"),
-        statePath: optionalFlagValue("--state"),
-        buildOnly: hasBuildOnlyFlag(),
+        statePath,
+        buildOnly,
       });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      if (statePath && !buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -477,14 +470,15 @@ async function run(): Promise<void> {
         "./deploys/receiver-bootstrap.js"
       );
       getCliConfig();
+      const statePath = optionalFlagValue("--state");
+      const buildOnly = hasBuildOnlyFlag();
       const result = await receiverBootstrap({
-        statePath: optionalFlagValue("--state"),
+        statePath,
         protocolStatePath: requireFlagValue("--protocol-state"),
-        buildOnly: hasBuildOnlyFlag(),
+        buildOnly,
       });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      if (statePath && !buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -495,13 +489,13 @@ async function run(): Promise<void> {
         "./deploys/receiver-parameterize.js"
       );
       getCliConfig();
+      const statePath = optionalFlagValue("--state");
       const result = await parameterizeReceiverScripts({
-        statePath: optionalFlagValue("--state"),
+        statePath,
         protocolStatePath: requireFlagValue("--protocol-state"),
       });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      if (statePath) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -512,15 +506,16 @@ async function run(): Promise<void> {
         "./deploys/client-reference-scripts.js"
       );
       getCliConfig();
+      const statePath = optionalFlagValue("--state");
+      const buildOnly = hasBuildOnlyFlag();
       const result = await publishClientReferenceScripts({
         lovelacePerOutput: requireFlagValue("--lovelace-per-output"),
-        statePath: optionalFlagValue("--state"),
+        statePath,
         protocolStatePath: requireFlagValue("--protocol-state"),
-        buildOnly: hasBuildOnlyFlag(),
+        buildOnly,
       });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      if (statePath && !buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -529,15 +524,16 @@ async function run(): Promise<void> {
     case "preview:receiver:top-up": {
       const { receiverTopUp } = await import("./transactions/receiver-top-up.js");
       getCliConfig();
+      const statePath = optionalFlagValue("--state");
+      const buildOnly = hasBuildOnlyFlag();
       const result = await receiverTopUp({
         amountLovelace: requireFlagValue("--amount-lovelace"),
-        statePath: optionalFlagValue("--state"),
+        statePath,
         protocolStatePath: requireFlagValue("--protocol-state"),
-        buildOnly: hasBuildOnlyFlag(),
+        buildOnly,
       });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      if (statePath && !buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -546,16 +542,17 @@ async function run(): Promise<void> {
     case "preview:receiver:withdraw": {
       const { receiverWithdraw } = await import("./transactions/receiver-withdraw.js");
       getCliConfig();
+      const statePath = optionalFlagValue("--state");
+      const buildOnly = hasBuildOnlyFlag();
       const result = await receiverWithdraw({
         amountLovelace: requireFlagValue("--amount-lovelace"),
         recipientAddress: optionalFlagValue("--recipient-address"),
-        statePath: optionalFlagValue("--state"),
+        statePath,
         protocolStatePath: requireFlagValue("--protocol-state"),
-        buildOnly: hasBuildOnlyFlag(),
+        buildOnly,
       });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      if (statePath && !buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;
@@ -602,17 +599,17 @@ async function run(): Promise<void> {
       if (!statePath) {
         throw new Error("Missing required argument: --state <path>");
       }
+      const buildOnly = hasBuildOnlyFlag();
       const result = await submitOracleUpdate({
         intentPath: requireFlagValue("--intent"),
         statePath,
         clientStatePath: requireFlagValue("--client-state"),
         protocolStatePath: requireFlagValue("--protocol-state"),
         minUtxoLovelace: optionalFlagValue("--min-utxo-lovelace"),
-        buildOnly: hasBuildOnlyFlag(),
+        buildOnly,
       });
-      const outPath = optionalFlagValue("--out");
-      if (outPath) {
-        await writeJsonOutput(outPath, result);
+      if (!buildOnly) {
+        await writeJsonOutput(statePath, result);
       }
       printJson(result);
       return;

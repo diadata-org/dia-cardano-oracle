@@ -114,14 +114,6 @@ function validateIntegerString(value: string): string | null {
   return /^\d+$/.test(value) ? null : "Enter a non-negative integer.";
 }
 
-function validateHexAddress(value: string): string | null {
-  const normalized = value.startsWith("0x") || value.startsWith("0X") ? value.slice(2) : value;
-  if (!/^[0-9a-fA-F]{40}$/.test(normalized)) {
-    return "Enter a 20-byte hex Ethereum address.";
-  }
-  return null;
-}
-
 async function promptExistingFilePath(): Promise<string> {
   while (true) {
     const value = await promptValue({
@@ -141,39 +133,20 @@ export async function createPreviewOracleIntent(args: {
   statePath?: string;
 }): Promise<IntentSignInput> {
   const defaults = await resolvePromptDefaults(args.statePath);
-  console.error("[preview:intent:create] Enter the unsigned OracleIntent fields.");
-
-  const domainName = await promptValue({
-    label: "Domain name",
-    defaultValue: defaults.domain.name,
-  });
-  const domainVersion = await promptValue({
-    label: "Domain version",
-    defaultValue: defaults.domain.version,
-  });
-  const sourceChainId = await promptValue({
-    label: "Domain sourceChainId",
-    defaultValue: String(defaults.domain.sourceChainId),
-    validate: validateIntegerString,
-  });
-  const verifyingContract = await promptValue({
-    label: "Domain verifyingContract",
-    defaultValue: defaults.domain.verifyingContract,
-    validate: validateHexAddress,
-  });
+  console.error(
+    "[preview:intent:create] Using EIP-712 domain from protocol state:",
+  );
+  console.error(`  name              ${defaults.domain.name}`);
+  console.error(`  version           ${defaults.domain.version}`);
+  console.error(`  sourceChainId     ${defaults.domain.sourceChainId}`);
+  console.error(`  verifyingContract ${defaults.domain.verifyingContract}`);
+  console.error(
+    "[preview:intent:create] Enter the OracleIntent fields that change per intent.",
+  );
 
   const intentType = await promptValue({
     label: "Intent type",
     defaultValue: defaults.intent.intentType,
-  });
-  const intentVersion = await promptValue({
-    label: "Intent version",
-    defaultValue: defaults.intent.version,
-  });
-  const chainId = await promptValue({
-    label: "Intent chainId",
-    defaultValue: String(defaults.intent.chainId),
-    validate: validateIntegerString,
   });
   const nonce = await promptValue({
     label: "Nonce",
@@ -199,28 +172,19 @@ export async function createPreviewOracleIntent(args: {
     defaultValue: String(defaults.intent.timestamp),
     validate: validateIntegerString,
   });
-  const source = await promptValue({
-    label: "Source",
-    defaultValue: defaults.intent.source,
-  });
 
   return {
-    domain: {
-      name: domainName,
-      version: domainVersion,
-      sourceChainId,
-      verifyingContract,
-    },
+    domain: defaults.domain,
     intent: {
       intentType,
-      version: intentVersion,
-      chainId,
+      version: defaults.domain.version,
+      chainId: defaults.domain.sourceChainId,
       nonce,
       expiry,
       symbol,
       price,
       timestamp,
-      source,
+      source: defaults.domain.name,
     },
   };
 }
