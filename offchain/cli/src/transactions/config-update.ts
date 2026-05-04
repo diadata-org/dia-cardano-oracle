@@ -30,6 +30,7 @@ import {
   findSingleUtxoAtUnit,
   splitUnit,
   toBigInt,
+  waitForWalletSettlement,
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
 import {
@@ -76,7 +77,10 @@ export async function configUpdate(args: {
   const lucid = await makeConfiguredLucid();
   const source = await selectConfiguredWallet(lucid);
   const wallet = lucid.wallet();
-  const walletAddress = await wallet.address();
+  const [walletAddress, walletUtxos] = await Promise.all([
+    wallet.address(),
+    wallet.getUtxos(),
+  ]);
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
 
   assertPaymentKeyHashIsConfigSigner(
@@ -168,6 +172,14 @@ export async function configUpdate(args: {
         `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
       );
     }
+
+    await waitForWalletSettlement({
+      wallet,
+      previousUtxos: walletUtxos,
+      spentUtxos: [],
+      label: "config update",
+      requireChangeWhenNoSpentUtxos: true,
+    });
   }
 
   const latestConfigUtxo =

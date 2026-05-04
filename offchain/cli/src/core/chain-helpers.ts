@@ -207,9 +207,10 @@ export async function waitForWalletSettlement(args: {
   label: string;
   maxAttempts?: number;
   delayMs?: number;
+  requireChangeWhenNoSpentUtxos?: boolean;
 }): Promise<UTxO[]> {
   const spentOutRefs = args.spentUtxos.map((utxo) => outRefKey(utxo));
-  if (spentOutRefs.length === 0) {
+  if (spentOutRefs.length === 0 && !args.requireChangeWhenNoSpentUtxos) {
     return args.wallet.getUtxos();
   }
 

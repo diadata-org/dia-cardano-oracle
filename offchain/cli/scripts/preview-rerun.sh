@@ -13,6 +13,8 @@ TEMPLATE_INTENTS_DIR="${TEMPLATE_INTENTS_DIR:-$CLI_DIR/state/preview/intents}"
 BACKUP_NAME="${BACKUP_NAME:-preview_${RUN_ID}}"
 BACKUP_ROOT="$CLI_DIR/state/${BACKUP_NAME}"
 CARDANO_PROVIDER="${CARDANO_PROVIDER:-Blockfrost}"
+PRESTART_SETTLE_SECONDS="${PRESTART_SETTLE_SECONDS:-60}"
+POST_TX_DELAY_SECONDS="${POST_TX_DELAY_SECONDS:-15}"
 
 mkdir -p "$CLI_DIR/state" "$REPO/docs/milestones/evidence"
 
@@ -38,6 +40,10 @@ export CARDANO_PROVIDER
 
 echo "[rerun] fresh state root: $STATE_ROOT"
 echo "[rerun] fresh evidence root: $EVIDENCE_ROOT"
+if [[ "$PRESTART_SETTLE_SECONDS" -gt 0 ]]; then
+  echo "[rerun] waiting ${PRESTART_SETTLE_SECONDS}s for wallet/provider settlement before protocol init"
+  sleep "$PRESTART_SETTLE_SECONDS"
+fi
 
 run_logged() {
   local log_name="$1"
@@ -45,6 +51,9 @@ run_logged() {
   local cli_cmd="$*"
   echo "[rerun] $cli_cmd"
   script -q -e -c "npm run cli -- $cli_cmd" /dev/null | tee "$EVIDENCE_ROOT/$log_name"
+  if [[ "$POST_TX_DELAY_SECONDS" -gt 0 ]]; then
+    sleep "$POST_TX_DELAY_SECONDS"
+  fi
 }
 
 run_logged "00-protocol-init.log" \
@@ -225,16 +234,28 @@ NODE
 SUCCESS_BATCH_SIZE=""
 for size in 10 9 8 7 6; do
   log_name="24-update-batch-${size}.log"
+  result_root="$STATE_ROOT/update-batches/batch-${size}.result.json"
+  rm -f "$result_root"
   if run_logged "$log_name" \
     "preview:update:batch --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/client-a.json --manifest $STATE_REL/update-batches/batch-${size}.manifest.json --min-utxo-lovelace 5000000 --out $STATE_REL/update-batches/batch-${size}.result.json"; then
-    SUCCESS_BATCH_SIZE="$size"
-    break
+    if [[ -s "$result_root" ]]; then
+      SUCCESS_BATCH_SIZE="$size"
+      break
+    fi
+
+    echo "[rerun] batch-$size did not produce a result artifact; treating it as a failed attempt" | tee -a "$EVIDENCE_ROOT/$log_name"
   fi
 done
 
 if [[ -z "$SUCCESS_BATCH_SIZE" ]]; then
+  result_root="$STATE_ROOT/update-batches/batch-5.result.json"
+  rm -f "$result_root"
   run_logged "24-update-batch-5.log" \
     "preview:update:batch --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/client-a.json --manifest $STATE_REL/update-batches/batch-5.manifest.json --min-utxo-lovelace 5000000 --out $STATE_REL/update-batches/batch-5.result.json"
+  if [[ ! -s "$result_root" ]]; then
+    echo "[rerun] batch-5 did not produce a result artifact; aborting rerun" | tee -a "$EVIDENCE_ROOT/24-update-batch-5.log"
+    exit 1
+  fi
   SUCCESS_BATCH_SIZE="5"
 fi
 

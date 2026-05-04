@@ -33,6 +33,7 @@ import {
   findSingleUtxoAtUnit,
   requireInlineDatum,
   splitUnit,
+  waitForWalletSettlement,
   waitForUnitUtxoReplacement,
   writeJsonFile,
 } from "../core/chain-helpers.js";
@@ -84,7 +85,11 @@ export async function settleAccruedFees(args: {
   reportProgress("Connecting to Preview and selecting the configured wallet");
   const lucid = await makeConfiguredLucid();
   const source = await selectConfiguredWallet(lucid);
-  const walletAddress = await lucid.wallet().address();
+  const wallet = lucid.wallet();
+  const [walletAddress, walletUtxos] = await Promise.all([
+    wallet.address(),
+    wallet.getUtxos(),
+  ]);
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
 
   assertPaymentKeyHashIsConfigSigner(
@@ -323,6 +328,14 @@ export async function settleAccruedFees(args: {
         `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
       );
     }
+
+    await waitForWalletSettlement({
+      wallet,
+      previousUtxos: walletUtxos,
+      spentUtxos: [],
+      label: "settle",
+      requireChangeWhenNoSpentUtxos: true,
+    });
   }
 
   // --- Wait for UTxO replacement ---

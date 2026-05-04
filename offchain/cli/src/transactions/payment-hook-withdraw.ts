@@ -28,6 +28,7 @@ import {
   findSingleUtxoAtUnit,
   splitUnit,
   toBigInt,
+  waitForWalletSettlement,
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
 import {
@@ -55,7 +56,11 @@ export async function paymentHookWithdraw(args: {
   reportProgress("Connecting to Preview and selecting the configured wallet");
   const lucid = await makeConfiguredLucid();
   const source = await selectConfiguredWallet(lucid);
-  const walletAddress = await lucid.wallet().address();
+  const wallet = lucid.wallet();
+  const [walletAddress, walletUtxos] = await Promise.all([
+    wallet.address(),
+    wallet.getUtxos(),
+  ]);
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
 
   assertPaymentKeyHashIsConfigSigner(
@@ -183,6 +188,14 @@ export async function paymentHookWithdraw(args: {
         `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
       );
     }
+
+    await waitForWalletSettlement({
+      wallet,
+      previousUtxos: walletUtxos,
+      spentUtxos: [],
+      label: "payment-hook withdraw",
+      requireChangeWhenNoSpentUtxos: true,
+    });
   }
 
   const latestPaymentHookUtxo =

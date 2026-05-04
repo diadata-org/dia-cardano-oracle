@@ -20,17 +20,22 @@ export async function awaitTxConfirmation(args: {
   fetchImpl?: FetchLike;
   koiosMaxAttempts?: number;
   koiosDelayMs?: number;
+  primaryTimeoutMs?: number;
 }): Promise<boolean> {
   const reportProgress = args.reportProgress ?? (() => undefined);
+  const primaryTimeoutMs = args.primaryTimeoutMs ?? 10_000;
 
   try {
-    const confirmed = await args.lucid.awaitTx(args.txHash, 3_000);
+    const confirmed = await Promise.race([
+      args.lucid.awaitTx(args.txHash, 3_000),
+      sleep(primaryTimeoutMs).then(() => false),
+    ]);
     if (confirmed) {
       return true;
     }
 
     reportProgress(
-      `Primary confirmation provider did not observe ${args.txHash}; falling back to Koios confirmation.`,
+      `Primary confirmation provider did not observe ${args.txHash} within ${primaryTimeoutMs}ms; falling back to Koios confirmation.`,
     );
   } catch (error) {
     reportProgress(
@@ -40,7 +45,7 @@ export async function awaitTxConfirmation(args: {
 
   const koiosApiUrl = args.koiosApiUrl ?? getCliConfig().koiosApiUrl;
   const fetchImpl = args.fetchImpl ?? fetch;
-  const maxAttempts = args.koiosMaxAttempts ?? 10;
+  const maxAttempts = args.koiosMaxAttempts ?? 40;
   const delayMs = args.koiosDelayMs ?? 3_000;
   const label = args.label ?? "transaction";
   let lastError: unknown = null;

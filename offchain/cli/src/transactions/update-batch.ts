@@ -57,6 +57,7 @@ import {
   requireInlineDatum,
   splitUnit,
   updateWitnessData,
+  waitForWalletSettlement,
   waitForUnitUtxoReplacement,
   writeJsonFile,
 } from "../core/chain-helpers.js";
@@ -194,7 +195,11 @@ export async function submitBatchOracleUpdate(args: {
   reportProgress("Connecting to Preview and selecting the configured wallet");
   const lucid = await makeConfiguredLucid();
   const source = await selectConfiguredWallet(lucid);
-  const walletAddress = await lucid.wallet().address();
+  const wallet = lucid.wallet();
+  const [walletAddress, walletUtxos] = await Promise.all([
+    wallet.address(),
+    wallet.getUtxos(),
+  ]);
   const { utxos: referenceScriptUtxos, missing: missingReferenceScripts } =
     await loadReferenceScriptUtxos(
       [
@@ -480,6 +485,14 @@ export async function submitBatchOracleUpdate(args: {
         `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
       );
     }
+
+    await waitForWalletSettlement({
+      wallet,
+      previousUtxos: walletUtxos,
+      spentUtxos: [],
+      label: "oracle batch update",
+      requireChangeWhenNoSpentUtxos: true,
+    });
   }
 
   const latestPairUtxos =

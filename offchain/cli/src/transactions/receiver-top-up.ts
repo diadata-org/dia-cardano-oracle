@@ -27,6 +27,7 @@ import {
   findSingleUtxoAtUnit,
   splitUnit,
   toBigInt,
+  waitForWalletSettlement,
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
 import { assertReceiverTopUpAmountPositive } from "../preflight/index.js";
@@ -52,7 +53,11 @@ export async function receiverTopUp(args: {
   reportProgress("Connecting to Preview and selecting the configured wallet");
   const lucid = await makeConfiguredLucid();
   const source = await selectConfiguredWallet(lucid);
-  const walletAddress = await lucid.wallet().address();
+  const wallet = lucid.wallet();
+  const [walletAddress, walletUtxos] = await Promise.all([
+    wallet.address(),
+    wallet.getUtxos(),
+  ]);
 
   const currentReceiverUtxo = await findSingleUtxoAtUnit(
     lucid,
@@ -148,6 +153,14 @@ export async function receiverTopUp(args: {
         `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
       );
     }
+
+    await waitForWalletSettlement({
+      wallet,
+      previousUtxos: walletUtxos,
+      spentUtxos: [],
+      label: "receiver top-up",
+      requireChangeWhenNoSpentUtxos: true,
+    });
   }
 
   const latestReceiverUtxo =
