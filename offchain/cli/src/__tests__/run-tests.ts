@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { Constr, type Data as PlutusData } from "@lucid-evolution/lucid";
+import { Data } from "@lucid-evolution/plutus";
 import {
   ensureCompatibleBatch,
   resolvePairArtifact,
@@ -14,6 +16,22 @@ import {
 } from "../core/dia-intent.js";
 import { createEthereumWallet } from "../oracle/ethereum-wallet-create.js";
 import { createWallet } from "../wallet/wallet-create.js";
+import {
+  buildConfigDatumCbor,
+  buildPairDatumCbor,
+  buildPaymentHookDatumCbor,
+  buildReceiverDatumCbor,
+  decodePaymentHookDatum,
+  decodeReceiverDatum,
+  addressToPlutusData,
+} from "../core/chain-helpers.js";
+import {
+  normalizeHex,
+  splitUnit,
+  toBigInt,
+  parseCommaSeparatedHexList,
+  utf8ToHex,
+} from "../core/primitives.js";
 import type {
   ConfigStateArtifact,
   ClientStateArtifact,
@@ -27,6 +45,32 @@ testBatchSnapshotRefresh();
 testCompatibleBatchRules();
 testProtocolStateInit();
 testClientStateInit();
+
+// --- Datum encoder/decoder tests (Test A) ----------------------------------
+// These exist as a regression net for three real bugs found and fixed in the
+// off-chain encoders during the architecture review:
+//   1. Receiver bootstrap encoded only 2 of the 3 ReceiverDatum fields.
+//   2. Config bootstrap had `max_bootstrap_drift_seconds` and
+//      `payment_hook_ref` swapped.
+//   3. PaymentHook bootstrap omitted `max_bootstrap_drift_seconds` from the
+//      ConfigDatum entirely.
+// They are golden-style: any reordering or missing field will trip them.
+
+testPrimitivesPureHelpers();
+testReceiverDatumRoundTrip();
+testReceiverDatumExactlyThreeIntegerFields();
+testPaymentHookDatumRoundTrip();
+testPaymentHookDatumWithdrawAddressRoundTrip();
+testConfigDatumRoundTrip();
+testConfigDatumFieldOrderAndArity();
+testPairDatumRoundTrip();
+testAddressToPlutusDataKeyAndStake();
+
+// --- Adversarial / invariant tests (Test B, pure-logic slice) --------------
+testReceiverWithdrawDoesNotTouchAccrued();
+testSettleDeltaInvariant();
+testBatchRejectsDuplicatePair();
+testBatchRejectsForeignReceiver();
 
 console.log("CLI tests passed");
 
@@ -88,6 +132,7 @@ function testBatchSnapshotRefresh(): void {
     ...sampleReceiverArtifact(),
     receiverState: {
       balanceLovelace: "33000000",
+      accruedToHookLovelace: "0",
       minUtxoLovelace: "3000000",
     },
     receiverUtxo: {
@@ -232,6 +277,435 @@ function testClientStateInit(): void {
   );
 }
 
+// =====================================================================
+// Datum encoder / decoder tests
+// =====================================================================
+
+function sampleReceiverState(overrides: Partial<{
+  balanceLovelace: string;
+  accruedToHookLovelace: string;
+  minUtxoLovelace: string;
+}> = {}) {
+  return {
+    balanceLovelace: overrides.balanceLovelace ?? "12345678",
+    accruedToHookLovelace: overrides.accruedToHookLovelace ?? "987654",
+    minUtxoLovelace: overrides.minUtxoLovelace ?? "3000000",
+  };
+}
+
+function samplePaymentHookStateDatum() {
+  return {
+    withdrawAddress:
+      "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
+    minUtxoLovelace: "3000000",
+    accruedFeesLovelace: "5000000",
+    lifetimeCollectedLovelace: "10000000",
+    lifetimeWithdrawnLovelace: "5000000",
+  };
+}
+
+function sampleConfigStateDatum() {
+  return {
+    validConfigSigners: ["99".repeat(28), "ab".repeat(28)],
+    authorizedDiaPublicKeys: [
+      "03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807",
+    ],
+    domain: {
+      name: "DIA Oracle",
+      version: "1.0",
+      sourceChainId: "100640",
+      verifyingContract: "f8c614a483a0427a13512f52ac72a576678be317",
+    },
+    protocolFeeLovelace: "2000000",
+    paymentHookRef: {
+      policyId: "44".repeat(28),
+      assetName: "4449415f5041594d454e545f484f4f4b",
+      unit: `${"44".repeat(28)}4449415f5041594d454e545f484f4f4b`,
+    },
+    updateCoordinatorCredential: {
+      type: "Script" as const,
+      hash: "33".repeat(28),
+    },
+    minUtxoLovelace: "5000000",
+    maxBootstrapDriftSeconds: "300",
+  };
+}
+
+function samplePairLiveState() {
+  return {
+    pairId: "555344432f555344",
+    price: "99992561",
+    timestamp: "1760960522",
+    nonce: "1760960522308165264",
+    intentHash: "44".repeat(32),
+    signer: "f64d333c19b007519c7b9316680ed26578f98c08",
+    minUtxoLovelace: "5000000",
+    intent: {
+      intentType: "OracleUpdate",
+      version: "1.0",
+      chainId: "100640",
+      nonce: "1760960522308165264",
+      expiry: "1760964122",
+      symbol: "USDC/USD",
+      price: "99992561",
+      timestamp: "1760960522",
+      source: "DIA Oracle",
+      signature: `0x${"66".repeat(64)}`,
+      signer: "0xf64d333c19b007519c7b9316680ed26578f98c08",
+    },
+  };
+}
+
+function testPrimitivesPureHelpers(): void {
+  assert.equal(toBigInt("42", "x"), 42n);
+  assert.equal(toBigInt(7, "y"), 7n);
+  assert.throws(() => toBigInt("not-a-number", "z"), /integer/i);
+
+  assert.equal(normalizeHex("0xABCD", "h"), "abcd");
+  assert.equal(normalizeHex("ABCD", "h"), "abcd");
+  assert.throws(() => normalizeHex("0xZZ", "bad"), /hex/i);
+  assert.throws(() => normalizeHex("abc", "odd"), /even/i);
+
+  const split = splitUnit(`${"aa".repeat(28)}4449415f434f4e464947`);
+  assert.equal(split.policyId.length, 56);
+  assert.equal(split.assetName, "4449415f434f4e464947");
+
+  assert.deepEqual(
+    parseCommaSeparatedHexList(" 0xaa, bb, 0xCC ", "list"),
+    ["aa", "bb", "cc"],
+  );
+  assert.deepEqual(parseCommaSeparatedHexList("", "list"), []);
+
+  assert.equal(utf8ToHex("DIA Oracle"), "444941204f7261636c65");
+}
+
+function testReceiverDatumRoundTrip(): void {
+  const state = sampleReceiverState();
+  const cbor = buildReceiverDatumCbor(state);
+  const decoded = decodeReceiverDatum(cbor);
+
+  assert.equal(decoded.balanceLovelace, state.balanceLovelace);
+  assert.equal(decoded.accruedToHookLovelace, state.accruedToHookLovelace);
+  assert.equal(decoded.minUtxoLovelace, state.minUtxoLovelace);
+}
+
+function testReceiverDatumExactlyThreeIntegerFields(): void {
+  // Regression for the bug where receiver-bootstrap.ts encoded 2 fields.
+  const cbor = buildReceiverDatumCbor(sampleReceiverState());
+  const datum = Data.from(cbor) as Constr<PlutusData>;
+
+  assert.equal(datum.index, 0, "ReceiverDatum constructor must be index 0");
+  assert.equal(datum.fields.length, 3, "ReceiverDatum must have exactly 3 fields");
+
+  for (let i = 0; i < datum.fields.length; i += 1) {
+    assert.equal(
+      typeof datum.fields[i],
+      "bigint",
+      `ReceiverDatum field ${i} must be Int (bigint), got ${typeof datum.fields[i]}`,
+    );
+  }
+  assert.equal(datum.fields[0], 12345678n);
+  assert.equal(datum.fields[1], 987654n);
+  assert.equal(datum.fields[2], 3000000n);
+}
+
+function testPaymentHookDatumRoundTrip(): void {
+  const state = samplePaymentHookStateDatum();
+  const cbor = buildPaymentHookDatumCbor(state);
+  const decoded = decodePaymentHookDatum(cbor, state.withdrawAddress);
+
+  assert.equal(decoded.withdrawAddress, state.withdrawAddress);
+  assert.equal(decoded.accruedFeesLovelace, state.accruedFeesLovelace);
+  assert.equal(decoded.lifetimeCollectedLovelace, state.lifetimeCollectedLovelace);
+  assert.equal(decoded.lifetimeWithdrawnLovelace, state.lifetimeWithdrawnLovelace);
+  assert.equal(decoded.minUtxoLovelace, state.minUtxoLovelace);
+}
+
+function testPaymentHookDatumWithdrawAddressRoundTrip(): void {
+  // Address must encode as a (paymentCred, optional stakeCred) pair
+  // following the Plutus Address shape, not as a string.
+  const state = samplePaymentHookStateDatum();
+  const cbor = buildPaymentHookDatumCbor(state);
+  const datum = Data.from(cbor) as Constr<PlutusData>;
+
+  assert.equal(datum.index, 0);
+  assert.equal(datum.fields.length, 5);
+
+  const addr = datum.fields[0] as Constr<PlutusData>;
+  assert.equal(addr.index, 0, "Address constructor must be 0");
+  assert.equal(addr.fields.length, 2, "Address must carry payment + stake credential");
+
+  const paymentCred = addr.fields[0] as Constr<PlutusData>;
+  // Sample address has key payment credential -> Constr 0.
+  assert.equal(paymentCred.index, 0, "payment credential should be VerificationKey");
+  assert.equal(typeof paymentCred.fields[0], "string");
+
+  // Stake credential is Some(...) for the sample address (it has a stake key).
+  const stakeWrapper = addr.fields[1] as Constr<PlutusData>;
+  assert.equal(stakeWrapper.index, 0, "stake credential should be Some(...)");
+
+  // Remaining fields must be ints in correct order.
+  assert.equal(typeof datum.fields[1], "bigint", "accrued_fees_lovelace");
+  assert.equal(typeof datum.fields[2], "bigint", "lifetime_collected_lovelace");
+  assert.equal(typeof datum.fields[3], "bigint", "lifetime_withdrawn_lovelace");
+  assert.equal(typeof datum.fields[4], "bigint", "min_utxo_lovelace");
+}
+
+function testConfigDatumRoundTrip(): void {
+  // No symmetric decoder exists for ConfigDatum (no off-chain caller needs it),
+  // so we round-trip via Data.from + structural comparison.
+  const state = sampleConfigStateDatum();
+  const cbor = buildConfigDatumCbor(state);
+  const datum = Data.from(cbor) as Constr<PlutusData>;
+
+  assert.equal(datum.index, 0);
+  assert.equal(datum.fields.length, 8, "ConfigDatum must have exactly 8 fields");
+
+  // 0: validConfigSigners (List<bytes>)
+  const signers = datum.fields[0] as string[];
+  assert.deepEqual(signers, state.validConfigSigners);
+
+  // 1: authorizedDiaPublicKeys (List<bytes>)
+  const keys = datum.fields[1] as string[];
+  assert.deepEqual(keys, state.authorizedDiaPublicKeys);
+
+  // 2: domain_data (Constr 0)
+  const domain = datum.fields[2] as Constr<PlutusData>;
+  assert.equal(domain.index, 0);
+  assert.equal(domain.fields.length, 4);
+  assert.equal(domain.fields[0], utf8ToHex(state.domain.name));
+  assert.equal(domain.fields[1], utf8ToHex(state.domain.version));
+  assert.equal(domain.fields[2], BigInt(state.domain.sourceChainId));
+  assert.equal(domain.fields[3], state.domain.verifyingContract);
+
+  // 3: protocol_fee_lovelace (Int)
+  assert.equal(datum.fields[3], BigInt(state.protocolFeeLovelace));
+
+  // 4: payment_hook_ref (Option<PaymentHookRef>) -> Some
+  const hookRef = datum.fields[4] as Constr<PlutusData>;
+  assert.equal(hookRef.index, 0, "payment_hook_ref must be Some(...)");
+  const hookInner = hookRef.fields[0] as Constr<PlutusData>;
+  assert.equal(hookInner.index, 0);
+  assert.equal(hookInner.fields[0], state.paymentHookRef.policyId);
+  assert.equal(hookInner.fields[1], state.paymentHookRef.assetName);
+
+  // 5: update_coordinator_credential (Option<Credential>) -> Some(Script)
+  const coord = datum.fields[5] as Constr<PlutusData>;
+  assert.equal(coord.index, 0, "coordinator credential must be Some(...)");
+  const coordCred = coord.fields[0] as Constr<PlutusData>;
+  assert.equal(coordCred.index, 1, "Script credential constructor is index 1");
+  assert.equal(coordCred.fields[0], state.updateCoordinatorCredential.hash);
+
+  // 6: max_bootstrap_drift_seconds (Int)
+  assert.equal(datum.fields[6], BigInt(state.maxBootstrapDriftSeconds));
+
+  // 7: min_utxo_lovelace (Int)
+  assert.equal(datum.fields[7], BigInt(state.minUtxoLovelace));
+}
+
+function testConfigDatumFieldOrderAndArity(): void {
+  // Direct regression for the field-order bug: previously
+  // max_bootstrap_drift_seconds and payment_hook_ref had been swapped, and
+  // payment-hook-bootstrap had omitted max_bootstrap_drift_seconds entirely.
+  const stateWithNone = {
+    ...sampleConfigStateDatum(),
+    paymentHookRef: null,
+    updateCoordinatorCredential: null,
+  };
+  const cbor = buildConfigDatumCbor(stateWithNone);
+  const datum = Data.from(cbor) as Constr<PlutusData>;
+
+  assert.equal(datum.fields.length, 8, "Arity must be 8 even when options are None");
+
+  const hookRef = datum.fields[4] as Constr<PlutusData>;
+  assert.equal(hookRef.index, 1, "None constructor for payment_hook_ref");
+  assert.equal(hookRef.fields.length, 0);
+
+  const coord = datum.fields[5] as Constr<PlutusData>;
+  assert.equal(coord.index, 1, "None constructor for update_coordinator_credential");
+  assert.equal(coord.fields.length, 0);
+
+  // Ints must be at the right positions.
+  assert.equal(typeof datum.fields[3], "bigint", "protocol_fee_lovelace at index 3");
+  assert.equal(typeof datum.fields[6], "bigint", "max_bootstrap_drift_seconds at index 6");
+  assert.equal(typeof datum.fields[7], "bigint", "min_utxo_lovelace at index 7");
+}
+
+function testPairDatumRoundTrip(): void {
+  const state = samplePairLiveState();
+  const cbor = buildPairDatumCbor(state);
+  const datum = Data.from(cbor) as Constr<PlutusData>;
+
+  assert.equal(datum.index, 0);
+  assert.equal(datum.fields.length, 7);
+  assert.equal(datum.fields[0], state.pairId);
+  assert.equal(datum.fields[1], BigInt(state.price));
+  assert.equal(datum.fields[2], BigInt(state.timestamp));
+  assert.equal(datum.fields[3], BigInt(state.nonce));
+  assert.equal(datum.fields[4], state.intentHash);
+  assert.equal(datum.fields[5], state.signer);
+  assert.equal(datum.fields[6], BigInt(state.minUtxoLovelace));
+}
+
+function testAddressToPlutusDataKeyAndStake(): void {
+  // Key-key address (sample mnemonic-derived).
+  const keyAddr =
+    "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j";
+  const data = addressToPlutusData(keyAddr);
+  assert.equal(data.index, 0);
+  assert.equal(data.fields.length, 2);
+  const payment = data.fields[0] as Constr<PlutusData>;
+  assert.equal(payment.index, 0, "key payment credential -> 0");
+  const stake = data.fields[1] as Constr<PlutusData>;
+  assert.equal(stake.index, 0, "stake should be Some(...)");
+}
+
+// =====================================================================
+// Adversarial / invariant tests (pure-logic slice of Test B)
+// =====================================================================
+
+function testReceiverWithdrawDoesNotTouchAccrued(): void {
+  // Invariant: a withdraw of N lovelace must reduce balance_lovelace by N
+  // and leave accrued_to_hook_lovelace untouched. This mirrors what the
+  // on-chain Withdraw redeemer enforces, asserted on the off-chain
+  // datum-builder side.
+  const before = sampleReceiverState({
+    balanceLovelace: "10000000",
+    accruedToHookLovelace: "1234567",
+  });
+  const withdrawAmount = 4_000_000n;
+
+  const after = {
+    ...before,
+    balanceLovelace: (BigInt(before.balanceLovelace) - withdrawAmount).toString(),
+  };
+
+  const beforeCbor = buildReceiverDatumCbor(before);
+  const afterCbor = buildReceiverDatumCbor(after);
+  const beforeDecoded = decodeReceiverDatum(beforeCbor);
+  const afterDecoded = decodeReceiverDatum(afterCbor);
+
+  assert.equal(
+    BigInt(beforeDecoded.balanceLovelace) - BigInt(afterDecoded.balanceLovelace),
+    withdrawAmount,
+  );
+  assert.equal(
+    afterDecoded.accruedToHookLovelace,
+    beforeDecoded.accruedToHookLovelace,
+    "Withdraw must not move funds out of accrued_to_hook_lovelace",
+  );
+  assert.equal(afterDecoded.minUtxoLovelace, beforeDecoded.minUtxoLovelace);
+
+  // Negative case: a "withdraw" that also drains accrued is a different shape
+  // and must produce a different datum CBOR.
+  const malicious = {
+    ...after,
+    accruedToHookLovelace: "0",
+  };
+  const maliciousCbor = buildReceiverDatumCbor(malicious);
+  assert.notEqual(maliciousCbor, afterCbor, "Draining accrued must change the datum bytes");
+}
+
+function testSettleDeltaInvariant(): void {
+  // Invariant: settle moves the entire accrued_to_hook_lovelace from
+  // receiver into payment hook accrued_fees_lovelace, and resets the
+  // receiver-side accrual to 0. The total of (receiver.accrued + hook.accrued)
+  // must be conserved.
+  const receiverBefore = sampleReceiverState({
+    balanceLovelace: "20000000",
+    accruedToHookLovelace: "7777777",
+  });
+  const hookBefore = samplePaymentHookStateDatum();
+
+  const delta = BigInt(receiverBefore.accruedToHookLovelace);
+
+  const receiverAfter = {
+    ...receiverBefore,
+    accruedToHookLovelace: "0",
+  };
+  const hookAfter = {
+    ...hookBefore,
+    accruedFeesLovelace: (BigInt(hookBefore.accruedFeesLovelace) + delta).toString(),
+    lifetimeCollectedLovelace: (
+      BigInt(hookBefore.lifetimeCollectedLovelace) + delta
+    ).toString(),
+  };
+
+  const totalBefore =
+    BigInt(receiverBefore.accruedToHookLovelace) +
+    BigInt(hookBefore.accruedFeesLovelace);
+  const totalAfter =
+    BigInt(receiverAfter.accruedToHookLovelace) +
+    BigInt(hookAfter.accruedFeesLovelace);
+
+  assert.equal(totalAfter, totalBefore, "Settle must conserve total accrued");
+  assert.equal(receiverAfter.accruedToHookLovelace, "0");
+  assert.equal(receiverAfter.balanceLovelace, receiverBefore.balanceLovelace);
+  assert.equal(receiverAfter.minUtxoLovelace, receiverBefore.minUtxoLovelace);
+
+  // Also: hook.lifetime_collected must grow by exactly delta.
+  assert.equal(
+    BigInt(hookAfter.lifetimeCollectedLovelace) -
+      BigInt(hookBefore.lifetimeCollectedLovelace),
+    delta,
+  );
+  // hook.lifetime_withdrawn must NOT change during a settle.
+  assert.equal(
+    hookAfter.lifetimeWithdrawnLovelace,
+    hookBefore.lifetimeWithdrawnLovelace,
+  );
+
+  // CBORs must round-trip cleanly through their decoders.
+  assert.deepEqual(
+    decodeReceiverDatum(buildReceiverDatumCbor(receiverAfter)),
+    receiverAfter,
+  );
+  assert.deepEqual(
+    decodePaymentHookDatum(
+      buildPaymentHookDatumCbor(hookAfter),
+      hookAfter.withdrawAddress,
+    ),
+    hookAfter,
+  );
+}
+
+function testBatchRejectsDuplicatePair(): void {
+  // Already covered by testCompatibleBatchRules but keep an explicit name
+  // so a regression touching only this rule shows clearly in the output.
+  const protocol = sampleConfigArtifact();
+  const client = sampleClientArtifact();
+  client.receiver = sampleReceiverArtifact();
+  const pair = resolvePairArtifact(samplePairArtifact("aa"), client, protocol);
+  assert.throws(
+    () => ensureCompatibleBatch([pair, pair]),
+    /Duplicate pair state included in batch/,
+  );
+}
+
+function testBatchRejectsForeignReceiver(): void {
+  const protocol = sampleConfigArtifact();
+  const client = sampleClientArtifact();
+  client.receiver = sampleReceiverArtifact();
+  const first = resolvePairArtifact(samplePairArtifact("aa"), client, protocol);
+  const second = resolvePairArtifact(samplePairArtifact("bb"), client, protocol);
+
+  // Mutating the second resolved pair to point at a different receiver
+  // simulates two pairs from different client deployments being submitted
+  // in one batch.
+  const tampered = {
+    ...second,
+    receiver: {
+      ...second.receiver,
+      receiverUnit: `${"33".repeat(28)}444946464552454e54`,
+    },
+  };
+
+  assert.throws(
+    () => ensureCompatibleBatch([first, tampered]),
+    /same client deployment/,
+  );
+}
+
 function assertHexString(value: unknown): void {
   if (typeof value !== "string") {
     assert.fail("value must be a string");
@@ -349,6 +823,7 @@ function sampleReceiverArtifact() {
     receiverValidatorAddress: "addr_test1receiver",
     receiverState: {
       balanceLovelace: "10000000",
+      accruedToHookLovelace: "0",
       minUtxoLovelace: "3000000",
     },
     receiverUtxo: {
@@ -444,6 +919,7 @@ function sampleConfigState(): ConfigStateArtifact["configState"] {
       hash: "33".repeat(28),
     },
     minUtxoLovelace: "5000000",
+    maxBootstrapDriftSeconds: "300",
   };
 }
 

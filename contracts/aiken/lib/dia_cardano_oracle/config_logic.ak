@@ -1,7 +1,7 @@
 use aiken/collection/list
 use aiken/crypto.{VerificationKeyHash}
 use aiken/primitive/bytearray
-use cardano/address.{Credential}
+use cardano/address.{Credential, Script}
 use cardano/assets.{AssetName, PolicyId}
 use cardano/transaction.{Transaction}
 
@@ -26,6 +26,7 @@ pub type ConfigDatum {
     protocol_fee_lovelace: Int,
     payment_hook_ref: Option<PaymentHookRef>,
     update_coordinator_credential: Option<Credential>,
+    max_bootstrap_drift_seconds: Int,
     min_utxo_lovelace: Int,
   }
 }
@@ -65,6 +66,7 @@ pub fn valid_config_state(datum: ConfigDatum) -> Bool {
       datum.update_coordinator_credential,
     ),
     unique_authorized_dia_public_keys(datum.authorized_dia_public_keys),
+    datum.max_bootstrap_drift_seconds >= 0,
     datum.min_utxo_lovelace >= 0,
   }
 }
@@ -126,6 +128,7 @@ pub fn sample_config() -> ConfigDatum {
     protocol_fee_lovelace: 2_000_000,
     payment_hook_ref: None,
     update_coordinator_credential: None,
+    max_bootstrap_drift_seconds: 86_400,
     min_utxo_lovelace: 2_000_000,
   }
 }
@@ -138,6 +141,7 @@ fn sample_updated_fee_config() -> ConfigDatum {
     protocol_fee_lovelace: 3_000_000,
     payment_hook_ref: sample_config().payment_hook_ref,
     update_coordinator_credential: sample_config().update_coordinator_credential,
+    max_bootstrap_drift_seconds: sample_config().max_bootstrap_drift_seconds,
     min_utxo_lovelace: sample_config().min_utxo_lovelace,
   }
 }
@@ -162,7 +166,65 @@ test duplicate_authorized_dia_public_keys_are_rejected() {
       protocol_fee_lovelace: 2_000_000,
       payment_hook_ref: None,
       update_coordinator_credential: None,
+      max_bootstrap_drift_seconds: 86_400,
       min_utxo_lovelace: 2_000_000,
     },
+  )
+}
+
+test negative_max_bootstrap_drift_is_rejected() {
+  !valid_config_state(
+    ConfigDatum { ..sample_config(), max_bootstrap_drift_seconds: -1 },
+  )
+}
+
+test empty_config_admins_are_rejected() {
+  !valid_config_state(ConfigDatum { ..sample_config(), config_admins: [] })
+}
+
+test empty_authorized_dia_public_keys_are_rejected() {
+  !valid_config_state(
+    ConfigDatum { ..sample_config(), authorized_dia_public_keys: [] },
+  )
+}
+
+test hook_set_without_coordinator_is_rejected() {
+  let sample_hook_ref =
+    PaymentHookRef {
+      policy_id: #"22222222222222222222222222222222222222222222222222222222",
+      asset_name: #"4449415f5041594d454e545f484f4f4b",
+    }
+  !valid_config_state(
+    ConfigDatum {
+      ..sample_config(),
+      payment_hook_ref: Some(sample_hook_ref),
+      update_coordinator_credential: None,
+    },
+  )
+}
+
+test coordinator_set_without_hook_is_rejected() {
+  let sample_coord_credential =
+    Script(#"33333333333333333333333333333333333333333333333333333333")
+  !valid_config_state(
+    ConfigDatum {
+      ..sample_config(),
+      payment_hook_ref: None,
+      update_coordinator_credential: Some(sample_coord_credential),
+    },
+  )
+}
+
+test admin_update_transition_accepts_drift_rotation() {
+  admin_update_transition(
+    sample_config(),
+    ConfigDatum { ..sample_config(), max_bootstrap_drift_seconds: 3_600 },
+  )
+}
+
+test admin_update_transition_rejects_min_utxo_change() {
+  !admin_update_transition(
+    sample_config(),
+    ConfigDatum { ..sample_config(), min_utxo_lovelace: 5_000_000 },
   )
 }

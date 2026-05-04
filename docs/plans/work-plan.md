@@ -43,7 +43,8 @@ Tasks:
 - [x] Implement datum types and redeemers per the architecture (`Config`, `PaymentHook`, `Receiver`, `Pair`).
 - [x] Implement `secp256k1` ECDSA + EIP-712 intent verification against the authorized DIA signer set.
 - [x] Implement continuity rules for Config, Hook, Receiver and Pair UTxOs, including `min_utxo_lovelace` invariants.
-- [x] Implement fee flow: Receiver → Hook on every price update; `ApplySingle` and `ApplyBatch` in the coordinator.
+- [x] Implement decoupled fee flow: every price update spends the Receiver with `AccrueFee` (moving the protocol fee from `balance_lovelace` into `accrued_to_hook_lovelace`); a separate admin-initiated Settle transaction (`receiver: Settle`, `payment_hook: ApplySettle`, `coordinator: ApplySettle`) drains the accrued lovelace from one or more Receivers into the global PaymentHook in a single batch. The PaymentHook is not touched during oracle updates.
+- [x] Coordinator redeemers `ApplySingle`, `ApplyBatch`, and `ApplySettle`.
 - [x] Unit tests for Config, Hook, Receiver, Pair, and coordinator logic, with real DIA `OracleIntent` fixtures for signature validation.
 - [x] Finalize pair-NFT asset-name derivation as `blake2b_256(pair_id)`.
 - [x] Finalize batch-update fee unit as one Config-defined fee per updated pair.

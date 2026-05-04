@@ -1,13 +1,12 @@
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { Constr, type OutRef, type UTxO } from "@lucid-evolution/lucid";
+import { Constr } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
 import {
   makeCoordinatorValidator,
   makePairStateMintingPolicy,
   makePairStateValidator,
-  makePaymentHookValidator,
   makeReceiverValidator,
   mintingPolicyFromCompiledScript,
   policyIdFromMintingPolicy,
@@ -23,9 +22,9 @@ import {
   normalizeDiaEip712Domain,
   normalizeDiaOracleIntent,
   normalizeHex,
+  readSignedIntentInput,
   recoverDiaOracleIntentWitness,
   type DiaOracleIntent,
-  type DiaOracleIntentInput,
 } from "../core/dia-intent.js";
 import {
   makeConfiguredLucid,
@@ -33,7 +32,7 @@ import {
 } from "../core/lucid.js";
 import {
   appendTransactionRecord,
-  readPairState,
+  readOptionalPairState,
   type ConfigStateArtifact,
   type ClientStateArtifact,
   type PairStateArtifact,
@@ -45,11 +44,10 @@ import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
 import { readClientContext } from "../core/artifact-context.js";
 import {
   buildPairDatumCbor,
-  buildPaymentHookDatumCbor,
   buildReceiverDatumCbor,
-  decodePaymentHookDatum,
   decodeReceiverDatum,
   findSingleUtxoAtUnit,
+  requireInlineDatum,
   splitUnit,
   updateWitnessData,
   waitForUnitUtxoReplacement,
@@ -72,8 +70,6 @@ type BatchUpdateResult = {
     address: string;
   };
   receiver: ResolvedPairStateArtifact["receiver"];
-  paymentHookState: ResolvedPairStateArtifact["paymentHookState"];
-  paymentHookUtxo: ResolvedPairStateArtifact["paymentHookUtxo"];
   pairs: Array<{
     statePath: string;
     outPath: string;
@@ -205,16 +201,6 @@ export async function submitBatchOracleUpdate(args: {
             : null,
         },
         {
-          key: "paymentHook",
-          label: "payment hook",
-          outRef: state.referenceScripts?.global?.paymentHook
-            ? {
-                txHash: state.referenceScripts.global.paymentHook.txHash,
-                outputIndex: state.referenceScripts.global.paymentHook.outputIndex,
-              }
-            : null,
-        },
-        {
           key: "receiver",
           label: "receiver",
           outRef: state.referenceScripts?.client?.receiver
@@ -238,7 +224,7 @@ export async function submitBatchOracleUpdate(args: {
       reportProgress,
     );
 
-  const [currentConfigUtxo, currentPaymentHookUtxo, currentReceiverUtxo] =
+  const [currentConfigUtxo, currentReceiverUtxo] =
     await Promise.all([
       findSingleUtxoAtUnit(
         lucid,
@@ -248,21 +234,11 @@ export async function submitBatchOracleUpdate(args: {
       ),
       findSingleUtxoAtUnit(
         lucid,
-        state.scripts.paymentHookValidatorAddress!,
-        state.scripts.paymentHookUnit!,
-        "payment hook",
-      ),
-      findSingleUtxoAtUnit(
-        lucid,
         state.receiver.receiverValidatorAddress,
         state.receiver.receiverUnit,
         "receiver",
       ),
     ]);
-  const currentPaymentHookState = decodePaymentHookDatum(
-    requireInlineDatum(currentPaymentHookUtxo, "payment hook"),
-    state.paymentHookState.withdrawAddress,
-  );
   const currentReceiverState = decodeReceiverDatum(
     requireInlineDatum(currentReceiverUtxo, "receiver"),
   );
@@ -270,20 +246,6 @@ export async function submitBatchOracleUpdate(args: {
   const pairValidatorHash = scriptHashFromValidator(pairValidator);
   if (pairValidatorHash !== state.scripts.pairValidatorHash) {
     throw new Error("Pair validator hash does not match the current blueprint.");
-  }
-
-  const paymentHookValidator = state.compiledScripts?.paymentHookValidator
-    ? spendingValidatorFromCompiledScript(state.compiledScripts.paymentHookValidator)
-    : await makePaymentHookValidator({
-        bootstrapOutRef: state.bootstrapRefs.paymentHook as OutRef,
-        assetName: splitUnit(state.scripts.paymentHookUnit!).assetName,
-        configPolicyId: state.scripts.configPolicyId,
-        configAssetName,
-        coordinatorCredentialHash: state.scripts.coordinatorHash,
-      });
-  const paymentHookValidatorHash = scriptHashFromValidator(paymentHookValidator);
-  if (paymentHookValidatorHash !== state.scripts.paymentHookValidatorHash) {
-    throw new Error("Payment hook validator hash does not match the current blueprint.");
   }
 
   const receiverValidator = state.compiledScripts?.receiverValidator
@@ -366,24 +328,16 @@ export async function submitBatchOracleUpdate(args: {
     balanceLovelace: (
       BigInt(currentReceiverState.balanceLovelace) - totalFee
     ).toString(),
+    accruedToHookLovelace: (
+      BigInt(currentReceiverState.accruedToHookLovelace) + totalFee
+    ).toString(),
   };
   if (BigInt(nextReceiverState.balanceLovelace) < 0n) {
     throw new Error("Receiver balance is not sufficient to pay the protocol fee batch.");
   }
 
-  const nextPaymentHookState = {
-    ...currentPaymentHookState,
-    accruedFeesLovelace: (
-      BigInt(currentPaymentHookState.accruedFeesLovelace) + totalFee
-    ).toString(),
-    lifetimeCollectedLovelace: (
-      BigInt(currentPaymentHookState.lifetimeCollectedLovelace) + totalFee
-    ).toString(),
-  };
-
   const pairRedeemer = Data.to(new Constr(0, []));
   const receiverRedeemer = Data.to(new Constr(1, []));
-  const paymentHookRedeemer = Data.to(new Constr(0, []));
   const coordinatorRedeemer = Data.to(
     new Constr<PlutusData>(1, [
       preparedUpdates.map(({ intent, witness, artifact }) =>
@@ -422,7 +376,6 @@ export async function submitBatchOracleUpdate(args: {
     .newTx()
     .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
     .collectFrom([currentReceiverUtxo], receiverRedeemer)
-    .collectFrom([currentPaymentHookUtxo], paymentHookRedeemer)
     .withdraw(state.scripts.coordinatorRewardAddress, 0n, coordinatorRedeemer);
 
   if (currentPairUtxos.length > 0) {
@@ -432,10 +385,6 @@ export async function submitBatchOracleUpdate(args: {
   if (missingReferenceScripts.receiver) {
     reportProgress("Reference script for receiver is missing on-chain; attaching the receiver validator inline.");
     txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
-  }
-  if (missingReferenceScripts.paymentHook) {
-    reportProgress("Reference script for payment hook is missing on-chain; attaching the payment hook validator inline.");
-    txBuilder = txBuilder.attach.SpendingValidator(paymentHookValidator);
   }
   if (missingReferenceScripts.coordinator) {
     reportProgress("Reference script for coordinator is missing on-chain; attaching the coordinator validator inline.");
@@ -476,18 +425,9 @@ export async function submitBatchOracleUpdate(args: {
       {
         lovelace:
           BigInt(nextReceiverState.minUtxoLovelace) +
-          BigInt(nextReceiverState.balanceLovelace),
+          BigInt(nextReceiverState.balanceLovelace) +
+          BigInt(nextReceiverState.accruedToHookLovelace),
         [state.receiver.receiverUnit]: 1n,
-      },
-    )
-    .pay.ToContract(
-      state.scripts.paymentHookValidatorAddress!,
-      { kind: "inline", value: buildPaymentHookDatumCbor(nextPaymentHookState) },
-      {
-        lovelace:
-          BigInt(nextPaymentHookState.minUtxoLovelace) +
-          BigInt(nextPaymentHookState.accruedFeesLovelace),
-        [state.scripts.paymentHookUnit!]: 1n,
       },
     );
 
@@ -533,16 +473,7 @@ export async function submitBatchOracleUpdate(args: {
           label: "receiver",
           previousOutRef: currentReceiverUtxo,
         });
-  const latestPaymentHookUtxo =
-    args.buildOnly || !confirmed
-      ? state.paymentHookUtxo.current
-      : await waitForUnitUtxoReplacement({
-          lucid,
-          address: state.scripts.paymentHookValidatorAddress!,
-          unit: state.scripts.paymentHookUnit!,
-          label: "payment hook",
-          previousOutRef: currentPaymentHookUtxo,
-        });
+
 
   const updatedArtifacts = preparedUpdates.map(({ entry, artifact, nextPairState }, index) => {
     const latestPairUtxo = latestPairUtxos[index]!;
@@ -578,37 +509,6 @@ export async function submitBatchOracleUpdate(args: {
   if (!args.buildOnly && confirmed) {
     for (const { entry, artifact } of updatedArtifacts) {
       await writeJsonFile(entry.outPath ?? entry.statePath, artifact);
-    }
-    if (protocolStatePath) {
-      await writeJsonFile(protocolStatePath, {
-        ...protocolState,
-        wallet: {
-          source,
-          address: walletAddress,
-        },
-        configUtxo: {
-          current: {
-            txHash: currentConfigUtxo.txHash,
-            outputIndex: currentConfigUtxo.outputIndex,
-          },
-        },
-        paymentHookState: nextPaymentHookState,
-        paymentHookUtxo: {
-          current: {
-            txHash: latestPaymentHookUtxo.txHash,
-            outputIndex: latestPaymentHookUtxo.outputIndex,
-          },
-        },
-        datum: {
-          ...protocolState.datum,
-          paymentHookCbor: buildPaymentHookDatumCbor(nextPaymentHookState),
-        },
-        transactions: appendTransactionRecord(protocolState.transactions, {
-          step: "preview:update:batch",
-          submittedTxHash,
-          confirmed,
-        }),
-      });
     }
     if (clientStatePath && clientState.receiver) {
       await writeJsonFile(clientStatePath, {
@@ -655,13 +555,6 @@ export async function submitBatchOracleUpdate(args: {
         },
       },
     },
-    paymentHookState: nextPaymentHookState,
-    paymentHookUtxo: {
-      current: {
-        txHash: latestPaymentHookUtxo.txHash,
-        outputIndex: latestPaymentHookUtxo.outputIndex,
-      },
-    },
     pairs: updatedArtifacts.map(({ entry, artifact }) => ({
       statePath: path.resolve(entry.statePath),
       outPath: path.resolve(entry.outPath ?? entry.statePath),
@@ -684,24 +577,6 @@ function reportProgress(message: string): void {
 async function readBatchUpdateInput(inputPath: string): Promise<BatchUpdateInput> {
   const raw = await readFile(inputPath, "utf8");
   return JSON.parse(raw) as BatchUpdateInput;
-}
-
-async function readSignedIntentInput(inputPath: string): Promise<DiaOracleIntentInput> {
-  const raw = JSON.parse(await readFile(inputPath, "utf8")) as
-    | DiaOracleIntentInput
-    | { intent: DiaOracleIntentInput };
-  return "intent" in raw ? raw.intent : raw;
-}
-
-async function readOptionalPairState(
-  statePath: string,
-): Promise<PairStateArtifact | null> {
-  try {
-    await access(statePath);
-  } catch {
-    return null;
-  }
-  return readPairState(statePath);
 }
 
 function createPairArtifactFromIntent(args: {
@@ -824,9 +699,3 @@ export function ensureCompatibleBatch(states: ResolvedPairStateArtifact[]): void
   }
 }
 
-function requireInlineDatum(utxo: UTxO, label: string): string {
-  if (!utxo.datum) {
-    throw new Error(`Current ${label} UTxO is missing its inline datum.`);
-  }
-  return utxo.datum;
-}

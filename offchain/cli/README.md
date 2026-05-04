@@ -361,6 +361,15 @@ for each pair update entry.
 
 `preview:update:batch` can update existing pairs and create missing pairs in the same transaction. Pass `--min-utxo-lovelace` when the manifest includes any pair artifact path that does not exist yet.
 
+Batch updates accrue fees locally on the Receiver
+(`balance_lovelace -= K * protocol_fee_lovelace`,
+`accrued_to_hook_lovelace += K * protocol_fee_lovelace`). The
+PaymentHook is **not** touched during updates. The accrued lovelace is
+drained from one or more Receivers into the global PaymentHook in a
+separate admin-initiated transaction submitted with `preview:settle`.
+See `docs/architecture/cardano-oracle-architecture.md` §5.11 and §7.4.11
+for the full validation model.
+
 ```sh
 npm run cli -- preview:update:batch \
   --protocol-state ./state/preview/config-bootstrap.json \
@@ -369,6 +378,18 @@ npm run cli -- preview:update:batch \
   --min-utxo-lovelace 5000000 \
   --out ./state/preview/update-batches/update-batch.result.json
 ```
+
+### 25b. Settle accrued fees
+
+After price updates accrue fees on the Receiver, use `preview:settle` to drain `accrued_to_hook_lovelace` from the Receiver and credit it to the PaymentHook in a single transaction. This is an admin-initiated operation.
+
+```sh
+npm run cli -- preview:settle \
+  --protocol-state ./state/preview/config-bootstrap.json \
+  --client-state ./state/preview/clients/client-a.json
+```
+
+This moves all accrued fees from the Receiver to the PaymentHook and updates both state artifacts.
 
 ## Maintenance Transactions
 
@@ -478,4 +499,5 @@ Transaction modules:
 - `src/transactions/update-batch.ts`
 - `src/transactions/receiver-top-up.ts`
 - `src/transactions/receiver-withdraw.ts`
+- `src/transactions/settle.ts`
 - `src/transactions/payment-hook-withdraw.ts`

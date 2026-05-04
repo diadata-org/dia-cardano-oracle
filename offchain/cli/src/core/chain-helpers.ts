@@ -4,7 +4,12 @@ import path from "node:path";
 import { Constr, getAddressDetails, type UTxO } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
-import { normalizeHex, type DiaOracleIntent } from "./dia-intent.js";
+import { type DiaOracleIntent } from "./dia-intent.js";
+import {
+  normalizeHex,
+  splitUnit,
+  toBigInt,
+} from "./primitives.js";
 import type {
   ConfigState,
   PairLiveState,
@@ -12,6 +17,12 @@ import type {
   ReceiverState,
 } from "./state.js";
 import { makeConfiguredLucid } from "./lucid.js";
+
+// Re-export the primitives that on-chain / Lucid callers most often
+// reach for through chain-helpers, so existing import sites keep
+// working. Canonical implementations live in core/primitives.ts; these
+// are re-exports, not duplicates.
+export { splitUnit, toBigInt } from "./primitives.js";
 
 export const BOOTSTRAP_REF_MIN_LOVELACE = 1_000_000n;
 
@@ -68,25 +79,17 @@ export async function waitForUnitUtxoReplacement(args: {
   );
 }
 
-export function splitUnit(
-  unit: string,
-): {
-  policyId: string;
-  assetName: string;
-} {
-  const normalizedUnit = normalizeHex(unit, "unit");
-  return {
-    policyId: normalizedUnit.slice(0, 56),
-    assetName: normalizedUnit.slice(56),
-  };
-}
-
-export function toBigInt(value: string | number, label: string): bigint {
-  const normalized = typeof value === "number" ? value.toString() : value.trim();
-  if (!/^-?\d+$/.test(normalized)) {
-    throw new Error(`Expected ${label} to be an integer.`);
+// Require that a UTxO carry an inline datum (the format used by every
+// stateful script in this protocol). Used by every tx builder that
+// spends a state UTxO.
+export function requireInlineDatum(
+  utxo: { datum?: string | null },
+  label: string,
+): string {
+  if (!utxo.datum) {
+    throw new Error(`Current ${label} UTxO is missing its inline datum.`);
   }
-  return BigInt(normalized);
+  return utxo.datum;
 }
 
 export function findUtxoByOutRef(
@@ -265,6 +268,7 @@ export function buildConfigDatumCbor(state: ConfigState): string {
                 ]),
           ])
         : new Constr<PlutusData>(1, []),
+      BigInt(state.maxBootstrapDriftSeconds),
       BigInt(state.minUtxoLovelace),
     ]),
   );
@@ -286,6 +290,7 @@ export function buildReceiverDatumCbor(state: ReceiverState): string {
   return Data.to(
     new Constr<PlutusData>(0, [
       BigInt(state.balanceLovelace),
+      BigInt(state.accruedToHookLovelace),  // Pending fees field
       BigInt(state.minUtxoLovelace),
     ]),
   );
@@ -293,10 +298,11 @@ export function buildReceiverDatumCbor(state: ReceiverState): string {
 
 export function decodeReceiverDatum(raw: string): ReceiverState {
   const datum = Data.from(raw) as Constr<PlutusData>;
-  const [balanceLovelace, minUtxoLovelace] = datum.fields;
+  const [balanceLovelace, accruedToHookLovelace, minUtxoLovelace] = datum.fields;
 
   return {
     balanceLovelace: BigInt(balanceLovelace as bigint).toString(),
+    accruedToHookLovelace: BigInt(accruedToHookLovelace as bigint).toString(),
     minUtxoLovelace: BigInt(minUtxoLovelace as bigint).toString(),
   };
 }
@@ -389,6 +395,9 @@ export async function writeJsonFile(outPath: string, value: unknown): Promise<vo
   );
 }
 
+// File-local: only used to assemble updateWitnessData here. Not exported
+// because the wire shape is internal to the coordinator witness encoding;
+// callers should always go through updateWitnessData.
 function diaIntentData(intent: DiaOracleIntent): Constr<PlutusData> {
   return new Constr<PlutusData>(0, [
     Buffer.from(intent.intentType, "utf8").toString("hex"),

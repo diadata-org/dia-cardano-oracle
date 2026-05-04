@@ -17,6 +17,32 @@ There is no global pair allow-list. Pair identity is represented by the Pair NFT
 
 There is also no placeholder Pair bootstrap state. The first transaction for a pair is an oracle update: it mints the Pair NFT and creates the Pair UTxO with the signed intent's real `price`, `timestamp`, `nonce`, `intent_hash`, and `signer`. Later updates consume the existing Pair UTxO and require strictly fresher `timestamp` and `nonce`.
 
+## Fee flow (decoupled settlement)
+
+Protocol fees are paid by clients and routed through the Receiver and
+PaymentHook in two separate transactions:
+
+1. **Per update — `AccrueFee` on the Receiver.** Every single or batch
+   oracle update spends the client's Receiver UTxO with the
+   `AccrueFee` redeemer. The Receiver datum moves the protocol fee
+   (or `N × protocol_fee_lovelace` in batch updates) from
+   `balance_lovelace` into `accrued_to_hook_lovelace`. The total ADA
+   on the Receiver UTxO does not change — fees are reclassified, not
+   spent. The PaymentHook is **not** touched during oracle updates.
+2. **Periodically — `Settle`.** An admin-initiated Settle transaction
+   spends one or more Receiver UTxOs with the `Settle` redeemer
+   (which drains `accrued_to_hook_lovelace` to zero on each), spends
+   the global PaymentHook UTxO with `ApplySettle` (which credits the
+   matching ADA to `accrued_fees_lovelace`), and is authorised by the
+   coordinator's `ApplySettle` redeemer plus an admin signature. The
+   coordinator enforces that the sum of the receiver drains equals
+   the increase in the hook's accrued fees.
+
+This decoupling exists so that high-frequency price updates do not
+contend on the single global PaymentHook UTxO. The `Withdraw` redeemer
+on the Receiver explicitly cannot drain `accrued_to_hook_lovelace` —
+the only path from a Receiver to the PaymentHook is through Settle.
+
 ## Structure
 
 - `validators/` contains spending, minting, and withdrawal validators.

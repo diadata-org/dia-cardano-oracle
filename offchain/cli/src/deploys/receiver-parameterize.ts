@@ -101,6 +101,7 @@ export async function parameterizeReceiverScripts(args: {
   });
   const receiverState = {
     balanceLovelace: "0",
+    accruedToHookLovelace: "0",
     minUtxoLovelace: toBigInt(
       resolvedInput.minUtxoLovelace,
       "minUtxoLovelace",

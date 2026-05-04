@@ -119,11 +119,12 @@ validator payment_hook(
         expected_asset_name,
       ) == 1,
       assets.quantity_of(next_output.value, own_policy_id, expected_asset_name) == 1,
+      next_output.address.payment_credential == Script(own_policy_id),
       payment_hook_logic.exact_locked_lovelace(own_input.output, current_datum),
       payment_hook_logic.exact_locked_lovelace(next_output, next_datum),
       when redeemer is {
-        payment_hook_logic.ApplyFee -> {
-          let collected_lovelace =
+        payment_hook_logic.ApplySettle -> {
+          let delta =
             next_datum.accrued_fees_lovelace - current_datum.accrued_fees_lovelace
 
           and {
@@ -133,10 +134,15 @@ validator payment_hook(
               expected_asset_name,
             ),
             coordinator_witness_present(self.withdrawals, config_datum),
-            payment_hook_logic.fee_charge_transition(
+            // Defense-in-depth: also require an admin signature on
+            // the hook spend, in addition to the coordinator witness.
+            // Cheap (one tx-wide check) and protects the
+            // single-most-valuable UTxO in the protocol.
+            config_logic.has_config_signer(config_datum, self),
+            payment_hook_logic.apply_settle_transition(
               current_datum,
               next_datum,
-              collected_lovelace,
+              delta,
             ),
           }
         }
@@ -189,6 +195,7 @@ fn has_valid_payment_hook_output(
         InlineDatum(output_datum) -> {
           expect hook_datum: payment_hook_logic.PaymentHookDatum = output_datum
           and {
+            hook_output.address.payment_credential == Script(hook_policy_id),
             payment_hook_logic.valid_payment_hook_state(hook_datum),
             payment_hook_logic.exact_locked_lovelace(hook_output, hook_datum),
           }

@@ -1,19 +1,13 @@
-import { access, readFile, unlink } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import path from "node:path";
 import { confirm } from "@inquirer/prompts";
-import {
-  Constr,
-  getAddressDetails,
-  type OutRef,
-  type UTxO,
-} from "@lucid-evolution/lucid";
+import { Constr, type UTxO } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
 import {
   makeCoordinatorValidator,
   makePairStateMintingPolicy,
   makePairStateValidator,
-  makePaymentHookValidator,
   makeReceiverValidator,
   mintingPolicyFromCompiledScript,
   spendingValidatorFromCompiledScript,
@@ -29,9 +23,8 @@ import {
   normalizeDiaEip712Domain,
   normalizeDiaOracleIntent,
   normalizeHex,
+  readSignedIntentInput,
   recoverDiaOracleIntentWitness,
-  type DiaOracleIntent,
-  type DiaOracleIntentInput,
 } from "../core/dia-intent.js";
 import {
   makeConfiguredLucid,
@@ -39,16 +32,20 @@ import {
 } from "../core/lucid.js";
 import {
   appendTransactionRecord,
-  readPairState,
-  type PaymentHookState,
-  type ReceiverState,
+  readOptionalPairState,
   type PairStateArtifact,
 } from "../core/state.js";
 import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
 import { readClientContext } from "../core/artifact-context.js";
 import {
-  decodePaymentHookDatum,
+  buildPairDatumCbor,
+  buildReceiverDatumCbor,
   decodeReceiverDatum,
+  findSingleUtxoAtUnit,
+  requireInlineDatum,
+  selectFundingUtxo,
+  splitUnit,
+  updateWitnessData,
   waitForWalletSettlement,
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
@@ -170,8 +167,6 @@ export async function submitOracleUpdate(args: {
     },
     configState: protocol.configState,
     configUtxo: protocol.configUtxo,
-    paymentHookState: protocol.paymentHookState!,
-    paymentHookUtxo: protocol.paymentHookUtxo!,
     compiledScripts: {
       ...protocol.compiledScripts,
       ...client.compiledScripts,
@@ -183,15 +178,10 @@ export async function submitOracleUpdate(args: {
     receiver: client.receiver,
     datum: {
       configCbor: protocol.datum.configCbor,
-      paymentHookCbor: protocol.datum.paymentHookCbor,
       receiverCbor: client.datum.receiverCbor,
       pairCbor: pair.datum.pairCbor,
     },
   };
-
-  if (!state.bootstrapRefs.paymentHook?.txHash) {
-    throw new Error("Pair state artifact is missing the selected PaymentHook bootstrap reference.");
-  }
 
   reportProgress("Connecting to Preview and selecting the configured wallet");
   const lucid = await makeConfiguredLucid();
@@ -211,16 +201,6 @@ export async function submitOracleUpdate(args: {
             ? {
                 txHash: state.referenceScripts.global.coordinator.txHash,
                 outputIndex: state.referenceScripts.global.coordinator.outputIndex,
-              }
-            : null,
-        },
-        {
-          key: "paymentHook",
-          label: "payment hook",
-          outRef: state.referenceScripts?.global?.paymentHook
-            ? {
-                txHash: state.referenceScripts.global.paymentHook.txHash,
-                outputIndex: state.referenceScripts.global.paymentHook.outputIndex,
               }
             : null,
         },
@@ -262,49 +242,24 @@ export async function submitOracleUpdate(args: {
         state.pair.pairUnit,
         "pair",
       );
-  const currentPaymentHookUtxo = await findSingleUtxoAtUnit(
-    lucid,
-    state.scripts.paymentHookValidatorAddress!,
-    state.scripts.paymentHookUnit!,
-    "payment hook",
-  );
   const currentReceiverUtxo = await findSingleUtxoAtUnit(
     lucid,
     state.receiver.receiverValidatorAddress,
     state.receiver.receiverUnit,
     "receiver",
   );
-  const currentPaymentHookState = decodePaymentHookDatum(
-    requireInlineDatum(currentPaymentHookUtxo, "payment hook"),
-    state.paymentHookState.withdrawAddress,
-  );
   const currentReceiverState = decodeReceiverDatum(
     requireInlineDatum(currentReceiverUtxo, "receiver"),
   );
-  const walletFundingUtxo = selectFundingUtxo(walletUtxos, [
-    state.bootstrapRefs.config,
-    state.bootstrapRefs.paymentHook,
-  ]);
-  if (!walletFundingUtxo) {
-    throw new Error("No suitable wallet UTxO is available to cover update fees and collateral.");
-  }
+  const walletFundingUtxo = selectFundingUtxo(
+    walletUtxos,
+    [state.bootstrapRefs.config],
+    5_000_000n,
+    "oracle update",
+  );
 
   if (pairValidatorHash !== state.scripts.pairValidatorHash) {
     throw new Error("Pair validator hash does not match the current blueprint.");
-  }
-
-  const paymentHookValidator = state.compiledScripts?.paymentHookValidator
-    ? spendingValidatorFromCompiledScript(state.compiledScripts.paymentHookValidator)
-    : await makePaymentHookValidator({
-        bootstrapOutRef: state.bootstrapRefs.paymentHook as OutRef,
-        assetName: splitUnit(state.scripts.paymentHookUnit!).assetName,
-        configPolicyId: state.scripts.configPolicyId,
-        configAssetName,
-        coordinatorCredentialHash: state.scripts.coordinatorHash,
-      });
-  const paymentHookValidatorHash = scriptHashFromValidator(paymentHookValidator);
-  if (paymentHookValidatorHash !== state.scripts.paymentHookValidatorHash) {
-    throw new Error("Payment hook validator hash does not match the current blueprint.");
   }
 
   const coordinatorValidator = state.compiledScripts?.coordinatorValidator
@@ -359,21 +314,14 @@ export async function submitOracleUpdate(args: {
     signer: intent.signer,
     intent: diaIntentToState(intent),
   };
-  const nextPaymentHookState = {
-    ...currentPaymentHookState,
-    accruedFeesLovelace: (
-      BigInt(currentPaymentHookState.accruedFeesLovelace) +
-      BigInt(state.configState.protocolFeeLovelace)
-    ).toString(),
-    lifetimeCollectedLovelace: (
-      BigInt(currentPaymentHookState.lifetimeCollectedLovelace) +
-      BigInt(state.configState.protocolFeeLovelace)
-    ).toString(),
-  };
   const nextReceiverState = {
     ...currentReceiverState,
     balanceLovelace: (
       BigInt(currentReceiverState.balanceLovelace) -
+      BigInt(state.configState.protocolFeeLovelace)
+    ).toString(),
+    accruedToHookLovelace: (
+      BigInt(currentReceiverState.accruedToHookLovelace) +
       BigInt(state.configState.protocolFeeLovelace)
     ).toString(),
   };
@@ -383,8 +331,7 @@ export async function submitOracleUpdate(args: {
 
   const pairRedeemer = Data.to(new Constr(0, []));
   const pairMintRedeemer = Data.to(new Constr<PlutusData>(0, []));
-  const paymentHookRedeemer = Data.to(new Constr(0, []));
-  const receiverRedeemer = Data.to(new Constr(1, []));
+  const receiverRedeemer = Data.to(new Constr(1, [])); // AccrueFee redeemer
   const coordinatorRedeemer = Data.to(
     new Constr<PlutusData>(0, [
       updateWitnessData(
@@ -398,7 +345,6 @@ export async function submitOracleUpdate(args: {
     ]),
   );
   const nextPairDatumCbor = buildPairDatumCbor(nextPairState);
-  const nextPaymentHookDatumCbor = buildPaymentHookDatumCbor(nextPaymentHookState);
   const nextReceiverDatumCbor = buildReceiverDatumCbor(nextReceiverState);
 
   reportProgress("Building Preview oracle update transaction");
@@ -406,7 +352,6 @@ export async function submitOracleUpdate(args: {
     .newTx()
     .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
     .collectFrom([currentReceiverUtxo], receiverRedeemer)
-    .collectFrom([currentPaymentHookUtxo], paymentHookRedeemer)
     .collectFrom([walletFundingUtxo])
     .withdraw(state.scripts.coordinatorRewardAddress, 0n, coordinatorRedeemer)
     .pay.ToContract(
@@ -423,18 +368,9 @@ export async function submitOracleUpdate(args: {
       {
         lovelace:
           BigInt(nextReceiverState.minUtxoLovelace) +
-          BigInt(nextReceiverState.balanceLovelace),
+          BigInt(nextReceiverState.balanceLovelace) +
+          BigInt(nextReceiverState.accruedToHookLovelace),
         [state.receiver.receiverUnit]: 1n,
-      },
-    )
-    .pay.ToContract(
-      state.scripts.paymentHookValidatorAddress!,
-      { kind: "inline", value: nextPaymentHookDatumCbor },
-      {
-        lovelace:
-          BigInt(nextPaymentHookState.minUtxoLovelace) +
-          BigInt(nextPaymentHookState.accruedFeesLovelace),
-        [state.scripts.paymentHookUnit!]: 1n,
       },
     );
 
@@ -449,10 +385,6 @@ export async function submitOracleUpdate(args: {
   if (missingReferenceScripts.receiver) {
     reportProgress("Reference script for receiver is missing on-chain; attaching the receiver validator inline.");
     txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
-  }
-  if (missingReferenceScripts.paymentHook) {
-    reportProgress("Reference script for payment hook is missing on-chain; attaching the payment hook validator inline.");
-    txBuilder = txBuilder.attach.SpendingValidator(paymentHookValidator);
   }
   if (missingReferenceScripts.coordinator) {
     reportProgress("Reference script for coordinator is missing on-chain; attaching the coordinator validator inline.");
@@ -499,16 +431,6 @@ export async function submitOracleUpdate(args: {
           label: "pair",
           previousOutRef: currentPairUtxo ?? undefined,
         });
-  const latestPaymentHookUtxo =
-    args.buildOnly || !confirmed
-      ? state.paymentHookUtxo.current
-      : await waitForUnitUtxoReplacement({
-          lucid,
-          address: state.scripts.paymentHookValidatorAddress!,
-          unit: state.scripts.paymentHookUnit!,
-          label: "payment hook",
-          previousOutRef: currentPaymentHookUtxo,
-        });
   const latestReceiverUtxo =
     args.buildOnly || !confirmed
       ? state.receiver.receiverUtxo.current
@@ -546,175 +468,4 @@ export async function submitOracleUpdate(args: {
 
 function reportProgress(message: string): void {
   console.error(`[preview:update] ${message}`);
-}
-
-async function readSignedIntentInput(inputPath: string): Promise<DiaOracleIntentInput> {
-  const raw = JSON.parse(await readFile(inputPath, "utf8")) as
-    | DiaOracleIntentInput
-    | { intent: DiaOracleIntentInput };
-  return "intent" in raw ? raw.intent : raw;
-}
-
-async function readOptionalPairState(
-  statePath: string,
-): Promise<PairStateArtifact | null> {
-  try {
-    await access(statePath);
-  } catch {
-    return null;
-  }
-  return readPairState(statePath);
-}
-
-function buildPairDatumCbor(state: PairStateArtifact["pairState"]): string {
-  return Data.to(
-    new Constr<PlutusData>(0, [
-      state.pairId,
-      BigInt(state.price),
-      BigInt(state.timestamp),
-      BigInt(state.nonce),
-      normalizeHex(state.intentHash, "intentHash"),
-      normalizeHex(state.signer, "signer"),
-      BigInt(state.minUtxoLovelace),
-    ]),
-  );
-}
-
-function buildPaymentHookDatumCbor(
-  state: PaymentHookState,
-): string {
-  return Data.to(
-    new Constr<PlutusData>(0, [
-      addressToPlutusData(state.withdrawAddress),
-      BigInt(state.accruedFeesLovelace),
-      BigInt(state.lifetimeCollectedLovelace),
-      BigInt(state.lifetimeWithdrawnLovelace),
-      BigInt(state.minUtxoLovelace),
-    ]),
-  );
-}
-
-function buildReceiverDatumCbor(state: ReceiverState): string {
-  return Data.to(
-    new Constr<PlutusData>(0, [
-      BigInt(state.balanceLovelace),
-      BigInt(state.minUtxoLovelace),
-    ]),
-  );
-}
-
-function addressToPlutusData(address: string): Constr<PlutusData> {
-  const details = getAddressDetails(address);
-  if (!details.paymentCredential) {
-    throw new Error("withdrawAddress must contain a payment credential.");
-  }
-
-  const paymentCredential =
-    details.paymentCredential.type === "Key"
-      ? new Constr<PlutusData>(0, [details.paymentCredential.hash])
-      : new Constr<PlutusData>(1, [details.paymentCredential.hash]);
-
-  const stakeCredential = details.stakeCredential
-    ? new Constr<PlutusData>(0, [
-        new Constr<PlutusData>(0, [
-          details.stakeCredential.type === "Key"
-            ? new Constr<PlutusData>(0, [details.stakeCredential.hash])
-            : new Constr<PlutusData>(1, [details.stakeCredential.hash]),
-        ]),
-      ])
-    : new Constr<PlutusData>(1, []);
-
-  return new Constr<PlutusData>(0, [paymentCredential, stakeCredential]);
-}
-
-function updateWitnessData(
-  intent: DiaOracleIntent,
-  receiverPolicyId: string,
-  receiverAssetName: string,
-  pairPolicyId: string,
-  pairTokenName: string,
-  signerPublicKey: string,
-): Constr<PlutusData> {
-  return new Constr<PlutusData>(0, [
-    normalizeHex(receiverPolicyId, "receiverPolicyId"),
-    normalizeHex(receiverAssetName, "receiverAssetName"),
-    normalizeHex(pairPolicyId, "pairPolicyId"),
-    pairTokenName,
-    diaIntentData(intent),
-    normalizeHex(signerPublicKey, "signerPublicKey"),
-  ]);
-}
-
-function diaIntentData(intent: DiaOracleIntent): Constr<PlutusData> {
-  return new Constr<PlutusData>(0, [
-    Buffer.from(intent.intentType, "utf8").toString("hex"),
-    Buffer.from(intent.version, "utf8").toString("hex"),
-    intent.chainId,
-    intent.nonce,
-    intent.expiry,
-    Buffer.from(intent.symbol, "utf8").toString("hex"),
-    intent.price,
-    intent.timestamp,
-    Buffer.from(intent.source, "utf8").toString("hex"),
-    normalizeHex(intent.signature, "intent.signature"),
-    normalizeHex(intent.signer, "intent.signer"),
-  ]);
-}
-
-async function findSingleUtxoAtUnit(
-  lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>,
-  address: string,
-  unit: string,
-  label: string,
-): Promise<UTxO> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const utxos = await lucid.utxosAtWithUnit(address, unit);
-    if (utxos.length === 1) {
-      return utxos[0];
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-  }
-
-  throw new Error(`Unable to observe a single ${label} UTxO at ${address} with unit ${unit}.`);
-}
-
-function splitUnit(unit: string): { policyId: string; assetName: string } {
-  const normalizedUnit = normalizeHex(unit, "unit");
-  return {
-    policyId: normalizedUnit.slice(0, 56),
-    assetName: normalizedUnit.slice(56),
-  };
-}
-
-function selectFundingUtxo(
-  utxos: UTxO[],
-  excludedOutRefs: Array<{
-    txHash: string;
-    outputIndex: number;
-  }>,
-): UTxO | null {
-  return (
-    utxos
-      .filter(
-        (utxo) =>
-          !excludedOutRefs.some(
-            (outRef) =>
-              utxo.txHash === outRef.txHash && utxo.outputIndex === outRef.outputIndex,
-          ),
-      )
-      .filter((utxo) => Object.keys(utxo.assets).length === 1)
-      .sort((left, right) => {
-        const leftValue = left.assets.lovelace ?? 0n;
-        const rightValue = right.assets.lovelace ?? 0n;
-        if (leftValue === rightValue) return 0;
-        return leftValue > rightValue ? -1 : 1;
-      })[0] ?? null
-  );
-}
-
-function requireInlineDatum(utxo: UTxO, label: string): string {
-  if (!utxo.datum) {
-    throw new Error(`Current ${label} UTxO is missing its inline datum.`);
-  }
-  return utxo.datum;
 }

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { Constr, type OutRef, type UTxO } from "@lucid-evolution/lucid";
-import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
+import { Data } from "@lucid-evolution/plutus";
 
 import {
   makeReceiverMintingPolicy,
@@ -22,8 +22,13 @@ import { readClientContext } from "../core/artifact-context.js";
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
+  buildReceiverDatumCbor,
+  findSingleUtxoAtUnit,
   findUtxoByOutRef,
+  selectBootstrapUtxo,
   selectFundingUtxo,
+  splitUnit,
+  toBigInt,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
 
@@ -79,7 +84,7 @@ export async function receiverBootstrap(args: {
   const configuredBootstrapRef = state.receiver?.bootstrapRef;
   const receiverBootstrapUtxo = configuredBootstrapRef
     ? findUtxoByOutRef(walletUtxos, configuredBootstrapRef, "receiver bootstrap")
-    : selectBootstrapUtxo(walletUtxos, [
+    : selectBootstrapUtxo(walletUtxos, 0n, [
         protocol.bootstrapRefs.config,
         protocol.bootstrapRefs.paymentHook!,
       ]);
@@ -142,6 +147,7 @@ export async function receiverBootstrap(args: {
 
   const receiverState = {
     balanceLovelace: "0",
+    accruedToHookLovelace: "0",
     minUtxoLovelace: toBigInt(
       resolvedInput.minUtxoLovelace,
       "minUtxoLovelace",
@@ -285,70 +291,3 @@ function resolveReceiverBootstrapInput(state: ClientStateArtifact): {
   };
 }
 
-function buildReceiverDatumCbor(state: {
-  balanceLovelace: string;
-  minUtxoLovelace: string;
-}): string {
-  return Data.to(
-    new Constr<PlutusData>(0, [
-      BigInt(state.balanceLovelace),
-      BigInt(state.minUtxoLovelace),
-    ]),
-  );
-}
-
-async function findSingleUtxoAtUnit(
-  lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>,
-  address: string,
-  unit: string,
-  label: string,
-): Promise<UTxO> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const utxos = await lucid.utxosAtWithUnit(address, unit);
-    if (utxos.length === 1) {
-      return utxos[0];
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-  }
-
-  throw new Error(`Unable to observe a single ${label} UTxO at ${address} with unit ${unit}.`);
-}
-
-function selectBootstrapUtxo(
-  utxos: UTxO[],
-  excludedOutRefs: Array<{ txHash: string; outputIndex: number }>,
-): UTxO | null {
-  return (
-    utxos
-      .filter(
-        (utxo) =>
-          !excludedOutRefs.some(
-            (outRef) =>
-              utxo.txHash === outRef.txHash && utxo.outputIndex === outRef.outputIndex,
-          ),
-      )
-      .filter((utxo) => Object.keys(utxo.assets).length === 1)
-      .sort((left, right) => {
-        const leftValue = left.assets.lovelace ?? 0n;
-        const rightValue = right.assets.lovelace ?? 0n;
-        if (leftValue === rightValue) return 0;
-        return leftValue > rightValue ? -1 : 1;
-      })[0] ?? null
-  );
-}
-
-function splitUnit(unit: string): { policyId: string; assetName: string } {
-  const normalizedUnit = normalizeHex(unit, "unit");
-  return {
-    policyId: normalizedUnit.slice(0, 56),
-    assetName: normalizedUnit.slice(56),
-  };
-}
-
-function toBigInt(value: string | number, label: string): bigint {
-  const normalized = typeof value === "number" ? value.toString() : value.trim();
-  if (!/^-?\d+$/.test(normalized)) {
-    throw new Error(`Expected ${label} to be an integer.`);
-  }
-  return BigInt(normalized);
-}

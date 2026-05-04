@@ -53,6 +53,7 @@ function printUsage(): void {
   npm run cli -- preview:update:batch --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json --manifest ./state/preview/update-batches/update-batch.manifest.json [--min-utxo-lovelace 5000000] [--build-only] [--out ./state/preview/update-batches/update-batch.result.json]
   npm run cli -- preview:receiver:top-up --amount-lovelace 5000000 --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
   npm run cli -- preview:receiver:withdraw --amount-lovelace 2000000 [--recipient-address <addr>] --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
+  npm run cli -- preview:settle --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json [--build-only]
   npm run cli -- preview:payment-hook:withdraw --amount-lovelace 2000000 --state ./state/preview/config-bootstrap.json [--build-only]`);
 }
 
@@ -461,6 +462,21 @@ async function run(): Promise<void> {
       if (statePath && !buildOnly) {
         await writeJsonOutput(statePath, result);
       }
+      printJson(result);
+      return;
+    }
+
+    case "preview:settle": {
+      const { settleAccruedFees } = await import(
+        "./transactions/settle.js"
+      );
+      getCliConfig();
+      const buildOnly = hasBuildOnlyFlag();
+      const result = await settleAccruedFees({
+        protocolStatePath: requireFlagValue("--protocol-state"),
+        clientStatePath: requireFlagValue("--client-state"),
+        buildOnly,
+      });
       printJson(result);
       return;
     }

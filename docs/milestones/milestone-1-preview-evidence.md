@@ -8,6 +8,17 @@ Verification date: 2026-04-27
 
 Network: Cardano Preview
 
+> **Note (re-deploy pending).** The Preview transaction hashes captured
+> in this document predate the security and architecture changes
+> documented in `docs/architecture/cardano-oracle-architecture.md`
+> §5.11 and §7.4 (decoupled fee settlement, security hardening, and
+> the related off-chain dedup pass). A fresh evidence pack will be
+> regenerated after the re-deploy on Preview and will be added under
+> `docs/milestones/evidence/m1-preview-<DATE>/`. Until then, the
+> hashes below remain valid as historical Preview proof of the
+> preceding contract version, but they should not be used to verify
+> the current contract behaviour.
+
 ## Official Milestone 1 Outputs
 
 | Official output | Repository status |

@@ -9,10 +9,14 @@ import {
   deriveCompressedPublicKeyFromPrivateKey,
   normalizeEthereumAddressHex,
   normalizeHex,
+  parseCommaSeparatedHexList,
   utf8ToHex,
 } from "../core/dia-intent.js";
 import type { ConfigStateArtifact } from "../core/state.js";
-import { emptyProtocolCompiledScripts } from "../core/state.js";
+import {
+  emptyProtocolCompiledScripts,
+  emptyReferenceScriptUtxo,
+} from "../core/state.js";
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 
@@ -25,6 +29,7 @@ const DEFAULT_DOMAIN = {
   verifyingContract: "0xF8c614A483A0427A13512F52ac72A576678bE317",
 };
 const DEFAULT_PROTOCOL_FEE_LOVELACE = "2000000";
+const DEFAULT_MAX_BOOTSTRAP_DRIFT_SECONDS = "300"; // 5 minutes
 const DEFAULT_MIN_UTXO_LOVELACE = "5000000";
 const DEFAULT_CONFIG_ASSET_LABEL = "DIA_CONFIG";
 const DEFAULT_PAYMENT_HOOK_ASSET_LABEL = "DIA_PAYMENT_HOOK";
@@ -40,6 +45,7 @@ type ProtocolInitConfigInput = {
     verifyingContract: string;
   };
   protocolFeeLovelace: string;
+  maxBootstrapDriftSeconds: string;
   minUtxoLovelace: string;
   configAssetLabel: string;
   configAssetName: string;
@@ -71,6 +77,7 @@ function defaultProtocolConfigInput(
       ),
     },
     protocolFeeLovelace: DEFAULT_PROTOCOL_FEE_LOVELACE,
+    maxBootstrapDriftSeconds: DEFAULT_MAX_BOOTSTRAP_DRIFT_SECONDS,
     minUtxoLovelace: DEFAULT_MIN_UTXO_LOVELACE,
     configAssetLabel: DEFAULT_CONFIG_ASSET_LABEL,
     configAssetName: normalizeHex(utf8ToHex(DEFAULT_CONFIG_ASSET_LABEL), "configAssetName"),
@@ -81,14 +88,6 @@ function defaultProtocolConfigInput(
     ),
     paymentHookWithdrawAddress: walletAddress,
     paymentHookMinUtxoLovelace: DEFAULT_PAYMENT_HOOK_MIN_UTXO_LOVELACE,
-  };
-}
-
-function emptyReferenceScriptUtxo() {
-  return {
-    txHash: "",
-    outputIndex: 0,
-    scriptHash: "",
   };
 }
 
@@ -115,6 +114,7 @@ export function createProtocolStateArtifact(args: {
       verifyingContract: configInput.domain.verifyingContract,
     },
     protocolFeeLovelace: configInput.protocolFeeLovelace,
+    maxBootstrapDriftSeconds: configInput.maxBootstrapDriftSeconds,
     paymentHookRef: null,
     updateCoordinatorCredential: null,
     minUtxoLovelace: configInput.minUtxoLovelace,
@@ -194,14 +194,6 @@ async function promptForText(args: {
   });
 }
 
-function parseCommaSeparatedHexList(raw: string, label: string): string[] {
-  return raw
-    .split(",")
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-    .map((value) => normalizeHex(value, label));
-}
-
 async function promptForProtocolConfigInput(
   defaultSigner: string,
   walletAddress: string,
@@ -236,6 +228,11 @@ async function promptForProtocolConfigInput(
   const protocolFeeLovelace = await promptForText({
     message: "Protocol fee lovelace",
     defaultValue: defaults.protocolFeeLovelace,
+    validate: (value) => (/^\d+$/.test(value) ? true : "Enter a non-negative integer."),
+  });
+  const maxBootstrapDriftSeconds = await promptForText({
+    message: "Max bootstrap drift seconds (intent freshness window)",
+    defaultValue: defaults.maxBootstrapDriftSeconds,
     validate: (value) => (/^\d+$/.test(value) ? true : "Enter a non-negative integer."),
   });
   const minUtxoLovelace = await promptForText({
@@ -277,6 +274,7 @@ async function promptForProtocolConfigInput(
       ),
     },
     protocolFeeLovelace: toBigInt(protocolFeeLovelace, "protocolFeeLovelace").toString(),
+    maxBootstrapDriftSeconds: toBigInt(maxBootstrapDriftSeconds, "maxBootstrapDriftSeconds").toString(),
     minUtxoLovelace: toBigInt(minUtxoLovelace, "minUtxoLovelace").toString(),
     configAssetLabel: configAssetLabel.trim(),
     configAssetName: normalizeHex(utf8ToHex(configAssetLabel.trim()), "configAssetName"),

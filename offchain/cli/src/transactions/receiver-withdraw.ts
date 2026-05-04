@@ -102,7 +102,7 @@ export async function receiverWithdraw(args: {
 
   const receiverDatumCbor = buildReceiverDatumCbor(nextReceiverState);
   const withdrawRedeemer = Data.to(
-    new Constr<PlutusData>(2, [
+    new Constr<PlutusData>(3, [
       amountLovelace,
       addressToPlutusData(recipientAddress),
     ]),
@@ -137,7 +137,8 @@ export async function receiverWithdraw(args: {
       {
         lovelace:
           BigInt(nextReceiverState.minUtxoLovelace) +
-          BigInt(nextReceiverState.balanceLovelace),
+          BigInt(nextReceiverState.balanceLovelace) +
+          BigInt(nextReceiverState.accruedToHookLovelace),
         [state.receiver.receiverUnit]: 1n,
       },
     )

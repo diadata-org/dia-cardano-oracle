@@ -106,7 +106,8 @@ export async function receiverTopUp(args: {
       {
         lovelace:
           BigInt(nextReceiverState.minUtxoLovelace) +
-          BigInt(nextReceiverState.balanceLovelace),
+          BigInt(nextReceiverState.balanceLovelace) +
+          BigInt(nextReceiverState.accruedToHookLovelace),
         [state.receiver.receiverUnit]: 1n,
       },
     );

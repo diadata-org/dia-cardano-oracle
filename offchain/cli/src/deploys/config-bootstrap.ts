@@ -1,6 +1,6 @@
 import path from "node:path";
 import { Constr, type OutRef, type UTxO } from "@lucid-evolution/lucid";
-import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
+import { Data } from "@lucid-evolution/plutus";
 
 import {
   makeConfigStateMintingPolicy,
@@ -18,7 +18,6 @@ import {
 import {
   normalizeEthereumAddressHex,
   normalizeHex,
-  utf8ToHex,
 } from "../core/dia-intent.js";
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import {
@@ -29,8 +28,13 @@ import {
 } from "../core/state.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
+  buildConfigDatumCbor,
+  findSingleUtxoAtUnit,
   findUtxoByOutRef,
+  selectBootstrapUtxo,
   selectFundingUtxo,
+  splitUnit,
+  toBigInt,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
 
@@ -45,6 +49,7 @@ type ResolvedConfigBootstrapInput = {
     verifyingContract: string;
   };
   protocolFeeLovelace: bigint;
+  maxBootstrapDriftSeconds: bigint;
   minUtxoLovelace: bigint;
 };
 
@@ -78,7 +83,7 @@ export async function configBootstrap(args: {
       : undefined;
   const walletBootstrapUtxo = configuredBootstrapRef
     ? findUtxoByOutRef(walletUtxos, configuredBootstrapRef, "config bootstrap")
-    : selectBootstrapUtxo(walletUtxos, resolvedInput.minUtxoLovelace);
+    : selectBootstrapUtxo(walletUtxos, resolvedInput.minUtxoLovelace, []);
 
   if (!walletBootstrapUtxo) {
     throw new Error(
@@ -132,7 +137,22 @@ export async function configBootstrap(args: {
   const coordinatorHash = scriptHashFromValidator(coordinatorValidator);
   const coordinatorRewardAddress = scriptRewardAddress(coordinatorHash);
 
-  const configDatumCbor = buildConfigDatumCbor(resolvedInput);
+  const nextConfigState: ConfigStateArtifact["configState"] = {
+    validConfigSigners: resolvedInput.validConfigSigners,
+    authorizedDiaPublicKeys: resolvedInput.authorizedDiaPublicKeys,
+    domain: {
+      name: resolvedInput.domain.name,
+      version: resolvedInput.domain.version,
+      sourceChainId: resolvedInput.domain.sourceChainId.toString(),
+      verifyingContract: resolvedInput.domain.verifyingContract,
+    },
+    protocolFeeLovelace: resolvedInput.protocolFeeLovelace.toString(),
+    maxBootstrapDriftSeconds: resolvedInput.maxBootstrapDriftSeconds.toString(),
+    paymentHookRef: null,
+    updateCoordinatorCredential: null,
+    minUtxoLovelace: resolvedInput.minUtxoLovelace.toString(),
+  };
+  const configDatumCbor = buildConfigDatumCbor(nextConfigState);
   const mintRedeemer = Data.to(new Constr(0, []));
   const fundingUtxos =
     (walletBootstrapUtxo.assets.lovelace ?? 0n) >=
@@ -198,18 +218,18 @@ export async function configBootstrap(args: {
     });
   }
 
-  const currentConfigUtxo =
+  const latestConfigUtxo =
     args.buildOnly || !confirmed
-      ? {
-          txHash: "",
-          outputIndex: 0,
-        }
-      : await waitForUtxoAtUnit(
+      ? null
+      : await findSingleUtxoAtUnit(
           lucid,
           configValidatorAddress,
           configUnit,
           "config",
         );
+  const currentConfigUtxo = latestConfigUtxo
+    ? { txHash: latestConfigUtxo.txHash, outputIndex: latestConfigUtxo.outputIndex }
+    : { txHash: "", outputIndex: 0 };
 
   return {
     wallet: {
@@ -233,20 +253,7 @@ export async function configBootstrap(args: {
       paymentHookValidatorHash: previousState?.scripts.paymentHookValidatorHash ?? null,
       paymentHookValidatorAddress: previousState?.scripts.paymentHookValidatorAddress ?? null,
     },
-    configState: {
-      validConfigSigners: resolvedInput.validConfigSigners,
-      authorizedDiaPublicKeys: resolvedInput.authorizedDiaPublicKeys,
-      domain: {
-        name: resolvedInput.domain.name,
-        version: resolvedInput.domain.version,
-        sourceChainId: resolvedInput.domain.sourceChainId.toString(),
-        verifyingContract: resolvedInput.domain.verifyingContract,
-      },
-      protocolFeeLovelace: resolvedInput.protocolFeeLovelace.toString(),
-      paymentHookRef: null,
-      updateCoordinatorCredential: null,
-      minUtxoLovelace: resolvedInput.minUtxoLovelace.toString(),
-    },
+    configState: nextConfigState,
     configUtxo: {
       current: currentConfigUtxo,
     },
@@ -287,6 +294,7 @@ function resolveConfigBootstrapInput(
         ) ?? [];
   const domain = state?.configState.domain;
   const protocolFeeLovelace = state?.configState.protocolFeeLovelace;
+  const maxBootstrapDriftSeconds = state?.configState.maxBootstrapDriftSeconds ?? "300"; // Default 5 minutes
   const minUtxoLovelace = state?.configState.minUtxoLovelace;
   const configAssetName =
     state?.drafts?.configParameterize?.configAssetName ||
@@ -318,6 +326,7 @@ function resolveConfigBootstrapInput(
       ),
     },
     protocolFeeLovelace: toBigInt(protocolFeeLovelace, "protocolFeeLovelace"),
+    maxBootstrapDriftSeconds: toBigInt(maxBootstrapDriftSeconds, "maxBootstrapDriftSeconds"),
     minUtxoLovelace: toBigInt(minUtxoLovelace, "minUtxoLovelace"),
   };
 }
@@ -326,85 +335,4 @@ function reportProgress(message: string): void {
   console.error(`[preview:config:bootstrap] ${message}`);
 }
 
-function buildConfigDatumCbor(input: ResolvedConfigBootstrapInput): string {
-  return Data.to(
-    new Constr<PlutusData>(0, [
-      input.validConfigSigners.map((value) => normalizeHex(value, "validConfigSigners[]")),
-      input.authorizedDiaPublicKeys.map((value) =>
-        normalizeHex(value, "authorizedDiaPublicKeys[]"),
-      ),
-      new Constr<PlutusData>(0, [
-        utf8ToHex(input.domain.name),
-        utf8ToHex(input.domain.version),
-        input.domain.sourceChainId,
-        normalizeHex(input.domain.verifyingContract, "domain.verifyingContract"),
-      ]),
-      input.protocolFeeLovelace,
-      noneData(),
-      noneData(),
-      input.minUtxoLovelace,
-    ]),
-  );
-}
 
-function noneData(): Constr<PlutusData> {
-  return new Constr<PlutusData>(1, []);
-}
-
-function selectBootstrapUtxo(
-  utxos: UTxO[],
-  requiredLovelace: bigint,
-): UTxO | null {
-  return (
-    utxos
-      .filter((utxo) => Object.keys(utxo.assets).length === 1)
-      .filter((utxo) => (utxo.assets.lovelace ?? 0n) >= requiredLovelace)
-      .sort((left, right) => {
-        const leftValue = left.assets.lovelace ?? 0n;
-        const rightValue = right.assets.lovelace ?? 0n;
-        if (leftValue === rightValue) return 0;
-        return leftValue > rightValue ? -1 : 1;
-      })[0] ?? null
-  );
-}
-
-async function waitForUtxoAtUnit(
-  lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>,
-  address: string,
-  unit: string,
-  label: string,
-): Promise<{
-  txHash: string;
-  outputIndex: number;
-}> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const utxos = await lucid.utxosAtWithUnit(address, unit);
-    if (utxos.length === 1) {
-      return {
-        txHash: utxos[0].txHash,
-        outputIndex: utxos[0].outputIndex,
-      };
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-  }
-
-  throw new Error(
-    `Unable to observe the current ${label} UTxO at ${address} with unit ${unit}.`,
-  );
-}
-
-function toBigInt(value: string | number, label: string): bigint {
-  const normalized = typeof value === "number" ? value.toString() : value.trim();
-  if (!/^-?\d+$/.test(normalized)) {
-    throw new Error(`Expected ${label} to be an integer.`);
-  }
-  return BigInt(normalized);
-}
-
-function splitUnit(unit: string): { policyId: string; assetName: string } {
-  const normalizedUnit = normalizeHex(unit, "unit");
-  return {
-    policyId: normalizedUnit.slice(0, 56),
-    assetName: normalizedUnit.slice(56),
-  };
-}

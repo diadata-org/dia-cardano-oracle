@@ -91,7 +91,13 @@ validator receiver(
             next_datum,
           )
 
-        receiver_logic.PayFee -> {
+        // The protocol fee is moved from `balance_lovelace` to
+        // `accrued_to_hook_lovelace` on the same UTxO. The actual lovelace
+        // does not move out of the Receiver until a settlement tx flushes
+        // accrued to the global PaymentHook. Per the coordinator-witness
+        // pattern, this spend only does the local invariant
+        // check and defers cross-UTxO arithmetic to the coordinator.
+        receiver_logic.AccrueFee -> {
           expect Some(config_input) =
             find_visible_config_input(self, config_policy_id, config_asset_name)
           expect InlineDatum(config_datum_data) = config_input.output.datum
@@ -100,11 +106,27 @@ validator receiver(
           and {
             config_logic.valid_config_state(config_datum),
             coordinator_witness_present(self.withdrawals, config_datum),
-            receiver_logic.pay_fee_transition(
+            receiver_logic.accrue_fee_transition(
               current_datum,
               next_datum,
               current_datum.balance_lovelace - next_datum.balance_lovelace,
             ),
+          }
+        }
+
+        // Drains pending fees to zero on this Receiver. Coordinator
+        // verifies that the lovelace decrease here is summed into the
+        // PaymentHook delta in the same tx. Local check only.
+        receiver_logic.Settle -> {
+          expect Some(config_input) =
+            find_visible_config_input(self, config_policy_id, config_asset_name)
+          expect InlineDatum(config_datum_data) = config_input.output.datum
+          expect config_datum: config_logic.ConfigDatum = config_datum_data
+
+          and {
+            config_logic.valid_config_state(config_datum),
+            coordinator_witness_present(self.withdrawals, config_datum),
+            receiver_logic.settle_transition(current_datum, next_datum),
           }
         }
 

@@ -175,10 +175,11 @@ Reference-script UTxOs are created at the `reference_holder` script address. The
     source_chain_id:    Int,
     verifying_contract: ByteArray,
   },
-  protocol_fee_lovelace: Int,                       -- fee moved Receiver -> Hook on each update
-  payment_hook_ref:      ScriptHash,                -- active hook
-  coordinator_cred:      Credential,                -- active update_coordinator stake credential
-  min_utxo_lovelace:     Int,
+  protocol_fee_lovelace:       Int,                  -- fee debited from Receiver balance on each update (accrued locally)
+  payment_hook_ref:            ScriptHash,           -- active hook
+  coordinator_cred:            Credential,           -- active update_coordinator stake credential
+  min_utxo_lovelace:           Int,
+  max_bootstrap_drift_seconds: Int,                  -- intent freshness window for bootstrap pair validation
 }
 ```
 
@@ -202,14 +203,23 @@ Invariant: `utxo.lovelace == min_utxo_lovelace + accrued_fees_lovelace`.
 
 ```
 {
-  balance_lovelace:    Int,   -- prepaid pool
-  min_utxo_lovelace:   Int,
+  balance_lovelace:          Int,   -- prepaid pool (debited by protocol fees on each update)
+  accrued_to_hook_lovelace:  Int,   -- pending fees awaiting Settle to PaymentHook
+  min_utxo_lovelace:         Int,
 }
 ```
 
-Invariant: `utxo.lovelace == min_utxo_lovelace + balance_lovelace`.
+Invariant: `utxo.lovelace == min_utxo_lovelace + balance_lovelace + accrued_to_hook_lovelace`.
 
-Signers, fees and admins live in Config. The client has no on-chain representation inside the Receiver: their identity is the script address, derived from the bootstrap `OutputReference`. The `client -> address` mapping is kept off-chain.
+Fee model (decoupled settlement):
+
+1. **AccrueFee** (during each price update): `balance -= fee`, `accrued_to_hook += fee`. The Receiver UTxO's total lovelace does not change — ADA shifts between accounting buckets.
+2. **Settle** (async, admin-initiated): drains `accrued_to_hook_lovelace → 0` and moves the ADA to the PaymentHook UTxO in a separate transaction.
+3. **Withdraw** cannot drain `accrued_to_hook_lovelace` — it can only withdraw from `balance_lovelace`.
+
+This design eliminates contention on the global PaymentHook UTxO during high-frequency updates.
+
+Signers, fees and admins live in Config. The client has no on-chain representation inside the Receiver: their identity is the script address, derived from the bootstrap `OutputReference`. The `client → address` mapping is kept off-chain.
 
 ### 4.4 Pair datum (per client, per pair)
 
@@ -288,17 +298,24 @@ flowchart LR
 - **Frequency:** once per chain.
 - **Inputs:**
   - DIA admin wallet (pays network fee + min UTxO).
-  - The specific UTxO referenced by the policy's one-shot `OutputReference` parameter.
+  - The parameterized one-shot `bootstrap_ref` UTxO.
 - **Reference inputs:** —
 - **Mint:** `+1` Config NFT.
-- **Outputs:** Config UTxO (address = `config` spend, value = `min_utxo_lovelace` + Config NFT, datum = initial Config datum).
-- **Mint redeemer:** `Bootstrap`.
-- **Signers:** at least one of the `config_admins` listed in the output datum.
-- **Validates:**
-  - The parametrized output reference is consumed (one-shot guarantee).
-  - Exactly one Config NFT is minted with the expected asset name.
-  - Exactly one output at the Config address holds the NFT and a well-formed datum.
-  - The datum references a valid `coordinator_cred` and `payment_hook_ref` (or placeholders if those get set later, preferably already set).
+- **Outputs:**
+  - Config UTxO at `Script(config_policy_id)`, value = `min_utxo_lovelace` + Config NFT, datum = initial `ConfigDatum`.
+- **Signers:** the admin wallet that controls `bootstrap_ref` (no `extra_signatories` check at this step; admin authority comes from owning the one-shot input).
+
+**Validators invoked**
+
+1. **`config_state` mint** — redeemer `ConfigMintAction::Bootstrap`. Validates:
+   - Mint redeemer is `Bootstrap`.
+   - Tokens minted under this policy form exactly one `Pair(asset_name, qty)`; `asset_name == expected_asset_name`; `quantity == 1`.
+   - Some input has `output_reference == bootstrap_ref` (one-shot).
+   - Some output holds `(policy_id, expected_asset_name) qty 1` with inline `ConfigDatum` and payment credential `Script(policy_id)`.
+   - `valid_config_state(config_datum)` ⇒ `config_admins` non-empty; `authorized_dia_public_keys` non-empty, unique, all entries non-empty; `valid_domain` (non-empty `name`/`version`, `source_chain_id ≥ 0`, `verifying_contract` is 20 bytes); `protocol_fee_lovelace ≥ 0`; `hook_and_coordinator_are_consistent` (both `None` or both `Some` with non-empty hook asset name); `max_bootstrap_drift_seconds ≥ 0`; `min_utxo_lovelace ≥ 0`.
+   - Config output ADA equals `config_datum.min_utxo_lovelace`.
+
+No other protocol script fires in this tx.
 
 ### 5.2 PaymentHook bootstrap
 
@@ -330,23 +347,35 @@ Side effect: the same tx carries a stake registration certificate for `update_co
 
 - **Frequency:** once per chain.
 - **Inputs:**
-  - DIA admin wallet.
-  - The selected wallet bootstrap UTxO.
+  - DIA admin wallet (network fee).
+  - Hook one-shot `bootstrap_ref` UTxO.
   - Config UTxO.
 - **Reference inputs:** —
 - **Mint:** `+1` PaymentHook NFT.
 - **Outputs:**
-  - Config UTxO recreated (same NFT, datum updated with `payment_hook_ref` and `coordinator_cred` if applicable).
-  - PaymentHook UTxO (value = `min_utxo_lovelace` + Hook NFT, datum with `accrued_fees_lovelace = 0`).
-- **Hook mint redeemer:** `Bootstrap`.
-- **Config spend redeemer:** `AdminUpdate`.
+  - Config UTxO recreated (same NFT, datum now embeds `payment_hook_ref` and `update_coordinator_credential`).
+  - PaymentHook UTxO with initialized datum (`accrued_fees = 0`, `lifetime_collected = 0`, `lifetime_withdrawn = 0`).
 - **Signers:** `config_admins`.
-- **Validates:**
-  - Config input NFT preserved in the output.
-  - Config datum changes are limited to `payment_hook_ref` / `coordinator_cred`.
-  - Hook NFT minted exactly once and placed at the new Hook UTxO.
-  - Hook datum initialized: `accrued_fees = 0`, `lifetime_collected = 0`, `lifetime_withdrawn = 0`.
-  - Side effect: the coordinator stake credential is registered via a registration certificate in the same tx.
+
+**Validators invoked**
+
+1. **`payment_hook` mint** — redeemer `PaymentHookMintAction::Bootstrap`. Validates:
+   - Mint redeemer is `Bootstrap`.
+   - Tokens minted under this hook policy form exactly one `Pair(asset_name, qty)`; `asset_name == expected_asset_name`; `quantity == 1`.
+   - Some input has `output_reference == bootstrap_ref` (one-shot).
+   - An input AND an output carry the Config NFT `qty 1`; both decode as inline `ConfigDatum` (`previous_config`, `next_config`).
+   - `valid_config_state(previous_config)` AND `valid_config_state(next_config)`.
+   - `previous_config.payment_hook_ref == None` AND `previous_config.update_coordinator_credential == None` (rejects double-bootstrap).
+   - `next_config.payment_hook_ref == Some(PaymentHookRef { policy_id = own_policy_id, asset_name = expected_asset_name })`.
+   - `next_config.update_coordinator_credential == Some(coordinator_credential)` (parameter wired at compile time).
+   - `has_config_signer(previous_config, tx)` ⇒ at least one `config_admins` key in `extra_signatories`.
+   - `has_valid_payment_hook_output`: an output holds the Hook NFT `qty 1` and inline `PaymentHookDatum`; output payment credential is `Script(hook_policy_id)`; `valid_payment_hook_state` (all four lovelace fields ≥ 0); `exact_locked_lovelace` ⇒ `lovelace == min_utxo + accrued_fees`.
+
+2. **`config_state` spend** — redeemer `ConfigRedeemer::AdminUpdate`. Same checks as §5.3 below (the spend ensures the Config NFT is continuous and `min_utxo_lovelace` is frozen; the hook mint above pins the new datum's `payment_hook_ref` and `update_coordinator_credential`).
+
+3. **Stake registration certificate** for `coordinator_credential` — witnessed by the admin signature.
+
+**Cross-script invariant.** The hook mint pins the new Config datum (this exact hook policy/asset, this exact coordinator credential), and the Config spend enforces that the Config UTxO is recreated under admin signature with `valid_config_state` and `min_utxo_lovelace` frozen. The two together force Config v1 (no hook, no coordinator) → Config v2 with both fields set, signed by an admin. Neither alone is enough.
 
 ### 5.3 Config update
 
@@ -369,18 +398,29 @@ flowchart LR
   classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
 ```
 
-- **Frequency:** rare (rotate signers, change fee, change domain, change hook, change coordinator).
-- **Inputs:** Config UTxO.
+- **Frequency:** rare (rotate signers, change fee, change domain, set/replace `payment_hook_ref` or `update_coordinator_credential`).
+- **Inputs:**
+  - Config UTxO.
+  - Admin wallet (network fee).
 - **Reference inputs:** —
 - **Mint:** —
-- **Outputs:** Config UTxO recreated (same NFT, modified datum).
-- **Spend redeemer:** `AdminUpdate`.
+- **Outputs:**
+  - Config UTxO recreated with the new datum.
 - **Signers:** `config_admins`.
-- **Validates:**
-  - Config NFT continuity.
-  - `min_utxo_lovelace` preserved.
-  - Output datum is well-formed.
-  - Any datum change requires an admin signature (checked against the input datum).
+
+**Validators invoked**
+
+1. **`config_state` spend** — redeemer `ConfigRedeemer::AdminUpdate`. Validates:
+   - Datum is `Some(current_datum)`; redeemer is `AdminUpdate`.
+   - Own input found at `own_ref`; payment credential is `Script(own_policy_id)`.
+   - Some output holds the Config NFT `qty 1` with inline `next_datum`; payment credential remains `Script(own_policy_id)`.
+   - NFT `qty 1` on consumed input AND on continuation output.
+   - `valid_config_state(current_datum)` AND `valid_config_state(next_datum)`.
+   - `has_config_signer(current_datum, tx)` (admin authorization is read from the datum being CONSUMED, so an attacker cannot rotate admins and self-authorize in the same tx).
+   - `lovelace_of(own_input.value) == current_datum.min_utxo_lovelace`; `lovelace_of(continuation.value) == next_datum.min_utxo_lovelace`.
+   - `admin_update_transition` ⇒ `previous.min_utxo_lovelace == next.min_utxo_lovelace` (this field is effectively immutable post-bootstrap).
+
+No other protocol script fires.
 
 ### 5.4 Receiver bootstrap (per client)
 
@@ -407,19 +447,26 @@ flowchart LR
 
 - **Frequency:** once per client.
 - **Inputs:**
-  - DIA admin wallet (pays network fee + min UTxO).
-  - The selected wallet bootstrap UTxO for this Receiver.
-- **Reference inputs:** Config UTxO (required to check the signer is in `config_admins`).
+  - DIA admin wallet (network fee + min UTxO).
+  - Receiver one-shot `bootstrap_ref` UTxO.
+- **Reference inputs:**
+  - Config UTxO.
 - **Mint:** `+1` Receiver NFT (policy = `receiver` parametrized for this client).
-- **Outputs:** Receiver UTxO (address = `receiver<client>` spend, value = `min_utxo_lovelace` + Receiver NFT, datum = `{ balance_lovelace = 0, min_utxo_lovelace }`).
-- **Mint redeemer:** `Bootstrap`.
-- **Signers:** at least one `Config.config_admins` (DIA admin).
-- **Validates:**
-  - The parametrized output reference is consumed.
-  - Exactly one Receiver NFT is minted with the expected asset name.
-  - Exactly one output at the Receiver address holds the NFT.
-  - Invariant `utxo.lovelace == min_utxo_lovelace + balance_lovelace`.
-  - Signer is one of `config_admins` (read from the reference input).
+- **Outputs:**
+  - Receiver UTxO at `Script(receiver_policy_id)` with `balance_lovelace = 0`, `accrued_to_hook_lovelace = 0`.
+- **Signers:** `config_admins`.
+
+**Validators invoked**
+
+1. **`receiver` mint** — redeemer `ReceiverMintAction::Bootstrap`. Validates:
+   - Mint redeemer is `Bootstrap`.
+   - Tokens minted under this policy form exactly one `Pair(asset_name, qty)`; `asset_name == expected_asset_name`; `quantity == 1`.
+   - Some input has `output_reference == bootstrap_ref` (one-shot).
+   - The Config NFT is visible (input or reference input) via `find_visible_config_input`; decodes as `ConfigDatum`; `valid_config_state(config_datum)` holds.
+   - `has_config_signer(config_datum, tx)` ⇒ at least one admin signed.
+   - `has_valid_receiver_output`: an output holds the Receiver NFT `qty 1` and inline `ReceiverDatum`; output payment credential is `Script(receiver_policy_id)`; `valid_receiver_state` (all three lovelace fields ≥ 0); `exact_locked_lovelace` ⇒ `lovelace == min_utxo + balance + accrued_to_hook`.
+
+No other protocol script fires.
 
 ### 5.5 Receiver top-up
 
@@ -442,20 +489,27 @@ flowchart LR
   classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
 ```
 
-- **Frequency:** ad-hoc. Permissionless (matches EVM `receive()`).
+- **Frequency:** ad-hoc, permissionless (matches EVM `receive()`).
 - **Inputs:**
   - Receiver UTxO.
-  - Wallet contributing the funds (the client, or anyone).
+  - Funder wallet (anyone).
 - **Reference inputs:** —
 - **Mint:** —
-- **Outputs:** Receiver UTxO recreated (same NFT, datum with `balance_lovelace += top_up`, `utxo.lovelace` increased by `top_up`).
-- **Spend redeemer:** `TopUp`.
+- **Outputs:**
+  - Receiver UTxO recreated with `balance += top_up`.
 - **Signers:** none required by the validator (the tx is signed by whoever provides the funding input).
-- **Validates:**
-  - Receiver NFT continuity.
-  - `min_utxo_lovelace` in the datum does not change.
-  - `new.balance_lovelace == old.balance_lovelace + (new.utxo.lovelace - old.utxo.lovelace)`.
-  - `new.utxo.lovelace >= old.utxo.lovelace` (cannot withdraw through this path).
+
+**Validators invoked**
+
+1. **`receiver` spend** — redeemer `ReceiverRedeemer::TopUp` (index 0). Validates:
+   - Datum is `Some(current_datum)`; own input is `Script(own_policy_id)`; `own_policy_id == expected_receiver_hash(own_input)` (defends against impostor receivers).
+   - Continuation output holds the Receiver NFT `qty 1` and inline `next_datum`; payment credential `Script(own_policy_id)`.
+   - NFT `qty 1` on input AND on continuation.
+   - `valid_receiver_state` for both `current_datum` and `next_datum`.
+   - `exact_locked_lovelace` on input AND on output.
+   - `top_up_transition` ⇒ `added = next_lovelace - prev_lovelace > 0` (rejects zero-add churn); `next.balance == previous.balance + added`; `next.accrued_to_hook == previous.accrued_to_hook` (frozen); `next.min_utxo == previous.min_utxo` (frozen).
+
+No Config visibility, no coordinator witness, no admin signer required: the TopUp branch is fully self-contained and permissionless.
 
 ### 5.6 Receiver withdraw (equivalent to EVM `retrieveLostTokens`)
 
@@ -481,18 +535,30 @@ flowchart LR
   classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
 ```
 
-- **Frequency:** rare.
-- **Inputs:** Receiver UTxO, DIA admin wallet (network fee).
-- **Reference inputs:** Config UTxO.
-- **Outputs:** Receiver UTxO recreated (smaller balance), payout to the address the admin specifies.
-- **Spend redeemer:** `Withdraw { amount, recipient }`.
-- **Signers:** at least one `Config.config_admins`.
-- **Validates:**
-  - Receiver NFT continuity.
-  - `amount <= old.balance_lovelace`.
-  - `new.balance_lovelace == old.balance_lovelace - amount`.
-  - `new.utxo.lovelace == old.utxo.lovelace - amount` (exactly `amount` goes to `recipient`).
-  - Signer is one of `config_admins`.
+- **Frequency:** rare, admin-initiated.
+- **Inputs:**
+  - Receiver UTxO.
+  - DIA admin wallet (network fee).
+- **Reference inputs:**
+  - Config UTxO.
+- **Mint:** —
+- **Outputs:**
+  - Receiver UTxO recreated with smaller `balance`.
+  - Recipient wallet receiving `amount` lovelace.
+- **Signers:** `config_admins`.
+
+**Validators invoked**
+
+1. **`receiver` spend** — redeemer `ReceiverRedeemer::Withdraw { amount, recipient }` (index 3). Validates:
+   - All §5.5 common spend prefix (datum decoding, NFT continuity, `valid_receiver_state` × 2, `exact_locked_lovelace` × 2, `expected_receiver_hash` self-check).
+   - Visible Config (input or reference input) decoded; `valid_config_state(config_datum)` holds.
+   - `has_config_signer(config_datum, tx)` (admin authorization).
+   - `withdraw_transition` ⇒ `amount > 0`; `amount ≤ previous.balance`; `next.balance == previous.balance - amount`; `next.accrued_to_hook == previous.accrued_to_hook` (FROZEN — admin cannot drain pending fees through this path); `next.min_utxo == previous.min_utxo`.
+   - `paid_to_recipient` ⇒ total ADA on outputs whose `address == recipient` is `≥ amount` (the recipient may receive the payout split across several outputs, but every such output must address EXACTLY `recipient`).
+
+No coordinator witness is required for this path — the admin signature alone authorizes the move.
+
+**Cross-script invariant.** Admin can never use Withdraw to move `accrued_to_hook` lovelace out of a Receiver. The only path that drains that bucket is §5.11 Settle, which routes the ADA to the PaymentHook UTxO.
 
 ### 5.7 First pair update/create (per client × pair)
 
@@ -501,26 +567,21 @@ There is no separate Pair bootstrap state. The client-to-Pair binding is enforce
 ```mermaid
 flowchart LR
   Updater([Updater Wallet<br/>pays network fee]):::wallet
-  ReceiverIn[Receiver UTxO<br/>balance v1]:::script
-  HookIn[PaymentHook UTxO<br/>accrued v1]:::script
+  ReceiverIn[Receiver UTxO<br/>balance v1<br/>accrued v1]:::script
   ConfigRef[Config UTxO]:::script
   PairMint[/pair_state mint<br/>MintPairs/]:::redeemer
-  ReceiverV[/receiver spend<br/>PayFee/]:::redeemer
-  HookV[/payment_hook spend<br/>ApplyFee/]:::redeemer
+  ReceiverV[/receiver spend<br/>AccrueFee/]:::redeemer
   Coord[/update_coordinator withdraw<br/>ApplySingle intent/]:::redeemer
 
   Updater --> TX((First price update<br/>create pair)):::tx
   ReceiverIn --> TX
-  HookIn --> TX
   ConfigRef -.-> TX
   PairMint -.-> TX
   ReceiverV -.-> TX
-  HookV -.-> TX
   Coord -.-> TX
 
   TX -- mint +1 Pair NFT --> PairOut[Pair UTxO<br/>price,ts,nonce from intent<br/>last_intent_hash<br/>last_signer]:::script
-  TX --> ReceiverOut[Receiver UTxO<br/>balance v2 = v1 - fee]:::script
-  TX --> HookOut[PaymentHook UTxO<br/>accrued v2 = v1 + fee]:::script
+  TX --> ReceiverOut[Receiver UTxO<br/>balance v2 = v1 - fee<br/>accrued v2 = v1 + fee]:::script
   TX --> Change([Updater change]):::wallet
 
   classDef wallet fill:#fff8dc,stroke:#aa8800,color:#111
@@ -530,28 +591,52 @@ flowchart LR
 ```
 
 - **Frequency:** once per (client, pair).
-- **Inputs:** Receiver UTxO, PaymentHook UTxO, updater wallet.
-- **Reference inputs:** Config UTxO.
-- **Mint:** `+1` Pair NFT (policy = `pair_state` parametrized by `receiver_hash` of this client; asset name derived from `pair_id`).
-- **Withdrawals:** `update_coordinator` (withdraw 0 trigger).
-- **Outputs:** Pair UTxO with `pair_id`, `price`, `timestamp`, `nonce`, `intent_hash`, and `signer` copied from the signed intent; Receiver and PaymentHook UTxOs updated for the protocol fee.
-- **Mint redeemer:** `MintPairs`.
-- **Coordinator withdraw redeemer:** `ApplySingle { witness }`.
-- **Signers:** none required by validators; the updater only pays network fees.
-- **Validates (mint policy):**
-  - At least one Pair NFT is minted under this client pair policy.
-  - Every minted Pair NFT has quantity `1`.
-  - Every minted Pair NFT has a Pair output at the pair script address with a well-formed datum and exact min UTxO.
-  - The Config reference input is valid.
-  - The configured coordinator withdrawal is present.
-- **Validates (coordinator):**
-  - The signed intent is authorized and valid.
-  - The Pair NFT asset name equals `blake2b_256(intent.symbol)`.
-  - There is no existing Pair input for this token.
-  - Exactly one Pair output exists for this token.
-  - The output datum equals the intent's real `symbol`, `price`, `timestamp`, `nonce`, `intent_hash`, and `signer`.
-  - The total minted Pair NFTs in the transaction exactly matches the create witnesses, so hidden extra pair mints are rejected.
-  - Receiver and PaymentHook fee transitions are exact.
+- **Inputs:**
+  - Receiver UTxO.
+  - Updater wallet (pays network fee; permissionless, does not need to be DIA).
+- **Reference inputs:**
+  - Config UTxO.
+- **Mint:** `+1` Pair NFT (asset name = `blake2b_256(pair_id)`).
+- **Withdrawals:** `update_coordinator` (zero-lovelace trigger).
+- **Outputs:**
+  - Pair UTxO with the signed intent's real datum (`price`, `timestamp`, `nonce`, `intent_hash`, `signer`).
+  - Receiver UTxO recreated with `balance -= fee`, `accrued_to_hook += fee`. Total lovelace on the Receiver UTxO is unchanged.
+- **Signers:** none required by validators.
+
+PaymentHook is **not** involved. Fees are accrued locally on the Receiver and settled later (§5.11).
+
+**Validators invoked**
+
+1. **`update_coordinator` withdraw** — redeemer `CoordinatorRedeemer::ApplySingle(witness)` (index 0). Stake credential firing this withdraw must equal `config.update_coordinator_credential`. Validates:
+   - Config NFT visible as REFERENCE input `qty 1`; decodes as `ConfigDatum`; `valid_config_state(config_datum)`.
+   - `config_datum.update_coordinator_credential == Some(own_credential)` (the staking credential firing this withdraw is the one Config currently points at).
+   - `intent_expiry_satisfied(witness.intent, tx)` ⇒ tx upper validity bound (in ms) is finite AND ≤ `intent.expiry × 1000`. Open-ended upper bounds are rejected.
+   - Exactly one output carries `(witness.pair_policy_id, witness.pair_token_name) qty 1`; output decodes as inline `PairDatum`; output payment credential is `Script(witness.pair_policy_id)`.
+   - `pair_input_count == 0` (this is the bootstrap-of-pair branch): `minted_pair_quantity(tx, pair_policy_id, pair_token_name) == 1` AND `minted_pair_token_count(tx, pair_policy_id) == 1` (no extra Pair NFTs may be smuggled in).
+   - `exact_locked_lovelace(pair_output, next_pair)` ⇒ pair output ADA equals `next_pair.min_utxo_lovelace`.
+   - `initial_pair_matches_witness` binds `next_pair.{pair_id, price, timestamp, nonce} == witness.intent.{symbol, price, timestamp, nonce}`; `next_pair.intent_hash == oracle_intent_hash(config.domain, witness.intent)`; `next_pair.signer == witness.intent.signer`; `witness.pair_token_name == blake2b_256(next_pair.pair_id)`. Plus `has_valid_signature` ⇒ `valid_intent` (non-empty fields, `chain_id ≥ 0`, `nonce ≥ 0`, `expiry ≥ 0`, `price ≥ 0`, `timestamp ≥ 0`, signature length 64/65, signer 20 bytes) AND `signer_is_authorized(config, witness.signer_public_key)` AND `verify_ecdsa_signature(...)`.
+   - `intent_freshness_satisfied(witness.intent, tx, config.max_bootstrap_drift_seconds)` ⇒ tx lower validity bound is finite AND `intent.timestamp × 1000 ≥ lower_ms - max_drift × 1000`. Rejects stale-intent replay on bootstrap.
+   - `valid_receiver_accrue_fee(tx, witness.receiver_policy_id, witness.receiver_asset_name, fee = config.protocol_fee_lovelace)`: locates a Receiver input/output pair carrying that NFT; both decode as `ReceiverDatum`; both pass `valid_receiver_state` AND `exact_locked_lovelace`; `accrue_fee_transition(prev, next, fee = config.protocol_fee_lovelace)` ⇒ `fee ≥ 0`, `fee ≤ prev.balance`, `next.balance == prev.balance - fee`, `next.accrued_to_hook == prev.accrued_to_hook + fee`, `next.min_utxo == prev.min_utxo`.
+
+2. **`pair_state` mint** — redeemer `PairMintAction::MintPairs`. Validates:
+   - Mint redeemer is `MintPairs`.
+   - At least one minted pair entry; each has `qty == 1`.
+   - For every minted name: an output holds that NFT `qty 1` and inline `PairDatum`; payment credential `Script(pair_policy_id)`; `pair_asset_name(datum.pair_id) == minted_name`; `valid_pair_state(datum)`; `exact_locked_lovelace`.
+   - Config NFT visible as reference input `qty 1`; decodes as `ConfigDatum`; `valid_config_state(config_datum)`.
+   - **Coordinator witness check:** `coordinator_witness_present(tx.withdrawals, config_datum)` ⇒ a withdrawal in `tx.withdrawals` has key equal to `config_datum.update_coordinator_credential`. If `config_datum.update_coordinator_credential == None` this returns `False` (rejects).
+
+3. **`receiver` spend** — redeemer `ReceiverRedeemer::AccrueFee` (index 1). Validates:
+   - All §5.5 common spend prefix.
+   - Visible Config decoded; `valid_config_state(config_datum)`.
+   - `coordinator_witness_present(tx.withdrawals, config_datum)` (same definition as in `pair_state`).
+   - `accrue_fee_transition(current_datum, next_datum, fee = current.balance - next.balance)` ⇒ same five-condition body as the coordinator's check above, but `fee` is **derived from the datum delta** here.
+
+**Cross-script invariants**
+
+- **The fee per update is exactly `protocol_fee_lovelace`.** The coordinator binds `fee = config.protocol_fee_lovelace` (constant). The receiver binds `fee = current.balance - next.balance` (datum delta). Both must hold simultaneously, so the datum delta is forced equal to the constant. Neither side alone is enough.
+- **Pair NFT name is bound to the intent symbol.** Coordinator: `pair_token_name == blake2b_256(pair_id)` AND `pair_id == witness.intent.symbol`. Pair mint: `pair_asset_name(datum.pair_id) == minted_name`. Either side alone could be circumvented; together they pin the asset name.
+- **No ghost-mint.** Coordinator: "exactly one Pair NFT under this policy/name AND no other token of this policy was minted in this tx". Pair mint: every minted name has a matching well-formed output.
+- **Stale-intent replay on bootstrap is rejected** by `intent_freshness_satisfied` (max-drift window).
 
 ### 5.8 Price update (single) — main tx
 
@@ -559,28 +644,23 @@ flowchart LR
 flowchart LR
   Updater([Updater Wallet<br/>pays network fee]):::wallet
   PairIn[Pair UTxO<br/>price,ts,nonce v1]:::script
-  ReceiverIn[Receiver UTxO<br/>balance v1]:::script
-  HookIn[PaymentHook UTxO<br/>accrued v1]:::script
+  ReceiverIn[Receiver UTxO<br/>balance v1<br/>accrued v1]:::script
   ConfigRef[Config UTxO]:::script
 
   PairV[/pair_state spend<br/>ApplyUpdate/]:::redeemer
-  ReceiverV[/receiver spend<br/>PayFee/]:::redeemer
-  HookV[/payment_hook spend<br/>ApplyFee/]:::redeemer
+  ReceiverV[/receiver spend<br/>AccrueFee/]:::redeemer
   Coord[/update_coordinator withdraw<br/>ApplySingle intent/]:::redeemer
 
   Updater --> TX((Price update<br/>single)):::tx
   PairIn --> TX
   ReceiverIn --> TX
-  HookIn --> TX
   ConfigRef -.-> TX
   PairV -.-> TX
   ReceiverV -.-> TX
-  HookV -.-> TX
   Coord -.-> TX
 
   TX --> PairOut[Pair UTxO<br/>price,ts,nonce v2<br/>last_intent_hash<br/>last_signer]:::script
-  TX --> ReceiverOut[Receiver UTxO<br/>balance v2 = v1 - fee]:::script
-  TX --> HookOut[PaymentHook UTxO<br/>accrued v2 = v1 + fee]:::script
+  TX --> ReceiverOut[Receiver UTxO<br/>balance v2 = v1 - fee<br/>accrued v2 = v1 + fee]:::script
   TX --> Change([Updater change]):::wallet
 
   classDef wallet fill:#fff8dc,stroke:#aa8800,color:#111
@@ -589,34 +669,48 @@ flowchart LR
   classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
 ```
 
+Same shape as §5.7 but for an EXISTING pair UTxO: the Pair UTxO is spent (no Pair NFT minted), and the Receiver accrues one fee.
+
 - **Frequency:** high (heartbeat / deviation).
 - **Inputs:**
-  - Pair UTxO being updated.
-  - Receiver UTxO (client's balance).
-  - PaymentHook UTxO.
-  - Updater wallet (pays network fee; permissionless, does not need to be DIA).
-- **Reference inputs:** Config UTxO.
-- **Mint:** — if the Pair UTxO already exists. If it does not exist, this is the first pair update/create described in 5.7.
-- **Withdrawals:** `update_coordinator` (withdraw 0 trigger).
+  - Pair UTxO.
+  - Receiver UTxO.
+  - Updater wallet.
+- **Reference inputs:**
+  - Config UTxO.
+- **Mint:** —
+- **Withdrawals:** `update_coordinator` (zero-lovelace trigger).
 - **Outputs:**
-  - Pair UTxO recreated (same NFT, datum updated with new `price`, `timestamp`, `nonce`, `last_intent_hash`, `last_signer`).
-  - Receiver UTxO recreated (same NFT, `balance_lovelace -= protocol_fee_lovelace`, `utxo.lovelace -= fee`).
-  - PaymentHook UTxO recreated (same NFT, `accrued_fees += fee`, `lifetime_collected += fee`, `utxo.lovelace += fee`).
-- **Coordinator withdraw redeemer:** `ApplySingle { witness }`, where the witness carries the Receiver NFT id, the Cardano pair policy id, the Pair NFT asset name, the DIA `OracleIntent`, and the recovered DIA signer public key.
-- **Pair spend redeemer:** `ApplyUpdate`.
-- **Receiver spend redeemer:** `PayFee`.
-- **Hook spend redeemer:** `ApplyFee`.
-- **Cardano signers:** none required by the validators (permissionless submission).
-- **Validates (coordinator, once per tx):**
-  - Reads Config through the reference input.
-  - DIA Intent signature valid per DIA `OracleIntentUtils` (ECDSA secp256k1 over EIP-712 digest). Signer pubkey ∈ `Config.authorized_dia_public_keys`, Pair NFT asset name = `blake2b_256(intent.symbol)`, `intent.timestamp > old.timestamp`, `intent.nonce > old.nonce`.
-  - `fee == Config.protocol_fee_lovelace`.
-  - `new_receiver.balance == old_receiver.balance - fee`.
-  - `new_hook.accrued_fees == old_hook.accrued_fees + fee`.
-  - `new_hook.lifetime_collected == old_hook.lifetime_collected + fee`.
-  - All NFTs remain continuous.
-  - All `min_utxo_lovelace` preserved.
-- **Validates (each local validator):** only that the coordinator withdrawal is present in the tx (defers to the coordinator).
+  - Pair UTxO recreated with new `price`, `timestamp`, `nonce`, `intent_hash`, `signer`.
+  - Receiver UTxO recreated with `balance -= fee`, `accrued_to_hook += fee`. Total Receiver UTxO lovelace unchanged.
+- **Signers:** none required by validators.
+
+PaymentHook is **not** an input or output in update transactions. This eliminates PaymentHook contention during high-frequency updates.
+
+**Validators invoked**
+
+1. **`update_coordinator` withdraw** — redeemer `CoordinatorRedeemer::ApplySingle(witness)` (index 0). Same as §5.7 except the branch is `pair_input_count == 1`. Validates:
+   - Config visibility/validity, coordinator-credential match, `intent_expiry_satisfied`, `valid_receiver_accrue_fee` exactly as in §5.7.
+   - Exactly one pair input AND exactly one pair output `qty 1` `(witness.pair_policy_id, witness.pair_token_name)`.
+   - `minted_pair_token_count(tx, pair_policy_id) == 0` (the spend branch must not mint Pair NFTs).
+   - `next_pair_matches_witness(prev_pair, next_pair, config, witness)` ⇒ `valid_pair_state` for both; `prev.pair_id == next.pair_id`; `prev.min_utxo == next.min_utxo`; same field bindings as §5.7's `initial_pair_matches_witness`; `is_fresh_update(prev, witness.intent)` ⇒ `intent.timestamp > prev.timestamp` AND `intent.nonce > prev.nonce`; signature path identical.
+   - `intent_freshness_satisfied` is NOT required here because the prev-vs-next replay check provides freshness from the previous Pair datum.
+
+2. **`pair_state` spend** — redeemer `PairSpendAction::ApplyUpdate`. Validates:
+   - Datum is `Some(current_datum)`; own input found at `own_ref` and is `Script(own_policy_id)`.
+   - Tokens of own policy on own input form exactly one `Pair(pair_token_name, 1)` (no multi-token Pair UTxO).
+   - Config NFT visible as reference input `qty 1`; decodes as `ConfigDatum`; `valid_config_state(config_datum)`.
+   - Continuation output holds the same Pair NFT `qty 1` with inline `next_datum`; payment credential `Script(own_policy_id)`.
+   - `valid_pair_state` for both `current_datum` and `next_datum`.
+   - `current.pair_id == next.pair_id`; `current.min_utxo == next.min_utxo`.
+   - `pair_token_name == blake2b_256(current.pair_id)`.
+   - `receiver_input_present(tx.inputs, receiver_hash)` ⇒ a UTxO at the parameterized `Script(receiver_hash)` is being spent in the same tx (binds the pair to its client's Receiver).
+   - `exact_locked_lovelace` on input AND on continuation.
+   - `coordinator_witness_present(tx.withdrawals, config_datum)`.
+
+3. **`receiver` spend** — redeemer `ReceiverRedeemer::AccrueFee`. Same as §5.7.
+
+**Cross-script invariants:** identical to §5.7, plus replay protection: `intent.timestamp > prev.timestamp` AND `intent.nonce > prev.nonce` (coordinator's `is_fresh_update`). Pair NFT cannot be duplicated mid-flight (no mint on this branch + single token of pair policy on own input + parametric NFT name = `blake2b_256(pair_id)`).
 
 ### 5.9 Price update (batch)
 
@@ -625,30 +719,25 @@ flowchart LR
   Updater([Updater Wallet]):::wallet
   Pair1In[Pair UTxO 1]:::script
   PairKIn[Pair UTxO K]:::script
-  ReceiverIn[Receiver UTxO<br/>balance v1]:::script
-  HookIn[PaymentHook UTxO<br/>accrued v1]:::script
+  ReceiverIn[Receiver UTxO<br/>balance v1<br/>accrued v1]:::script
   ConfigRef[Config UTxO]:::script
 
   PairV[/pair_state spend<br/>ApplyUpdate/]:::redeemer
-  ReceiverV[/receiver spend<br/>PayFee/]:::redeemer
-  HookV[/payment_hook spend<br/>ApplyFee/]:::redeemer
+  ReceiverV[/receiver spend<br/>AccrueFee/]:::redeemer
   Coord[/update_coordinator withdraw<br/>ApplyBatch intents/]:::redeemer
 
   Updater --> TX((Price update<br/>batch K pairs)):::tx
   Pair1In --> TX
   PairKIn --> TX
   ReceiverIn --> TX
-  HookIn --> TX
   ConfigRef -.-> TX
   PairV -.-> TX
   ReceiverV -.-> TX
-  HookV -.-> TX
   Coord -.-> TX
 
   TX --> Pair1Out[Pair UTxO 1 v2]:::script
   TX --> PairKOut[Pair UTxO K v2]:::script
-  TX --> ReceiverOut[Receiver UTxO<br/>balance v2 = v1 - K*fee]:::script
-  TX --> HookOut[PaymentHook UTxO<br/>accrued v2 = v1 + K*fee]:::script
+  TX --> ReceiverOut[Receiver UTxO<br/>balance v2 = v1 - K*fee<br/>accrued v2 = v1 + K*fee]:::script
   TX --> Change([Updater change]):::wallet
 
   classDef wallet fill:#fff8dc,stroke:#aa8800,color:#111
@@ -657,13 +746,45 @@ flowchart LR
   classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
 ```
 
-- **Frequency:** high, variant of 5.8.
-- **Inputs:** existing Pair UTxOs for updates, Receiver UTxO, Hook UTxO, updater wallet.
-- **Reference inputs:** Config UTxO.
-- **Withdrawals:** `update_coordinator` with `ApplyBatch { [intent] }`.
-- **Mint:** Pair NFTs for any batch entries whose Pair UTxO does not exist yet.
-- **Outputs:** K Pair UTxOs written from K signed intents, Receiver UTxO recreated (`balance -= K * fee`), Hook UTxO (`accrued += K * fee`).
-- **Validates:** same as 5.7/5.8 per intent; the coordinator iterates over the list, rejects duplicate pair units, requires a shared receiver and pair policy, and ensures the count of minted Pair NFTs equals the count of create witnesses.
+N intents in one tx, each addressing the SAME pair policy and the SAME Receiver. Each witness is either a "first update" (mints the Pair NFT) or an "ApplyUpdate" (spends an existing Pair UTxO).
+
+- **Frequency:** high; batch variant of §5.8.
+- **Inputs:**
+  - Existing Pair UTxOs being updated (`0..K`).
+  - Receiver UTxO.
+  - Updater wallet.
+- **Reference inputs:**
+  - Config UTxO.
+- **Mint:** Pair NFTs for any "first update" witnesses.
+- **Withdrawals:** `update_coordinator` (zero-lovelace trigger).
+- **Outputs:**
+  - `N` Pair UTxOs (one per witness, mix of newly-minted and recreated).
+  - Receiver UTxO recreated with `balance -= N × fee`, `accrued_to_hook += N × fee`. Total Receiver UTxO lovelace unchanged.
+- **Signers:** none required by validators.
+
+**Validators invoked**
+
+1. **`update_coordinator` withdraw** — redeemer `CoordinatorRedeemer::ApplyBatch(witnesses)` (index 1). Same Config visibility/validity and coordinator-credential match as in §5.7, plus:
+   - `witnesses_share_receiver(witnesses)` ⇒ every witness names the same Receiver NFT.
+   - `list.all(witnesses, intent_expiry_satisfied)` (per-intent expiry).
+   - `length(witnesses) > 0`.
+   - `unique_pair_units(witnesses)` ⇒ no duplicate `(pair_policy_id, pair_token_name)`.
+   - `witnesses_share_pair_policy(witnesses)`.
+   - `minted_pair_token_count(tx, shared_pair_policy_id) == create_witness_count(tx, witnesses)` ⇒ the count of minted Pair NFTs equals the count of "first update" witnesses (extras are rejected).
+   - For each witness: same per-witness assertions as §5.7 (`pair_input_count == 0`) OR §5.8 (`pair_input_count == 1`), depending on whether the Pair UTxO already exists.
+   - `valid_batch_receiver_accrue_fee(tx, witnesses, fee = config.protocol_fee_lovelace × length(witnesses))` ⇒ the Receiver datum delta MUST equal `N × protocol_fee`.
+
+2. **`pair_state` mint** — redeemer `MintPairs`. Same as §5.7. Fired once for the shared pair policy with all newly-minted Pair NFTs in `tx.mint`.
+
+3. **`pair_state` spend** — redeemer `ApplyUpdate`. Same as §5.8. Fired once per existing Pair UTxO being updated.
+
+4. **`receiver` spend** — redeemer `ReceiverRedeemer::AccrueFee`. Same as §5.7. Fired once for the single Receiver UTxO.
+
+**Cross-script invariants**
+
+- Per-pair fee accumulates linearly with batch size: coordinator wires receiver to `N × fee`; receiver `accrue_fee_transition` enforces the datum delta. Both must agree.
+- No witness can pair-mint twice inside a batch: `unique_pair_units` + `minted_pair_token_count == create_witness_count` + `witnesses_share_pair_policy`.
+- All N witnesses come from the same client (`witnesses_share_receiver` + the per-client Receiver NFT).
 
 ### 5.10 PaymentHook withdraw
 
@@ -689,23 +810,115 @@ flowchart LR
   classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
 ```
 
-- **Frequency:** low (manual).
-- **Inputs:** PaymentHook UTxO, DIA admin wallet (network fee).
-- **Reference inputs:** Config UTxO.
+- **Frequency:** low, manual.
+- **Inputs:**
+  - PaymentHook UTxO.
+  - DIA admin wallet (network fee).
+- **Reference inputs:**
+  - Config UTxO.
 - **Mint:** —
 - **Outputs:**
-  - PaymentHook UTxO recreated (same NFT, `accrued_fees_lovelace = 0`, `lifetime_withdrawn += withdrawn`, `utxo.lovelace = min_utxo_lovelace`).
-  - `withdrawn` ADA paid to `Hook.withdraw_address`.
-- **Spend redeemer:** `Withdraw { amount }`.
-- **Signers:** `config_admins` (per the referenced Config).
-- **Validates:**
-  - Hook NFT continuity.
-  - `amount <= old.accrued_fees_lovelace`.
-  - `new.accrued_fees = old.accrued_fees - amount`.
-  - `new.lifetime_withdrawn = old.lifetime_withdrawn + amount`.
-  - `new.utxo.lovelace == min_utxo_lovelace + new.accrued_fees`.
-  - Actual payout to `withdraw_address` of `amount`.
-  - Signed by one of `config_admins`.
+  - PaymentHook UTxO recreated with reduced `accrued_fees`.
+  - Target wallet at `withdraw_address` receiving `amount` lovelace.
+- **Signers:** `config_admins`.
+
+The `update_coordinator` does NOT need to fire — `coordinator_witness_present` is only required on `ApplySettle`.
+
+**Validators invoked**
+
+1. **`payment_hook` spend** — redeemer `PaymentHookRedeemer::Withdraw { amount }` (index 2). Validates:
+   - Common hook-spend prefix: datum decoded; own input is `Script(own_policy_id)`; visible Config decoded; `valid_payment_hook_state` for both old and new; NFT `qty 1` preserved on input AND on continuation; continuation payment credential `Script(own_policy_id)`; `exact_locked_lovelace` on both.
+   - `has_config_signer(config_datum, tx)` (admin authorization).
+   - `withdraw_transition` ⇒ `amount ≥ 0`; `amount ≤ previous.accrued_fees_lovelace`; `next.withdraw_address == previous.withdraw_address` (frozen); `next.min_utxo == previous.min_utxo` (frozen); `next.accrued_fees == previous.accrued_fees - amount`; `next.lifetime_collected == previous.lifetime_collected` (frozen); `next.lifetime_withdrawn == previous.lifetime_withdrawn + amount`.
+   - `withdraw_paid_to_target(tx.outputs, current.withdraw_address, amount)` ⇒ total ADA on outputs whose `address == withdraw_address` is `≥ amount`.
+
+**Invariants**
+
+- `withdraw_address` cannot be silently rotated during a Withdraw: `withdraw_transition` freezes it. (To change it admins must use `AdminUpdate` on the hook, which freezes all economic fields by `admin_update_transition`.)
+- `lifetime_collected` and `lifetime_withdrawn` are monotonic. Withdraw bumps `lifetime_withdrawn`; Settle bumps `lifetime_collected` (§5.11). Neither transition lets either field decrease.
+
+### 5.11 Settle accrued fees
+
+This transaction is the second half of the decoupled fee settlement model. It drains `accrued_to_hook_lovelace` from one or more Receiver UTxOs and credits the corresponding ADA to the PaymentHook UTxO.
+
+```mermaid
+flowchart LR
+  Admin([DIA Admin Wallet]):::wallet
+  ReceiverIn[Receiver UTxO<br/>balance v1<br/>accrued v1]:::script
+  HookIn[PaymentHook UTxO<br/>accrued_fees v1]:::script
+  ConfigRef[Config UTxO]:::script
+
+  ReceiverV[/receiver spend<br/>Settle/]:::redeemer
+  HookV[/payment_hook spend<br/>ApplySettle/]:::redeemer
+  Coord[/update_coordinator withdraw<br/>ApplySettle manifest/]:::redeemer
+
+  Admin --> TX((Settle<br/>accrued fees)):::tx
+  ReceiverIn --> TX
+  HookIn --> TX
+  ConfigRef -.-> TX
+  ReceiverV -.-> TX
+  HookV -.-> TX
+  Coord -.-> TX
+
+  TX --> ReceiverOut[Receiver UTxO<br/>balance v1 unchanged<br/>accrued v2 = 0]:::script
+  TX --> HookOut[PaymentHook UTxO<br/>accrued_fees v2 = v1 + drained<br/>lifetime_collected += drained]:::script
+  TX --> Change([Admin change]):::wallet
+
+  classDef wallet fill:#fff8dc,stroke:#aa8800,color:#111
+  classDef script fill:#e8f0ff,stroke:#3355aa,stroke-width:1.5px,color:#111
+  classDef redeemer fill:#f8f8f8,stroke:#666,stroke-dasharray:3 2,color:#111
+  classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
+```
+
+**Three validators fire in this single tx**, tied together by the coordinator: `update_coordinator` (the only place the cross-UTxO arithmetic is enforced), one `receiver` spend per Receiver in the manifest, and the `payment_hook` spend.
+
+- **Frequency:** periodic (e.g. daily or after N updates), admin-initiated.
+- **Inputs:**
+  - `R` Receiver UTxOs (each with `accrued_to_hook_lovelace > 0`).
+  - PaymentHook UTxO.
+  - DIA admin wallet (network fee).
+- **Reference inputs:**
+  - Config UTxO.
+- **Mint:** —
+- **Withdrawals:** `update_coordinator` (zero-lovelace trigger).
+- **Outputs:**
+  - Each Receiver UTxO recreated with `accrued_to_hook = 0`, `balance` unchanged, total UTxO lovelace decreased by its `drained` amount.
+  - PaymentHook UTxO recreated with `accrued_fees += sum(drained)`, `lifetime_collected += sum(drained)`, total UTxO lovelace increased by `sum(drained)`.
+- **Signers:** `config_admins`.
+
+**Validators invoked**
+
+1. **`update_coordinator` withdraw** — redeemer `CoordinatorRedeemer::ApplySettle(SettleManifest { receivers })` (index 2). This is the only validator that knows the cross-UTxO arithmetic. Validates:
+   - Config NFT visible as REFERENCE input `qty 1`; `valid_config_state(config_datum)`; `config_datum.update_coordinator_credential == Some(own_credential)`.
+   - `has_config_signer(config_datum, tx)` (admin authorization).
+   - `config_datum.payment_hook_ref == Some(payment_hook_ref)`.
+   - An input AND an output carry `(payment_hook_ref.policy_id, payment_hook_ref.asset_name) qty 1`; both decode as `PaymentHookDatum` (`previous_hook`, `next_hook`).
+   - `manifest.receivers` non-empty AND `unique_settle_receivers(manifest.receivers)` (no duplicate Receiver in the manifest).
+   - `valid_payment_hook_state` for both hooks; `exact_locked_lovelace` for both.
+   - `apply_settle_transition(previous_hook, next_hook, expected_delta = next.accrued - prev.accrued)` ⇒ `delta > 0`; `next.withdraw_address == prev.withdraw_address`; `next.min_utxo == prev.min_utxo`; `next.accrued == prev.accrued + delta`; `next.lifetime_collected == prev.lifetime_collected + delta`; `next.lifetime_withdrawn == prev.lifetime_withdrawn` (frozen).
+   - `sum_receiver_accrued_drained(manifest.receivers, tx) == expected_delta`. For each manifest entry the coordinator finds the matching Receiver input/output, asserts `valid_receiver_state` on both, `exact_locked_lovelace` on both, `receiver_logic.settle_transition` (drains `accrued_to_hook` to zero, freezes `balance` and `min_utxo`), and `receiver_output.payment_credential == Script(receiver.receiver_policy_id)`. The previous `accrued_to_hook` is summed across all manifest entries; the total must equal the hook's `accrued_fees` increase.
+
+2. **`receiver` spend × R** — redeemer `ReceiverRedeemer::Settle` (index 2). Each Receiver UTxO in the manifest is spent under this branch. Validates:
+   - All §5.5 common spend prefix.
+   - Visible Config decoded; `valid_config_state(config_datum)`.
+   - **Coordinator witness check:** `coordinator_witness_present(tx.withdrawals, config_datum)` ⇒ this is HOW the local Receiver "knows" the coordinator authorized the cross-UTxO arithmetic. The check passes iff a withdrawal in `tx.withdrawals` has key `config_datum.update_coordinator_credential`. The validator does NOT inspect which redeemer the coordinator was invoked with; it relies on the fact that the coordinator's withdraw script only succeeds when its own redeemer-branch invariants hold. In this tx that redeemer is `ApplySettle(manifest)`, and the coordinator already enforced the global drain==delta arithmetic.
+   - `settle_transition` ⇒ `previous.accrued_to_hook > 0` (rejects no-op churn); `next.accrued_to_hook == 0`; `next.balance == previous.balance` (FROZEN); `next.min_utxo == previous.min_utxo` (FROZEN).
+
+3. **`payment_hook` spend** — redeemer `PaymentHookRedeemer::ApplySettle` (index 0). Validates:
+   - Common hook-spend prefix (datum decoded, NFT continuity, `valid_payment_hook_state` × 2, `exact_locked_lovelace` × 2, payment credential preserved).
+   - `has_expected_hook_ref(config_datum, own_policy_id, expected_asset_name)` ⇒ Config currently names THIS exact hook policy/name as the protocol's hook (`payment_hook_ref`). Even a compromised coordinator could not slip a different hook UTxO into the tx.
+   - `coordinator_witness_present(tx.withdrawals, config_datum)`.
+   - `has_config_signer(config_datum, tx)` (defense-in-depth: admin must sign even though the coordinator is gating the tx, because the hook is the single most valuable UTxO in the protocol).
+   - `apply_settle_transition(current_datum, next_datum, delta = next.accrued - current.accrued)` ⇒ same five-condition body as the coordinator's check above, but `delta` is **derived from the hook's own datum delta** here.
+
+**How "deferral to the coordinator" actually works.** The local `receiver` and `payment_hook` validators do NOT inspect the redeemer the coordinator was invoked with. They only check that **some** withdrawal at `config_datum.update_coordinator_credential` is present in `tx.withdrawals`. The coordinator validator runs once per tx and is the only place the cross-UTxO arithmetic (Σ receiver drains == hook accrued delta) is enforced. Each local validator enforces the local invariants of its own UTxO; the coordinator enforces the cross-UTxO arithmetic; both run in the same tx. None of the three can be omitted, and none is sufficient on its own.
+
+**Cross-script invariants**
+
+- **`Σ (drained accrued_to_hook on receivers) == Δ accrued_fees on the hook`.** Coordinator: `sum == expected_delta`. Receiver `settle_transition`: drain is the WHOLE `accrued_to_hook` (`prev > 0`, `next == 0`). Hook `apply_settle_transition`: `delta > 0`. None can be circumvented in isolation.
+- **Settle cannot rotate the hook NFT or the `withdraw_address`.** `apply_settle_transition` freezes hook identity fields. The hook spend independently re-asserts `has_expected_hook_ref`.
+- **Settle cannot bleed `balance` from the receiver.** `settle_transition` freezes `balance` and `min_utxo`; only `accrued_to_hook` moves.
+- **A no-op settle is impossible.** `manifest.receivers` non-empty + each entry's `prev.accrued_to_hook > 0`.
 
 ---
 
@@ -714,3 +927,99 @@ flowchart LR
 1. **Config is shared.** One global Config UTxO is read as a reference input by Receivers, Pair states, PaymentHook, and the coordinator.
 2. **Fees live in Config.** `protocol_fee_lovelace` is admin-tunable in Config and is charged per updated pair.
 3. **Pair NFT asset names are hashed.** Pair asset name = `blake2b_256(pair_id)`, where `pair_id` is the UTF-8 bytes of the DIA symbol such as `USDC/USD`.
+4. **Decoupled fee settlement.** Update transactions accrue fees locally on the Receiver (`balance -= fee`, `accrued_to_hook += fee`). Fees are settled to the PaymentHook in a separate admin-initiated Settle transaction. This eliminates contention on the global PaymentHook UTxO during high-frequency updates.
+
+---
+
+## 7. Redeemer index reference
+
+| Script | Idx | Redeemer | Used in |
+|---|:---:|---|---|
+| `config_state` mint | — | `ConfigMintAction::Bootstrap` | §5.1 |
+| `config_state` spend | 0 | `ConfigRedeemer::AdminUpdate` | §5.2, §5.3 |
+| `payment_hook` mint | — | `PaymentHookMintAction::Bootstrap` | §5.2 |
+| `payment_hook` spend | 0 | `PaymentHookRedeemer::ApplySettle` | §5.11 |
+| `payment_hook` spend | 1 | `PaymentHookRedeemer::AdminUpdate` | (admin-only mutation, no full-tx section) |
+| `payment_hook` spend | 2 | `PaymentHookRedeemer::Withdraw { amount }` | §5.10 |
+| `receiver` mint | — | `ReceiverMintAction::Bootstrap` | §5.4 |
+| `receiver` spend | 0 | `ReceiverRedeemer::TopUp` | §5.5 |
+| `receiver` spend | 1 | `ReceiverRedeemer::AccrueFee` | §5.7, §5.8, §5.9 |
+| `receiver` spend | 2 | `ReceiverRedeemer::Settle` | §5.11 |
+| `receiver` spend | 3 | `ReceiverRedeemer::Withdraw { amount, recipient }` | §5.6 |
+| `pair_state` mint | — | `PairMintAction::MintPairs` | §5.7, §5.9 |
+| `pair_state` spend | — | `PairSpendAction::ApplyUpdate` | §5.8, §5.9 |
+| `update_coordinator` withdraw | 0 | `CoordinatorRedeemer::ApplySingle(UpdateWitness)` | §5.7, §5.8 |
+| `update_coordinator` withdraw | 1 | `CoordinatorRedeemer::ApplyBatch(List<UpdateWitness>)` | §5.9 |
+| `update_coordinator` withdraw | 2 | `CoordinatorRedeemer::ApplySettle(SettleManifest)` | §5.11 |
+
+The exhaustive list of validators invoked per transaction, the redeemer each one is invoked with, and every check enforced by every redeemer lives inline in §5. There is no separate per-transaction validation table — §5 is the single source of truth.
+
+---
+
+## 8. Script identities and references
+
+This section is the global counterpart of §5 — instead of grouping
+information by transaction, it groups it by the **identifiers** that
+flow through the system: which policy IDs and script hashes exist,
+where each one is stored on-chain and on-disk, which NFTs witness
+which identity, where the Config datum is treated as the source of
+truth, and which scripts are parameterized by what.
+
+### 8.1 Table E — Where each policy ID / script hash is stored and read
+
+| Identifier | Bound to script | Stored on-chain in | Stored off-chain in | Read by (on-chain) |
+|---|---|---|---|---|
+| `config_policy_id` | `validators/config_state.ak` (mint) | NFT bytes on the Config UTxO | `state.scripts.configPolicyId` (`offchain/cli/state/preview/config-bootstrap.json`) | Hardcoded as a compile-time parameter on `payment_hook`, `receiver`, `pair_state`, `update_coordinator` (`validators/{payment_hook,receiver,pair_state,update_coordinator}.ak` headers); also re-checked at runtime via `find_visible_config_input` |
+| `config_asset_name` | same | NFT bytes on the Config UTxO | `state.scripts.configUnit.assetName` | Same compile-time parameters as above |
+| `payment_hook_policy_id` | `validators/payment_hook.ak` (mint) | NFT bytes on the Hook UTxO; **also recorded inside `ConfigDatum.payment_hook_ref`** | `state.scripts.paymentHookPolicyId` and `state.scripts.paymentHookValidator{Hash,Address}` | Read by `update_coordinator` `valid_settle` (`update_coordinator.ak:175-205`) and re-asserted by hook's `has_expected_hook_ref` (`payment_hook.ak:243-253`) |
+| `payment_hook_asset_name` | same | NFT bytes; `ConfigDatum.payment_hook_ref.asset_name` | `state.scripts.paymentHookUnit` | Same as above |
+| `receiver_policy_id` | `validators/receiver.ak` (mint) | NFT bytes on the Receiver UTxO; embedded in `UpdateWitness.receiver_policy_id` (off-chain witness) | `clientState.receiver.receiverPolicyId` (per-client artifact) | Read by `update_coordinator` `valid_receiver_accrue_fee` (`update_coordinator.ak:107-126`) which finds the receiver via this NFT |
+| `receiver_asset_name` | same | NFT bytes; embedded in `UpdateWitness` | `clientState.receiver.receiverAssetName` | Same as above |
+| `receiver_validator_hash` | `validators/receiver.ak` (spend) | None — derived from script | `clientState.receiver.receiverValidatorHash` | Wired as compile-time parameter into `pair_state.receiver_hash` (`validators/pair_state.ak:23`); enforced at runtime by `pair_state.receiver_input_present` (`pair_state.ak:116, 161-170`) |
+| `pair_policy_id` (per-client) | `validators/pair_state.ak` (mint) | NFT bytes on each pair UTxO; embedded in `UpdateWitness.pair_policy_id` | `pairArtifact.scripts.pairPolicyId` | Read by `update_coordinator.valid_single_update` and `valid_batch_update` (`update_coordinator.ak:319, 367, 389`) |
+| `pair_token_name` (per pair) | same | NFT bytes; equal to `blake2b_256(pair_id)` | `pairArtifact.scripts.pairUnit` | Re-derived on-chain by `oracle_logic.pair_asset_name` (`oracle_logic.ak:50-52`) and asserted at `pair_state.ak:115` and `update_coordinator.ak` C7 / C7' |
+| `coordinator_credential` (stake credential) | `validators/update_coordinator.ak` (withdraw) | `ConfigDatum.update_coordinator_credential` (set at hook bootstrap, frozen unless config admin update edits it) | `state.scripts.coordinatorHash`, `state.scripts.coordinatorRewardAddress` | Read by `update_coordinator.ak:55-56` (must equal `own_credential`); read by every `coordinator_witness_present` site in `pair_state`, `receiver`, and `payment_hook` |
+| `reference_holder` validator hash | `validators/reference_holder.ak` | UTxOs at the reference-holder address that carry the reference scripts | `state.referenceHolderAddress` | Not read by any other validator on-chain; this script's only purpose is to hold reference scripts (its `spend` returns `False`, so the UTxOs are forever consumable only as `reference_input`s) |
+
+### 8.2 Table F — Identity NFTs
+
+| NFT | Derivation (policy id source) | Asset name | Custodian (UTxO it lives in) | Downstream checks that require its presence |
+|---|---|---|---|---|
+| Config NFT | One-shot mint policy parameterized by `bootstrap_ref` and `expected_asset_name` (`validators/config_state.ak:12-14`) | Compile-time parameter `expected_asset_name` (operator-chosen UTF-8 label, e.g. `"DIA_CONFIG"`) | The single Config UTxO at `Script(config_policy_id)` | `payment_hook`, `receiver`, `pair_state`, `update_coordinator` all do `find_visible_config_input` searching for a UTxO carrying this NFT `qty 1` |
+| PaymentHook NFT | One-shot mint policy parameterized by hook `bootstrap_ref`, `expected_asset_name`, `config_policy_id`, `config_asset_name`, `coordinator_credential` (`validators/payment_hook.ak:15-20`) | Compile-time `expected_asset_name` (operator-chosen) | The single PaymentHook UTxO at `Script(payment_hook_policy_id)` | `update_coordinator.valid_settle` searches inputs and outputs for this NFT (`update_coordinator.ak:178-205`); hook's own `ApplySettle`/`Withdraw` paths re-assert the NFT is on the consumed input and the continuation output, `qty 1` (`payment_hook.ak:117-121`) |
+| Receiver NFT | Mint policy parameterized per client by `bootstrap_ref`, `expected_asset_name`, `config_policy_id`, `config_asset_name` (`validators/receiver.ak:15-19`) | Compile-time `expected_asset_name` (operator-chosen per-client label, typically `"DIA_RECEIVER_<ClientID>"`) | The single Receiver UTxO at `Script(receiver_policy_id)` | `update_coordinator.valid_receiver_accrue_fee` finds the receiver by this NFT (`update_coordinator.ak:107-126`); `pair_state` requires a receiver UTxO under `receiver_hash` to be a tx input (`pair_state.ak:116, 161-170`); receiver's own spend re-asserts the NFT on input and continuation `qty 1` (`receiver.ak:76-82`) |
+| Pair NFT | Mint policy parameterized per client by `config_policy_id`, `config_asset_name`, `receiver_hash` (`validators/pair_state.ak:20-23`) | `blake2b_256(pair_id)` where `pair_id` is the UTF-8 bytes of the DIA symbol (e.g. `"USDC/USD"`) — derived by `oracle_logic.pair_asset_name` (`oracle_logic.ak:50-52`) | One Pair UTxO per pair at `Script(pair_policy_id)` | `update_coordinator.valid_single_update` and `valid_batch_update` enforce exactly one pair output and `pair_input_count ∈ {0,1}` per witness; `pair_state.spend` enforces exactly one token of own policy on own input and continuation |
+
+### 8.3 Table G — Config datum as a source of truth
+
+For every field of `ConfigDatum`, where it is set, who can mutate it,
+and which on-chain checks consume it.
+
+| Field | Set at | Mutable by | Consumed by |
+|---|---|---|---|
+| `config_admins: List<VKH>` | Config bootstrap (initial value) | `config_state.spend AdminUpdate` | Every `has_config_signer(config_datum, tx)` site: `config_state.spend`, `payment_hook` mint and `ApplySettle`/`AdminUpdate`/`Withdraw`, `receiver` mint and `Withdraw`, `update_coordinator.ApplySettle` |
+| `authorized_dia_public_keys: List<ByteArray>` | Config bootstrap | `config_state.spend AdminUpdate` | `oracle_logic.signer_is_authorized` inside `has_valid_signature` for every coordinator update |
+| `domain_data: Domain` | Config bootstrap | `config_state.spend AdminUpdate` | `oracle_logic.oracle_intent_hash` (the EIP-712 hash bound into every `PairDatum.intent_hash`) |
+| `protocol_fee_lovelace: Int` | Config bootstrap | `config_state.spend AdminUpdate` | `update_coordinator.valid_receiver_accrue_fee` (single) and `valid_batch_receiver_accrue_fee` (batch × N) |
+| `payment_hook_ref: Option<PaymentHookRef>` | `None` at Config bootstrap; set to `Some(...)` at PaymentHook bootstrap | `config_state.spend AdminUpdate` (subject to `valid_config_state` consistency) | `update_coordinator.valid_settle` (must be `Some`); `payment_hook.has_expected_hook_ref` (must equal own policy/name); `valid_config_state.hook_and_coordinator_are_consistent` |
+| `update_coordinator_credential: Option<Credential>` | `None` at Config bootstrap; set to `Some(...)` at PaymentHook bootstrap | `config_state.spend AdminUpdate` | `update_coordinator` itself (own credential must match); every `coordinator_witness_present` site (`pair_state`, `receiver.AccrueFee`/`Settle`, `payment_hook.ApplySettle`) |
+| `max_bootstrap_drift_seconds: Int` | Config bootstrap | `config_state.spend AdminUpdate` | `update_coordinator.intent_freshness_satisfied` for the bootstrap branch of single/batch updates |
+| `min_utxo_lovelace: Int` | Config bootstrap | `config_state.spend AdminUpdate` (but `admin_update_transition` requires `previous == next` — this field is effectively immutable post-bootstrap) | `config_state.spend` (Config UTxO ADA must equal this value on input AND on output) |
+
+### 8.4 Table H — Parameterization vs runtime references
+
+For each script that takes compile-time parameters (`applyParamsToScript`),
+list the parameters and whether the same value is **also** read at
+runtime through Config / NFT presence (defense in depth) or only used
+at compile time.
+
+| Script | Compile-time parameters | Re-read at runtime? |
+|---|---|---|
+| `config_state` | `bootstrap_ref: OutputReference`, `expected_asset_name: AssetName` (`validators/config_state.ak:12-14`) | `bootstrap_ref` is consumed once at mint time and never again; `expected_asset_name` is checked on every spend (continuation must carry `(own_policy_id, expected_asset_name) qty 1`). |
+| `payment_hook` | `bootstrap_ref`, `expected_asset_name`, `config_policy_id`, `config_asset_name`, `coordinator_credential: Credential` (`validators/payment_hook.ak:15-20`) | `config_policy_id` + `config_asset_name` are used to find the Config NFT at runtime (`payment_hook.ak:36-46, 211-239`); `coordinator_credential` is wired into the initial `ConfigDatum` at hook bootstrap (`payment_hook.ak:75-76`) and from then on the coordinator credential is re-derived from `ConfigDatum.update_coordinator_credential` rather than from the parameter. The compile-time parameter is what allowed bootstrap to assert the new Config datum names this exact credential. |
+| `receiver` | `bootstrap_ref`, `expected_asset_name`, `config_policy_id`, `config_asset_name` (`validators/receiver.ak:15-19`) | `config_policy_id` + `config_asset_name` are used by `find_visible_config_input` on every receiver mint and on `AccrueFee`/`Settle`/`Withdraw` spends. |
+| `pair_state` | `config_policy_id`, `config_asset_name`, `receiver_hash: ScriptHash` (`validators/pair_state.ak:20-23`) | `config_policy_id`/`asset_name` are searched on every mint and spend; `receiver_hash` is asserted by `receiver_input_present` on every pair spend, AND by every pair mint via the inner `coordinator_witness_present + receiver_input_present` requirement (the pair mint requires the receiver UTxO to be in the tx). |
+| `update_coordinator` | `config_policy_id`, `config_asset_name` (`validators/update_coordinator.ak:30-33`) | Used to locate Config as a reference input on every coordinator withdraw (`update_coordinator.ak:39-48`). All other identifiers (hook NFT, receiver NFT, pair policy) come from runtime witnesses, not parameters. |
+| `reference_holder` | none (`validators/reference_holder.ak:3-6`) | The script's only purpose is to host reference UTxOs; its `spend` returns `False`, so the UTxOs can never be consumed and instead are forever available as `reference_input`s. |
+
+---

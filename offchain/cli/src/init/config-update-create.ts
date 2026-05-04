@@ -1,7 +1,10 @@
 import { input as promptInput } from "@inquirer/prompts";
 import path from "node:path";
 
-import { normalizeEthereumAddressHex, normalizeHex } from "../core/dia-intent.js";
+import {
+  normalizeEthereumAddressHex,
+  parseCommaSeparatedHexList,
+} from "../core/dia-intent.js";
 import { readConfigState } from "../core/state.js";
 import { toBigInt } from "../core/chain-helpers.js";
 
@@ -30,14 +33,6 @@ async function promptForText(args: {
       (value.trim().length > 0 || "Value is required."),
     transformer: (value) => value.trim(),
   });
-}
-
-function parseCommaSeparatedHexList(raw: string, label: string): string[] {
-  return raw
-    .split(",")
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-    .map((value) => normalizeHex(value, label));
 }
 
 export async function createConfigUpdateDraft(args: {

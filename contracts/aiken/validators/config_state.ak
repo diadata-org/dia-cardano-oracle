@@ -73,6 +73,7 @@ validator config_state(
         own_policy_id,
         expected_asset_name,
       ) == 1,
+      config_output.address.payment_credential == Script(own_policy_id),
       config_logic.valid_config_state(current_datum),
       config_logic.valid_config_state(next_datum),
       config_logic.has_config_signer(current_datum, self),
@@ -105,6 +106,7 @@ fn has_valid_config_bootstrap_output(
         InlineDatum(output_datum) -> {
           expect config_datum: config_logic.ConfigDatum = output_datum
           and {
+            config_output.address.payment_credential == Script(config_policy_id),
             config_logic.valid_config_state(config_datum),
             assets.lovelace_of(config_output.value) == config_datum.min_utxo_lovelace,
           }

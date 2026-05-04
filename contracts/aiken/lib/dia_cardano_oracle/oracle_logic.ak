@@ -1,10 +1,11 @@
 use aiken/builtin
 use aiken/collection/list
 use aiken/crypto.{blake2b_256, keccak_256, verify_ecdsa_signature}
+use aiken/interval.{Finite, IntervalBound}
 use aiken/primitive/bytearray
 use aiken/primitive/string
 use cardano/assets
-use cardano/transaction.{Output}
+use cardano/transaction.{Output, Transaction}
 use dia_cardano_oracle/config_logic
 
 pub type OracleIntent {
@@ -92,6 +93,41 @@ pub fn is_fresh_update(previous: PairDatum, intent: OracleIntent) -> Bool {
   and {
     intent.timestamp > previous.timestamp,
     intent.nonce > previous.nonce,
+  }
+}
+
+/// Returns True if the intent's `expiry` (unix seconds, signed by DIA)
+/// is at or after the transaction's validity-range upper bound (posix
+/// milliseconds). The off-chain code MUST set a finite upper bound on
+/// every tx that consumes a signed intent — an open-ended upper bound
+/// would leave the intent replayable forever and is rejected here.
+pub fn intent_expiry_satisfied(
+  intent: OracleIntent,
+  tx: Transaction,
+) -> Bool {
+  let IntervalBound { bound_type, .. } = tx.validity_range.upper_bound
+  when bound_type is {
+    Finite(upper_millis) -> intent.expiry * 1000 >= upper_millis
+    _ -> False
+  }
+}
+
+/// Returns True if the intent's `timestamp` (unix seconds) is no older
+/// than `max_drift_seconds` before the transaction's validity-range
+/// lower bound (posix milliseconds). Used to enforce freshness on
+/// bootstrap, where there is no previous Pair datum to provide a
+/// freshness anchor. Rejects open-ended lower bounds for the same
+/// reason as `intent_expiry_satisfied`.
+pub fn intent_freshness_satisfied(
+  intent: OracleIntent,
+  tx: Transaction,
+  max_drift_seconds: Int,
+) -> Bool {
+  let IntervalBound { bound_type, .. } = tx.validity_range.lower_bound
+  when bound_type is {
+    Finite(lower_millis) ->
+      intent.timestamp * 1000 >= lower_millis - max_drift_seconds * 1000
+    _ -> False
   }
 }
 
@@ -272,6 +308,7 @@ fn sample_config() -> config_logic.ConfigDatum {
     protocol_fee_lovelace: config_logic.sample_config().protocol_fee_lovelace,
     payment_hook_ref: None,
     update_coordinator_credential: None,
+    max_bootstrap_drift_seconds: config_logic.sample_config().max_bootstrap_drift_seconds,
     min_utxo_lovelace: config_logic.sample_config().min_utxo_lovelace,
   }
 }
@@ -443,4 +480,94 @@ test wrong_pair_nft_is_rejected() {
       pair_token_name: #"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     },
   )
+}
+
+fn sample_tx_with_validity_range(
+  lower_millis: Int,
+  upper_millis: Int,
+) -> Transaction {
+  Transaction {
+    ..transaction.placeholder,
+    validity_range: interval.between(lower_millis, upper_millis),
+  }
+}
+
+test intent_expiry_satisfied_when_upper_bound_within_expiry() {
+  // intent.expiry = 1760964122 (unix seconds)
+  // upper_bound = expiry_millis - 1 ms => still inside the expiry window
+  let intent = sample_intent()
+  intent_expiry_satisfied(
+    intent,
+    sample_tx_with_validity_range(0, intent.expiry * 1000 - 1),
+  )
+}
+
+test intent_expiry_satisfied_when_upper_bound_equals_expiry() {
+  let intent = sample_intent()
+  intent_expiry_satisfied(
+    intent,
+    sample_tx_with_validity_range(0, intent.expiry * 1000),
+  )
+}
+
+test intent_expiry_rejected_when_upper_bound_after_expiry() {
+  // upper_bound = expiry + 1 ms => intent has lapsed by the latest moment
+  // this tx could be applied on-chain.
+  let intent = sample_intent()
+  !intent_expiry_satisfied(
+    intent,
+    sample_tx_with_validity_range(0, intent.expiry * 1000 + 1),
+  )
+}
+
+test intent_expiry_rejected_when_upper_bound_is_open() {
+  // open-ended upper bound (interval.everything) must be rejected:
+  // it would allow replaying a signed intent forever.
+  let intent = sample_intent()
+  !intent_expiry_satisfied(intent, transaction.placeholder)
+}
+
+test intent_freshness_satisfied_when_timestamp_within_drift() {
+  // intent.timestamp = 1760960522 (unix seconds)
+  // lower_bound exactly at timestamp_millis => freshness ok with any
+  // non-negative drift.
+  let intent = sample_intent()
+  intent_freshness_satisfied(
+    intent,
+    sample_tx_with_validity_range(intent.timestamp * 1000, intent.expiry * 1000),
+    0,
+  )
+}
+
+test intent_freshness_satisfied_when_timestamp_inside_drift_window() {
+  // lower_bound is timestamp + 60 s; with drift 120 s, still fresh.
+  let intent = sample_intent()
+  intent_freshness_satisfied(
+    intent,
+    sample_tx_with_validity_range(
+      intent.timestamp * 1000 + 60_000,
+      intent.expiry * 1000,
+    ),
+    120,
+  )
+}
+
+test intent_freshness_rejected_when_outside_drift_window() {
+  // lower_bound is timestamp + 1 day; with drift 60 s, intent is stale.
+  let intent = sample_intent()
+  !intent_freshness_satisfied(
+    intent,
+    sample_tx_with_validity_range(
+      intent.timestamp * 1000 + 86_400_000,
+      intent.timestamp * 1000 + 86_400_000 + 1_000,
+    ),
+    60,
+  )
+}
+
+test intent_freshness_rejected_when_lower_bound_is_open() {
+  // open-ended lower bound (interval.everything) must be rejected:
+  // we cannot determine on-chain how stale the intent is.
+  let intent = sample_intent()
+  !intent_freshness_satisfied(intent, transaction.placeholder, 86_400)
 }

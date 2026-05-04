@@ -106,6 +106,7 @@ export async function parameterizeConfigScripts(args: {
     paymentHookRef: null,
     updateCoordinatorCredential: null,
     minUtxoLovelace: minUtxoLovelace.toString(),
+    maxBootstrapDriftSeconds: previousState?.configState.maxBootstrapDriftSeconds ?? "300",
   };
 
   return {

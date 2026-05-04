@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DiaOracleIntentInput } from "./dia-intent.js";
@@ -29,6 +29,7 @@ export type ConfigState = {
     verifyingContract: string;
   };
   protocolFeeLovelace: string;
+  maxBootstrapDriftSeconds: string;  // Intent freshness window for bootstrap validation
   paymentHookRef: PaymentHookRefState | null;
   updateCoordinatorCredential: CoordinatorCredentialState | null;
   minUtxoLovelace: string;
@@ -66,6 +67,7 @@ export type ResolvedDeploymentScripts = ProtocolDeploymentScripts &
 
 export type ReceiverState = {
   balanceLovelace: string;
+  accruedToHookLovelace: string;  // Pending protocol fees to be settled to the hook
   minUtxoLovelace: string;
 };
 
@@ -287,6 +289,14 @@ export function emptyProtocolCompiledScripts(): ProtocolCompiledScripts {
   };
 }
 
+export function emptyReferenceScriptUtxo(): ReferenceScriptUtxo {
+  return {
+    txHash: "",
+    outputIndex: 0,
+    scriptHash: "",
+  };
+}
+
 export function emptyClientCompiledScripts(): ClientCompiledScripts {
   return {
     receiverMintPolicy: "",
@@ -312,4 +322,18 @@ export async function readPairState(
 ): Promise<PairStateArtifact> {
   const raw = await readFile(path.resolve(statePath), "utf8");
   return JSON.parse(raw) as PairStateArtifact;
+}
+
+// Same as readPairState, but returns null if the file does not exist
+// instead of throwing. Used by the update tx builders to handle the
+// "first update for this pair" case.
+export async function readOptionalPairState(
+  statePath: string,
+): Promise<PairStateArtifact | null> {
+  try {
+    await access(statePath);
+  } catch {
+    return null;
+  }
+  return readPairState(statePath);
 }

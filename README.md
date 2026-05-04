@@ -52,9 +52,18 @@ Step 1 can be skipped if you have not modified the contracts; the committed
 
 Use [`offchain/cli/README.md`](offchain/cli/README.md) for the step-by-step Preview runbook:
 
-- protocol bootstrap
+- protocol bootstrap (Config, PaymentHook, coordinator stake registration)
 - global and client reference-script publication
-- client onboarding
+- client onboarding (per-client Receiver and Pair scripts)
 - pair create/update through signed oracle intents
 - single and batch updates, including first-time pair creation
+- decoupled fee settlement: every update accrues the protocol fee on the
+  Receiver datum; an admin-initiated Settle transaction periodically
+  drains the accrued fees from one or more Receivers into the global
+  PaymentHook in a single batched transaction
 - admin and withdrawal transactions
+
+The full transaction model, including Settle, is documented in the
+[architecture document](docs/architecture/cardano-oracle-architecture.md) — see
+§5 (per-transaction details) and §7.4 (per-transaction validation
+tables).

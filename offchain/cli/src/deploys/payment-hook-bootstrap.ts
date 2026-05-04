@@ -1,11 +1,6 @@
 import path from "node:path";
-import {
-  Constr,
-  getAddressDetails,
-  type OutRef,
-  type UTxO,
-} from "@lucid-evolution/lucid";
-import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
+import { Constr, type OutRef } from "@lucid-evolution/lucid";
+import { Data } from "@lucid-evolution/plutus";
 
 import {
   makeConfigStateValidator,
@@ -28,8 +23,14 @@ import {
 } from "../core/state.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
+  buildConfigDatumCbor,
+  buildPaymentHookDatumCbor,
+  findSingleUtxoAtUnit,
   findUtxoByOutRef,
+  selectBootstrapUtxo,
   selectFundingUtxo,
+  splitUnit,
+  toBigInt,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
 
@@ -324,135 +325,3 @@ function resolvePaymentHookBootstrapInput(
   };
 }
 
-function buildConfigDatumCbor(state: ConfigStateArtifact["configState"]): string {
-  return Data.to(
-    new Constr<PlutusData>(0, [
-      state.validConfigSigners.map((value) => normalizeHex(value, "validConfigSigners[]")),
-      state.authorizedDiaPublicKeys.map((value) =>
-        normalizeHex(value, "authorizedDiaPublicKeys[]"),
-      ),
-      new Constr<PlutusData>(0, [
-        Buffer.from(state.domain.name, "utf8").toString("hex"),
-        Buffer.from(state.domain.version, "utf8").toString("hex"),
-        BigInt(state.domain.sourceChainId),
-        normalizeHex(state.domain.verifyingContract, "domain.verifyingContract"),
-      ]),
-      BigInt(state.protocolFeeLovelace),
-      state.paymentHookRef
-        ? new Constr<PlutusData>(0, [
-            new Constr<PlutusData>(0, [
-              state.paymentHookRef.policyId,
-              state.paymentHookRef.assetName,
-            ]),
-          ])
-        : new Constr<PlutusData>(1, []),
-      state.updateCoordinatorCredential
-        ? new Constr<PlutusData>(0, [
-            state.updateCoordinatorCredential.type === "Script"
-              ? new Constr<PlutusData>(1, [state.updateCoordinatorCredential.hash])
-              : new Constr<PlutusData>(0, [state.updateCoordinatorCredential.hash]),
-          ])
-        : new Constr<PlutusData>(1, []),
-      BigInt(state.minUtxoLovelace),
-    ]),
-  );
-}
-
-function buildPaymentHookDatumCbor(
-  state: NonNullable<ConfigStateArtifact["paymentHookState"]>,
-): string {
-  return Data.to(
-    new Constr<PlutusData>(0, [
-      addressToPlutusData(state.withdrawAddress),
-      BigInt(state.accruedFeesLovelace),
-      BigInt(state.lifetimeCollectedLovelace),
-      BigInt(state.lifetimeWithdrawnLovelace),
-      BigInt(state.minUtxoLovelace),
-    ]),
-  );
-}
-
-function addressToPlutusData(address: string): Constr<PlutusData> {
-  const details = getAddressDetails(address);
-  if (!details.paymentCredential) {
-    throw new Error("withdrawAddress must contain a payment credential.");
-  }
-
-  const paymentCredential =
-    details.paymentCredential.type === "Key"
-      ? new Constr<PlutusData>(0, [details.paymentCredential.hash])
-      : new Constr<PlutusData>(1, [details.paymentCredential.hash]);
-
-  const stakeCredential = details.stakeCredential
-    ? new Constr<PlutusData>(0, [
-        new Constr<PlutusData>(0, [
-          details.stakeCredential.type === "Key"
-            ? new Constr<PlutusData>(0, [details.stakeCredential.hash])
-            : new Constr<PlutusData>(1, [details.stakeCredential.hash]),
-        ]),
-      ])
-    : new Constr<PlutusData>(1, []);
-
-  return new Constr<PlutusData>(0, [paymentCredential, stakeCredential]);
-}
-
-function selectBootstrapUtxo(
-  utxos: UTxO[],
-  requiredLovelace: bigint,
-  excludedOutRefs: Array<{
-    txHash: string;
-    outputIndex: number;
-  }>,
-): UTxO | null {
-  return (
-    utxos
-      .filter(
-        (utxo) =>
-          !excludedOutRefs.some(
-            (outRef) =>
-              utxo.txHash === outRef.txHash && utxo.outputIndex === outRef.outputIndex,
-          ),
-      )
-      .filter((utxo) => Object.keys(utxo.assets).length === 1)
-      .filter((utxo) => (utxo.assets.lovelace ?? 0n) >= requiredLovelace)
-      .sort((left, right) => {
-        const leftValue = left.assets.lovelace ?? 0n;
-        const rightValue = right.assets.lovelace ?? 0n;
-        if (leftValue === rightValue) return 0;
-        return leftValue > rightValue ? -1 : 1;
-      })[0] ?? null
-  );
-}
-
-async function findSingleUtxoAtUnit(
-  lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>,
-  address: string,
-  unit: string,
-  label: string,
-): Promise<UTxO> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const utxos = await lucid.utxosAtWithUnit(address, unit);
-    if (utxos.length === 1) {
-      return utxos[0];
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-  }
-
-  throw new Error(`Unable to observe a single ${label} UTxO at ${address} with unit ${unit}.`);
-}
-
-function splitUnit(unit: string): { policyId: string; assetName: string } {
-  const normalizedUnit = normalizeHex(unit, "unit");
-  return {
-    policyId: normalizedUnit.slice(0, 56),
-    assetName: normalizedUnit.slice(56),
-  };
-}
-
-function toBigInt(value: string | number, label: string): bigint {
-  const normalized = typeof value === "number" ? value.toString() : value.trim();
-  if (!/^-?\d+$/.test(normalized)) {
-    throw new Error(`Expected ${label} to be an integer.`);
-  }
-  return BigInt(normalized);
-}

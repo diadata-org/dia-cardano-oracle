@@ -39,6 +39,7 @@ type ConfigUpdateInput = {
     verifyingContract?: string;
   };
   protocolFeeLovelace?: string;
+  maxBootstrapDriftSeconds?: string;
   paymentHookRef?: {
     policyId: string;
     assetName: string;
@@ -248,6 +249,10 @@ function resolveNextConfigState(
       input.protocolFeeLovelace === undefined
         ? state.configState.protocolFeeLovelace
         : toBigInt(input.protocolFeeLovelace, "protocolFeeLovelace").toString(),
+    maxBootstrapDriftSeconds:
+      input.maxBootstrapDriftSeconds === undefined
+        ? state.configState.maxBootstrapDriftSeconds
+        : toBigInt(input.maxBootstrapDriftSeconds, "maxBootstrapDriftSeconds").toString(),
     paymentHookRef: nextPaymentHookRef,
     updateCoordinatorCredential: nextCoordinatorCredential,
     minUtxoLovelace: state.configState.minUtxoLovelace,

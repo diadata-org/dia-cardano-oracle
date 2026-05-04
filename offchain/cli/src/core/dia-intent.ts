@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { Constr, type Data as PlutusData } from "@lucid-evolution/lucid";
 import { Data } from "@lucid-evolution/plutus";
 import { blake2b } from "@noble/hashes/blake2b";
@@ -10,6 +12,24 @@ import {
   solidityPacked,
   toUtf8Bytes,
 } from "ethers";
+
+import {
+  normalizeEthereumAddressHex,
+  normalizeHex,
+  parseCommaSeparatedHexList,
+  toBigInt,
+  utf8ToHex,
+} from "./primitives.js";
+
+// Re-export the pure helpers so callers that already import them from
+// dia-intent (and there are many) keep working. The canonical
+// implementations live in core/primitives.ts; these are not duplicates.
+export {
+  normalizeEthereumAddressHex,
+  normalizeHex,
+  parseCommaSeparatedHexList,
+  utf8ToHex,
+} from "./primitives.js";
 
 const abiCoder = AbiCoder.defaultAbiCoder();
 const DOMAIN_TYPE =
@@ -342,34 +362,22 @@ export function diaIntentToState(intent: DiaOracleIntent): DiaOracleIntentInput 
   };
 }
 
-export function normalizeHex(value: string, label: string): string {
-  const trimmed = value.trim().toLowerCase();
-  const normalized = trimmed.startsWith("0x") ? trimmed.slice(2) : trimmed;
-
-  if (!/^[0-9a-f]*$/.test(normalized) || normalized.length % 2 !== 0) {
-    throw new Error(`Expected ${label} to be an even-length hex string.`);
-  }
-
-  return normalized;
-}
-
-export function normalizeEthereumAddressHex(value: string, label: string): string {
-  const normalized = normalizeHex(value, label);
-
-  if (normalized.length !== 40) {
-    throw new Error(`Expected ${label} to be a 20-byte Ethereum address.`);
-  }
-
-  return normalized;
-}
-
 export function deriveCompressedPublicKeyFromPrivateKey(value: string): string {
   const signingKey = new SigningKey(with0x(normalizePrivateKey(value)));
   return strip0x(SigningKey.computePublicKey(signingKey.publicKey, true));
 }
 
-export function utf8ToHex(value: string): string {
-  return Buffer.from(value, "utf8").toString("hex");
+// Read a signed intent JSON file. The on-disk shape is either the
+// intent object itself or `{ intent: ... }` (the format produced by
+// `signPreviewOracleIntent`). Used by the single and batch update tx
+// builders.
+export async function readSignedIntentInput(
+  inputPath: string,
+): Promise<DiaOracleIntentInput> {
+  const raw = JSON.parse(await readFile(inputPath, "utf8")) as
+    | DiaOracleIntentInput
+    | { intent: DiaOracleIntentInput };
+  return "intent" in raw ? raw.intent : raw;
 }
 
 function normalizeSignatureHex(value: string, label: string): string {
@@ -390,16 +398,6 @@ function normalizePrivateKey(value: string): string {
   }
 
   return normalized;
-}
-
-function toBigInt(value: string | number, label: string): bigint {
-  const normalized = typeof value === "number" ? value.toString() : value.trim();
-
-  if (!/^-?\d+$/.test(normalized)) {
-    throw new Error(`Expected ${label} to be an integer.`);
-  }
-
-  return BigInt(normalized);
 }
 
 function strip0x(value: string): string {

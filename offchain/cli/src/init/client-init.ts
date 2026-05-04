@@ -3,20 +3,13 @@ import { toBigInt } from "../core/chain-helpers.js";
 import { normalizeHex, utf8ToHex } from "../core/dia-intent.js";
 import {
   emptyClientCompiledScripts,
+  emptyReferenceScriptUtxo,
   readConfigState,
   type ClientStateArtifact,
   type ReceiverParameterizeDefaults,
 } from "../core/state.js";
 
 const DEFAULT_MIN_UTXO_LOVELACE = "3000000";
-
-function emptyReferenceScriptUtxo() {
-  return {
-    txHash: "",
-    outputIndex: 0,
-    scriptHash: "",
-  };
-}
 
 function normalizedClientIdSuffix(clientId: string): string {
   return clientId
