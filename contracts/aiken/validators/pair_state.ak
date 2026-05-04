@@ -1,12 +1,13 @@
 use aiken/collection/dict
 use aiken/collection/list
 use aiken/crypto.{ScriptHash}
-use cardano/address.{Credential, Script}
+use cardano/address.{Script}
 use cardano/assets.{AssetName, PolicyId}
 use cardano/transaction.{
   InlineDatum, Input, Output, OutputReference, Transaction,
 }
 use dia_cardano_oracle/config_logic
+use dia_cardano_oracle/coordinator_logic.{pair_intent_satisfied}
 use dia_cardano_oracle/oracle_logic
 
 pub type PairMintAction {
@@ -53,11 +54,15 @@ validator pair_state(
           and {
             quantity == 1,
             has_pair_output(self.outputs, policy_id, asset_name),
+            // Binds the coordinator redeemer to this exact Pair NFT AND
+            // re-asserts intent expiry locally (defence-in-depth: every
+            // path that consumes a signed intent enforces expiry, not
+            // only the coordinator's own redeemer body).
+            pair_intent_satisfied(self, config_datum, policy_id, asset_name),
           }
         },
       ),
       config_logic.valid_config_state(config_datum),
-      coordinator_witness_present(self.withdrawals, config_datum),
     }
   }
 
@@ -117,7 +122,14 @@ validator pair_state(
       config_logic.valid_config_state(config_datum),
       oracle_logic.exact_locked_lovelace(own_input.output, current_datum),
       oracle_logic.exact_locked_lovelace(pair_output, next_datum),
-      coordinator_witness_present(self.withdrawals, config_datum),
+      // Same defence-in-depth as the mint branch: bind to this Pair NFT
+      // AND enforce intent expiry locally on the spend path.
+      pair_intent_satisfied(
+        self,
+        config_datum,
+        own_policy_id,
+        pair_token_name,
+      ),
     }
   }
 
@@ -168,19 +180,4 @@ fn receiver_input_present(
       input.output.address.payment_credential == Script(receiver_hash)
     },
   )
-}
-
-fn coordinator_witness_present(
-  withdrawals: Pairs<Credential, Int>,
-  config_datum: config_logic.ConfigDatum,
-) -> Bool {
-  when config_datum.update_coordinator_credential is {
-    Some(expected_credential) ->
-      list.any(
-        withdrawals,
-        fn(withdrawal) { withdrawal.1st == expected_credential },
-      )
-
-    None -> False
-  }
 }

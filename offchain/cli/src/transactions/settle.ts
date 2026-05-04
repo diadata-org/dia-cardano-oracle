@@ -34,6 +34,11 @@ import {
   waitForUnitUtxoReplacement,
   writeJsonFile,
 } from "../core/chain-helpers.js";
+import {
+  assertPaymentKeyHashIsConfigSigner,
+  assertSettleManifestMatchesSingleClientReceiver,
+  assertSettleReceiverAccruedPositive,
+} from "../preflight/index.js";
 
 type SettleResult = {
   wallet: {
@@ -80,9 +85,14 @@ export async function settleAccruedFees(args: {
   const walletAddress = await lucid.wallet().address();
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
 
-  if (!protocol.configState.validConfigSigners.includes(walletDefaults.paymentKeyHash)) {
-    throw new Error("Settle requires a config signer. The configured wallet is not authorized.");
-  }
+  assertPaymentKeyHashIsConfigSigner(
+    walletDefaults.paymentKeyHash,
+    protocol.configState.validConfigSigners,
+    {
+      unauthorizedMessage:
+        "Settle requires a config signer. The configured wallet is not authorized.",
+    },
+  );
 
   const configAssetName = splitUnit(protocol.scripts.configUnit).assetName;
 
@@ -118,13 +128,26 @@ export async function settleAccruedFees(args: {
   );
 
   const accruedLovelace = BigInt(currentReceiverState.accruedToHookLovelace);
-  if (accruedLovelace <= 0n) {
-    throw new Error(
-      `Receiver ${clientState.receiver.receiverUnit} has no accrued fees to settle (accruedToHookLovelace=${currentReceiverState.accruedToHookLovelace}).`,
-    );
-  }
+  assertSettleReceiverAccruedPositive(
+    accruedLovelace,
+    currentReceiverState.accruedToHookLovelace,
+    clientState.receiver.receiverUnit,
+  );
 
   reportProgress(`Settling ${accruedLovelace} lovelace from receiver to payment hook`);
+
+  assertSettleManifestMatchesSingleClientReceiver(
+    [
+      {
+        receiverPolicyId: clientState.receiver.receiverPolicyId,
+        receiverAssetName: clientState.receiver.receiverAssetName,
+      },
+    ],
+    {
+      receiverPolicyId: clientState.receiver.receiverPolicyId,
+      receiverAssetName: clientState.receiver.receiverAssetName,
+    },
+  );
 
   // --- Compute next states ---
   const nextReceiverState = {

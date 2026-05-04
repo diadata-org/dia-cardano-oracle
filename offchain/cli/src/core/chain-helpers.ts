@@ -1,3 +1,23 @@
+// Canonical home for Cardano-side runtime helpers used by tx builders,
+// deploys, init flows, and tests. Two rules apply here and only here:
+//
+// 1. Datum encoders (`build*DatumCbor`) and decoders mirror the field
+//    order declared in `contracts/aiken/lib/dia_cardano_oracle/*.ak`. A
+//    drift in field order or arity here silently corrupts every datum
+//    we put on chain, so any change MUST be made in lockstep with the
+//    on-chain types and asserted by the round-trip tests in
+//    `__tests__/run-tests.ts`.
+// 2. Every shared helper (datum codec, asset/UTxO selector, address
+//    encoder, intent helper) lives here. `transactions/`, `deploys/`,
+//    and `init/` MUST NOT redeclare these locally. Local copies were
+//    the root cause of the receiver-datum and config-datum encoding
+//    bugs found during the deduplication audit; that audit is the
+//    archived `docs/_archived/offchain-helpers-catalog.md`.
+//
+// File-local helpers in other modules are allowed only when they are
+// genuinely scoped to that module (e.g. a tx builder's per-call
+// progress prefix). Anything reused in two places belongs here.
+
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 

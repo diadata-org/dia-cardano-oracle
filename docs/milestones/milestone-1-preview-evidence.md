@@ -4,7 +4,7 @@ Source of truth: [`final-cardano-milestones.md`](./final-cardano-milestones.md)
 
 Scope: Milestone 1 validation on Cardano Preview. Cardano mainnet deployment and final mainnet evidence are not included in this Preview evidence file.
 
-Verification date: 2026-04-27
+Verification date: 2026-04-27 (on-chain steps); **local tool verification refreshed 2026-05-04** (counts below).
 
 Network: Cardano Preview
 
@@ -25,22 +25,33 @@ Network: Cardano Preview
 | --- | --- |
 | Aiken oracle smart contract ported to Cardano UTxO model | Complete |
 | Compiled contract | Complete: `contracts/aiken/plutus.json` |
-| Unit/integration test coverage | Complete for current repository scope: `aiken check` passes 24/24 tests; CLI tests pass |
+| Unit/integration test coverage | **Repository:** `aiken check` — 78/78 tests; `offchain/cli` `npm run test` + `npm run typecheck` green (2026-05-04). **Preview tx table below** still reflects the **2026-04-27** chain walk (pre–current bytecode); replace after the next Preview re-bootstrap (see note at top of this file). |
 | Deployment scripts | Complete: `offchain/cli` runbook and CLI commands |
 | Documentation for Cardano developers | Complete in repository: root README, Aiken README, CLI runbook, architecture document |
 | Verified Cardano mainnet deployment and execution hashes | Pending: mainnet not executed yet |
 
-## Current Verification
+## Current verification (tooling)
 
-- `aiken check`: 24/24 tests passed.
-- `npm run test`: passed in `offchain/cli`.
+These counts are for **current** `main` branch sources. They do not re-verify the historical Preview transaction hashes in the tables further down until a new evidence pack is captured.
+
+- `aiken check`: **78/78** tests passed (`contracts/aiken`).
+- `npm run test`: passed in `offchain/cli` (`CLI tests passed`).
 - `npm run typecheck`: passed in `offchain/cli`.
 - `npm run build`: passed in `offchain/cli`.
-- Preview CLI flow regenerated end-to-end on 2026-04-27 using the clarified init + parameterize + bootstrap + reference-script + update flow.
+- Preview CLI flow: last **end-to-end** hash capture **2026-04-27** (see [`./evidence/m1-preview-20260427/`](./evidence/m1-preview-20260427/)). **Pending:** new folder `m1-preview-<DATE>/` after re-bootstrap on current contracts + runbook including **Settle** (`preview:settle`).
 
 ## Reproducible Local Test Evidence
 
 The local verification logs are committed under [`docs/milestones/evidence/m1-preview-20260427/`](./evidence/m1-preview-20260427/). Each command was run on 2026-04-27 and exited with status `0`.
+
+| Area | Working directory | Command | Captured output |
+| --- | --- | --- | --- |
+| Aiken contracts | `contracts/aiken` | `aiken check` | *(Re-run and save to new evidence folder when refreshing)* |
+| CLI tests | `offchain/cli` | `npm run test` | *(ibid.)* |
+| CLI typecheck | `offchain/cli` | `npm run typecheck` | *(ibid.)* |
+| CLI build | `offchain/cli` | `npm run build` | *(ibid.)* |
+
+### Historical pack (2026-04-27)
 
 | Area | Working directory | Command | Captured output |
 | --- | --- | --- | --- |
@@ -49,9 +60,9 @@ The local verification logs are committed under [`docs/milestones/evidence/m1-pr
 | CLI typecheck | `offchain/cli` | `npm run typecheck` | [`npm-typecheck.log`](./evidence/m1-preview-20260427/npm-typecheck.log) |
 | CLI build | `offchain/cli` | `npm run build` | [`npm-build.log`](./evidence/m1-preview-20260427/npm-build.log) |
 
-Summary from the captured logs:
+Summary from the **2026-04-27** captured logs:
 
-- `aiken check` collected 24 Aiken unit tests and passed 24/24.
+- `aiken check` collected **24** Aiken unit tests and passed 24/24 (older contract revision).
 - `npm run test` printed `CLI tests passed`.
 - `npm run typecheck` completed TypeScript checking with exit code `0`.
 - `npm run build` completed TypeScript compilation with exit code `0`.
@@ -65,8 +76,8 @@ Summary from the captured logs:
 | Reject stale or replayed updates | `stale_timestamp_is_rejected`, `stale_nonce_is_rejected` |
 | Reject invalid signer or pair mismatch | `unauthorized_dia_signer_is_rejected`, `wrong_pair_symbol_is_rejected`, `wrong_pair_nft_is_rejected` |
 | Reject invalid price state | `negative_price_pair_state_is_rejected`, `negative_price_intent_signature_is_rejected` |
-| Protocol fee accounting | `fee_charge_transition_increments_balances`, `fee_charge_transition_rejects_wrong_fee_amount`, update, batch update, and PaymentHook withdraw CLI commands |
-| Receiver balance accounting | `pay_fee_transition_decrements_balance`, `pay_fee_transition_rejects_wrong_fee_amount`, `pay_fee_transition_rejects_balance_underflow`, update, batch update, Receiver top-up, and Receiver withdraw CLI commands |
+| Protocol fee accounting | `apply_settle_transition_*` in `payment_hook_logic.ak`; `accrue_fee_transition_*` / `settle_transition_*` in `receiver_logic.ak`; coordinator `ApplySettle`; CLI `preview:update`, `preview:update:batch`, **`preview:settle`**, `preview:payment-hook:withdraw` |
+| Receiver balance accounting | `accrue_fee_transition_*`, `settle_transition_*`, `withdraw_transition_*`, `top_up_transition_*` in `receiver_logic.ak`; CLI receiver top-up / withdraw / update / batch / settle |
 | PaymentHook withdrawal accounting | `withdraw_transition_decrements_accrued_balance`, `withdraw_transition_rejects_above_accrued_fees`, PaymentHook withdraw CLI command |
 | Protocol and client deployment flow | CLI runbook steps 6-27: initialize protocol/client artifacts, parameterize with existing wallet UTxOs, bootstrap Config, PaymentHook, and Receiver, publish reference scripts at ReferenceHolder, top up the Receiver, create and sign intents, create/update pairs through real oracle updates, generate Config-update and batch payloads, and submit maintenance transactions |
 | CLI signer, intent, generated payload, and state artifact checks | `npm run test` in `offchain/cli` |
@@ -74,6 +85,8 @@ Summary from the captured logs:
 | Mainnet deployment hashes | Pending |
 
 ## Required Preview Transaction Evidence
+
+The step numbers match the historical **2026-04-27** runbook. The **current** protocol adds a **Settle** transaction between batch updates and maintenance withdraws; capture a `preview:settle` hash when regenerating evidence.
 
 | CLI step | Operation | Evidence status |
 | --- | --- | --- |
@@ -97,6 +110,7 @@ Summary from the captured logs:
 | 23 | Config update | `27fbf81d8b0039ff2eb88573bd67bdf377d083d68106b2c1adcd8754711f48c4` |
 | 24 | Create batch manifest | N/A: local generated manifest with USDC/USD and USDT/USD updates |
 | 25 | Batch oracle update/create pairs | `4dc69409ce41b4a02cf8a7867e5891a6a5007a7ef213a435ea6bfa23b91bb687` |
+| — | **Settle** — move accrued fees from Receiver(s) to PaymentHook (`preview:settle`) | **Pending** in next evidence pack (not part of Apr 27 capture) |
 | 26 | Receiver withdraw | `bea7199aee9ac51ecec68e65bd6df2eaaed69b1cd391814df53ee808bf06d0e7` |
 | 27 | PaymentHook withdraw | `3e890f1272082c1150e73dfa0efe3ca3259671a1692e965a7fa43bf45ffeb70c` |
 
@@ -146,7 +160,7 @@ Inline datum verification guide:
 | --- | --- |
 | Config datum | Authorized Config signer `50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2d`; authorized DIA compressed public key `02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531`; EIP-712 domain `DIA Oracle`, version `1.0`, source chain `100640`, verifying contract `f8c614a483a0427a13512f52ac72a576678be317`; protocol fee `2000000`; PaymentHook NFT ref; Coordinator script credential. |
 | PaymentHook datum | Withdraw address `addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j`; accrued fees `6000000`; lifetime collected `8000000`; lifetime withdrawn `2000000`; min UTxO `3000000`. |
-| Receiver datum | Client balance `1000000` lovelace after top-up, update fees, and withdraw; min UTxO `3000000`. |
+| Receiver datum | Client balance `1000000` lovelace after top-up, update fees, and withdraw; accrued-to-hook per current protocol (see architecture doc); min UTxO `3000000`. |
 | USDC/USD Pair datum | Pair id `555344432f555344` (`USDC/USD`); price `100065678`; timestamp `1777274653`; nonce `1777274633040`; signer key hash `2b1c7eff297766569966b630a6862947a8e5285a`; intent hash `cfd4d7a1b5d316a2b6fddf383168d5c164445345ab13412997e8f2c925340bca`; min UTxO `5000000`. |
 | USDT/USD Pair datum | Pair id `555344542f555344` (`USDT/USD`); price `100001234`; timestamp `1777274653`; nonce `1777274633040`; signer key hash `2b1c7eff297766569966b630a6862947a8e5285a`; intent hash `e7692f59032293d3d37782acde24bc4ca223d2b11666e5b55bbbc4a0496d7f51`; min UTxO `5000000`. |
 
@@ -166,6 +180,6 @@ Each DIA `OracleIntent` signature is valid only for the exact payload it signs, 
 
 Reference-script UTxOs must be created at the `reference_holder` script address derived from `contracts/aiken/plutus.json`. The deploy wallet funds those outputs but cannot spend them.
 
-Single and batch oracle updates read the current Receiver and PaymentHook inline datums from chain before computing the next accounting state. This avoids treating generated JSON artifacts as the source of truth for mutable fee balances after earlier update transactions.
+Single and batch oracle updates read the current Receiver inline datum from chain before computing the next accounting state; fees accrue on the Receiver until a **Settle** transaction moves them to the PaymentHook. This avoids treating generated JSON artifacts as the source of truth for mutable balances after earlier update transactions.
 
 Mainnet evidence must be recorded after the final transaction flow is executed on Cardano mainnet.

@@ -24,6 +24,7 @@ import {
   toBigInt,
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
+import { assertReceiverTopUpAmountPositive } from "../preflight/index.js";
 
 export async function receiverTopUp(args: {
   amountLovelace: string;
@@ -65,6 +66,7 @@ export async function receiverTopUp(args: {
       });
 
   const amountLovelace = toBigInt(args.amountLovelace, "amountLovelace");
+  assertReceiverTopUpAmountPositive(amountLovelace);
   const currentReceiverState =
     currentReceiverUtxo.datum
       ? decodeReceiverDatum(currentReceiverUtxo.datum)

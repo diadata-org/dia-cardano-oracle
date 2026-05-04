@@ -571,3 +571,31 @@ test intent_freshness_rejected_when_lower_bound_is_open() {
   let intent = sample_intent()
   !intent_freshness_satisfied(intent, transaction.placeholder, 86_400)
 }
+
+test tampered_intent_timestamp_is_rejected() {
+  // The signed payload binds price+timestamp+nonce. Mutating the
+  // timestamp after signing must invalidate the signature.
+  !has_valid_signature(
+    sample_config(),
+    UpdateWitness {
+      ..sample_witness(),
+      intent: OracleIntent {
+        ..sample_intent(),
+        timestamp: sample_intent().timestamp + 1,
+      },
+    },
+  )
+}
+
+test tampered_intent_nonce_is_rejected() {
+  !has_valid_signature(
+    sample_config(),
+    UpdateWitness {
+      ..sample_witness(),
+      intent: OracleIntent {
+        ..sample_intent(),
+        nonce: sample_intent().nonce + 1,
+      },
+    },
+  )
+}

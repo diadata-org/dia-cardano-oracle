@@ -26,6 +26,13 @@ import {
   toBigInt,
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
+import {
+  assertPaymentKeyHashIsConfigSigner,
+  assertReceiverWithdrawAmountPositive,
+  assertReceiverWithdrawAmountValid,
+} from "../preflight/index.js";
+
+export { assertReceiverWithdrawAmountValid } from "../preflight/index.js";
 
 export async function receiverWithdraw(args: {
   amountLovelace: string;
@@ -53,9 +60,10 @@ export async function receiverWithdraw(args: {
   const walletAddress = await wallet.address();
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
 
-  if (!protocol.configState.validConfigSigners.includes(walletDefaults.paymentKeyHash)) {
-    throw new Error("The configured wallet is not authorized as a config signer.");
-  }
+  assertPaymentKeyHashIsConfigSigner(
+    walletDefaults.paymentKeyHash,
+    protocol.configState.validConfigSigners,
+  );
 
   const [currentConfigUtxo, currentReceiverUtxo] = await Promise.all([
     findSingleUtxoAtUnit(
@@ -82,6 +90,7 @@ export async function receiverWithdraw(args: {
       });
 
   const amountLovelace = toBigInt(args.amountLovelace, "amountLovelace");
+  assertReceiverWithdrawAmountPositive(amountLovelace);
   const recipientAddress = args.recipientAddress?.trim().length
     ? args.recipientAddress.trim()
     : walletAddress;
@@ -89,16 +98,17 @@ export async function receiverWithdraw(args: {
     currentReceiverUtxo.datum
       ? decodeReceiverDatum(currentReceiverUtxo.datum)
       : state.receiver.receiverState;
+  assertReceiverWithdrawAmountValid(
+    amountLovelace,
+    BigInt(currentReceiverState.balanceLovelace),
+  );
+
   const nextReceiverState = {
     ...currentReceiverState,
     balanceLovelace: (
       BigInt(currentReceiverState.balanceLovelace) - amountLovelace
     ).toString(),
   };
-
-  if (BigInt(nextReceiverState.balanceLovelace) < 0n) {
-    throw new Error("Receiver balance is not sufficient for the requested withdrawal.");
-  }
 
   const receiverDatumCbor = buildReceiverDatumCbor(nextReceiverState);
   const withdrawRedeemer = Data.to(

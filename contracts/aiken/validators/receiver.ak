@@ -1,11 +1,14 @@
 use aiken/collection/dict
 use aiken/collection/list
-use cardano/address.{Credential, Script}
+use cardano/address.{Script}
 use cardano/assets.{AssetName, PolicyId}
 use cardano/transaction.{
   InlineDatum, Input, Output, OutputReference, Transaction,
 }
 use dia_cardano_oracle/config_logic
+use dia_cardano_oracle/coordinator_logic.{
+  IntentForReceiverAccrue, IntentForReceiverSettle, coordinator_intent_matches,
+}
 use dia_cardano_oracle/receiver_logic
 
 pub type ReceiverMintAction {
@@ -105,7 +108,14 @@ validator receiver(
 
           and {
             config_logic.valid_config_state(config_datum),
-            coordinator_witness_present(self.withdrawals, config_datum),
+            coordinator_intent_matches(
+              self,
+              config_datum,
+              IntentForReceiverAccrue {
+                receiver_policy_id: own_policy_id,
+                receiver_asset_name: expected_asset_name,
+              },
+            ),
             receiver_logic.accrue_fee_transition(
               current_datum,
               next_datum,
@@ -125,7 +135,14 @@ validator receiver(
 
           and {
             config_logic.valid_config_state(config_datum),
-            coordinator_witness_present(self.withdrawals, config_datum),
+            coordinator_intent_matches(
+              self,
+              config_datum,
+              IntentForReceiverSettle {
+                receiver_policy_id: own_policy_id,
+                receiver_asset_name: expected_asset_name,
+              },
+            ),
             receiver_logic.settle_transition(current_datum, next_datum),
           }
         }
@@ -231,19 +248,4 @@ fn find_visible_config_input(
 fn expected_receiver_hash(output: Output) -> PolicyId {
   expect Script(receiver_hash) = output.address.payment_credential
   receiver_hash
-}
-
-fn coordinator_witness_present(
-  withdrawals: Pairs<Credential, Int>,
-  config_datum: config_logic.ConfigDatum,
-) -> Bool {
-  when config_datum.update_coordinator_credential is {
-    Some(expected_credential) ->
-      list.any(
-        withdrawals,
-        fn(withdrawal) { withdrawal.1st == expected_credential },
-      )
-
-    None -> False
-  }
 }

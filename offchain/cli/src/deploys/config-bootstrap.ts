@@ -37,6 +37,7 @@ import {
   toBigInt,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
+import { assertNftBootstrapDestinationIsNotFundingWallet } from "../preflight/bootstrap-pay.js";
 
 type ResolvedConfigBootstrapInput = {
   configAssetName: string;
@@ -173,6 +174,11 @@ export async function configBootstrap(args: {
         ];
 
   reportProgress("Building Preview config bootstrap transaction");
+  assertNftBootstrapDestinationIsNotFundingWallet(
+    configValidatorAddress,
+    walletAddress,
+    "preview:config:bootstrap",
+  );
   const txBuilder = lucid
     .newTx()
     .collectFrom([walletBootstrapUtxo, ...fundingUtxos])

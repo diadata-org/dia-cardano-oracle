@@ -17,6 +17,7 @@ import {
   withdrawalValidatorFromCompiledScript,
 } from "../core/contracts.js";
 import {
+  assertDiaOracleIntentNotExpired,
   diaIntentToState,
   diaIntentTokenNameFromSymbol,
   diaPairIdHex,
@@ -26,6 +27,10 @@ import {
   readSignedIntentInput,
   recoverDiaOracleIntentWitness,
 } from "../core/dia-intent.js";
+import {
+  assertOracleIntentTimestampAndNonceMonotonic,
+  assertOracleUpdateBootstrapRefsResolved,
+} from "../preflight/index.js";
 import {
   makeConfiguredLucid,
   selectConfiguredWallet,
@@ -74,6 +79,7 @@ export async function submitOracleUpdate(args: {
   if (!client.scripts.pairPolicyId || !client.scripts.pairValidatorHash || !client.scripts.pairValidatorAddress) {
     throw new Error("Oracle update requires client state after Receiver/Pair parameterization.");
   }
+  assertOracleUpdateBootstrapRefsResolved(protocol.bootstrapRefs);
   let existingPair = await readOptionalPairState(statePath);
   if (
     existingPair &&
@@ -298,12 +304,15 @@ export async function submitOracleUpdate(args: {
     throw new Error(`Intent symbol ${intent.symbol} does not match pair id ${state.pair.pairId}.`);
   }
 
-  if (!isCreate && BigInt(intent.timestamp) <= BigInt(state.pairState.timestamp)) {
-    throw new Error("Oracle intent timestamp must be greater than the current timestamp.");
-  }
-  if (!isCreate && BigInt(intent.nonce) <= BigInt(state.pairState.nonce)) {
-    throw new Error("Oracle intent nonce must be greater than the current nonce.");
-  }
+  assertOracleIntentTimestampAndNonceMonotonic({
+    isCreate,
+    intentTimestamp: intent.timestamp,
+    intentNonce: intent.nonce,
+    pairStateTimestamp: state.pairState.timestamp,
+    pairStateNonce: state.pairState.nonce,
+  });
+
+  assertDiaOracleIntentNotExpired(intent, BigInt(Math.floor(Date.now() / 1000)));
 
   const nextPairState = {
     ...state.pairState,

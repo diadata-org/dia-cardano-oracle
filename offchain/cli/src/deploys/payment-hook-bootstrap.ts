@@ -33,6 +33,7 @@ import {
   toBigInt,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
+import { assertNftBootstrapDestinationIsNotFundingWallet } from "../preflight/bootstrap-pay.js";
 
 export async function paymentHookBootstrap(args: {
   statePath?: string;
@@ -180,6 +181,16 @@ export async function paymentHookBootstrap(args: {
   const mintRedeemer = Data.to(new Constr(0, []));
 
   reportProgress("Building Preview payment-hook bootstrap transaction");
+  assertNftBootstrapDestinationIsNotFundingWallet(
+    state.scripts.configValidatorAddress,
+    walletAddress,
+    "preview:payment-hook:bootstrap:config-output",
+  );
+  assertNftBootstrapDestinationIsNotFundingWallet(
+    paymentHookValidatorAddress,
+    walletAddress,
+    "preview:payment-hook:bootstrap:hook-output",
+  );
   const txBuilder = lucid
     .newTx()
     .collectFrom([currentConfigUtxo], adminUpdateRedeemer)

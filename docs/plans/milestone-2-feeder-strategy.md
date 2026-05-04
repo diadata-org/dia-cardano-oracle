@@ -15,6 +15,8 @@ For Cardano, we are building the destination side:
 4. The Cardano validator verifies the DIA signature.
 5. The Pair UTxO is updated with the latest price.
 
+**Milestone 1 note (fee path):** updates accrue the protocol fee on the Receiver (`accrued_to_hook_lovelace`); moving those accruals to the global PaymentHook is a separate **Settle** transaction (coordinator + admin). The feeder in Milestone 2 may emit updates only, with Settle on an operator cadence, unless product requires the feeder to drive Settle as well. See [`../architecture/cardano-oracle-architecture.md`](../architecture/cardano-oracle-architecture.md) §5.11.
+
 The important idea is this: the feeder does not make the price true. DIA's
 signature makes the price authoritative. The feeder is only the delivery
 mechanism that brings that signed message onto Cardano.

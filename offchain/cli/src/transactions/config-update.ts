@@ -27,6 +27,12 @@ import {
   toBigInt,
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
+import {
+  assertConfigMinUtxoLovelaceImmutable,
+  assertConfigUtxoLivesAtValidatorAddress,
+  assertHookCoordinatorConsistency,
+  assertPaymentKeyHashIsConfigSigner,
+} from "../preflight/index.js";
 
 type ConfigUpdateInput = {
   validConfigSigners?: string[];
@@ -68,15 +74,24 @@ export async function configUpdate(args: {
   const walletAddress = await wallet.address();
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
 
-  if (!state.configState.validConfigSigners.includes(walletDefaults.paymentKeyHash)) {
-    throw new Error("The configured wallet is not authorized as a current config signer.");
-  }
+  assertPaymentKeyHashIsConfigSigner(
+    walletDefaults.paymentKeyHash,
+    state.configState.validConfigSigners,
+    {
+      unauthorizedMessage:
+        "The configured wallet is not authorized as a current config signer.",
+    },
+  );
 
   const currentConfigUtxo = await findSingleUtxoAtUnit(
     lucid,
     state.scripts.configValidatorAddress,
     state.scripts.configUnit,
     "config",
+  );
+  assertConfigUtxoLivesAtValidatorAddress(
+    currentConfigUtxo.address,
+    state.scripts.configValidatorAddress,
   );
   const { utxos: referenceScriptUtxos, missing: missingReferenceScript } =
     await loadReferenceScriptUtxos(
@@ -222,7 +237,7 @@ function resolveNextConfigState(
             ),
           };
 
-  return {
+  const next: ConfigStateArtifact["configState"] = {
     validConfigSigners:
       input.validConfigSigners?.map((value) =>
         normalizeHex(value, "validConfigSigners[]"),
@@ -257,4 +272,14 @@ function resolveNextConfigState(
     updateCoordinatorCredential: nextCoordinatorCredential,
     minUtxoLovelace: state.configState.minUtxoLovelace,
   };
+
+  assertConfigMinUtxoLovelaceImmutable(
+    state.configState.minUtxoLovelace,
+    next.minUtxoLovelace,
+  );
+  assertHookCoordinatorConsistency(
+    next.paymentHookRef,
+    next.updateCoordinatorCredential,
+  );
+  return next;
 }

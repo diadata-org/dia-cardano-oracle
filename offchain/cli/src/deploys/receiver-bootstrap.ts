@@ -31,6 +31,7 @@ import {
   toBigInt,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
+import { assertNftBootstrapDestinationIsNotFundingWallet } from "../preflight/bootstrap-pay.js";
 
 export async function receiverBootstrap(args: {
   statePath?: string;
@@ -173,6 +174,11 @@ export async function receiverBootstrap(args: {
   const mintRedeemer = Data.to(new Constr(0, []));
 
   reportProgress("Building Preview receiver bootstrap transaction");
+  assertNftBootstrapDestinationIsNotFundingWallet(
+    receiverValidatorAddress,
+    walletAddress,
+    "preview:receiver:bootstrap",
+  );
   const txBuilder = lucid
     .newTx()
     .readFrom([currentConfigUtxo])

@@ -1,6 +1,7 @@
 import { input as promptInput } from "@inquirer/prompts";
 import { toBigInt } from "../core/chain-helpers.js";
 import { normalizeHex, utf8ToHex } from "../core/dia-intent.js";
+import { assertClientIdNonEmpty } from "../preflight/index.js";
 import {
   emptyClientCompiledScripts,
   emptyReferenceScriptUtxo,
@@ -92,6 +93,8 @@ export function createClientStateArtifact(
   clientId: string,
   receiverDefaults: ReceiverParameterizeDefaults,
 ): ClientStateArtifact {
+  assertClientIdNonEmpty(clientId);
+
   return {
     clientId,
     scripts: {

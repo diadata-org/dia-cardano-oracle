@@ -35,6 +35,15 @@ Deliverables include:
 **Project Completion**  
  30%
 
+---
+
+## Repository status — Preview vs mainnet (not part of Catalyst text)
+
+This file quotes the official milestone wording. For **engineering tracking** only:
+
+- **Cardano Preview** evidence and CLI runbooks can reach “feature complete” for Milestone 1 scope (contracts, tests, deployment scripts, in-repo developer docs) before **mainnet** evidence exists.
+- **Mainnet** transaction hashes called out in Milestone 1 above remain the separate acceptance gate; see [`work-plan.md`](../plans/work-plan.md) Workstream F.
+
 **Milestone 2**
 
 **Milestone Title:** Implement Data Feeder and Documentation

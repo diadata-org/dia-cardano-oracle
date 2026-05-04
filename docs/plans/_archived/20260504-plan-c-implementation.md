@@ -1,7 +1,7 @@
 # Plan C Implementation Plan — Decoupled Fee Settlement + Security Hardening
 
-This is the implementation plan for the redesign described in
-`payment-hook-contention-options.md` (Option C) plus four security fixes
+This is the implementation plan for the redesign described in the archived
+`docs/plans/_archived/20260504-payment-hook-contention-options.md` (Option C) plus four security fixes
 identified during the security review of the milestone-1 contracts.
 
 It is a **breaking change**: the on-chain Receiver datum gains a new field,
@@ -313,7 +313,7 @@ submits the corresponding tx changes too. Concretely:
 | --- | --- |
 | `docs/architecture/cardano-oracle-architecture.md` | **EXTEND section 5 "Transactions"** with: enumerated validations `[1]`, `[2]` for every redeemer; Mermaid diagrams showing cross-script communication per tx type; "Who Knows What" table per tx; trust model explanation. Update subsections 5.7–5.9 (price update flow no longer touches Hook), add subsection 5.11 "Settle". Also update: sections 1 (script set), 4 (datums — new Receiver field, new Config field), section 6 (finalized design decisions) |
 | `docs/plans/work-plan.md` | Add Plan-C / security fixes as workstream A2; mark prior payment-hook-contention as resolved |
-| `docs/plans/payment-hook-contention-options.md` | Mark as superseded by this plan |
+| `docs/plans/_archived/20260504-payment-hook-contention-options.md` | Archived design discussion (Options A–C); superseded by current architecture |
 | `docs/milestones/final-cardano-milestones.md` | Adjust language about milestone-1 fee accrual to reflect the new flow |
 | `docs/milestones/milestone-1-preview-evidence.md` | Note that prior evidence is from before Plan C; new evidence will be regenerated post-redeploy |
 | `README.md` (root) | Update description, quick start, refer to Settle |
@@ -476,18 +476,18 @@ fresh bootstrap. The redeploy sequence is unchanged in shape:
 
 ## 6. Order of work
 
-Suggested implementation order (matches PR-friendly chunks):
+Suggested implementation order (matches PR-friendly chunks). **Status snapshot: 2026-05-04.**
 
-1. **✅ COMPLETED — Aiken contracts + lib** — security fixes (1.1, 1.2, 1.3, 1.4). 35 Aiken tests passing.
-2. **✅ COMPLETED — Aiken contracts + lib** — Plan C datum / redeemer changes (Receiver accrued_to_hook, Coordinator ApplySettle, Hook/Payment apply_settle_transition). 53 Aiken tests passing.
-3. **✅ COMPLETED — `aiken build` + blueprint sync.** 
-4. **✅ COMPLETED — CRITICAL FIX:** Batch fee multiplication `* list.length(witnesses)` added to coordinator.
-5. **✅ COMPLETED — Off-chain `core/`** — `ReceiverState` with `accruedToHookLovelace`, `ConfigState` with `maxBootstrapDriftSeconds`, datum encoders updated.
-6. **🔄 IN PROGRESS — Off-chain transactions/** — `update.ts` reescrito (PaymentHook removido, AccrueFee redeemer, datum con 3 campos). **FALTA:** `update-batch.ts` rewrite, `settle.ts` nuevo, updates de `receiver-top-up.ts`, `receiver-withdraw.ts`, `payment-hook-withdraw.ts`.
-7. **🔄 IN PROGRESS — Off-chain init/** — `protocol-init.ts` y `config-bootstrap.ts` actualizados con `maxBootstrapDriftSeconds`. **FALTA:** `receiver-bootstrap.ts` y `receiver-parameterize.ts` verificados con `accruedToHookLovelace`, `client-init.ts`, wiring de comando `preview:settle` en `index.ts`.
-8. **Tests** — extend `__tests__/run-tests.ts` with the full attack-vector matrix.
-9. **Docs** — architecture, work-plan, README, contracts README, CLI README, state README, milestone notes.
-10. **Evidence** — re-run the bootstrap and updates on Preview, capture logs.
+1. **✅ COMPLETED — Aiken contracts + lib** — security fixes (1.1, 1.2, 1.3, 1.4).
+2. **✅ COMPLETED — Aiken contracts + lib** — decoupled settlement: Receiver `accrued_to_hook`, coordinator `ApplySettle`, PaymentHook `ApplySettle`, intent expiry / bootstrap freshness, coordinator `coordinator_intent_matches` on pair_state / payment_hook / receiver fee paths.
+3. **✅ COMPLETED — `aiken build` + blueprint sync.**
+4. **✅ COMPLETED — CRITICAL FIX:** batch fee uses `* list.length(witnesses)` where required.
+5. **✅ COMPLETED — Off-chain `core/`** — state types, datum CBOR in `chain-helpers.ts`, deploy dedup (canonical encoders from `core/chain-helpers.ts` in `deploys/*`).
+6. **✅ COMPLETED — Off-chain `transactions/`** — `update.ts`, `update-batch.ts` (no Hook in update path; `AccrueFee`), `settle.ts`, `receiver-top-up.ts`, `receiver-withdraw.ts`, `payment-hook-withdraw.ts`, `config-update.ts`; CLI `preview:settle` wired in `index.ts`.
+7. **✅ COMPLETED — Off-chain `init/`** — `protocol-init.ts`, `client-init.ts`, bootstraps / parameterize paths aligned with three-field Receiver datum and Config drift field.
+8. **🔄 PARTIAL — Pure preflight + unit tests** — `offchain/cli/src/preflight/*` + expanded `run-tests.ts` (datum goldens, oracle/config/settle/receiver guards, Lucid emulator smoke). **Still open:** full §4.2 adversarial matrix on the emulator for every tx builder; §4.3 two-client + redirect scenarios.
+9. **🔄 PARTIAL — Docs** — architecture + helper catalog updated for current protocol; per-transaction Tables A–D next to every §5 subsection (plan §9) may still need tightening vs on-chain line-by-line claims in §5 prose.
+10. **❌ PENDING — Preview evidence pack** — new `docs/milestones/evidence/m1-preview-<DATE>/` after re-bootstrap on Preview (logs + tx hashes for update, batch, settle, withdraws). Old pack under `m1-preview-20260427/` remains historical.
 
 Each step keeps the build green
 (`aiken check && npm run build && npm run typecheck && npm test`).
@@ -523,10 +523,6 @@ single-most-valuable UTxO in the protocol.
 
 ---
 
-## 9. Evidence capture
-
----
-
 ## 8. Documentation policy (IMPORTANT)
 
 When updating any README, architecture doc, milestone doc, work plan, or
@@ -543,9 +539,7 @@ new redeemers, security fixes, new datum fields):
   protocol, period.
 - The only documents allowed to reference "Plan C" by name are:
   - `docs/plans/plan-c-implementation.md` (this file)
-  - `docs/plans/payment-hook-contention-options.md` (the design discussion
-    that produced the decision; it can be marked as superseded by the
-    current architecture without naming Plan C in user-facing prose)
+  - `docs/plans/_archived/20260504-payment-hook-contention-options.md` (historical design discussion only)
 
 ## 9. Architecture doc — per-tx exhaustive validation tables (NEW REQUIREMENT)
 
@@ -612,8 +606,9 @@ coordinator does, but the property holds because the per-Receiver
 
 ### 9.2 Cross-script reference / identity tables (global)
 
-In a new top-level section (suggested: "Script identities and references")
-add static tables that document the on-chain identity graph independent
+**Implemented:** `docs/architecture/cardano-oracle-architecture.md` §8 ("Script identities and references") contains Tables E–H.
+
+The original requirement was to add static tables that document the on-chain identity graph independent
 of any particular tx:
 
 #### Table E — Where each policy id / script hash lives
@@ -670,7 +665,7 @@ not optional.
 
 ---
 
-## 9b. Helper inventory and de-duplication audit (NEW REQUIREMENT)
+## 9b. Helper inventory and de-duplication audit
 
 **Why this exists:** during the on-chain encoding bug review we found
 local helpers that shadowed the canonical ones (e.g.
@@ -753,9 +748,9 @@ explicitly:
   (used by `updateWitnessData`) and the read found another private one
   in `transactions/update.ts`. They must converge.
 
-### Deliverable
+### Deliverable (met)
 
-A single markdown document with three sections:
+A single markdown document with three sections (see `docs/architecture/offchain-helpers-catalog.md`):
 
 1. **Inventory** — file-by-file table of exported and local symbols,
    each with its category.
@@ -781,99 +776,59 @@ in a follow-up commit and the typecheck + tests stay green.
 
 ---
 
-## 10. Current Implementation Status
+## 10. Current implementation status
 
-**Last updated:** May 4, 2026
+**Last updated:** 2026-05-04 (America/Bogota calendar date).
 
-### ✅ COMPLETED
+### Green gates
 
-| Chunk | Files | Status |
-|-------|-------|--------|
-| 1-4 | Aiken contracts (`receiver.ak`, `update_coordinator.ak`, `payment_hook.ak`, lib logic) | ✅ 53 tests passing, `aiken check` green |
-| 5 | Off-chain `core/` | ✅ `state.ts` types updated, `chain-helpers.ts` encoders updated |
-| 6 partial | `update.ts` | ✅ Reescrito: PaymentHook removido, AccrueFee redeemer, 3-field datum |
-| 7 partial | `protocol-init.ts`, `config-bootstrap.ts` | ✅ Agregado `maxBootstrapDriftSeconds` a ConfigState y prompts |
+| Gate | Location | Typical command |
+| --- | --- | --- |
+| Aiken | `contracts/aiken` | `aiken check` — **78/78** unit tests passing at last refresh |
+| CLI | `offchain/cli` | `npm run typecheck`, `npm run test`, `npm run build` |
 
-### 🔄 IN PROGRESS / NEEDS WORK
+### Done (this plan’s scope)
 
-| Chunk | Files | What Needs To Be Done |
-|-------|-------|----------------------|
-| 6 | `update-batch.ts` | Rewrite completo: remover PaymentHook, cambiar a AccrueFee, usar nuevo datum |
-| 6 | `settle.ts` | **NUEVO archivo**: implementar transacción de settle con redeemer ApplySettle |
-| 6 | `receiver-top-up.ts` | Update: usar redeemer TopUp (verificar contra on-chain) |
-| 6 | `receiver-withdraw.ts` | Update: usar redeemer Withdraw (verificar contra on-chain) |
-| 6 | `payment-hook-withdraw.ts` | Update: verificar redeemers disponibles en hook |
-| 7 | `receiver-bootstrap.ts` | ✅ YA ESTÁ: agregué `accruedToHookLovelace: "0"` (verificar que compile) |
-| 7 | `receiver-parameterize.ts` | ✅ YA ESTÁ: tiene `accruedToHookLovelace: "0"` (verificar que compile) |
-| 7 | `client-init.ts` | Update: verificar que use nuevos datums si aplica |
-| 7 | `index.ts` | Wire new CLI command `preview:settle` |
+| Area | Notes |
+| --- | --- |
+| On-chain | Decoupled accrual + `ApplySettle`, NFT script-address hardening, intent expiry + bootstrap freshness, `coordinator_intent_matches` on fee/settle paths for `pair_state`, `receiver`, `payment_hook`. |
+| CLI tx builders | Update / batch / settle / receiver / hook / config flows aligned with current redeemers and datums. |
+| CLI preflight | Pure checks in `offchain/cli/src/preflight/` (including `bootstrap-pay.ts`: NFT bootstrap outputs must not target the funding wallet); shared with `run-tests.ts`. |
+| Deploy encoding | `deploys/*` uses canonical `build*DatumCbor` from `core/chain-helpers.ts` (no duplicate 2-field receiver / wrong-order config encoders). |
+| Docs (non–“Plan C” naming) | `cardano-oracle-architecture.md` reflects Settle + identities; `offchain-helpers-catalog.md` exists post–de-duplication audit. |
+| Design decision archive | Historical options doc: `_archived/20260504-payment-hook-contention-options.md` only. |
 
-### ❌ BLOCKERS (verified May 4, 2026 — typecheck and tests pass but on-chain encoding is wrong)
+### Still open for Milestone 1 *Preview* closure (this delivery)
 
-1. **`offchain/cli/src/deploys/receiver-bootstrap.ts`** has a **local**
-   `buildReceiverDatumCbor` that encodes only `[balance, min_utxo]` (2
-   fields). The on-chain `ReceiverDatum` is now 3 fields
-   `[balance, accrued_to_hook, min_utxo]`. The state object built right
-   above the call already includes `accruedToHookLovelace: "0"`, but the
-   local encoder drops it. Fix: delete the local helper and use
-   `buildReceiverDatumCbor` from `core/chain-helpers.ts` (which encodes
-   the full 3 fields).
+| Item | Owner / artifact |
+| --- | --- |
+| **Preview evidence pack** | Run full bootstrap + at least one update, batch, **settle**, receiver withdraw, hook withdraw on Preview; commit logs under `docs/milestones/evidence/m1-preview-<DATE>/`; refresh `milestone-1-preview-evidence.md` tables and explorer links. |
+| **Emulator / adversarial matrix** | §4.2–4.3: two-client parallelism, redirect attempts, expired intent, stale bootstrap duplicate — **stretch** beyond current smoke + pure guards (not blocking Plan C engineering sign-off). |
+| **Per-tx Tables A–D** | Optional audit formatting in `cardano-oracle-architecture.md` §5 (prose + §8 already cover behaviour). |
 
-2. **`offchain/cli/src/deploys/config-bootstrap.ts`** has a **local**
-   `buildConfigDatumCbor` whose field order is wrong vs. the on-chain
-   `ConfigDatum`. On-chain order is:
-   `[admins, dia_pubkeys, domain, protocol_fee, payment_hook_ref, update_coordinator_credential, max_bootstrap_drift_seconds, min_utxo]`.
-   The local encoder currently emits
-   `[admins, dia_pubkeys, domain, protocol_fee, max_bootstrap_drift_seconds, none, none, min_utxo]`.
-   That places `max_bootstrap_drift_seconds` (an Int) where the
-   validator expects `Option<PaymentHookRef>` and would fail
-   deserialization. Fix: delete the local helper and use
-   `buildConfigDatumCbor` from `core/chain-helpers.ts`.
+### Plan C — engineering sign-off (repo)
 
-### 📋 NEXT AGENT TODO LIST (in order)
+Treat **Plan C engineering** as complete in `main` when: `aiken check`, `npm run typecheck`, `npm run test`, and `npm run build` are green; decoupled settle path is implemented on-chain and in the CLI; preflight covers the agreed guard rails (including bootstrap pay destination). **Preview log + tx evidence** is a **separate operator deliverable** for Catalyst / milestone packaging, not a blocker to archive this plan internally.
 
-1. **Fix the two on-chain encoding bugs above.** Then run
-   `npm run build && npm run typecheck && npm test` to confirm green.
-2. **Off-chain attack-vector tests** (`offchain/cli/src/__tests__/run-tests.ts`):
-   add the negative cases in section 4.2 (top-up zero, withdraw drains
-   accrued, settle without admin, settle with mismatched delta, hook
-   relocation on settle, expired intent on update, stale-bootstrap
-   intent, etc.). Today only 7 unit tests exist (wallet, intent
-   signing, batch compatibility, state init).
-3. **Emulator/integration tests** (section 4.3): two-client scenario,
-   settle, cross-client parallelism, hook NFT relocation, config NFT
-   relocation, expired intent replay, stale-bootstrap duplicate.
-4. **Documentation update** under the rules in section 8 (NO mention of
-   "Plan C" anywhere in user/operator docs):
-   - Root `README.md`: cover Settle and the new fee flow as the design.
-   - `contracts/aiken/README.md`: rewrite the fee-flow description to
-     match the current contracts (AccrueFee → accrued; Settle moves
-     accrued to hook).
-   - `docs/plans/work-plan.md`: realign the workstream A bullet about
-     fee flow with the current behaviour.
-   - `docs/milestones/final-cardano-milestones.md`: update language
-     about milestone-1 fee accrual.
-   - `docs/milestones/milestone-1-preview-evidence.md`: add a note that
-     the prior evidence is from before the redeploy and will be
-     regenerated after re-bootstrap.
-   - `offchain/cli/state/README.md`: document the receiver state file
-     fields including `accruedToHookLovelace`.
-5. **Architecture doc per-tx tables** (section 9 of this plan): for
-   every transaction subsection (Config bootstrap, Config update,
-   PaymentHook bootstrap, PaymentHook withdraw, Receiver bootstrap,
-   Receiver top-up, Receiver withdraw, Single update, Batch update,
-   Settle), add Tables A–D next to the existing Mermaid diagrams. Add
-   the global Tables E–H in a new "Script identities and references"
-   section. All table content must be backed by the on-chain code.
-6. **Helper inventory and de-duplication audit** (section 9b of this
-   plan): produce `docs/architecture/offchain-helpers-catalog.md` with
-   a file-by-file inventory of every export and local helper under
-   `offchain/cli/src/`, define the canonical owner per category, and
-   list every duplicate / name-shadow / drift to be moved, inlined, or
-   deleted. Then execute the actions in a follow-up commit and keep
-   build + tests green. This must catch the class of bug we just fixed
-   (local copies of `buildReceiverDatumCbor`, `buildConfigDatumCbor`).
-7. **Re-deploy on Preview** and capture a fresh evidence pack under
-   `docs/milestones/evidence/m1-preview-<DATE>/` (logs of `aiken check`,
-   `npm run build`, `npm run typecheck`, `npm test`, plus the bootstrap
-   and update tx hashes).
+### Next agent focus (ordered)
+
+1. **Operator:** new Preview evidence pack (`docs/milestones/evidence/m1-preview-<DATE>/`) + refresh `milestone-1-preview-evidence.md`.
+2. **Stretch:** grow emulator adversarial coverage toward §4.3.
+3. **Optional:** per-tx Tables A–D in §5 if an auditor requires them.
+
+---
+
+## 11. After Plan C — extreme cleanup (internal)
+
+When engineering sign-off above is true **and** you want a minimal `docs/plans/` root:
+
+1. `git mv docs/plans/plan-c-implementation.md docs/plans/_archived/YYYYMMDD-plan-c-implementation.md` (use the real date).
+2. Remove or archive `docs/plans/dev-session-resume-todo.md` (merge any still-useful bullets into `work-plan.md` or a single open-issues line first).
+3. In `work-plan.md` → Related documents, drop the “Plan C implementation” bullet **or** replace it with a one-liner link to the archived file only.
+4. Keep **`milestone-2-feeder-strategy.md`** and **`work-plan.md`** as the live forward plans.
+
+Do **not** archive `work-plan.md` or `milestone-2-feeder-strategy.md` as part of Plan C closure.
+
+### Mainnet (official Catalyst M1 output)
+
+Verified **mainnet** deployment and execution hashes remain **out of scope** for Preview-only milestone notes; track under `work-plan.md` Workstream F and `final-cardano-milestones.md`.

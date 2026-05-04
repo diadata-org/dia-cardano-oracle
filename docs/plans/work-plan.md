@@ -4,10 +4,10 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 
 ## Related documents
 
-- [Cardano Oracle Architecture](../../docs/architecture/cardano-oracle-architecture.md) — single architecture reference.
+- [Cardano Oracle Architecture](../architecture/cardano-oracle-architecture.md) — single architecture reference.
 - [Cardano Integration Requirement [PF]](../requirements/cardano-integration-requirement-pf.md) — DIA requirement document.
-- [Final Cardano Milestones](../../docs/milestones/final-cardano-milestones.md) — Catalyst milestone text.
-- [PaymentHook Contention: Design Options](./payment-hook-contention-options.md) — open Milestone 1 design decision: how to remove the global PaymentHook UTxO bottleneck before mainnet deployment.
+- [Final Cardano Milestones](../milestones/final-cardano-milestones.md) — Catalyst milestone text.
+- [Milestone 1 Preview Evidence](../milestones/milestone-1-preview-evidence.md) — M1 Preview verification log.
 - [Milestone 2 Feeder Strategy](./milestone-2-feeder-strategy.md) — recommended feeder split, DIA stack glossary, and M2 implementation direction.
 
 ## Scope
@@ -45,9 +45,10 @@ Tasks:
 - [x] Implement continuity rules for Config, Hook, Receiver and Pair UTxOs, including `min_utxo_lovelace` invariants.
 - [x] Implement decoupled fee flow: every price update spends the Receiver with `AccrueFee` (moving the protocol fee from `balance_lovelace` into `accrued_to_hook_lovelace`); a separate admin-initiated Settle transaction (`receiver: Settle`, `payment_hook: ApplySettle`, `coordinator: ApplySettle`) drains the accrued lovelace from one or more Receivers into the global PaymentHook in a single batch. The PaymentHook is not touched during oracle updates.
 - [x] Coordinator redeemers `ApplySingle`, `ApplyBatch`, and `ApplySettle`.
-- [x] Unit tests for Config, Hook, Receiver, Pair, and coordinator logic, with real DIA `OracleIntent` fixtures for signature validation.
+- [x] Unit tests for Config, Hook, Receiver, Pair, and coordinator logic, with real DIA `OracleIntent` fixtures for signature validation. Inline Aiken `test` blocks cover every redeemer transition and the documented attack vectors (NFT exfiltration, accrued-fee drain via withdraw, expired/replayed intents, stale bootstrap, zero-add griefing, settle manifest mismatch, cross-script redeemer confusion).
 - [x] Finalize pair-NFT asset-name derivation as `blake2b_256(pair_id)`.
 - [x] Finalize batch-update fee unit as one Config-defined fee per updated pair.
+- [ ] Off-chain Lucid emulator adversarial matrix: full update / batch / settle / receiver top-up / receiver withdraw / hook withdraw / config-update transactions submitted through the Plutus VM with golden + every documented attack-vector negative case (two-client parallelism, expired intent, stale bootstrap duplicate, NFT redirect on settle and config-update, accrued drain via withdraw, settle without admin signature, non-admin withdraw).
 
 ## Workstream B — Off-chain CLI and deployment tooling
 
@@ -93,7 +94,7 @@ Tasks:
 
 Tasks:
 
-- [x] Preview execution evidence regenerated with the clarified init + parameterize + bootstrap + reference-script deployment flow.
+- [ ] **Preview evidence pack — fresh capture** on the current bytecode: full bootstrap (Config, PaymentHook, Receiver), reference-script publication, Receiver top-up, single oracle update, batch oracle update, **Settle**, Receiver withdraw, PaymentHook withdraw. Logs and tx hashes go under `docs/milestones/evidence/m1-preview-<DATE>/`; `milestone-1-preview-evidence.md` tables and explorer links must be refreshed. Historical pack `docs/milestones/evidence/m1-preview-20260427/` predates the current contracts and is kept only as historical proof. Requires Preview wallet + ADA (operator task).
 - [ ] Mainnet deployment scripts and evidence (contract addresses, reference-script UTxOs, verified mainnet tx hashes).
 - [x] Operator runbook (onboarding a new client, subscribing a new pair, rotating signers, withdrawing accrued fees).
 - [ ] Developer documentation published via DIA's developer documentation website, covering:

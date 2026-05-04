@@ -6,6 +6,9 @@ use cardano/transaction.{
   InlineDatum, Input, Output, OutputReference, Transaction,
 }
 use dia_cardano_oracle/config_logic
+use dia_cardano_oracle/coordinator_logic.{
+  IntentForHookSettle, coordinator_intent_matches,
+}
 use dia_cardano_oracle/payment_hook_logic
 
 pub type PaymentHookMintAction {
@@ -133,7 +136,11 @@ validator payment_hook(
               own_policy_id,
               expected_asset_name,
             ),
-            coordinator_witness_present(self.withdrawals, config_datum),
+            coordinator_intent_matches(
+              self,
+              config_datum,
+              IntentForHookSettle,
+            ),
             // Defense-in-depth: also require an admin signature on
             // the hook spend, in addition to the coordinator witness.
             // Cheap (one tx-wide check) and protects the
@@ -251,19 +258,4 @@ fn has_expected_hook_ref(
       asset_name: hook_asset_name,
     },
   )
-}
-
-fn coordinator_witness_present(
-  withdrawals: Pairs<Credential, Int>,
-  config_datum: config_logic.ConfigDatum,
-) -> Bool {
-  when config_datum.update_coordinator_credential is {
-    Some(expected_credential) ->
-      list.any(
-        withdrawals,
-        fn(withdrawal) { withdrawal.1st == expected_credential },
-      )
-
-    None -> False
-  }
 }

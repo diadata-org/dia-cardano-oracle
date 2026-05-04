@@ -102,6 +102,24 @@ export function normalizeDiaOracleIntent(input: DiaOracleIntentInput): DiaOracle
   };
 }
 
+/**
+ * Rejects expired intents before building an update tx (complements on-chain checks).
+ * `expiry === 0` is treated as unset and not enforced (matches unsigned defaults).
+ */
+export function assertDiaOracleIntentNotExpired(
+  intent: DiaOracleIntentPayload | DiaOracleIntent,
+  nowUnixSeconds: bigint,
+): void {
+  if (intent.expiry === 0n) {
+    return;
+  }
+  if (nowUnixSeconds > intent.expiry) {
+    throw new Error(
+      `Oracle intent expired: expiry unix ${intent.expiry.toString()} is before current unix ${nowUnixSeconds.toString()}.`,
+    );
+  }
+}
+
 export function normalizeUnsignedDiaOracleIntent(
   input: UnsignedDiaOracleIntentInput,
 ): DiaOracleIntentPayload {

@@ -4,28 +4,13 @@ use cardano/address.{Credential, Script}
 use cardano/assets.{AssetName, PolicyId}
 use cardano/transaction.{InlineDatum, Input, Output, Transaction}
 use dia_cardano_oracle/config_logic
+use dia_cardano_oracle/coordinator_logic.{
+  ApplyBatch, ApplySettle, ApplySingle, CoordinatorRedeemer, SettleManifest,
+  SettleReceiver,
+}
 use dia_cardano_oracle/oracle_logic
 use dia_cardano_oracle/payment_hook_logic
 use dia_cardano_oracle/receiver_logic
-
-pub type SettleReceiver {
-  SettleReceiver {
-    receiver_policy_id: PolicyId,
-    receiver_asset_name: AssetName,
-  }
-}
-
-pub type SettleManifest {
-  SettleManifest {
-    receivers: List<SettleReceiver>,
-  }
-}
-
-pub type CoordinatorRedeemer {
-  ApplySingle(oracle_logic.UpdateWitness)
-  ApplyBatch(List<oracle_logic.UpdateWitness>)
-  ApplySettle(SettleManifest)
-}
 
 validator update_coordinator(
   config_policy_id: PolicyId,

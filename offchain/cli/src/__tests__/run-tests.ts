@@ -13,6 +13,7 @@ import {
   normalizeDiaEip712Domain,
   normalizeDiaOracleIntent,
   signDiaOracleIntentInput,
+  assertDiaOracleIntentNotExpired,
 } from "../core/dia-intent.js";
 import { createEthereumWallet } from "../oracle/ethereum-wallet-create.js";
 import { createWallet } from "../wallet/wallet-create.js";
@@ -32,11 +33,35 @@ import {
   parseCommaSeparatedHexList,
   utf8ToHex,
 } from "../core/primitives.js";
+import {
+  assertClientIdNonEmpty,
+  assertConfigMinUtxoLovelaceImmutable,
+  assertConfigUtxoLivesAtValidatorAddress,
+  assertHookCoordinatorConsistency,
+  assertNftBootstrapDestinationIsNotFundingWallet,
+  assertNonEmptyConfigSignerList,
+  assertOracleIntentTimestampAndNonceMonotonic,
+  assertOracleUpdateBootstrapRefsResolved,
+  assertPaymentHookWithdrawAmountPositive,
+  assertPaymentHookWithdrawAmountValid,
+  assertPaymentKeyHashIsConfigSigner,
+  assertReceiverTopUpAmountPositive,
+  assertReceiverWithdrawAmountPositive,
+  assertReceiverWithdrawAmountValid,
+  assertSettleManifestMatchesSingleClientReceiver,
+  assertSettleManifestReceiversNonEmptyAndUnique,
+  assertSettleReceiverAccruedPositive,
+} from "../preflight/index.js";
 import type {
   ConfigStateArtifact,
   ClientStateArtifact,
   PairStateArtifact,
 } from "../core/state.js";
+import {
+  emulatorSubmitAndMine,
+  makeOracleEmulatorLucid,
+  makeOracleEmulatorWithReferenceScriptRow,
+} from "./emulator/harness.js";
 
 testCardanoWalletCreate();
 testEthereumWalletCreate();
@@ -46,7 +71,7 @@ testCompatibleBatchRules();
 testProtocolStateInit();
 testClientStateInit();
 
-// --- Datum encoder/decoder tests (Test A) ----------------------------------
+// --- Datum encoder/decoder regression tests ---------------------------------
 // These exist as a regression net for three real bugs found and fixed in the
 // off-chain encoders during the architecture review:
 //   1. Receiver bootstrap encoded only 2 of the 3 ReceiverDatum fields.
@@ -66,11 +91,22 @@ testConfigDatumFieldOrderAndArity();
 testPairDatumRoundTrip();
 testAddressToPlutusDataKeyAndStake();
 
-// --- Adversarial / invariant tests (Test B, pure-logic slice) --------------
+// --- Pure invariant tests (withdraw, settle, batch guards) -----------------
 testReceiverWithdrawDoesNotTouchAccrued();
 testSettleDeltaInvariant();
 testBatchRejectsDuplicatePair();
 testBatchRejectsForeignReceiver();
+testSettleManifestPreChecks();
+testHookCoordinatorConsistencyPure();
+testWithdrawAmountPreflightHelpers();
+testReceiverTransactionPreflightGuards();
+testConfigUpdateAndInitArtifactPreflight();
+testBootstrapNftPayPreflight();
+testSettleAndPaymentHookPreflight();
+testOracleUpdatePreflightPureGuards();
+
+// --- Lucid emulator harness (smoke: pay + reference script genesis) ---------
+await runLucidEmulatorHarnessSmokeTests();
 
 console.log("CLI tests passed");
 
@@ -561,8 +597,390 @@ function testAddressToPlutusDataKeyAndStake(): void {
 }
 
 // =====================================================================
-// Adversarial / invariant tests (pure-logic slice of Test B)
+// Pure invariant tests (withdraw, settle, batch, config, manifest)
 // =====================================================================
+
+function testSettleManifestPreChecks(): void {
+  assert.throws(
+    () => assertSettleManifestReceiversNonEmptyAndUnique([]),
+    /at least one receiver/,
+  );
+  const dup = { receiverPolicyId: "aa", receiverAssetName: "bb" };
+  assert.throws(
+    () => assertSettleManifestReceiversNonEmptyAndUnique([dup, dup]),
+    /Duplicate settle receiver/,
+  );
+  assert.doesNotThrow(() =>
+    assertSettleManifestReceiversNonEmptyAndUnique([
+      { receiverPolicyId: "11", receiverAssetName: "22" },
+      { receiverPolicyId: "11", receiverAssetName: "33" },
+    ]),
+  );
+}
+
+function testHookCoordinatorConsistencyPure(): void {
+  assert.throws(
+    () =>
+      assertHookCoordinatorConsistency(
+        { policyId: "ab", assetName: "cd", unit: "abcd" },
+        null,
+      ),
+    /paymentHookRef set without updateCoordinatorCredential/,
+  );
+  assert.throws(
+    () =>
+      assertHookCoordinatorConsistency(null, { type: "Script", hash: "11".repeat(28) }),
+    /without paymentHookRef/,
+  );
+  assert.throws(
+    () =>
+      assertHookCoordinatorConsistency(
+        { policyId: "", assetName: "cd", unit: "cd" },
+        { type: "Script", hash: "11".repeat(28) },
+      ),
+    /non-empty hex/,
+  );
+  assert.throws(
+    () =>
+      assertHookCoordinatorConsistency(
+        { policyId: "ab", assetName: "", unit: "ab" },
+        { type: "Script", hash: "11".repeat(28) },
+      ),
+    /non-empty hex/,
+  );
+  assert.doesNotThrow(() => assertHookCoordinatorConsistency(null, null));
+  assert.doesNotThrow(() =>
+    assertHookCoordinatorConsistency(
+      { policyId: "ab", assetName: "cd", unit: "abcd" },
+      { type: "Script", hash: "11".repeat(28) },
+    ),
+  );
+}
+
+function testWithdrawAmountPreflightHelpers(): void {
+  assert.doesNotThrow(() => assertReceiverWithdrawAmountValid(100n, 100n));
+  assert.throws(
+    () => assertReceiverWithdrawAmountValid(101n, 100n),
+    /not sufficient/,
+  );
+}
+
+function testReceiverTransactionPreflightGuards(): void {
+  assert.throws(() => assertReceiverTopUpAmountPositive(0n), /greater than zero/);
+  assert.throws(() => assertReceiverTopUpAmountPositive(-1n), /greater than zero/);
+  assert.throws(() => assertReceiverWithdrawAmountPositive(0n), /greater than zero/);
+  assert.throws(
+    () => assertPaymentKeyHashIsConfigSigner("deadbeef", ["cafe", "babe"]),
+    /not authorized as a config signer/,
+  );
+  assert.doesNotThrow(() =>
+    assertPaymentKeyHashIsConfigSigner("cafe", ["cafe", "babe"]),
+  );
+  assert.throws(
+    () =>
+      assertPaymentKeyHashIsConfigSigner("bad", ["good"], {
+        unauthorizedMessage: "Settle requires a config signer. The configured wallet is not authorized.",
+      }),
+    /Settle requires a config signer/,
+  );
+}
+
+function testConfigUpdateAndInitArtifactPreflight(): void {
+  const expectedAddr = sampleScripts().configValidatorAddress;
+  assert.doesNotThrow(() =>
+    assertConfigUtxoLivesAtValidatorAddress(expectedAddr, expectedAddr),
+  );
+  assert.throws(
+    () =>
+      assertConfigUtxoLivesAtValidatorAddress(
+        "addr_test1wrong",
+        expectedAddr,
+      ),
+    /Loaded config UTxO address does not match scripts\.configValidatorAddress/,
+  );
+
+  assert.doesNotThrow(() =>
+    assertConfigMinUtxoLovelaceImmutable("5000000", "5000000"),
+  );
+  assert.throws(
+    () => assertConfigMinUtxoLovelaceImmutable("5000000", "6000000"),
+    /cannot change min_utxo_lovelace/,
+  );
+
+  assert.throws(
+    () =>
+      assertPaymentKeyHashIsConfigSigner("deadbeef", ["cafe"], {
+        unauthorizedMessage:
+          "The configured wallet is not authorized as a current config signer.",
+      }),
+    /The configured wallet is not authorized as a current config signer\./,
+  );
+
+  assert.throws(
+    () => assertNonEmptyConfigSignerList([]),
+    /at least one payment key hash/,
+  );
+  assert.throws(
+    () => assertNonEmptyConfigSignerList(["   "]),
+    /non-empty hex string/,
+  );
+  assert.doesNotThrow(() =>
+    assertNonEmptyConfigSignerList(["aa".repeat(14)]),
+  );
+
+  assert.throws(() => assertClientIdNonEmpty(""), /non-empty string/);
+  assert.throws(() => assertClientIdNonEmpty("   "), /non-empty string/);
+  assert.throws(
+    () =>
+      createClientStateArtifact("  ", {
+        clientId: "ignored",
+        receiverAssetLabel: "L",
+        receiverAssetName: "44",
+        minUtxoLovelace: "3000000",
+      }),
+    /non-empty string/,
+  );
+}
+
+function testBootstrapNftPayPreflight(): void {
+  const wallet = "addr_test1walletxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+  const script = "addr_test1scriptxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+  assert.doesNotThrow(() =>
+    assertNftBootstrapDestinationIsNotFundingWallet(script, wallet, "unit"),
+  );
+  assert.throws(
+    () => assertNftBootstrapDestinationIsNotFundingWallet(wallet, wallet, "preview:x"),
+    /must pay to the validator script address/,
+  );
+}
+
+function testSettleAndPaymentHookPreflight(): void {
+  testSettlePreflightGuards();
+  testPaymentHookWithdrawPreflightGuards();
+}
+
+function testSettlePreflightGuards(): void {
+  assert.throws(
+    () => assertSettleReceiverAccruedPositive(0n, "0", "recv_unit"),
+    /no accrued fees to settle/,
+  );
+  assert.throws(
+    () => assertSettleReceiverAccruedPositive(-3n, "-3", "recv_unit"),
+    /no accrued fees to settle/,
+  );
+  assert.doesNotThrow(() =>
+    assertSettleReceiverAccruedPositive(1n, "1", "recv_unit"),
+  );
+
+  const client = { receiverPolicyId: "aa", receiverAssetName: "bb" };
+  assert.throws(
+    () => assertSettleManifestMatchesSingleClientReceiver([], client),
+    /at least one receiver/,
+  );
+  assert.throws(
+    () =>
+      assertSettleManifestMatchesSingleClientReceiver(
+        [
+          { receiverPolicyId: "aa", receiverAssetName: "bb" },
+          { receiverPolicyId: "aa", receiverAssetName: "bb" },
+        ],
+        client,
+      ),
+    /Duplicate settle receiver/,
+  );
+  assert.throws(
+    () =>
+      assertSettleManifestMatchesSingleClientReceiver(
+        [
+          { receiverPolicyId: "11", receiverAssetName: "bb" },
+          { receiverPolicyId: "22", receiverAssetName: "bb" },
+        ],
+        client,
+      ),
+    /exactly one receiver/,
+  );
+  assert.throws(
+    () =>
+      assertSettleManifestMatchesSingleClientReceiver(
+        [{ receiverPolicyId: "xx", receiverAssetName: "yy" }],
+        client,
+      ),
+    /does not match the loaded client receiver/,
+  );
+  assert.doesNotThrow(() =>
+    assertSettleManifestMatchesSingleClientReceiver([{ ...client }], client),
+  );
+}
+
+function testPaymentHookWithdrawPreflightGuards(): void {
+  assert.throws(() => assertPaymentHookWithdrawAmountPositive(0n), /greater than zero/);
+  assert.doesNotThrow(() => assertPaymentHookWithdrawAmountPositive(1n));
+  assert.doesNotThrow(() => assertPaymentHookWithdrawAmountValid(5n, 10n));
+  assert.throws(
+    () => assertPaymentHookWithdrawAmountValid(11n, 10n),
+    /not sufficient/,
+  );
+}
+
+function testOracleUpdatePreflightPureGuards(): void {
+  testOracleIntentExpiryPreflight();
+  testBootstrapRefsPreflight();
+  testBatchRejectsMismatchedPaymentHookUnit();
+  testRecoverWitnessRejectsTamperedSignature();
+  testOracleIntentMonotonicPreflight();
+}
+
+function testOracleIntentExpiryPreflight(): void {
+  const base = {
+    intentType: "OracleUpdate",
+    version: "1.0",
+    chainId: 100640n,
+    nonce: 1n,
+    expiry: 1000n,
+    symbol: "X",
+    price: 1n,
+    timestamp: 900n,
+    source: "S",
+  };
+  assert.throws(
+    () => assertDiaOracleIntentNotExpired(base, 1001n),
+    /Oracle intent expired/,
+  );
+  assert.doesNotThrow(() => assertDiaOracleIntentNotExpired(base, 1000n));
+  assert.doesNotThrow(() =>
+    assertDiaOracleIntentNotExpired({ ...base, expiry: 0n }, 999_999_999_999n),
+  );
+}
+
+function testBootstrapRefsPreflight(): void {
+  assert.throws(
+    () =>
+      assertOracleUpdateBootstrapRefsResolved({
+        config: { txHash: "", outputIndex: 0 },
+        paymentHook: { txHash: "aa", outputIndex: 0 },
+      }),
+    /config bootstrap/,
+  );
+  assert.throws(
+    () =>
+      assertOracleUpdateBootstrapRefsResolved({
+        config: { txHash: "aa", outputIndex: 0 },
+        paymentHook: { txHash: "  ", outputIndex: 0 },
+      }),
+    /payment-hook bootstrap/,
+  );
+  assert.doesNotThrow(() =>
+    assertOracleUpdateBootstrapRefsResolved(sampleConfigArtifact().bootstrapRefs),
+  );
+}
+
+function testBatchRejectsMismatchedPaymentHookUnit(): void {
+  const protocol = sampleConfigArtifact();
+  const client = sampleClientArtifact();
+  client.receiver = sampleReceiverArtifact();
+  const first = resolvePairArtifact(samplePairArtifact("aa"), client, protocol);
+  const second = resolvePairArtifact(samplePairArtifact("bb"), client, protocol);
+  const wrongHook = {
+    ...second,
+    scripts: {
+      ...second.scripts,
+      paymentHookUnit: `${"55".repeat(28)}4449415f5041594d454e545f484f4f4b`,
+    },
+  };
+  assert.throws(
+    () => ensureCompatibleBatch([first, wrongHook]),
+    /same client deployment/,
+  );
+}
+
+function testRecoverWitnessRejectsTamperedSignature(): void {
+  const domain = {
+    name: "DIA Oracle",
+    version: "1.0",
+    sourceChainId: "100640",
+    verifyingContract: "0xF8c614A483A0427A13512F52ac72A576678bE317",
+  };
+  const signed = signDiaOracleIntentInput({
+    domain,
+    intent: {
+      intentType: "OracleUpdate",
+      version: "1.0",
+      chainId: "100640",
+      nonce: "1",
+      expiry: "9999999999",
+      symbol: "USDC/USD",
+      price: "1000",
+      timestamp: "1000",
+      source: "DIA Oracle",
+    },
+    privateKey: "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  });
+  const intent = normalizeDiaOracleIntent(signed.intent);
+  const normDomain = normalizeDiaEip712Domain(domain);
+  assert.doesNotThrow(() => recoverDiaOracleIntentWitness(normDomain, intent));
+
+  const tampered = normalizeDiaOracleIntent({
+    ...signed.intent,
+    signature: `0x${"ab".repeat(65)}`,
+  });
+  assert.throws(() => recoverDiaOracleIntentWitness(normDomain, tampered));
+}
+
+function testOracleIntentMonotonicPreflight(): void {
+  assert.throws(
+    () =>
+      assertOracleIntentTimestampAndNonceMonotonic({
+        isCreate: false,
+        intentTimestamp: 100n,
+        intentNonce: 2n,
+        pairStateTimestamp: "100",
+        pairStateNonce: "1",
+      }),
+    /timestamp must be greater/,
+  );
+  assert.throws(
+    () =>
+      assertOracleIntentTimestampAndNonceMonotonic({
+        isCreate: false,
+        intentTimestamp: 101n,
+        intentNonce: 1n,
+        pairStateTimestamp: "100",
+        pairStateNonce: "2",
+      }),
+    /nonce must be greater/,
+  );
+  assert.throws(
+    () =>
+      assertOracleIntentTimestampAndNonceMonotonic({
+        isCreate: false,
+        intentTimestamp: 100n,
+        intentNonce: 2n,
+        pairStateTimestamp: "100",
+        pairStateNonce: "1",
+        batchStatePath: "/tmp/oracle-batch.json",
+      }),
+    (err: unknown) =>
+      err instanceof Error && err.message.includes("/tmp/oracle-batch.json"),
+  );
+  assert.doesNotThrow(() =>
+    assertOracleIntentTimestampAndNonceMonotonic({
+      isCreate: true,
+      intentTimestamp: 1n,
+      intentNonce: 1n,
+      pairStateTimestamp: "999",
+      pairStateNonce: "999",
+    }),
+  );
+  assert.doesNotThrow(() =>
+    assertOracleIntentTimestampAndNonceMonotonic({
+      isCreate: false,
+      intentTimestamp: 200n,
+      intentNonce: 5n,
+      pairStateTimestamp: "100",
+      pairStateNonce: "2",
+    }),
+  );
+}
 
 function testReceiverWithdrawDoesNotTouchAccrued(): void {
   // Invariant: a withdraw of N lovelace must reduce balance_lovelace by N
@@ -931,4 +1349,33 @@ function samplePaymentHookState(): NonNullable<ConfigStateArtifact["paymentHookS
     lifetimeCollectedLovelace: "0",
     lifetimeWithdrawnLovelace: "0",
   };
+}
+
+async function runLucidEmulatorHarnessSmokeTests(): Promise<void> {
+  await testEmulatorHarnessSimpleTransfer();
+  await testEmulatorHarnessReferenceScriptGenesisRow();
+}
+
+async function testEmulatorHarnessSimpleTransfer(): Promise<void> {
+  const { lucid, emulator, accounts } = await makeOracleEmulatorLucid();
+  const dest = accounts[1].address;
+  const send = 15_000_000n;
+  const txSignBuilder = await lucid
+    .newTx()
+    .pay.ToAddress(dest, { lovelace: send })
+    .complete();
+  const signed = await txSignBuilder.sign.withWallet().complete();
+  await emulatorSubmitAndMine(emulator, signed);
+  const utxos = await emulator.getUtxos(dest);
+  const total = utxos.reduce((sum, u) => sum + (u.assets.lovelace ?? 0n), 0n);
+  assert.ok(total >= send, "recipient should hold at least the paid lovelace");
+}
+
+async function testEmulatorHarnessReferenceScriptGenesisRow(): Promise<void> {
+  const { emulator, accounts } = await makeOracleEmulatorWithReferenceScriptRow();
+  const refAddr = accounts[1].address;
+  const utxos = await emulator.getUtxos(refAddr);
+  assert.equal(utxos.length, 1);
+  assert.ok(utxos[0].scriptRef, "genesis row should expose reference script");
+  assert.equal(utxos[0].scriptRef?.type, "PlutusV3");
 }

@@ -25,6 +25,13 @@ import {
   toBigInt,
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
+import {
+  assertPaymentKeyHashIsConfigSigner,
+  assertPaymentHookWithdrawAmountPositive,
+  assertPaymentHookWithdrawAmountValid,
+} from "../preflight/index.js";
+
+export { assertPaymentHookWithdrawAmountValid } from "../preflight/index.js";
 
 export async function paymentHookWithdraw(args: {
   amountLovelace: string;
@@ -46,9 +53,10 @@ export async function paymentHookWithdraw(args: {
   const walletAddress = await lucid.wallet().address();
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
 
-  if (!state.configState.validConfigSigners.includes(walletDefaults.paymentKeyHash)) {
-    throw new Error("The configured wallet is not authorized as a config signer.");
-  }
+  assertPaymentKeyHashIsConfigSigner(
+    walletDefaults.paymentKeyHash,
+    state.configState.validConfigSigners,
+  );
 
   const [currentConfigUtxo, currentPaymentHookUtxo] = await Promise.all([
     findSingleUtxoAtUnit(
@@ -76,6 +84,7 @@ export async function paymentHookWithdraw(args: {
       });
 
   const amountLovelace = toBigInt(args.amountLovelace, "amountLovelace");
+  assertPaymentHookWithdrawAmountPositive(amountLovelace);
   const currentPaymentHookState =
     currentPaymentHookUtxo.datum
       ? decodePaymentHookDatum(
@@ -83,6 +92,11 @@ export async function paymentHookWithdraw(args: {
           state.paymentHookState.withdrawAddress,
         )
       : state.paymentHookState;
+  assertPaymentHookWithdrawAmountValid(
+    amountLovelace,
+    BigInt(currentPaymentHookState.accruedFeesLovelace),
+  );
+
   const nextPaymentHookState = {
     ...currentPaymentHookState,
     accruedFeesLovelace: (
@@ -92,10 +106,6 @@ export async function paymentHookWithdraw(args: {
       BigInt(currentPaymentHookState.lifetimeWithdrawnLovelace) + amountLovelace
     ).toString(),
   };
-
-  if (BigInt(nextPaymentHookState.accruedFeesLovelace) < 0n) {
-    throw new Error("PaymentHook accrued fees are not sufficient for the requested withdrawal.");
-  }
 
   const paymentHookDatumCbor = buildPaymentHookDatumCbor(nextPaymentHookState);
   const withdrawRedeemer = Data.to(
