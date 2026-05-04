@@ -62,6 +62,7 @@ import {
   makeOracleEmulatorLucid,
   makeOracleEmulatorWithReferenceScriptRow,
 } from "./emulator/harness.js";
+import { isAnyReferenceScriptMissing } from "../core/reference-scripts.js";
 
 testCardanoWalletCreate();
 testEthereumWalletCreate();
@@ -98,6 +99,7 @@ testBatchRejectsDuplicatePair();
 testBatchRejectsForeignReceiver();
 testSettleManifestPreChecks();
 testHookCoordinatorConsistencyPure();
+testReferenceScriptMissingHelper();
 testWithdrawAmountPreflightHelpers();
 testReceiverTransactionPreflightGuards();
 testConfigUpdateAndInitArtifactPreflight();
@@ -1121,6 +1123,24 @@ function testBatchRejectsForeignReceiver(): void {
   assert.throws(
     () => ensureCompatibleBatch([first, tampered]),
     /same client deployment/,
+  );
+}
+
+function testReferenceScriptMissingHelper(): void {
+  assert.equal(
+    isAnyReferenceScriptMissing({ receiver: false }),
+    false,
+    "all-resolved reference maps should not trigger inline fallback",
+  );
+  assert.equal(
+    isAnyReferenceScriptMissing({ receiver: true }),
+    true,
+    "a missing reference should trigger inline fallback",
+  );
+  assert.equal(
+    isAnyReferenceScriptMissing({ receiver: false, pair: true }),
+    true,
+    "mixed reference availability should still report a missing entry",
   );
 }
 

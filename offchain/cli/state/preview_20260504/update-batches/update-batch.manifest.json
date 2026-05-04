@@ -1,0 +1,14 @@
+{
+  "updates": [
+    {
+      "statePath": "./state/preview/clients/client-a/pairs/usdc-usd.json",
+      "outPath": "./state/preview/clients/client-a/pairs/usdc-usd.json",
+      "intentPath": "./state/preview/intents/usdc-usd-batch.signed.json"
+    },
+    {
+      "statePath": "./state/preview/clients/client-a/pairs/usdt-usd.json",
+      "outPath": "./state/preview/clients/client-a/pairs/usdt-usd.json",
+      "intentPath": "./state/preview/intents/usdt-usd-batch.signed.json"
+    }
+  ]
+}

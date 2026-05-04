@@ -1,0 +1,26 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts preview:intent:sign --input ./state/preview/intents/usdc-usd.unsigned.json --out ./state/preview/intents/usdc-usd.signed.json
+
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview/intents/usdc-usd.signed.json
+{
+  "intent": {
+    "intentType": "OracleUpdate",
+    "version": "1.0",
+    "chainId": "100640",
+    "nonce": "1777877977349",
+    "expiry": "1777881577",
+    "symbol": "USDC/USD",
+    "price": "100065432",
+    "timestamp": "1777877977",
+    "source": "DIA Oracle",
+    "signature": "0x3ea64f2d3ad14e8696ba094ba145bcefcf782a0dab21ccf4dad0a4624f2c0893124e4f895985ab286abde30890cca6ea0dd8f02cd0ba52c5ca41cab61ce344f81b",
+    "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+  },
+  "witness": {
+    "signerPublicKey": "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531",
+    "signerAddress": "0x2b1c7eff297766569966b630a6862947a8e5285a",
+    "intentHash": "f8b6924f48c7d2973296b133ffa019db4c92a1e576f575e6d8370f7027dfd6b6",
+    "compactSignature": "3ea64f2d3ad14e8696ba094ba145bcefcf782a0dab21ccf4dad0a4624f2c0893124e4f895985ab286abde30890cca6ea0dd8f02cd0ba52c5ca41cab61ce344f8"
+  }
+}

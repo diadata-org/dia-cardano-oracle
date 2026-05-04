@@ -18,7 +18,10 @@ import {
   readConfigState,
   type ConfigStateArtifact,
 } from "../core/state.js";
-import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
+import {
+  isAnyReferenceScriptMissing,
+  loadReferenceScriptUtxos,
+} from "../core/reference-scripts.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   buildConfigDatumCbor,
@@ -134,7 +137,7 @@ export async function configUpdate(args: {
       { ...currentConfigUtxo.assets },
     );
 
-  if (missingReferenceScript) {
+  if (isAnyReferenceScriptMissing(missingReferenceScript)) {
     reportProgress(
       "Reference script for config is missing on-chain; attaching the config validator inline.",
     );

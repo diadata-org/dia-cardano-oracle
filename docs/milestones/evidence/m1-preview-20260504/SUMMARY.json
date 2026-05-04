@@ -1,0 +1,431 @@
+{
+  "protocolTransactions": [
+    {
+      "step": "preview:config:bootstrap",
+      "submittedTxHash": "f6975c53582a2dfc2031ed05dae0ee82c252b0d050f1805d55f8f87e5d5fdd4f",
+      "confirmed": true
+    },
+    {
+      "step": "preview:config:reference-scripts",
+      "submittedTxHash": "aa672cb34019fd3839a914553f4dacb677ed0fed3ec196f8d8c4fb9f70408bf9",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:bootstrap",
+      "submittedTxHash": "bbc542f9b8a0efc7402fccd9c396c117ffc8a49175867bde960ab72b474b535a",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:reference-script",
+      "submittedTxHash": "2aecfd981003eccf7cb20a122ad7320b73e124c4c573954996d600cc4341f857",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "8e996d89368739ca80ef4620db713a8e44de1b828c8f17d71a443dd58e187791",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:withdraw",
+      "submittedTxHash": "1cf8258f56c0775f4bdd244e60b535826ea9dce84f6b8cb28dd9ded82bdbad61",
+      "confirmed": true
+    }
+  ],
+  "clientTransactions": [
+    {
+      "step": "preview:receiver:bootstrap",
+      "submittedTxHash": "cde0d8b4be4597216bbdf52304883fb16c3a2b1ff5e797596fc64190ecc42224",
+      "confirmed": true
+    },
+    {
+      "step": "preview:reference-scripts:publish-client",
+      "submittedTxHash": "cc0c685e1b389bb3b6866caf2a2adcc20e0574aa51aa789728c9347d6a3bbc77",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:top-up",
+      "submittedTxHash": "fa763874da069e3aefdf7a04c278f5f09154364f5ba41adc5b40897e18e23fc8",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:top-up",
+      "submittedTxHash": "f35de82d892001e11aafb31bae4acf6c33036cb659460bc8cfe3dfdeb7e6ff84",
+      "confirmed": true
+    },
+    {
+      "step": "preview:update:batch",
+      "submittedTxHash": "1a676b49f83b2dd7855eb1e34697f01ba383914e035120fdaf1d8363e75e1d35",
+      "confirmed": true
+    },
+    {
+      "step": "preview:update:batch",
+      "submittedTxHash": "8e04c3e07f53c560efbefb478b2cb6a29acfa1d7644924ac09da799e6b7d55d3",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "8e996d89368739ca80ef4620db713a8e44de1b828c8f17d71a443dd58e187791",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:withdraw",
+      "submittedTxHash": "7982be4b1bb27ac5f2919f786cb5742666398af4cb1623aae4c4f221a008c554",
+      "confirmed": true
+    }
+  ],
+  "evidenceFeeAudit": {
+    "source": "Koios Preview tx_info",
+    "queriedAtDate": "2026-05-04",
+    "totalConfirmedFeeLovelace": "16461829",
+    "totalConfirmedFeeAda": "16.461829",
+    "transactions": [
+      {
+        "step": "2",
+        "label": "preview:config:bootstrap",
+        "submittedTxHash": "f6975c53582a2dfc2031ed05dae0ee82c252b0d050f1805d55f8f87e5d5fdd4f",
+        "confirmed": true,
+        "feeLovelace": "300362",
+        "feeAda": "0.300362"
+      },
+      {
+        "step": "3",
+        "label": "preview:config:reference-scripts",
+        "submittedTxHash": "aa672cb34019fd3839a914553f4dacb677ed0fed3ec196f8d8c4fb9f70408bf9",
+        "confirmed": true,
+        "feeLovelace": "610693",
+        "feeAda": "0.610693"
+      },
+      {
+        "step": "5",
+        "label": "preview:payment-hook:bootstrap",
+        "submittedTxHash": "bbc542f9b8a0efc7402fccd9c396c117ffc8a49175867bde960ab72b474b535a",
+        "confirmed": true,
+        "feeLovelace": "598308",
+        "feeAda": "0.598308"
+      },
+      {
+        "step": "6",
+        "label": "preview:payment-hook:reference-script",
+        "submittedTxHash": "2aecfd981003eccf7cb20a122ad7320b73e124c4c573954996d600cc4341f857",
+        "confirmed": true,
+        "feeLovelace": "387261",
+        "feeAda": "0.387261"
+      },
+      {
+        "step": "8",
+        "label": "preview:receiver:bootstrap",
+        "submittedTxHash": "cde0d8b4be4597216bbdf52304883fb16c3a2b1ff5e797596fc64190ecc42224",
+        "confirmed": true,
+        "feeLovelace": "425212",
+        "feeAda": "0.425212"
+      },
+      {
+        "step": "9",
+        "label": "preview:reference-scripts:publish-client",
+        "submittedTxHash": "cc0c685e1b389bb3b6866caf2a2adcc20e0574aa51aa789728c9347d6a3bbc77",
+        "confirmed": true,
+        "feeLovelace": "552921",
+        "feeAda": "0.552921"
+      },
+      {
+        "step": "10",
+        "label": "preview:receiver:top-up (30 ADA)",
+        "submittedTxHash": "fa763874da069e3aefdf7a04c278f5f09154364f5ba41adc5b40897e18e23fc8",
+        "confirmed": true,
+        "feeLovelace": "350012",
+        "feeAda": "0.350012"
+      },
+      {
+        "step": "11b",
+        "label": "preview:update — USDC/USD bootstrap",
+        "submittedTxHash": "ad48a66a00d5295fd3d9435d0366b13f4d7d94888d2c24fdb61170058c8ea127",
+        "confirmed": true,
+        "feeLovelace": "697579",
+        "feeAda": "0.697579"
+      },
+      {
+        "step": "12",
+        "label": "preview:update — BTC/USD bootstrap",
+        "submittedTxHash": "0fc6bf5bcdd6a27819cc7521e2e8259ea7be78a3199b17fb7c4cb2de93d9179f",
+        "confirmed": true,
+        "feeLovelace": "697843",
+        "feeAda": "0.697843"
+      },
+      {
+        "step": "12",
+        "label": "preview:update — ETH/USD bootstrap",
+        "submittedTxHash": "407c49a5f10c15c105ee7c368a6133a03f3c1b808f1fd254d1b2a7082cd3449f",
+        "confirmed": true,
+        "feeLovelace": "697843",
+        "feeAda": "0.697843"
+      },
+      {
+        "step": "12",
+        "label": "preview:update — ADA/USD bootstrap",
+        "submittedTxHash": "ddae0b30ce9f60cd8f6c972c616e075316971d4cddb1b20cc34acfbd111e144c",
+        "confirmed": true,
+        "feeLovelace": "697491",
+        "feeAda": "0.697491"
+      },
+      {
+        "step": "12",
+        "label": "preview:update — USDT/USD bootstrap",
+        "submittedTxHash": "ca6aefe94aa6939ae7ae37fffbe1371cb2a58f58f01645fd6e859708f1720169",
+        "confirmed": true,
+        "feeLovelace": "697579",
+        "feeAda": "0.697579"
+      },
+      {
+        "step": "12",
+        "label": "preview:update — DAI/USD bootstrap",
+        "submittedTxHash": "6b2a6364980188608e88f02ca905be69e96d67a8aaef1ba9b6c6ae2365f25d31",
+        "confirmed": true,
+        "feeLovelace": "697491",
+        "feeAda": "0.697491"
+      },
+      {
+        "step": "12",
+        "label": "preview:update — SOL/USD bootstrap",
+        "submittedTxHash": "c8149192530b2566908ee5f46c73844276f30731580bf470eccf7e4ebbd2e670",
+        "confirmed": true,
+        "feeLovelace": "697843",
+        "feeAda": "0.697843"
+      },
+      {
+        "step": "12",
+        "label": "preview:update — BNB/USD bootstrap",
+        "submittedTxHash": "68f6b566566db4c7afa70aeaf8230145296f18c6d5168491352468fe632a598f",
+        "confirmed": true,
+        "feeLovelace": "697843",
+        "feeAda": "0.697843"
+      },
+      {
+        "step": "12",
+        "label": "preview:update — XRP/USD bootstrap",
+        "submittedTxHash": "d6d4b11417d7dc76451217a353b7ed0def98439a304ae49f4f0f63820ed23eb9",
+        "confirmed": true,
+        "feeLovelace": "697491",
+        "feeAda": "0.697491"
+      },
+      {
+        "step": "12",
+        "label": "preview:update — MATIC/USD bootstrap",
+        "submittedTxHash": "a3c3abf2bcec9a89a537f5a1516f1e7086e0bec75470d1e5019d91491f2e2ea3",
+        "confirmed": true,
+        "feeLovelace": "697677",
+        "feeAda": "0.697677"
+      },
+      {
+        "step": "12",
+        "label": "preview:update — DOT/USD bootstrap",
+        "submittedTxHash": "77f627a7cb575596c58124c096735169b5aaef3872ccd2d57d2013b194478303",
+        "confirmed": true,
+        "feeLovelace": "697491",
+        "feeAda": "0.697491"
+      },
+      {
+        "step": "13",
+        "label": "preview:receiver:top-up (30 ADA)",
+        "submittedTxHash": "f35de82d892001e11aafb31bae4acf6c33036cb659460bc8cfe3dfdeb7e6ff84",
+        "confirmed": true,
+        "feeLovelace": "349757",
+        "feeAda": "0.349757"
+      },
+      {
+        "step": "14",
+        "label": "preview:update:batch (10 pairs, attempted)",
+        "submittedTxHash": null,
+        "confirmed": false,
+        "feeLovelace": "0",
+        "feeAda": "0",
+        "status": "rejected_pre_submit"
+      },
+      {
+        "step": "14a",
+        "label": "preview:update:batch (5 pairs)",
+        "submittedTxHash": "1a676b49f83b2dd7855eb1e34697f01ba383914e035120fdaf1d8363e75e1d35",
+        "confirmed": true,
+        "feeLovelace": "1848581",
+        "feeAda": "1.848581"
+      },
+      {
+        "step": "14b",
+        "label": "preview:update:batch (5 pairs)",
+        "submittedTxHash": "8e04c3e07f53c560efbefb478b2cb6a29acfa1d7644924ac09da799e6b7d55d3",
+        "confirmed": true,
+        "feeLovelace": "1842452",
+        "feeAda": "1.842452"
+      },
+      {
+        "step": "15",
+        "label": "preview:settle",
+        "submittedTxHash": "8e996d89368739ca80ef4620db713a8e44de1b828c8f17d71a443dd58e187791",
+        "confirmed": true,
+        "feeLovelace": "762751",
+        "feeAda": "0.762751"
+      },
+      {
+        "step": "16",
+        "label": "preview:receiver:withdraw (5 ADA → admin wallet)",
+        "submittedTxHash": "7982be4b1bb27ac5f2919f786cb5742666398af4cb1623aae4c4f221a008c554",
+        "confirmed": true,
+        "feeLovelace": "379981",
+        "feeAda": "0.379981"
+      },
+      {
+        "step": "17",
+        "label": "preview:payment-hook:withdraw (10 ADA → admin wallet)",
+        "submittedTxHash": "1cf8258f56c0775f4bdd244e60b535826ea9dce84f6b8cb28dd9ded82bdbad61",
+        "confirmed": true,
+        "feeLovelace": "379367",
+        "feeAda": "0.379367"
+      }
+    ]
+  },
+  "scripts": {
+    "configPolicyId": "36e44a4553788b6e7994b826ba67bfcceb70f394a6ba49f791413513",
+    "configUnit": "36e44a4553788b6e7994b826ba67bfcceb70f394a6ba49f7914135134449415f434f4e464947",
+    "configValidatorHash": "36e44a4553788b6e7994b826ba67bfcceb70f394a6ba49f791413513",
+    "configValidatorAddress": "addr_test1wqmwgjj92dugkmnejjuzdwn8hlxwku8njjnt5j0hj9qn2ycj0msnv",
+    "coordinatorHash": "da563a2d90ae28342c8cf04ba4d0059512a19f4f310268e283c3edd8",
+    "coordinatorRewardAddress": "stake_test17rd9vw3djzhzsdpv3ncyhfxsqk239gvlfucsy68zs0p7mkqunnsxs",
+    "paymentHookPolicyId": "7aa0a4029e2c5c00a74ee4f0dd5036c1a3b5bfa3413505e9413f9027",
+    "paymentHookUnit": "7aa0a4029e2c5c00a74ee4f0dd5036c1a3b5bfa3413505e9413f90274449415f5041594d454e545f484f4f4b",
+    "paymentHookValidatorHash": "7aa0a4029e2c5c00a74ee4f0dd5036c1a3b5bfa3413505e9413f9027",
+    "paymentHookValidatorAddress": "addr_test1wpa2pfqznck9cq98fmj0ph2sxmq68ddl5dqn2p0fgyleqfcj9rcus",
+    "pairValidatorAddress": "addr_test1wr22ktazlu2wzpzntr0m45pns2jwgm6knhx83007jwsz6zctjx355"
+  },
+  "configUtxo": {
+    "current": {
+      "txHash": "bbc542f9b8a0efc7402fccd9c396c117ffc8a49175867bde960ab72b474b535a",
+      "outputIndex": 0
+    }
+  },
+  "paymentHookState": {
+    "withdrawAddress": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
+    "accruedFeesLovelace": "32000000",
+    "lifetimeCollectedLovelace": "42000000",
+    "lifetimeWithdrawnLovelace": "10000000",
+    "minUtxoLovelace": "3000000"
+  },
+  "paymentHookUtxo": {
+    "current": {
+      "txHash": "1cf8258f56c0775f4bdd244e60b535826ea9dce84f6b8cb28dd9ded82bdbad61",
+      "outputIndex": 0
+    }
+  },
+  "receiverState": {
+    "receiverAssetLabel": "DIA_RECEIVER_CLIENT_A",
+    "receiverAssetName": "4449415f52454345495645525f434c49454e545f41",
+    "balanceLovelace": "0",
+    "accruedToHookLovelace": "0",
+    "minUtxoLovelace": "3000000"
+  },
+  "receiverUtxo": {
+    "current": {
+      "txHash": "",
+      "outputIndex": 0
+    }
+  },
+  "pairs": {
+    "ada-usd.json": {
+      "stateUtxo": {
+        "txHash": "1a676b49f83b2dd7855eb1e34697f01ba383914e035120fdaf1d8363e75e1d35",
+        "outputIndex": 2
+      },
+      "price": "45100000",
+      "timestamp": "1777879570",
+      "nonce": "1777879571154"
+    },
+    "bnb-usd.json": {
+      "stateUtxo": {
+        "txHash": "8e04c3e07f53c560efbefb478b2cb6a29acfa1d7644924ac09da799e6b7d55d3",
+        "outputIndex": 1
+      },
+      "price": "62020000000",
+      "timestamp": "1777879719",
+      "nonce": "1777879719781"
+    },
+    "btc-usd.json": {
+      "stateUtxo": {
+        "txHash": "1a676b49f83b2dd7855eb1e34697f01ba383914e035120fdaf1d8363e75e1d35",
+        "outputIndex": 0
+      },
+      "price": "6000100000000",
+      "timestamp": "1777879562",
+      "nonce": "1777879563787"
+    },
+    "dai-usd.json": {
+      "stateUtxo": {
+        "txHash": "1a676b49f83b2dd7855eb1e34697f01ba383914e035120fdaf1d8363e75e1d35",
+        "outputIndex": 4
+      },
+      "price": "100013000",
+      "timestamp": "1777879578",
+      "nonce": "1777879578432"
+    },
+    "dot-usd.json": {
+      "stateUtxo": {
+        "txHash": "8e04c3e07f53c560efbefb478b2cb6a29acfa1d7644924ac09da799e6b7d55d3",
+        "outputIndex": 4
+      },
+      "price": "42200000",
+      "timestamp": "1777879731",
+      "nonce": "1777879732117"
+    },
+    "eth-usd.json": {
+      "stateUtxo": {
+        "txHash": "1a676b49f83b2dd7855eb1e34697f01ba383914e035120fdaf1d8363e75e1d35",
+        "outputIndex": 1
+      },
+      "price": "350010000000",
+      "timestamp": "1777879566",
+      "nonce": "1777879566801"
+    },
+    "matic-usd.json": {
+      "stateUtxo": {
+        "txHash": "8e04c3e07f53c560efbefb478b2cb6a29acfa1d7644924ac09da799e6b7d55d3",
+        "outputIndex": 3
+      },
+      "price": "75200000",
+      "timestamp": "1777879727",
+      "nonce": "1777879727929"
+    },
+    "sol-usd.json": {
+      "stateUtxo": {
+        "txHash": "8e04c3e07f53c560efbefb478b2cb6a29acfa1d7644924ac09da799e6b7d55d3",
+        "outputIndex": 0
+      },
+      "price": "18520000000",
+      "timestamp": "1777879715",
+      "nonce": "1777879715635"
+    },
+    "usdc-usd.json": {
+      "stateUtxo": {
+        "txHash": "ad48a66a00d5295fd3d9435d0366b13f4d7d94888d2c24fdb61170058c8ea127",
+        "outputIndex": 0
+      },
+      "price": "100065432",
+      "timestamp": "1777878937",
+      "nonce": "1777878937009"
+    },
+    "usdt-usd.json": {
+      "stateUtxo": {
+        "txHash": "1a676b49f83b2dd7855eb1e34697f01ba383914e035120fdaf1d8363e75e1d35",
+        "outputIndex": 3
+      },
+      "price": "99988000",
+      "timestamp": "1777879574",
+      "nonce": "1777879575042"
+    },
+    "xrp-usd.json": {
+      "stateUtxo": {
+        "txHash": "8e04c3e07f53c560efbefb478b2cb6a29acfa1d7644924ac09da799e6b7d55d3",
+        "outputIndex": 2
+      },
+      "price": "21530000",
+      "timestamp": "1777879723",
+      "nonce": "1777879724284"
+    }
+  }
+}

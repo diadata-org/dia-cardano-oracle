@@ -15,7 +15,10 @@ import {
   readConfigState,
   type ConfigStateArtifact,
 } from "../core/state.js";
-import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
+import {
+  isAnyReferenceScriptMissing,
+  loadReferenceScriptUtxos,
+} from "../core/reference-scripts.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   buildPaymentHookDatumCbor,
@@ -149,7 +152,7 @@ export async function paymentHookWithdraw(args: {
       lovelace: amountLovelace,
     });
 
-  if (missingReferenceScript) {
+  if (isAnyReferenceScriptMissing(missingReferenceScript)) {
     reportProgress(
       "Reference script for payment hook is missing on-chain; attaching the payment hook validator inline.",
     );

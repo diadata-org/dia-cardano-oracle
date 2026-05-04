@@ -1,0 +1,59 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts preview:update --intent ./state/preview/intents/bnb-usd.signed.json --min-utxo-lovelace 5000000 --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json --state ./state/preview/clients/client-a/pairs/bnb-usd.json
+
+[preview:update] Loading signed intent from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview/intents/bnb-usd.signed.json
+[preview:update] Loading client and protocol state
+[preview:update] Connecting to Preview and selecting the configured wallet
+[preview:update] Building Preview oracle update transaction
+[preview:update] Unsigned transaction ready: 68f6b566566db4c7afa70aeaf8230145296f18c6d5168491352468fe632a598f
+[preview:update] Submitted transaction hash: 68f6b566566db4c7afa70aeaf8230145296f18c6d5168491352468fe632a598f
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview/clients/client-a/pairs/bnb-usd.json
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+  },
+  "pair": {
+    "tokenName": "09da81653014451f3a86d96589f6a9e5d97b4e8236a461c7b2edbe1bab30b101",
+    "pairId": "424e422f555344",
+    "pairUnit": "d4ab2fa2ff14e1045358dfbad03382a4e46f569dcc78bdfe93a02d0b09da81653014451f3a86d96589f6a9e5d97b4e8236a461c7b2edbe1bab30b101",
+    "pairValidatorAddress": "addr_test1wr22ktazlu2wzpzntr0m45pns2jwgm6knhx83007jwsz6zctjx355",
+    "stateUtxo": {
+      "txHash": "68f6b566566db4c7afa70aeaf8230145296f18c6d5168491352468fe632a598f",
+      "outputIndex": 0
+    }
+  },
+  "pairState": {
+    "pairId": "424e422f555344",
+    "price": "62000000000",
+    "timestamp": "1777879237",
+    "nonce": "1777879237518",
+    "intentHash": "fd2d5cad27db19f97b4b5f23362fc751f3425b68353c96551d07ae60148138c0",
+    "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+    "minUtxoLovelace": "5000000",
+    "intent": {
+      "intentType": "OracleUpdate",
+      "version": "1.0",
+      "chainId": "100640",
+      "nonce": "1777879237518",
+      "expiry": "1777882837",
+      "symbol": "BNB/USD",
+      "price": "62000000000",
+      "timestamp": "1777879237",
+      "source": "DIA Oracle",
+      "signature": "edcc13bb9017326d175090ca443e4a0bba232f62837c5631503b9749251f6ef7726e6c52bc75e5142e516bcad308c231193f0630c4a94f6878d360bc3f7954241b",
+      "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+    }
+  },
+  "datum": {
+    "pairCbor": "d8799f47424e422f5553441b0000000e6f7cec001a69f848c51b0000019df1dc438e5820fd2d5cad27db19f97b4b5f23362fc751f3425b68353c96551d07ae60148138c0542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+  },
+  "transactions": [
+    {
+      "step": "preview:update",
+      "submittedTxHash": "68f6b566566db4c7afa70aeaf8230145296f18c6d5168491352468fe632a598f",
+      "confirmed": true
+    }
+  ]
+}

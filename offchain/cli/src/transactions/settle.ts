@@ -251,8 +251,14 @@ export async function settleAccruedFees(args: {
 
   // --- Build transaction ---
   reportProgress("Building Preview settle transaction");
+  // Settle does not consume an intent, but the coordinator's
+  // ApplySettle path still runs alongside other validators that may
+  // require finite bounds (defence in depth). A 30-min window is safe.
+  const nowMs = Date.now();
   let txBuilder = lucid
     .newTx()
+    .validFrom(nowMs - 60_000)
+    .validTo(nowMs + 30 * 60_000)
     .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
     .collectFrom([currentReceiverUtxo], receiverRedeemer)
     .collectFrom([currentPaymentHookUtxo], paymentHookRedeemer)

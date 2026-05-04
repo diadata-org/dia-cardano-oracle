@@ -382,8 +382,23 @@ export async function submitBatchOracleUpdate(args: {
   );
 
   reportProgress("Building Preview oracle batch update transaction");
+  // Finite tx validity range required by the on-chain coordinator
+  // (intent_expiry_satisfied) and pair_state.pair_intent_satisfied.
+  // Cap upper bound below the earliest intent expiry in the batch.
+  const nowMs = Date.now();
+  const earliestExpirySec = preparedUpdates.reduce(
+    (min, u) => (u.intent.expiry < min ? u.intent.expiry : min),
+    preparedUpdates[0].intent.expiry,
+  );
+  const txValidFromMs = nowMs - 60_000;
+  const txValidToMs = Math.min(
+    nowMs + 30 * 60_000,
+    Number(earliestExpirySec) * 1000 - 60_000,
+  );
   let txBuilder = lucid
     .newTx()
+    .validFrom(txValidFromMs)
+    .validTo(txValidToMs)
     .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
     .collectFrom([currentReceiverUtxo], receiverRedeemer)
     .withdraw(state.scripts.coordinatorRewardAddress, 0n, coordinatorRedeemer);

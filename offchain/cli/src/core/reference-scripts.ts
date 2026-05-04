@@ -13,6 +13,12 @@ export type ReferenceScriptLoadResult<K extends string> = {
   missing: Record<K, boolean>;
 };
 
+export function isAnyReferenceScriptMissing<K extends string>(
+  missing: Record<K, boolean>,
+): boolean {
+  return Object.values(missing).some(Boolean);
+}
+
 export async function loadReferenceScriptUtxos<K extends string>(
   descriptors: readonly ReferenceScriptDescriptor<K>[],
   reportProgress: (message: string) => void,

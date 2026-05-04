@@ -1,0 +1,7 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts preview:payment-hook:parameterize --state ./state/preview/config-bootstrap.json
+
+[preview:payment-hook:parameterize] Using PaymentHook values from the protocol artifact
+[preview:payment-hook:parameterize] Connecting to Preview and selecting the configured wallet
+Unable to find payment-hook bootstrap UTxO #0 in the configured wallet.

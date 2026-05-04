@@ -1,0 +1,15 @@
+{
+  "validConfigSigners": [
+    "50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2d"
+  ],
+  "authorizedDiaPublicKeys": [
+    "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531"
+  ],
+  "domain": {
+    "name": "DIA Oracle",
+    "version": "1.0",
+    "sourceChainId": "100640",
+    "verifyingContract": "f8c614a483a0427a13512f52ac72a576678be317"
+  },
+  "protocolFeeLovelace": "2000000"
+}

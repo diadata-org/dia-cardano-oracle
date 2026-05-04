@@ -357,8 +357,17 @@ export async function submitOracleUpdate(args: {
   const nextReceiverDatumCbor = buildReceiverDatumCbor(nextReceiverState);
 
   reportProgress("Building Preview oracle update transaction");
+  // The on-chain coordinator (and pair_state.pair_intent_satisfied) require
+  // a finite tx validity range so intent expiry / bootstrap freshness can
+  // be evaluated. Cap the upper bound below the signed intent's expiry.
+  const nowMs = Date.now();
+  const txValidFromMs = nowMs - 60_000;
+  const intentExpiryMs = Number(intent.expiry) * 1000;
+  const txValidToMs = Math.min(nowMs + 30 * 60_000, intentExpiryMs - 60_000);
   let txBuilder = lucid
     .newTx()
+    .validFrom(txValidFromMs)
+    .validTo(txValidToMs)
     .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
     .collectFrom([currentReceiverUtxo], receiverRedeemer)
     .collectFrom([walletFundingUtxo])

@@ -1,0 +1,70 @@
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+  },
+  "receiver": {
+    "clientId": "client-a",
+    "bootstrapRef": {
+      "txHash": "855989fa8de4140c9307045dafeb245bb70f8ca74aac0e235d9ea5cb6fd3c7b1",
+      "outputIndex": 1
+    },
+    "receiverAssetName": "4449415f52454345495645525f434c49454e545f41",
+    "receiverPolicyId": "2946700041db0a710ced0da2ff7954f29550fc9ebc817557b68c9a1c",
+    "receiverUnit": "2946700041db0a710ced0da2ff7954f29550fc9ebc817557b68c9a1c4449415f52454345495645525f434c49454e545f41",
+    "receiverValidatorHash": "2946700041db0a710ced0da2ff7954f29550fc9ebc817557b68c9a1c",
+    "receiverValidatorAddress": "addr_test1wq55vuqqg8ds5ugva5x69lme2nef258un67gza2hk6xf58q8r2zne",
+    "receiverState": {
+      "balanceLovelace": "2000000",
+      "minUtxoLovelace": "3000000"
+    },
+    "receiverUtxo": {
+      "current": {
+        "txHash": "4dc69409ce41b4a02cf8a7867e5891a6a5007a7ef213a435ea6bfa23b91bb687",
+        "outputIndex": 2
+      }
+    }
+  },
+  "paymentHookState": {
+    "withdrawAddress": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
+    "accruedFeesLovelace": "8000000",
+    "lifetimeCollectedLovelace": "8000000",
+    "lifetimeWithdrawnLovelace": "0",
+    "minUtxoLovelace": "3000000"
+  },
+  "paymentHookUtxo": {
+    "current": {
+      "txHash": "4dc69409ce41b4a02cf8a7867e5891a6a5007a7ef213a435ea6bfa23b91bb687",
+      "outputIndex": 3
+    }
+  },
+  "pairs": [
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview/clients/client-a/pairs/usdc-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview/clients/client-a/pairs/usdc-usd.json",
+      "pairId": "555344432f555344",
+      "pairUnit": "f07a8782f848ddd5902251ed731fc66a2c605fc8eb7f19d9a89556010156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac",
+      "stateUtxo": {
+        "txHash": "4dc69409ce41b4a02cf8a7867e5891a6a5007a7ef213a435ea6bfa23b91bb687",
+        "outputIndex": 0
+      }
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview/clients/client-a/pairs/usdt-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview/clients/client-a/pairs/usdt-usd.json",
+      "pairId": "555344542f555344",
+      "pairUnit": "f07a8782f848ddd5902251ed731fc66a2c605fc8eb7f19d9a89556015ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315",
+      "stateUtxo": {
+        "txHash": "4dc69409ce41b4a02cf8a7867e5891a6a5007a7ef213a435ea6bfa23b91bb687",
+        "outputIndex": 1
+      }
+    }
+  ],
+  "transactions": [
+    {
+      "step": "preview:update:batch",
+      "submittedTxHash": "4dc69409ce41b4a02cf8a7867e5891a6a5007a7ef213a435ea6bfa23b91bb687",
+      "confirmed": true
+    }
+  ]
+}

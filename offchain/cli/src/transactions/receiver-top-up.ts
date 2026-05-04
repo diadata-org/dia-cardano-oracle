@@ -14,7 +14,10 @@ import {
   appendTransactionRecord,
   type ClientStateArtifact,
 } from "../core/state.js";
-import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
+import {
+  isAnyReferenceScriptMissing,
+  loadReferenceScriptUtxos,
+} from "../core/reference-scripts.js";
 import { readClientContext } from "../core/artifact-context.js";
 import {
   buildReceiverDatumCbor,
@@ -114,7 +117,7 @@ export async function receiverTopUp(args: {
       },
     );
 
-  if (missingReferenceScript) {
+  if (isAnyReferenceScriptMissing(missingReferenceScript)) {
     reportProgress(
       "Reference script for receiver is missing on-chain; attaching the receiver validator inline.",
     );
