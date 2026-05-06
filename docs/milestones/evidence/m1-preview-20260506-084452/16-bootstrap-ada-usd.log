@@ -1,0 +1,61 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts preview:update --intent ./state/preview_rerun_20260506-084452/intents/ada-usd.signed.json --protocol-state ./state/preview_rerun_20260506-084452/config-bootstrap.json --client-state ./state/preview_rerun_20260506-084452/clients/client-a.json --state ./state/preview_rerun_20260506-084452/clients/client-a/pairs/ada-usd.json
+
+[1G[0K[preview:update] Loading signed intent from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260506-084452/intents/ada-usd.signed.json
+[preview:update] Loading client and protocol state
+[preview:update] Connecting to Preview and selecting the configured wallet
+[preview:update] Building Preview oracle update transaction
+[preview:update] Tx resources: fee=0.697491 ADA (697491 lovelace), cpu=727038683, mem=1871968
+[preview:update] Output[0] | addr=addr_test1wqfz...yf9twd | lovelace=5.000000 ADA (5000000) | assets=122d94207291...5e32b4=1 | datum=inline(91B)
+[preview:update] Output[1] | addr=addr_test1wrvp...2kple9 | lovelace=35.000000 ADA (35000000) | assets=d81b5bea65f0...545f41=1 | datum=inline(19B)
+[preview:update] Output[2] | addr=addr_test1qpgp...quxj3j | lovelace=5748.348859 ADA (5748348859)
+[preview:update] Unsigned transaction ready: b9b58c3c42df89457d8b0beec42de519f948939bdeb175572e9eff3b7dd3b8e6
+[preview:update] Submitted transaction hash: b9b58c3c42df89457d8b0beec42de519f948939bdeb175572e9eff3b7dd3b8e6
+[preview:update] Confirmed by Blockfrost: oracle update transaction b9b58c3c42df89457d8b0beec42de519f948939bdeb175572e9eff3b7dd3b8e6.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260506-084452/clients/client-a/pairs/ada-usd.json
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+  },
+  "pair": {
+    "tokenName": "04e5366fb69cdc906d0e8841d641628f09a50f7618e944de5cdb7a26b95e32b4",
+    "pairId": "4144412f555344",
+    "pairUnit": "122d94207291b7aa97efe85b4a23fe20c00dbdf7ec28d3604313ec2a04e5366fb69cdc906d0e8841d641628f09a50f7618e944de5cdb7a26b95e32b4",
+    "pairValidatorAddress": "addr_test1wqfzm9pqw2gm025hal59kj3rlcsvqrda7lkz35mqgvf7c2syf9twd"
+  },
+  "pairState": {
+    "pairId": "4144412f555344",
+    "price": "750000000",
+    "timestamp": "1778057945",
+    "nonce": "1778057945000",
+    "intentHash": "ccda5d15f5da5649c696dedf9c70ae167b378d69da9fd6cd2f1919985690cf8f",
+    "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+    "minUtxoLovelace": "5000000",
+    "intent": {
+      "intentType": "OracleUpdate",
+      "version": "1.0",
+      "chainId": "100640",
+      "nonce": "1778057945000",
+      "expiry": "1778061545",
+      "symbol": "ADA/USD",
+      "price": "750000000",
+      "timestamp": "1778057945",
+      "source": "DIA Oracle",
+      "signature": "f830473b1b4f4c34968b370a58b0284919d1e57832f4491afa1d2200de725d07707ba2814fb2032b9bcd8b0203994496bdb68c23149c17e7e647be4f4714c8f11c",
+      "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+    }
+  },
+  "datum": {
+    "pairCbor": "d8799f474144412f5553441a2cb417801a69fb02d91b0000019dfc831fa85820ccda5d15f5da5649c696dedf9c70ae167b378d69da9fd6cd2f1919985690cf8f542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+  },
+  "transactions": [
+    {
+      "step": "preview:update",
+      "submittedTxHash": "b9b58c3c42df89457d8b0beec42de519f948939bdeb175572e9eff3b7dd3b8e6",
+      "confirmed": true
+    }
+  ]
+}
+[1G[0K⠙[1G[0K
