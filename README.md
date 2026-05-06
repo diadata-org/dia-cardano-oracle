@@ -9,7 +9,7 @@ The source-of-truth architecture is:
 Project and delivery documents:
 
 - [Final Cardano Milestones](docs/milestones/final-cardano-milestones.md)
-- [Milestone 1 Preview Evidence](docs/milestones/milestone-1-preview-evidence.md)
+- [Milestone 1 Preview Evidence](docs/milestones/evidence/m1-preview-20260506-084452/milestone-1-preview-evidence.md)
 - [Requirements](docs/requirements/cardano-integration-requirement-pf.md)
 
 Component docs:

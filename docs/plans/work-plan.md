@@ -7,7 +7,7 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 - [Cardano Oracle Architecture](../architecture/cardano-oracle-architecture.md) — single architecture reference.
 - [Cardano Integration Requirement [PF]](../requirements/cardano-integration-requirement-pf.md) — DIA requirement document.
 - [Final Cardano Milestones](../milestones/final-cardano-milestones.md) — Catalyst milestone text.
-- [Milestone 1 Preview Evidence](../milestones/milestone-1-preview-evidence.md) — M1 Preview verification log.
+- [Milestone 1 Preview Evidence](../milestones/evidence/m1-preview-20260506-084452/milestone-1-preview-evidence.md) — M1 Preview verification log.
 - [Milestone 2 Feeder Strategy](./milestone-2-feeder-strategy.md) — recommended feeder split, DIA stack glossary, and M2 implementation direction.
 
 ## Scope
@@ -94,7 +94,7 @@ Tasks:
 
 Tasks:
 
-- [ ] **Preview evidence pack — fresh capture** on the current bytecode: full bootstrap (Config, PaymentHook, Receiver), reference-script publication, Receiver top-up, single oracle update, batch oracle update, **Settle**, Receiver withdraw, PaymentHook withdraw. Logs and tx hashes go under `docs/milestones/evidence/m1-preview-<DATE>/`; `milestone-1-preview-evidence.md` tables and explorer links must be refreshed. Historical pack `docs/milestones/evidence/m1-preview-20260427/` predates the current contracts and is kept only as historical proof. Requires Preview wallet + ADA (operator task).
+- [x] **Preview evidence pack — fresh capture** on the current bytecode: full bootstrap (Config, PaymentHook, Receiver), reference-script publication, Receiver top-up, single oracle update, batch oracle update, **Settle**, Receiver withdraw, PaymentHook withdraw. Captured 2026-05-06 under `docs/milestones/evidence/m1-preview-20260506-084452/`. Historical pack `docs/milestones/evidence/m1-preview-20260427/` predates the current contracts and is kept only as historical proof.
 - [ ] Mainnet deployment scripts and evidence (contract addresses, reference-script UTxOs, verified mainnet tx hashes).
 - [x] Operator runbook (onboarding a new client, subscribing a new pair, rotating signers, withdrawing accrued fees).
 - [ ] Developer documentation published via DIA's developer documentation website, covering:
