@@ -19,6 +19,7 @@ import {
   loadReferenceScriptUtxos,
 } from "../core/reference-scripts.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
+import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { readClientContext } from "../core/artifact-context.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
@@ -172,6 +173,7 @@ export async function receiverWithdraw(args: {
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -202,16 +204,15 @@ export async function receiverWithdraw(args: {
     });
   }
 
-  const latestReceiverUtxo =
-    args.buildOnly || !confirmed
-      ? state.receiver.receiverUtxo.current
-      : await waitForUnitUtxoReplacement({
-          lucid,
-          address: state.receiver.receiverValidatorAddress,
-          unit: state.receiver.receiverUnit,
-          label: "receiver",
-          previousOutRef: currentReceiverUtxo,
-        });
+  if (!args.buildOnly && confirmed) {
+    await waitForUnitUtxoReplacement({
+      lucid,
+      address: state.receiver.receiverValidatorAddress,
+      unit: state.receiver.receiverUnit,
+      label: "receiver",
+      previousOutRef: currentReceiverUtxo,
+    });
+  }
 
   return {
     ...state,
@@ -222,12 +223,6 @@ export async function receiverWithdraw(args: {
     receiver: {
       ...state.receiver,
       receiverState: nextReceiverState,
-      receiverUtxo: {
-        current: {
-          txHash: latestReceiverUtxo.txHash,
-          outputIndex: latestReceiverUtxo.outputIndex,
-        },
-      },
     },
     datum: {
       ...state.datum,

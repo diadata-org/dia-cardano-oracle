@@ -23,7 +23,8 @@ export async function awaitTxConfirmation(args: {
   primaryTimeoutMs?: number;
 }): Promise<boolean> {
   const reportProgress = args.reportProgress ?? (() => undefined);
-  const primaryTimeoutMs = args.primaryTimeoutMs ?? 10_000;
+  const primaryTimeoutMs = args.primaryTimeoutMs ?? 60_000;
+  const label = args.label ?? "transaction";
 
   try {
     const confirmed = await Promise.race([
@@ -31,15 +32,16 @@ export async function awaitTxConfirmation(args: {
       sleep(primaryTimeoutMs).then(() => false),
     ]);
     if (confirmed) {
+      reportProgress(`Confirmed by Blockfrost: ${label} ${args.txHash}.`);
       return true;
     }
 
     reportProgress(
-      `Primary confirmation provider did not observe ${args.txHash} within ${primaryTimeoutMs}ms; falling back to Koios confirmation.`,
+      `Blockfrost did not see ${args.txHash} within ${primaryTimeoutMs}ms; trying Koios.`,
     );
   } catch (error) {
     reportProgress(
-      `Primary confirmation provider failed for ${args.txHash}; falling back to Koios confirmation (${describeError(error)}).`,
+      `Blockfrost lookup failed for ${args.txHash}; trying Koios (${describeError(error)}).`,
     );
   }
 
@@ -47,7 +49,6 @@ export async function awaitTxConfirmation(args: {
   const fetchImpl = args.fetchImpl ?? fetch;
   const maxAttempts = args.koiosMaxAttempts ?? 40;
   const delayMs = args.koiosDelayMs ?? 3_000;
-  const label = args.label ?? "transaction";
   let lastError: unknown = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -62,13 +63,13 @@ export async function awaitTxConfirmation(args: {
         const location = txInfo.block_height
           ? ` at block ${txInfo.block_height}`
           : "";
-        reportProgress(`Koios confirmed ${label} ${args.txHash}${location}.`);
+        reportProgress(`Confirmed by Koios: ${label} ${args.txHash}${location}.`);
         return true;
       }
     } catch (error) {
       lastError = error;
       reportProgress(
-        `Koios confirmation attempt ${attempt + 1}/${maxAttempts} failed for ${args.txHash} (${describeError(error)}).`,
+        `Koios attempt ${attempt + 1}/${maxAttempts} failed for ${args.txHash} (${describeError(error)}).`,
       );
     }
 

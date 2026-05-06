@@ -16,9 +16,11 @@ import {
 import { normalizeHex } from "../core/dia-intent.js";
 import {
   appendTransactionRecord,
+  hasCompletedStep,
   type ClientStateArtifact,
 } from "../core/state.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
+import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { readClientContext } from "../core/artifact-context.js";
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
@@ -49,7 +51,7 @@ export async function receiverBootstrap(args: {
     protocolStatePath: args.protocolStatePath,
   });
 
-  if (state.receiver?.receiverUtxo.current.txHash) {
+  if (hasCompletedStep(state.transactions, "preview:receiver:bootstrap")) {
     throw new Error(
       "Receiver bootstrap was already completed for this client artifact. Reuse the current artifact and continue with the next step instead of running preview:receiver:bootstrap again.",
     );
@@ -199,6 +201,7 @@ export async function receiverBootstrap(args: {
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -228,10 +231,11 @@ export async function receiverBootstrap(args: {
     });
   }
 
-  const latestReceiverUtxo =
-    args.buildOnly || !confirmed
-      ? { txHash: "", outputIndex: 0 }
-      : await findSingleUtxoAtUnit(lucid, receiverValidatorAddress, receiverUnit, "receiver");
+  // Wait for the indexer to see the freshly-minted Receiver UTxO before
+  // returning, so the next CLI step resolves it by NFT immediately.
+  if (!args.buildOnly && confirmed) {
+    await findSingleUtxoAtUnit(lucid, receiverValidatorAddress, receiverUnit, "receiver");
+  }
 
   return {
     ...state,
@@ -254,12 +258,6 @@ export async function receiverBootstrap(args: {
       receiverValidatorHash,
       receiverValidatorAddress,
       receiverState,
-      receiverUtxo: {
-        current: {
-          txHash: latestReceiverUtxo.txHash,
-          outputIndex: latestReceiverUtxo.outputIndex,
-        },
-      },
     },
     datum: {
       ...state.datum,

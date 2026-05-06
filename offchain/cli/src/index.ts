@@ -32,25 +32,25 @@ function printUsage(): void {
   npm run cli -- preview:wallet:utxos
   npm run cli -- preview:wallet:defaults
   npm run cli -- preview:ethereum-wallet:create
-  npm run cli -- preview:protocol:init [--use-defaults] [--out ./state/preview/config-bootstrap.json]
-  npm run cli -- preview:client:init [--state ./state/preview/config-bootstrap.json] [--client-id client-a] [--use-defaults] [--out ./state/preview/clients/client-a.json]
-  npm run cli -- preview:intent:create [--state ./state/preview/config-bootstrap.json] [--out ./state/preview/intents/usdc-usd.unsigned.json]
+  npm run cli -- preview:protocol:init [--valid-config-signers <pkh[,pkh...]> --authorized-dia-public-keys <pubkey[,pubkey...]> --domain-name "DIA Oracle" --domain-version 1.0 --domain-source-chain-id 100640 --domain-verifying-contract 0xF8c614A483A0427A13512F52ac72A576678bE317 --protocol-fee-lovelace 2000000 --max-bootstrap-drift-seconds 300 --min-utxo-lovelace 5000000 --config-asset-label DIA_CONFIG --payment-hook-asset-label DIA_PAYMENT_HOOK --payment-hook-withdraw-address <addr>] [--out ./state/preview/config-bootstrap.json]
+  npm run cli -- preview:client:init [--state ./state/preview/config-bootstrap.json] [--client-id client-a --receiver-asset-label DIA_RECEIVER_CLIENT_A] [--out ./state/preview/clients/client-a.json]
+  npm run cli -- preview:intent:create [--state ./state/preview/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ./state/preview/intents/usdc-usd.unsigned.json]
   npm run cli -- preview:intent:sign [--input ./state/preview/intents/usdc-usd.unsigned.json] [--out ./state/preview/intents/usdc-usd.signed.json]
-  npm run cli -- preview:intent:create-and-sign [--state ./state/preview/config-bootstrap.json] [--out ./state/preview/intents/usdc-usd.signed.json]
+  npm run cli -- preview:intent:create-and-sign [--state ./state/preview/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ./state/preview/intents/usdc-usd.signed.json]
   npm run cli -- preview:config:update:create [--state ./state/preview/config-bootstrap.json] [--out ./state/preview/config-updates/config-update.preview.json]
   npm run cli -- preview:config:parameterize --state ./state/preview/config-bootstrap.json
-  npm run cli -- preview:config:reference-scripts --lovelace-per-output 3000000 --state ./state/preview/config-bootstrap.json [--build-only]
+  npm run cli -- preview:config:reference-scripts --state ./state/preview/config-bootstrap.json [--build-only]
   npm run cli -- preview:config:bootstrap --state ./state/preview/config-bootstrap.json [--build-only]
   npm run cli -- preview:payment-hook:parameterize --state ./state/preview/config-bootstrap.json
-  npm run cli -- preview:payment-hook:reference-script --lovelace-per-output 3000000 --state ./state/preview/config-bootstrap.json [--build-only]
+  npm run cli -- preview:payment-hook:reference-script --state ./state/preview/config-bootstrap.json [--build-only]
   npm run cli -- preview:payment-hook:bootstrap --state ./state/preview/config-bootstrap.json [--build-only]
   npm run cli -- preview:receiver:parameterize --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json
-  npm run cli -- preview:reference-scripts:publish-client --lovelace-per-output 3000000 --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
+  npm run cli -- preview:reference-scripts:publish-client --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
   npm run cli -- preview:receiver:bootstrap --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
-  npm run cli -- preview:update --intent ./state/preview/intents/usdc-usd.signed.json --min-utxo-lovelace 5000000 --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json --state ./state/preview/clients/client-a/pairs/usdc-usd.json [--build-only]
+  npm run cli -- preview:update --intent ./state/preview/intents/usdc-usd.signed.json --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json --state ./state/preview/clients/client-a/pairs/usdc-usd.json [--build-only]
   npm run cli -- preview:config:update --input ./state/preview/config-updates/config-update.preview.json --state ./state/preview/config-bootstrap.json [--build-only]
   npm run cli -- preview:update:batch:create [--pairs-dir ./state/preview/clients/client-a/pairs] [--intents-dir ./state/preview/intents] [--out ./state/preview/update-batches/update-batch.manifest.json]
-  npm run cli -- preview:update:batch --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json --manifest ./state/preview/update-batches/update-batch.manifest.json [--min-utxo-lovelace 5000000] [--build-only] [--out ./state/preview/update-batches/update-batch.result.json]
+  npm run cli -- preview:update:batch --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json --manifest ./state/preview/update-batches/update-batch.manifest.json [--build-only] [--out ./state/preview/update-batches/update-batch.result.json]
   npm run cli -- preview:receiver:top-up --amount-lovelace 5000000 --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
   npm run cli -- preview:receiver:withdraw --amount-lovelace 2000000 [--recipient-address <addr>] --protocol-state ./state/preview/config-bootstrap.json --state ./state/preview/clients/client-a.json [--build-only]
   npm run cli -- preview:settle --protocol-state ./state/preview/config-bootstrap.json --client-state ./state/preview/clients/client-a.json [--build-only]
@@ -97,6 +97,13 @@ function optionalFlagValue(flag: string): string | undefined {
   }
 
   return args[index + 1];
+}
+
+function parseCommaSeparatedFlagValues(flag: string): string[] {
+  return requireFlagValue(flag)
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
 }
 
 async function promptForText(args: {
@@ -224,7 +231,40 @@ async function run(): Promise<void> {
     case "preview:protocol:init": {
       const { initializeProtocolState } = await import("./init/protocol-init.js");
       getCliConfig();
+      const hasExplicitProtocolConfig =
+        hasFlag("--valid-config-signers") ||
+        hasFlag("--authorized-dia-public-keys") ||
+        hasFlag("--domain-name") ||
+        hasFlag("--domain-version") ||
+        hasFlag("--domain-source-chain-id") ||
+        hasFlag("--domain-verifying-contract") ||
+        hasFlag("--protocol-fee-lovelace") ||
+        hasFlag("--max-bootstrap-drift-seconds") ||
+        hasFlag("--min-utxo-lovelace") ||
+        hasFlag("--config-asset-label") ||
+        hasFlag("--payment-hook-asset-label") ||
+        hasFlag("--payment-hook-withdraw-address");
       const result = await initializeProtocolState({
+        configInput: hasExplicitProtocolConfig
+          ? {
+              validConfigSigners: parseCommaSeparatedFlagValues("--valid-config-signers"),
+              authorizedDiaPublicKeys: parseCommaSeparatedFlagValues("--authorized-dia-public-keys"),
+              domain: {
+                name: requireFlagValue("--domain-name"),
+                version: requireFlagValue("--domain-version"),
+                sourceChainId: requireFlagValue("--domain-source-chain-id"),
+                verifyingContract: requireFlagValue("--domain-verifying-contract"),
+              },
+              protocolFeeLovelace: requireFlagValue("--protocol-fee-lovelace"),
+              maxBootstrapDriftSeconds: requireFlagValue("--max-bootstrap-drift-seconds"),
+              minUtxoLovelace: requireFlagValue("--min-utxo-lovelace"),
+              configAssetLabel: requireFlagValue("--config-asset-label"),
+              configAssetName: "",
+              paymentHookAssetLabel: requireFlagValue("--payment-hook-asset-label"),
+              paymentHookAssetName: "",
+              paymentHookWithdrawAddress: requireFlagValue("--payment-hook-withdraw-address"),
+            }
+          : undefined,
         useDefaults: hasFlag("--use-defaults"),
       });
       const outPath = optionalFlagValue("--out") ??
@@ -239,19 +279,34 @@ async function run(): Promise<void> {
 
     case "preview:client:init": {
       const { initializeClientState } = await import("./init/client-init.js");
+      const { normalizeHex, utf8ToHex } = await import("./core/dia-intent.js");
       getCliConfig();
       const statePath = await resolveTextFlag({
         flag: "--state",
         message: "Protocol state path",
         defaultValue: "./state/preview/config-bootstrap.json",
       });
+      const hasExplicitReceiverDefaults =
+        hasFlag("--client-id") ||
+        hasFlag("--receiver-asset-label");
+      const explicitClientId = optionalFlagValue("--client-id");
       const result = await initializeClientState({
         statePath,
-        clientId: optionalFlagValue("--client-id"),
+        clientId: explicitClientId,
+        receiverDefaults: hasExplicitReceiverDefaults
+          ? {
+              clientId: requireFlagValue("--client-id"),
+              receiverAssetLabel: requireFlagValue("--receiver-asset-label"),
+              receiverAssetName: normalizeHex(
+                utf8ToHex(requireFlagValue("--receiver-asset-label")),
+                "receiverAssetName",
+              ),
+            }
+          : undefined,
         useDefaults: hasFlag("--use-defaults"),
       });
       const resolvedClientId =
-        result.drafts?.receiverParameterize?.clientId ?? "client-a";
+        explicitClientId ?? result.drafts?.receiverParameterize?.clientId ?? "client-a";
       const outPath = optionalFlagValue("--out") ??
         await promptForText({
           message: "Client artifact output path",
@@ -269,6 +324,13 @@ async function run(): Promise<void> {
       } = await import("./oracle/intent-create.js");
       const result = await createPreviewOracleIntent({
         statePath: optionalFlagValue("--state"),
+        intentType: optionalFlagValue("--intent-type"),
+        nonce: optionalFlagValue("--nonce"),
+        expiry: optionalFlagValue("--expiry"),
+        symbol: optionalFlagValue("--symbol"),
+        price: optionalFlagValue("--price"),
+        timestamp: optionalFlagValue("--timestamp"),
+        source: optionalFlagValue("--source"),
       });
       const outPath = optionalFlagValue("--out") ??
         await promptForText({
@@ -305,6 +367,13 @@ async function run(): Promise<void> {
       } = await import("./oracle/intent-create.js");
       const result = await createAndSignPreviewOracleIntent({
         statePath: optionalFlagValue("--state"),
+        intentType: optionalFlagValue("--intent-type"),
+        nonce: optionalFlagValue("--nonce"),
+        expiry: optionalFlagValue("--expiry"),
+        symbol: optionalFlagValue("--symbol"),
+        price: optionalFlagValue("--price"),
+        timestamp: optionalFlagValue("--timestamp"),
+        source: optionalFlagValue("--source"),
       });
       const outPath = optionalFlagValue("--out") ??
         await promptForText({
@@ -359,7 +428,6 @@ async function run(): Promise<void> {
       const statePath = optionalFlagValue("--state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await publishConfigReferenceScripts({
-        lovelacePerOutput: requireFlagValue("--lovelace-per-output"),
         statePath,
         buildOnly,
       });
@@ -439,7 +507,6 @@ async function run(): Promise<void> {
       const statePath = optionalFlagValue("--state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await publishPaymentHookReferenceScript({
-        lovelacePerOutput: requireFlagValue("--lovelace-per-output"),
         statePath,
         buildOnly,
       });
@@ -528,7 +595,6 @@ async function run(): Promise<void> {
       const statePath = optionalFlagValue("--state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await publishClientReferenceScripts({
-        lovelacePerOutput: requireFlagValue("--lovelace-per-output"),
         statePath,
         protocolStatePath: requireFlagValue("--protocol-state"),
         buildOnly,
@@ -584,7 +650,6 @@ async function run(): Promise<void> {
         manifestPath: requireFlagValue("--manifest"),
         clientStatePath: requireFlagValue("--client-state"),
         protocolStatePath: requireFlagValue("--protocol-state"),
-        minUtxoLovelace: optionalFlagValue("--min-utxo-lovelace"),
         buildOnly: hasBuildOnlyFlag(),
       });
       const outPath = optionalFlagValue("--out");
@@ -624,7 +689,6 @@ async function run(): Promise<void> {
         statePath,
         clientStatePath: requireFlagValue("--client-state"),
         protocolStatePath: requireFlagValue("--protocol-state"),
-        minUtxoLovelace: optionalFlagValue("--min-utxo-lovelace"),
         buildOnly,
       });
       if (!buildOnly) {

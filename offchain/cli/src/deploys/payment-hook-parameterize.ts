@@ -103,12 +103,6 @@ export async function parameterizePaymentHookScripts(args: {
       paymentHookValidatorAddress: scriptAddressFromValidator(paymentHookValidator),
     },
     paymentHookState,
-    paymentHookUtxo: {
-      current: {
-        txHash: "",
-        outputIndex: 0,
-      },
-    },
     compiledScripts: {
       ...(state.compiledScripts ?? emptyProtocolCompiledScripts()),
       paymentHookMintPolicy: paymentHookMintPolicy.script,

@@ -23,6 +23,7 @@ import {
   loadReferenceScriptUtxos,
 } from "../core/reference-scripts.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
+import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
@@ -152,6 +153,7 @@ export async function configUpdate(args: {
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -182,16 +184,15 @@ export async function configUpdate(args: {
     });
   }
 
-  const latestConfigUtxo =
-    args.buildOnly || !confirmed
-      ? state.configUtxo.current
-      : await waitForUnitUtxoReplacement({
-          lucid,
-          address: state.scripts.configValidatorAddress,
-          unit: state.scripts.configUnit,
-          label: "config",
-          previousOutRef: currentConfigUtxo,
-        });
+  if (!args.buildOnly && confirmed) {
+    await waitForUnitUtxoReplacement({
+      lucid,
+      address: state.scripts.configValidatorAddress,
+      unit: state.scripts.configUnit,
+      label: "config",
+      previousOutRef: currentConfigUtxo,
+    });
+  }
 
   return {
     ...state,
@@ -200,12 +201,6 @@ export async function configUpdate(args: {
       address: walletAddress,
     },
     configState: nextConfigState,
-    configUtxo: {
-      current: {
-        txHash: latestConfigUtxo.txHash,
-        outputIndex: latestConfigUtxo.outputIndex,
-      },
-    },
     datum: {
       ...state.datum,
       configCbor: configDatumCbor,

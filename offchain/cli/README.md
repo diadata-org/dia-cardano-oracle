@@ -8,7 +8,14 @@ This CLI now uses three kinds of files:
 
 - `state artifacts`: persistent protocol, client, and pair state files under `./state/preview`
 - `generated payloads`: unsigned intents, signed intents, config-update drafts, and batch manifests under `./state/preview`
-- direct CLI flags: simple ADA values such as `--amount-lovelace`, `--min-utxo-lovelace`, and `--lovelace-per-output`
+- direct CLI flags: simple ADA values such as `--amount-lovelace` (the amount the user moves on top-up/withdraw)
+
+The protocol's `minUtxoLovelace` is chosen ONCE in `preview:protocol:init` and
+inherited by every datum the CLI creates (config, paymentHook, receiver, pair).
+There is no per-command flag for it. Outputs that carry a reference script
+compute their lovelace automatically from the on-chain protocol parameters
+(`coinsPerUtxoByte`); the CLI logs the effective lovelace of every output it
+builds, so the on-chain reality is never hidden.
 
 The normal flow is:
 
@@ -173,7 +180,6 @@ Creates the Config and Coordinator reference scripts at `reference_holder`.
 
 ```sh
 npm run cli -- preview:config:reference-scripts \
-  --lovelace-per-output 3000000 \
   --state ./state/preview/config-bootstrap.json
 ```
 
@@ -201,7 +207,6 @@ npm run cli -- preview:payment-hook:bootstrap \
 
 ```sh
 npm run cli -- preview:payment-hook:reference-script \
-  --lovelace-per-output 3000000 \
   --state ./state/preview/config-bootstrap.json
 ```
 
@@ -247,7 +252,6 @@ Publishes the Receiver and Pair validators at `reference_holder`.
 
 ```sh
 npm run cli -- preview:reference-scripts:publish-client \
-  --lovelace-per-output 3000000 \
   --protocol-state ./state/preview/config-bootstrap.json \
   --state ./state/preview/clients/client-a.json
 ```
@@ -310,12 +314,11 @@ For every later update, generate a fresh signed intent with a new nonce, timesta
 
 - If the pair artifact does not exist yet, it mints the Pair NFT and creates the first Pair UTxO with the signed intent's real price datum.
 - If the pair artifact already exists, it consumes the current Pair UTxO and writes the next datum.
-- `--min-utxo-lovelace` is required only for the first update/create of a pair.
+- The pair's `minUtxoLovelace` is inherited from `configState.minUtxoLovelace` (set once in `preview:protocol:init`).
 
 ```sh
 npm run cli -- preview:update \
   --intent ./state/preview/intents/usdc-usd.signed.json \
-  --min-utxo-lovelace 5000000 \
   --protocol-state ./state/preview/config-bootstrap.json \
   --client-state ./state/preview/clients/client-a.json \
   --state ./state/preview/clients/client-a/pairs/usdc-usd.json
@@ -359,7 +362,7 @@ for each pair update entry.
 
 ### 25. Submit a batch update
 
-`preview:update:batch` can update existing pairs and create missing pairs in the same transaction. Pass `--min-utxo-lovelace` when the manifest includes any pair artifact path that does not exist yet.
+`preview:update:batch` can update existing pairs and create missing pairs in the same transaction. New pairs inherit `minUtxoLovelace` from `configState.minUtxoLovelace` automatically.
 
 Batch updates accrue fees locally on the Receiver
 (`balance_lovelace -= K * protocol_fee_lovelace`,
@@ -375,7 +378,6 @@ npm run cli -- preview:update:batch \
   --protocol-state ./state/preview/config-bootstrap.json \
   --client-state ./state/preview/clients/client-a.json \
   --manifest ./state/preview/update-batches/update-batch.manifest.json \
-  --min-utxo-lovelace 5000000 \
   --out ./state/preview/update-batches/update-batch.result.json
 ```
 
@@ -429,7 +431,6 @@ If you want to capture the build output to a file, redirect stdout:
 ```sh
 npm run cli -- preview:update \
   --intent ./state/preview/intents/usdc-usd.signed.json \
-  --min-utxo-lovelace 5000000 \
   --protocol-state ./state/preview/config-bootstrap.json \
   --client-state ./state/preview/clients/client-a.json \
   --state ./state/preview/clients/client-a/pairs/usdc-usd.json \

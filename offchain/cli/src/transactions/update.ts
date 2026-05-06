@@ -43,6 +43,8 @@ import {
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
+import { logEffectiveOutputs } from "../core/output-logging.js";
+import { getNetworkNow, slotBackoffUnixTimeMs } from "../core/network-time.js";
 import { readClientContext } from "../core/artifact-context.js";
 import {
   buildPairDatumCbor,
@@ -62,7 +64,6 @@ export async function submitOracleUpdate(args: {
   statePath: string;
   clientStatePath: string;
   protocolStatePath: string;
-  minUtxoLovelace?: string;
   buildOnly: boolean;
 }): Promise<PairStateArtifact> {
   reportProgress(`Loading signed intent from ${path.resolve(args.intentPath)}`);
@@ -131,12 +132,7 @@ export async function submitOracleUpdate(args: {
   const pairId = diaPairIdHex(intent);
   const isCreate = !existingPair;
   const minUtxoLovelace = existingPair?.pairState.minUtxoLovelace ??
-    args.minUtxoLovelace;
-  if (!minUtxoLovelace) {
-    throw new Error(
-      "Creating a new pair requires --min-utxo-lovelace because no pair artifact exists yet.",
-    );
-  }
+    protocol.configState.minUtxoLovelace;
   const pair: PairStateArtifact = existingPair ?? {
     wallet: {
       source: "seed",
@@ -147,10 +143,6 @@ export async function submitOracleUpdate(args: {
       pairId,
       pairUnit,
       pairValidatorAddress,
-      stateUtxo: {
-        txHash: "",
-        outputIndex: 0,
-      },
     },
     pairState: {
       pairId,
@@ -174,7 +166,6 @@ export async function submitOracleUpdate(args: {
       ...client.scripts,
     },
     configState: protocol.configState,
-    configUtxo: protocol.configUtxo,
     compiledScripts: {
       ...protocol.compiledScripts,
       ...client.compiledScripts,
@@ -314,7 +305,8 @@ export async function submitOracleUpdate(args: {
     pairStateNonce: state.pairState.nonce,
   });
 
-  assertDiaOracleIntentNotExpired(intent, BigInt(Math.floor(Date.now() / 1000)));
+  const networkNow = getNetworkNow(lucid);
+  assertDiaOracleIntentNotExpired(intent, networkNow.unixTimeSec);
 
   const nextPairState = {
     ...state.pairState,
@@ -362,10 +354,12 @@ export async function submitOracleUpdate(args: {
   // The on-chain coordinator (and pair_state.pair_intent_satisfied) require
   // a finite tx validity range so intent expiry / bootstrap freshness can
   // be evaluated. Cap the upper bound below the signed intent's expiry.
-  const nowMs = Date.now();
-  const txValidFromMs = nowMs - 60_000;
+  const txValidFromMs = slotBackoffUnixTimeMs(lucid, networkNow.slot);
   const intentExpiryMs = Number(intent.expiry) * 1000;
-  const txValidToMs = Math.min(nowMs + 30 * 60_000, intentExpiryMs - 60_000);
+  const txValidToMs = Math.min(
+    networkNow.unixTimeMs + 30 * 60_000,
+    intentExpiryMs - 60_000,
+  );
   let txBuilder = lucid
     .newTx()
     .validFrom(txValidFromMs)
@@ -418,6 +412,7 @@ export async function submitOracleUpdate(args: {
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -447,26 +442,24 @@ export async function submitOracleUpdate(args: {
     });
   }
 
-  const latestPairUtxo =
-    args.buildOnly || !confirmed
-      ? state.pair.stateUtxo
-      : await waitForUnitUtxoReplacement({
-          lucid,
-          address: state.pair.pairValidatorAddress,
-          unit: state.pair.pairUnit,
-          label: "pair",
-          previousOutRef: currentPairUtxo ?? undefined,
-        });
-  const latestReceiverUtxo =
-    args.buildOnly || !confirmed
-      ? state.receiver.receiverUtxo.current
-      : await waitForUnitUtxoReplacement({
-          lucid,
-          address: state.receiver.receiverValidatorAddress,
-          unit: state.receiver.receiverUnit,
-          label: "receiver",
-          previousOutRef: currentReceiverUtxo,
-        });
+  if (!args.buildOnly && confirmed) {
+    await Promise.all([
+      waitForUnitUtxoReplacement({
+        lucid,
+        address: state.pair.pairValidatorAddress,
+        unit: state.pair.pairUnit,
+        label: "pair",
+        previousOutRef: currentPairUtxo ?? undefined,
+      }),
+      waitForUnitUtxoReplacement({
+        lucid,
+        address: state.receiver.receiverValidatorAddress,
+        unit: state.receiver.receiverUnit,
+        label: "receiver",
+        previousOutRef: currentReceiverUtxo,
+      }),
+    ]);
+  }
 
   return {
     wallet: {
@@ -475,10 +468,6 @@ export async function submitOracleUpdate(args: {
     },
     pair: {
       ...state.pair,
-      stateUtxo: {
-        txHash: latestPairUtxo.txHash,
-        outputIndex: latestPairUtxo.outputIndex,
-      },
     },
     pairState: nextPairState,
     datum: {

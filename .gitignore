@@ -11,6 +11,9 @@ docs/plans/archived/
 docs/plans/_archived/
 
 # Generated CLI state artifacts. Keep only the state directory placeholder/docs.
-offchain/cli/state/preview/**
+offchain/cli/state
+
 !offchain/cli/state/preview/
 !offchain/cli/state/preview/.gitkeep
+!offchain/cli/state/mainnet/
+!offchain/cli/state/mainnet/.gitkeep

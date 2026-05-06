@@ -1,5 +1,4 @@
 import { input as promptInput } from "@inquirer/prompts";
-import { toBigInt } from "../core/chain-helpers.js";
 import { normalizeHex, utf8ToHex } from "../core/dia-intent.js";
 import { assertClientIdNonEmpty } from "../preflight/index.js";
 import {
@@ -9,8 +8,6 @@ import {
   type ClientStateArtifact,
   type ReceiverParameterizeDefaults,
 } from "../core/state.js";
-
-const DEFAULT_MIN_UTXO_LOVELACE = "3000000";
 
 function normalizedClientIdSuffix(clientId: string): string {
   return clientId
@@ -34,12 +31,13 @@ function defaultReceiverAssetNameForClient(clientId: string): string {
 
 function defaultReceiverParameterizeDefaults(
   clientId: string,
+  minUtxoLovelace: string,
 ): ReceiverParameterizeDefaults {
   return {
     clientId,
     receiverAssetLabel: defaultReceiverAssetLabelForClient(clientId),
     receiverAssetName: defaultReceiverAssetNameForClient(clientId),
-    minUtxoLovelace: DEFAULT_MIN_UTXO_LOVELACE,
+    minUtxoLovelace,
   };
 }
 
@@ -60,9 +58,10 @@ async function promptForText(args: {
 
 async function promptForReceiverDefaults(
   clientId: string,
+  minUtxoLovelace: string,
 ): Promise<ReceiverParameterizeDefaults> {
   console.error("[preview:client:init] Enter the initial Receiver defaults.");
-  const defaults = defaultReceiverParameterizeDefaults(clientId);
+  const defaults = defaultReceiverParameterizeDefaults(clientId, minUtxoLovelace);
   const resolvedClientId = await promptForText({
     message: "Client id",
     defaultValue: defaults.clientId,
@@ -70,12 +69,6 @@ async function promptForReceiverDefaults(
   const receiverAssetLabel = await promptForText({
     message: "Receiver asset label",
     defaultValue: defaultReceiverAssetLabelForClient(resolvedClientId),
-  });
-  const minUtxoLovelace = await promptForText({
-    message: "Receiver min UTxO lovelace",
-    defaultValue: defaults.minUtxoLovelace,
-    validate: (value) =>
-      (/^\d+$/.test(value) ? true : "Enter a non-negative integer."),
   });
 
   return {
@@ -85,7 +78,7 @@ async function promptForReceiverDefaults(
       receiverAssetNameFromLabel(receiverAssetLabel),
       "receiverAssetName",
     ),
-    minUtxoLovelace: toBigInt(minUtxoLovelace, "minUtxoLovelace").toString(),
+    minUtxoLovelace: defaults.minUtxoLovelace,
   };
 }
 
@@ -122,6 +115,7 @@ export async function initializeClientState(args: {
   statePath: string;
   clientId?: string;
   useDefaults?: boolean;
+  receiverDefaults?: Omit<ReceiverParameterizeDefaults, "minUtxoLovelace">;
 }): Promise<ClientStateArtifact> {
   const state = await readConfigState(args.statePath);
   if (!state.bootstrapRefs.config.txHash || !state.bootstrapRefs.paymentHook?.txHash) {
@@ -135,9 +129,12 @@ export async function initializeClientState(args: {
       "Client init requires protocol state after PaymentHook bootstrap.",
     );
   }
-  const receiverDefaults = args.useDefaults
-    ? defaultReceiverParameterizeDefaults(args.clientId ?? "client-a")
-    : await promptForReceiverDefaults(args.clientId ?? "client-a");
+  const inheritedMinUtxoLovelace = state.configState.minUtxoLovelace;
+  const receiverDefaults: ReceiverParameterizeDefaults = args.receiverDefaults
+    ? { ...args.receiverDefaults, minUtxoLovelace: inheritedMinUtxoLovelace }
+    : args.useDefaults
+      ? defaultReceiverParameterizeDefaults(args.clientId ?? "client-a", inheritedMinUtxoLovelace)
+      : await promptForReceiverDefaults(args.clientId ?? "client-a", inheritedMinUtxoLovelace);
   return createClientStateArtifact(
     receiverDefaults.clientId,
     receiverDefaults,

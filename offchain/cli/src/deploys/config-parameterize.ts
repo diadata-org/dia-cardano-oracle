@@ -134,14 +134,7 @@ export async function parameterizeConfigScripts(args: {
       paymentHookValidatorAddress: previousState?.scripts.paymentHookValidatorAddress ?? null,
     },
     configState,
-    configUtxo: {
-      current: {
-        txHash: "",
-        outputIndex: 0,
-      },
-    },
     paymentHookState: previousState?.paymentHookState ?? null,
-    paymentHookUtxo: previousState?.paymentHookUtxo ?? null,
     compiledScripts: {
       ...(previousState?.compiledScripts ?? emptyProtocolCompiledScripts()),
       configMintPolicy: configMintPolicy.script,

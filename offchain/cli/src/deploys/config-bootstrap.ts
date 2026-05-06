@@ -23,10 +23,12 @@ import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import {
   appendTransactionRecord,
   emptyProtocolCompiledScripts,
+  hasCompletedStep,
   readConfigState,
   type ConfigStateArtifact,
 } from "../core/state.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
+import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
@@ -65,7 +67,7 @@ export async function configBootstrap(args: {
     ? await readConfigState(path.resolve(args.statePath))
     : null;
 
-  if (previousState?.configUtxo.current.txHash) {
+  if (hasCompletedStep(previousState?.transactions, "preview:config:bootstrap")) {
     throw new Error(
       "Config bootstrap was already completed for this protocol artifact. Reuse the current artifact and continue with the next step instead of running preview:config:bootstrap again.",
     );
@@ -197,6 +199,7 @@ export async function configBootstrap(args: {
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   const unsignedCbor = txSignBuilder.toCBOR();
 
@@ -232,18 +235,16 @@ export async function configBootstrap(args: {
     });
   }
 
-  const latestConfigUtxo =
-    args.buildOnly || !confirmed
-      ? null
-      : await findSingleUtxoAtUnit(
-          lucid,
-          configValidatorAddress,
-          configUnit,
-          "config",
-        );
-  const currentConfigUtxo = latestConfigUtxo
-    ? { txHash: latestConfigUtxo.txHash, outputIndex: latestConfigUtxo.outputIndex }
-    : { txHash: "", outputIndex: 0 };
+  // Wait for the indexer to see the freshly-minted Config UTxO before
+  // returning, so the next CLI step can resolve it by NFT immediately.
+  if (!args.buildOnly && confirmed) {
+    await findSingleUtxoAtUnit(
+      lucid,
+      configValidatorAddress,
+      configUnit,
+      "config",
+    );
+  }
 
   return {
     wallet: {
@@ -268,11 +269,7 @@ export async function configBootstrap(args: {
       paymentHookValidatorAddress: previousState?.scripts.paymentHookValidatorAddress ?? null,
     },
     configState: nextConfigState,
-    configUtxo: {
-      current: currentConfigUtxo,
-    },
     paymentHookState: previousState?.paymentHookState ?? null,
-    paymentHookUtxo: previousState?.paymentHookUtxo ?? null,
     compiledScripts: {
       ...(previousState?.compiledScripts ?? emptyProtocolCompiledScripts()),
       configMintPolicy: configMintPolicy.script,

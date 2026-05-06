@@ -34,7 +34,6 @@ const DEFAULT_MAX_BOOTSTRAP_DRIFT_SECONDS = "300"; // 5 minutes
 const DEFAULT_MIN_UTXO_LOVELACE = "5000000";
 const DEFAULT_CONFIG_ASSET_LABEL = "DIA_CONFIG";
 const DEFAULT_PAYMENT_HOOK_ASSET_LABEL = "DIA_PAYMENT_HOOK";
-const DEFAULT_PAYMENT_HOOK_MIN_UTXO_LOVELACE = "3000000";
 
 type ProtocolInitConfigInput = {
   validConfigSigners: string[];
@@ -53,7 +52,6 @@ type ProtocolInitConfigInput = {
   paymentHookAssetLabel: string;
   paymentHookAssetName: string;
   paymentHookWithdrawAddress: string;
-  paymentHookMinUtxoLovelace: string;
 };
 
 function defaultProtocolConfigInput(
@@ -88,7 +86,6 @@ function defaultProtocolConfigInput(
       "paymentHookAssetName",
     ),
     paymentHookWithdrawAddress: walletAddress,
-    paymentHookMinUtxoLovelace: DEFAULT_PAYMENT_HOOK_MIN_UTXO_LOVELACE,
   };
 }
 
@@ -105,6 +102,17 @@ export function createProtocolStateArtifact(args: {
   const configInput =
     args.configInput ??
     defaultProtocolConfigInput(walletDefaults.paymentKeyHash, args.walletAddress);
+  const configAssetName =
+    configInput.configAssetName.trim().length > 0
+      ? normalizeHex(configInput.configAssetName, "configAssetName")
+      : normalizeHex(utf8ToHex(configInput.configAssetLabel), "configAssetName");
+  const paymentHookAssetName =
+    configInput.paymentHookAssetName.trim().length > 0
+      ? normalizeHex(configInput.paymentHookAssetName, "paymentHookAssetName")
+      : normalizeHex(
+          utf8ToHex(configInput.paymentHookAssetLabel),
+          "paymentHookAssetName",
+        );
   const configState = {
     validConfigSigners: configInput.validConfigSigners,
     authorizedDiaPublicKeys: configInput.authorizedDiaPublicKeys,
@@ -149,25 +157,18 @@ export function createProtocolStateArtifact(args: {
       paymentHookValidatorAddress: null,
     },
     configState,
-    configUtxo: {
-      current: {
-        txHash: "",
-        outputIndex: 0,
-      },
-    },
     paymentHookState: null,
-    paymentHookUtxo: null,
     compiledScripts: emptyProtocolCompiledScripts(),
     drafts: {
       configParameterize: {
         configAssetLabel: configInput.configAssetLabel,
-        configAssetName: configInput.configAssetName,
+        configAssetName,
       },
       paymentHookParameterize: {
         paymentHookAssetLabel: configInput.paymentHookAssetLabel,
-        paymentHookAssetName: configInput.paymentHookAssetName,
+        paymentHookAssetName,
         withdrawAddress: configInput.paymentHookWithdrawAddress,
-        minUtxoLovelace: configInput.paymentHookMinUtxoLovelace,
+        minUtxoLovelace: configInput.minUtxoLovelace,
       },
     },
     referenceScripts: {
@@ -255,11 +256,6 @@ async function promptForProtocolConfigInput(
     message: "PaymentHook withdraw address",
     defaultValue: defaults.paymentHookWithdrawAddress,
   });
-  const paymentHookMinUtxoLovelace = await promptForText({
-    message: "PaymentHook min UTxO lovelace",
-    defaultValue: defaults.paymentHookMinUtxoLovelace,
-    validate: (value) => (/^\d+$/.test(value) ? true : "Enter a non-negative integer."),
-  });
 
   return {
     validConfigSigners: parseCommaSeparatedHexList(validConfigSignersRaw, "validConfigSigners[]"),
@@ -287,15 +283,12 @@ async function promptForProtocolConfigInput(
       "paymentHookAssetName",
     ),
     paymentHookWithdrawAddress: paymentHookWithdrawAddress.trim(),
-    paymentHookMinUtxoLovelace: toBigInt(
-      paymentHookMinUtxoLovelace,
-      "paymentHookMinUtxoLovelace",
-    ).toString(),
   };
 }
 
 export async function initializeProtocolState(args?: {
   useDefaults?: boolean;
+  configInput?: ProtocolInitConfigInput;
 }): Promise<ConfigStateArtifact> {
   const lucid = await makeConfiguredLucid();
   const source = await selectConfiguredWallet(lucid);
@@ -307,12 +300,13 @@ export async function initializeProtocolState(args?: {
     source,
     address: walletAddress,
   });
-  const configInput = args?.useDefaults
+  const configInput = args?.configInput ??
+    (args?.useDefaults
     ? defaultProtocolConfigInput(walletDefaults.paymentKeyHash, walletAddress)
     : await promptForProtocolConfigInput(
         walletDefaults.paymentKeyHash,
         walletAddress,
-      );
+      ));
 
   return createProtocolStateArtifact({
     source,

@@ -22,20 +22,21 @@ import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { readClientContext } from "../core/artifact-context.js";
 import {
+  computeMinUtxoForScriptOutput,
+  logEffectiveOutputs,
+} from "../core/output-logging.js";
+import {
   buildReceiverDatumCbor,
   selectFundingUtxo,
   splitUnit,
-  toBigInt,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
 
 export async function publishClientReferenceScripts(args: {
-  lovelacePerOutput: string;
   statePath?: string;
   protocolStatePath: string;
   buildOnly: boolean;
 }): Promise<ClientStateArtifact> {
-  reportProgress(`Using lovelacePerOutput=${args.lovelacePerOutput} for client reference scripts`);
   const statePath = path.resolve(args.statePath ?? "state/preview/clients/client-a.json");
   reportProgress(`Loading client state from ${statePath}`);
   const { client: state, protocol } = await readClientContext({
@@ -58,7 +59,6 @@ export async function publishClientReferenceScripts(args: {
     wallet.getUtxos(),
   ]);
 
-  const lovelacePerOutput = toBigInt(args.lovelacePerOutput, "lovelacePerOutput");
   const referenceAddress = scriptAddressFromValidator(await makeReferenceHolderValidator());
 
   const configAssetName = splitUnit(protocol.scripts.configUnit).assetName;
@@ -91,21 +91,40 @@ export async function publishClientReferenceScripts(args: {
         }),
   ]);
 
+  const coinsPerUtxoByte = lucid.config().protocolParameters?.coinsPerUtxoByte;
+  if (!coinsPerUtxoByte) {
+    throw new Error("Lucid protocol parameters did not expose coinsPerUtxoByte.");
+  }
+  const receiverMinLovelace = computeMinUtxoForScriptOutput({
+    coinsPerUtxoByte,
+    address: referenceAddress,
+    scriptRef: receiverValidator,
+  });
+  const pairMinLovelace = computeMinUtxoForScriptOutput({
+    coinsPerUtxoByte,
+    address: referenceAddress,
+    scriptRef: pairValidator,
+  });
+  reportProgress(
+    `Computed min lovelace for reference-script outputs: receiverValidator=${receiverMinLovelace}, pairValidator=${pairMinLovelace}`,
+  );
+
   reportProgress("Building Preview client reference-script publish transaction");
   const fundingUtxo = selectFundingUtxo(
     latestWalletUtxos,
     [receiver.bootstrapRef],
-    lovelacePerOutput * 2n,
+    receiverMinLovelace + pairMinLovelace,
     "client reference-script publish",
   );
   const txBuilder = lucid
     .newTx()
     .collectFrom([fundingUtxo])
-    .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: lovelacePerOutput }, receiverValidator)
-    .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: lovelacePerOutput }, pairValidator);
+    .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: receiverMinLovelace }, receiverValidator)
+    .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: pairMinLovelace }, pairValidator);
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -172,7 +191,6 @@ export async function publishClientReferenceScripts(args: {
       receiverValidatorHash: receiver.receiverValidatorHash,
       receiverValidatorAddress: receiver.receiverValidatorAddress,
       receiverState: receiver.receiverState,
-      receiverUtxo: receiver.receiverUtxo,
     },
     datum: {
       ...state.datum,

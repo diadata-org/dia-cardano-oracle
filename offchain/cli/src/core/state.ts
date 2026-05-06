@@ -83,12 +83,6 @@ export type ReceiverArtifact = {
   receiverValidatorHash: string;
   receiverValidatorAddress: string;
   receiverState: ReceiverState;
-  receiverUtxo: {
-    current: {
-      txHash: string;
-      outputIndex: number;
-    };
-  };
 };
 
 export type ReceiverParameterizeDefaults = {
@@ -170,19 +164,7 @@ export type ConfigStateArtifact = {
   };
   scripts: ProtocolDeploymentScripts;
   configState: ConfigState;
-  configUtxo: {
-    current: {
-      txHash: string;
-      outputIndex: number;
-    };
-  };
   paymentHookState: PaymentHookState | null;
-  paymentHookUtxo: {
-    current: {
-      txHash: string;
-      outputIndex: number;
-    };
-  } | null;
   compiledScripts: ProtocolCompiledScripts;
   drafts?: {
     configParameterize?: ConfigParameterizeDefaults;
@@ -243,10 +225,6 @@ export type PairStateArtifact = {
     pairId: string;
     pairUnit: string;
     pairValidatorAddress: string;
-    stateUtxo: {
-      txHash: string;
-      outputIndex: number;
-    };
   };
   pairState: PairLiveState;
   datum: {
@@ -315,6 +293,15 @@ export function appendTransactionRecord(
   }
 
   return [...(records ?? []), entry];
+}
+
+export function hasCompletedStep(
+  records: TransactionRecord[] | undefined,
+  step: string,
+): boolean {
+  return Boolean(
+    records?.some((entry) => entry.step === step && entry.submittedTxHash),
+  );
 }
 
 export async function readPairState(

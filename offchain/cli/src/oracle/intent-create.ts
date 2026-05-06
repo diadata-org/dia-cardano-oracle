@@ -3,9 +3,14 @@ import path from "node:path";
 import { input } from "@inquirer/prompts";
 
 import {
+  makeConfiguredLucid,
+  selectConfiguredWallet,
+} from "../core/lucid.js";
+import {
   getDefaultConfigStatePath,
   readConfigState,
 } from "../core/state.js";
+import { resolveIntentTimingFromNetwork } from "../core/network-time.js";
 import {
   signedIntentPathForSymbol,
   unsignedIntentPathForSymbol,
@@ -26,10 +31,6 @@ const DEFAULT_DOMAIN = {
   sourceChainId: "100640",
   verifyingContract: "0xF8c614A483A0427A13512F52ac72A576678bE317",
 };
-
-function toUnixSeconds(date: Date): string {
-  return Math.floor(date.getTime() / 1000).toString();
-}
 
 function with0x(value: string): string {
   return value.startsWith("0x") || value.startsWith("0X") ? value : `0x${value}`;
@@ -73,9 +74,12 @@ async function resolvePromptDefaults(statePath?: string): Promise<PromptDefaults
     // Fall back to Preview defaults when no protocol artifact is available.
   }
 
-  const now = new Date();
-  const timestamp = toUnixSeconds(now);
-  const expiry = (BigInt(timestamp) + 3600n).toString();
+  const lucid = await makeConfiguredLucid();
+  await selectConfiguredWallet(lucid);
+  const timing = resolveIntentTimingFromNetwork({
+    lucid,
+    expirySeconds: 3600n,
+  });
 
   return {
     domain,
@@ -83,9 +87,9 @@ async function resolvePromptDefaults(statePath?: string): Promise<PromptDefaults
       ...defaultIntent,
       version: domain.version,
       chainId: domain.sourceChainId,
-      nonce: now.getTime().toString(),
-      expiry,
-      timestamp,
+      nonce: timing.nonce,
+      expiry: timing.expiry,
+      timestamp: timing.timestamp,
       source: domain.name,
     },
   };
@@ -131,8 +135,61 @@ async function promptExistingFilePath(): Promise<string> {
 
 export async function createPreviewOracleIntent(args: {
   statePath?: string;
+  intentType?: string;
+  nonce?: string;
+  expiry?: string;
+  symbol?: string;
+  price?: string;
+  timestamp?: string;
+  source?: string;
 }): Promise<IntentSignInput> {
   const defaults = await resolvePromptDefaults(args.statePath);
+
+  if (
+    args.intentType ||
+    args.nonce ||
+    args.expiry ||
+    args.symbol ||
+    args.price ||
+    args.timestamp ||
+    args.source
+  ) {
+    const intentType = args.intentType?.trim() || defaults.intent.intentType;
+    const nonce = args.nonce?.trim() || String(defaults.intent.nonce);
+    const expiry = args.expiry?.trim() || String(defaults.intent.expiry);
+    const symbol = args.symbol?.trim() || defaults.intent.symbol;
+    const price = args.price?.trim() || String(defaults.intent.price);
+    const timestamp = args.timestamp?.trim() || String(defaults.intent.timestamp);
+    const source = args.source?.trim() || defaults.domain.name;
+
+    for (const [label, value] of [
+      ["nonce", nonce],
+      ["expiry", expiry],
+      ["price", price],
+      ["timestamp", timestamp],
+    ] as const) {
+      const validation = validateIntegerString(value);
+      if (validation) {
+        throw new Error(`Invalid ${label}: ${validation}`);
+      }
+    }
+
+    return {
+      domain: defaults.domain,
+      intent: {
+        intentType,
+        version: defaults.domain.version,
+        chainId: defaults.domain.sourceChainId,
+        nonce,
+        expiry,
+        symbol,
+        price,
+        timestamp,
+        source,
+      },
+    };
+  }
+
   console.error(
     "[preview:intent:create] Using EIP-712 domain from protocol state:",
   );
@@ -202,6 +259,13 @@ export async function signPreviewOracleIntentInteractive(): Promise<ReturnType<t
 
 export async function createAndSignPreviewOracleIntent(args: {
   statePath?: string;
+  intentType?: string;
+  nonce?: string;
+  expiry?: string;
+  symbol?: string;
+  price?: string;
+  timestamp?: string;
+  source?: string;
 }): Promise<ReturnType<typeof signPreviewOracleIntentFromInput>> {
   const unsignedIntent = await createPreviewOracleIntent(args);
   return signPreviewOracleIntentFromInput({ input: unsignedIntent });

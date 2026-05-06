@@ -128,12 +128,6 @@ export async function parameterizeReceiverScripts(args: {
       receiverValidatorHash,
       receiverValidatorAddress: scriptAddressFromValidator(receiverValidator),
       receiverState,
-      receiverUtxo: {
-        current: {
-          txHash: "",
-          outputIndex: 0,
-        },
-      },
     },
     compiledScripts: {
       ...state.compiledScripts,

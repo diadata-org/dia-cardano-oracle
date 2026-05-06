@@ -12,6 +12,7 @@ import {
 } from "../core/lucid.js";
 import {
   appendTransactionRecord,
+  hasCompletedStep,
   readConfigState,
   type ConfigStateArtifact,
 } from "../core/state.js";
@@ -20,6 +21,7 @@ import {
   loadReferenceScriptUtxos,
 } from "../core/reference-scripts.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
+import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
@@ -49,7 +51,11 @@ export async function paymentHookWithdraw(args: {
   reportProgress(`Loading config state from ${statePath}`);
   const state = await readConfigState(statePath);
 
-  if (!state.paymentHookState || !state.paymentHookUtxo || !state.bootstrapRefs.paymentHook) {
+  if (
+    !state.paymentHookState ||
+    !state.bootstrapRefs.paymentHook ||
+    !hasCompletedStep(state.transactions, "preview:payment-hook:bootstrap")
+  ) {
     throw new Error("Payment-hook withdraw requires a state artifact produced after payment-hook bootstrap.");
   }
 
@@ -168,6 +174,7 @@ export async function paymentHookWithdraw(args: {
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -198,16 +205,15 @@ export async function paymentHookWithdraw(args: {
     });
   }
 
-  const latestPaymentHookUtxo =
-    args.buildOnly || !confirmed
-      ? state.paymentHookUtxo.current
-      : await waitForUnitUtxoReplacement({
-          lucid,
-          address: state.scripts.paymentHookValidatorAddress!,
-          unit: state.scripts.paymentHookUnit!,
-          label: "payment hook",
-          previousOutRef: currentPaymentHookUtxo,
-        });
+  if (!args.buildOnly && confirmed) {
+    await waitForUnitUtxoReplacement({
+      lucid,
+      address: state.scripts.paymentHookValidatorAddress!,
+      unit: state.scripts.paymentHookUnit!,
+      label: "payment hook",
+      previousOutRef: currentPaymentHookUtxo,
+    });
+  }
 
   return {
     ...state,
@@ -215,19 +221,7 @@ export async function paymentHookWithdraw(args: {
       source,
       address: walletAddress,
     },
-    configUtxo: {
-      current: {
-        txHash: currentConfigUtxo.txHash,
-        outputIndex: currentConfigUtxo.outputIndex,
-      },
-    },
     paymentHookState: nextPaymentHookState,
-    paymentHookUtxo: {
-      current: {
-        txHash: latestPaymentHookUtxo.txHash,
-        outputIndex: latestPaymentHookUtxo.outputIndex,
-      },
-    },
     datum: {
       ...state.datum,
       paymentHookCbor: paymentHookDatumCbor,

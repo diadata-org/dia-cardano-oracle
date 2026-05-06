@@ -37,6 +37,7 @@ import {
 } from "../core/lucid.js";
 import {
   appendTransactionRecord,
+  hasCompletedStep,
   readOptionalPairState,
   type ConfigStateArtifact,
   type ClientStateArtifact,
@@ -48,6 +49,8 @@ import {
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
+import { logEffectiveOutputs } from "../core/output-logging.js";
+import { getNetworkNow, slotBackoffUnixTimeMs } from "../core/network-time.js";
 import { readClientContext } from "../core/artifact-context.js";
 import {
   buildPairDatumCbor,
@@ -83,10 +86,6 @@ type BatchUpdateResult = {
     outPath: string;
     pairId: string;
     pairUnit: string;
-    stateUtxo: {
-      txHash: string;
-      outputIndex: number;
-    };
   }>;
   transactions?: ConfigStateArtifact["transactions"];
 };
@@ -95,9 +94,7 @@ type ResolvedPairStateArtifact = PairStateArtifact & {
   bootstrapRefs: ConfigStateArtifact["bootstrapRefs"];
   scripts: ResolvedDeploymentScripts;
   configState: ConfigStateArtifact["configState"];
-  configUtxo: ConfigStateArtifact["configUtxo"];
   paymentHookState: NonNullable<ConfigStateArtifact["paymentHookState"]>;
-  paymentHookUtxo: NonNullable<ConfigStateArtifact["paymentHookUtxo"]>;
   compiledScripts: ResolvedCompiledScripts;
   referenceScripts?: ReferenceScriptsState;
   receiver: NonNullable<ClientStateArtifact["receiver"]>;
@@ -112,7 +109,6 @@ export async function submitBatchOracleUpdate(args: {
   manifestPath: string;
   clientStatePath: string;
   protocolStatePath: string;
-  minUtxoLovelace?: string;
   buildOnly: boolean;
 }): Promise<BatchUpdateResult> {
   reportProgress(`Loading batch update manifest from ${path.resolve(args.manifestPath)}`);
@@ -164,7 +160,7 @@ export async function submitBatchOracleUpdate(args: {
         intent,
         pairPolicyId,
         pairValidatorAddress,
-        minUtxoLovelace: args.minUtxoLovelace,
+        minUtxoLovelace: context.protocol.configState.minUtxoLovelace,
       });
       return {
         entry,
@@ -315,7 +311,8 @@ export async function submitBatchOracleUpdate(args: {
       batchStatePath: entry.statePath,
     });
 
-    assertDiaOracleIntentNotExpired(intent, BigInt(Math.floor(Date.now() / 1000)));
+    const networkNow = getNetworkNow(lucid);
+    assertDiaOracleIntentNotExpired(intent, networkNow.unixTimeSec);
 
     const nextPairState = {
       ...artifact.pairState,
@@ -392,14 +389,14 @@ export async function submitBatchOracleUpdate(args: {
   // Finite tx validity range required by the on-chain coordinator
   // (intent_expiry_satisfied) and pair_state.pair_intent_satisfied.
   // Cap upper bound below the earliest intent expiry in the batch.
-  const nowMs = Date.now();
+  const networkNow = getNetworkNow(lucid);
   const earliestExpirySec = preparedUpdates.reduce(
     (min, u) => (u.intent.expiry < min ? u.intent.expiry : min),
     preparedUpdates[0].intent.expiry,
   );
-  const txValidFromMs = nowMs - 60_000;
+  const txValidFromMs = slotBackoffUnixTimeMs(lucid, networkNow.slot);
   const txValidToMs = Math.min(
-    nowMs + 30 * 60_000,
+    networkNow.unixTimeMs + 30 * 60_000,
     Number(earliestExpirySec) * 1000 - 60_000,
   );
   let txBuilder = lucid
@@ -465,6 +462,7 @@ export async function submitBatchOracleUpdate(args: {
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -495,34 +493,29 @@ export async function submitBatchOracleUpdate(args: {
     });
   }
 
-  const latestPairUtxos =
-    args.buildOnly || !confirmed
-      ? preparedUpdates.map(({ artifact }) => artifact.pair.stateUtxo)
-      : await Promise.all(
-          preparedUpdates.map(({ artifact }) =>
-            waitForUnitUtxoReplacement({
-              lucid,
-              address: artifact.pair.pairValidatorAddress,
-              unit: artifact.pair.pairUnit,
-              label: `pair ${artifact.pair.pairId}`,
-              previousOutRef: currentPairUtxoByUnit.get(artifact.pair.pairUnit),
-            }),
-          ),
-        );
-  const latestReceiverUtxo =
-    args.buildOnly || !confirmed
-      ? state.receiver.receiverUtxo.current
-      : await waitForUnitUtxoReplacement({
+  if (!args.buildOnly && confirmed) {
+    await Promise.all([
+      ...preparedUpdates.map(({ artifact }) =>
+        waitForUnitUtxoReplacement({
           lucid,
-          address: state.receiver.receiverValidatorAddress,
-          unit: state.receiver.receiverUnit,
-          label: "receiver",
-          previousOutRef: currentReceiverUtxo,
-        });
+          address: artifact.pair.pairValidatorAddress,
+          unit: artifact.pair.pairUnit,
+          label: `pair ${artifact.pair.pairId}`,
+          previousOutRef: currentPairUtxoByUnit.get(artifact.pair.pairUnit),
+        }),
+      ),
+      waitForUnitUtxoReplacement({
+        lucid,
+        address: state.receiver.receiverValidatorAddress,
+        unit: state.receiver.receiverUnit,
+        label: "receiver",
+        previousOutRef: currentReceiverUtxo,
+      }),
+    ]);
+  }
 
 
-  const updatedArtifacts = preparedUpdates.map(({ entry, artifact, nextPairState }, index) => {
-    const latestPairUtxo = latestPairUtxos[index]!;
+  const updatedArtifacts = preparedUpdates.map(({ entry, artifact, nextPairState }) => {
     const updatedArtifact: PairStateArtifact = {
       wallet: {
         source,
@@ -530,10 +523,6 @@ export async function submitBatchOracleUpdate(args: {
       },
       pair: {
         ...artifact.pair,
-        stateUtxo: {
-          txHash: latestPairUtxo.txHash,
-          outputIndex: latestPairUtxo.outputIndex,
-        },
       },
       pairState: nextPairState,
       datum: {
@@ -566,12 +555,6 @@ export async function submitBatchOracleUpdate(args: {
         receiver: {
           ...clientState.receiver,
           receiverState: nextReceiverState,
-          receiverUtxo: {
-            current: {
-              txHash: latestReceiverUtxo.txHash,
-              outputIndex: latestReceiverUtxo.outputIndex,
-            },
-          },
         },
         datum: {
           ...clientState.datum,
@@ -594,19 +577,12 @@ export async function submitBatchOracleUpdate(args: {
     receiver: {
       ...state.receiver,
       receiverState: nextReceiverState,
-      receiverUtxo: {
-        current: {
-          txHash: latestReceiverUtxo.txHash,
-          outputIndex: latestReceiverUtxo.outputIndex,
-        },
-      },
     },
     pairs: updatedArtifacts.map(({ entry, artifact }) => ({
       statePath: path.resolve(entry.statePath),
       outPath: path.resolve(entry.outPath ?? entry.statePath),
       pairId: artifact.pair.pairId,
       pairUnit: artifact.pair.pairUnit,
-      stateUtxo: artifact.pair.stateUtxo,
     })),
     transactions: appendTransactionRecord(undefined, {
       step: "preview:update:batch",
@@ -629,13 +605,8 @@ function createPairArtifactFromIntent(args: {
   intent: DiaOracleIntent;
   pairPolicyId: string;
   pairValidatorAddress: string;
-  minUtxoLovelace?: string;
+  minUtxoLovelace: string;
 }): PairStateArtifact {
-  if (!args.minUtxoLovelace) {
-    throw new Error(
-      "Creating new pairs in a batch requires --min-utxo-lovelace for entries without pair artifacts.",
-    );
-  }
   const pairId = diaPairIdHex(args.intent);
   const tokenName = diaIntentTokenNameFromSymbol(args.intent);
   return {
@@ -648,10 +619,6 @@ function createPairArtifactFromIntent(args: {
       pairId,
       pairUnit: `${args.pairPolicyId}${tokenName}`,
       pairValidatorAddress: args.pairValidatorAddress,
-      stateUtxo: {
-        txHash: "",
-        outputIndex: 0,
-      },
     },
     pairState: {
       pairId,
@@ -674,7 +641,10 @@ export function resolvePairArtifact(
   clientState: ClientStateArtifact,
   protocolState: ConfigStateArtifact,
 ): ResolvedPairStateArtifact {
-  if (!protocolState.paymentHookState || !protocolState.paymentHookUtxo) {
+  if (
+    !protocolState.paymentHookState ||
+    !hasCompletedStep(protocolState.transactions, "preview:payment-hook:bootstrap")
+  ) {
     throw new Error("Batch update requires protocol state after PaymentHook bootstrap.");
   }
 
@@ -690,9 +660,7 @@ export function resolvePairArtifact(
       ...clientState.scripts,
     },
     configState: protocolState.configState,
-    configUtxo: protocolState.configUtxo,
     paymentHookState: protocolState.paymentHookState,
-    paymentHookUtxo: protocolState.paymentHookUtxo,
     compiledScripts: {
       ...protocolState.compiledScripts,
       ...clientState.compiledScripts,

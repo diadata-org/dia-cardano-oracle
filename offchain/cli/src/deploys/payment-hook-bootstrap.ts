@@ -18,10 +18,12 @@ import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import {
   appendTransactionRecord,
   emptyProtocolCompiledScripts,
+  hasCompletedStep,
   readConfigState,
   type ConfigStateArtifact,
 } from "../core/state.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
+import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
@@ -47,7 +49,7 @@ export async function paymentHookBootstrap(args: {
   reportProgress(`Loading config state from ${statePath}`);
   const state = await readConfigState(statePath);
 
-  if (state.paymentHookUtxo?.current.txHash) {
+  if (hasCompletedStep(state.transactions, "preview:payment-hook:bootstrap")) {
     throw new Error(
       "PaymentHook bootstrap was already completed for this protocol artifact. Reuse the current artifact and continue with the next step instead of running preview:payment-hook:bootstrap again.",
     );
@@ -218,6 +220,7 @@ export async function paymentHookBootstrap(args: {
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -247,24 +250,24 @@ export async function paymentHookBootstrap(args: {
     });
   }
 
-  const latestConfigUtxo =
-    args.buildOnly || !confirmed
-      ? state.configUtxo.current
-      : await findSingleUtxoAtUnit(
-          lucid,
-          state.scripts.configValidatorAddress,
-          state.scripts.configUnit,
-          "config",
-        );
-  const latestPaymentHookUtxo =
-    args.buildOnly || !confirmed
-      ? { txHash: "", outputIndex: 0 }
-      : await findSingleUtxoAtUnit(
-          lucid,
-          paymentHookValidatorAddress,
-          paymentHookUnit,
-          "payment hook",
-        );
+  // Wait for the indexer to catch up on the new Config and PaymentHook UTxOs
+  // so the next CLI step resolves them by NFT without retries.
+  if (!args.buildOnly && confirmed) {
+    await Promise.all([
+      findSingleUtxoAtUnit(
+        lucid,
+        state.scripts.configValidatorAddress,
+        state.scripts.configUnit,
+        "config",
+      ),
+      findSingleUtxoAtUnit(
+        lucid,
+        paymentHookValidatorAddress,
+        paymentHookUnit,
+        "payment hook",
+      ),
+    ]);
+  }
 
   return {
     wallet: {
@@ -284,13 +287,7 @@ export async function paymentHookBootstrap(args: {
       paymentHookValidatorAddress,
     },
     configState: nextConfigState,
-    configUtxo: {
-      current: latestConfigUtxo,
-    },
     paymentHookState,
-    paymentHookUtxo: {
-      current: latestPaymentHookUtxo,
-    },
     compiledScripts: state.compiledScripts ?? emptyProtocolCompiledScripts(),
     drafts: state.drafts,
     referenceScripts: state.referenceScripts,

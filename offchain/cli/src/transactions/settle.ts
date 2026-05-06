@@ -16,12 +16,15 @@ import {
 } from "../core/lucid.js";
 import {
   appendTransactionRecord,
+  hasCompletedStep,
   readConfigState,
   type ConfigStateArtifact,
   type ClientStateArtifact,
 } from "../core/state.js";
 import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
+import { logEffectiveOutputs } from "../core/output-logging.js";
+import { getNetworkNow, slotBackoffUnixTimeMs } from "../core/network-time.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { readClientContext } from "../core/artifact-context.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
@@ -68,7 +71,11 @@ export async function settleAccruedFees(args: {
   reportProgress(`Loading protocol state from ${protocolStatePath}`);
   const protocolState = await readConfigState(protocolStatePath);
 
-  if (!protocolState.paymentHookState || !protocolState.paymentHookUtxo || !protocolState.bootstrapRefs.paymentHook) {
+  if (
+    !protocolState.paymentHookState ||
+    !protocolState.bootstrapRefs.paymentHook ||
+    !hasCompletedStep(protocolState.transactions, "preview:payment-hook:bootstrap")
+  ) {
     throw new Error("Settle requires protocol state after PaymentHook bootstrap.");
   }
 
@@ -261,11 +268,11 @@ export async function settleAccruedFees(args: {
   // Settle does not consume an intent, but the coordinator's
   // ApplySettle path still runs alongside other validators that may
   // require finite bounds (defence in depth). A 30-min window is safe.
-  const nowMs = Date.now();
+  const networkNow = getNetworkNow(lucid);
   let txBuilder = lucid
     .newTx()
-    .validFrom(nowMs - 60_000)
-    .validTo(nowMs + 30 * 60_000)
+    .validFrom(slotBackoffUnixTimeMs(lucid, networkNow.slot))
+    .validTo(networkNow.unixTimeMs + 30 * 60_000)
     .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
     .collectFrom([currentReceiverUtxo], receiverRedeemer)
     .collectFrom([currentPaymentHookUtxo], paymentHookRedeemer)
@@ -308,6 +315,7 @@ export async function settleAccruedFees(args: {
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -339,45 +347,31 @@ export async function settleAccruedFees(args: {
   }
 
   // --- Wait for UTxO replacement ---
-  const latestReceiverUtxo =
-    args.buildOnly || !confirmed
-      ? clientState.receiver.receiverUtxo.current
-      : await waitForUnitUtxoReplacement({
-          lucid,
-          address: clientState.receiver.receiverValidatorAddress,
-          unit: clientState.receiver.receiverUnit,
-          label: "receiver",
-          previousOutRef: currentReceiverUtxo,
-        });
-  const latestPaymentHookUtxo =
-    args.buildOnly || !confirmed
-      ? protocolState.paymentHookUtxo.current
-      : await waitForUnitUtxoReplacement({
-          lucid,
-          address: protocol.scripts.paymentHookValidatorAddress!,
-          unit: protocol.scripts.paymentHookUnit!,
-          label: "payment hook",
-          previousOutRef: currentPaymentHookUtxo,
-        });
+  if (!args.buildOnly && confirmed) {
+    await Promise.all([
+      waitForUnitUtxoReplacement({
+        lucid,
+        address: clientState.receiver.receiverValidatorAddress,
+        unit: clientState.receiver.receiverUnit,
+        label: "receiver",
+        previousOutRef: currentReceiverUtxo,
+      }),
+      waitForUnitUtxoReplacement({
+        lucid,
+        address: protocol.scripts.paymentHookValidatorAddress!,
+        unit: protocol.scripts.paymentHookUnit!,
+        label: "payment hook",
+        previousOutRef: currentPaymentHookUtxo,
+      }),
+    ]);
+  }
 
   // --- Persist updated state files ---
   if (!args.buildOnly && confirmed) {
     await writeJsonFile(protocolStatePath, {
       ...protocolState,
       wallet: { source, address: walletAddress },
-      configUtxo: {
-        current: {
-          txHash: currentConfigUtxo.txHash,
-          outputIndex: currentConfigUtxo.outputIndex,
-        },
-      },
       paymentHookState: nextPaymentHookState,
-      paymentHookUtxo: {
-        current: {
-          txHash: latestPaymentHookUtxo.txHash,
-          outputIndex: latestPaymentHookUtxo.outputIndex,
-        },
-      },
       datum: {
         ...protocolState.datum,
         paymentHookCbor: buildPaymentHookDatumCbor(nextPaymentHookState),
@@ -389,21 +383,15 @@ export async function settleAccruedFees(args: {
       }),
     });
 
-    await writeJsonFile(clientStatePath, {
-      ...clientState,
-      wallet: { source, address: walletAddress },
-      receiver: {
-        ...clientState.receiver,
-        receiverState: nextReceiverState,
-        receiverUtxo: {
-          current: {
-            txHash: latestReceiverUtxo.txHash,
-            outputIndex: latestReceiverUtxo.outputIndex,
-          },
+      await writeJsonFile(clientStatePath, {
+        ...clientState,
+        wallet: { source, address: walletAddress },
+        receiver: {
+          ...clientState.receiver,
+          receiverState: nextReceiverState,
         },
-      },
-      datum: {
-        ...clientState.datum,
+        datum: {
+          ...clientState.datum,
         receiverCbor: buildReceiverDatumCbor(nextReceiverState),
       },
       transactions: appendTransactionRecord(clientState.transactions, {

@@ -16,18 +16,19 @@ import {
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import {
+  computeMinUtxoForScriptOutput,
+  logEffectiveOutputs,
+} from "../core/output-logging.js";
+import {
   selectFundingUtxo,
   splitUnit,
-  toBigInt,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
 
 export async function publishPaymentHookReferenceScript(args: {
-  lovelacePerOutput: string;
   statePath?: string;
   buildOnly: boolean;
 }): Promise<ConfigStateArtifact> {
-  reportProgress(`Using lovelacePerOutput=${args.lovelacePerOutput} for payment-hook reference script`);
   const state = await readConfigState(path.resolve(args.statePath ?? "state/preview/config-bootstrap.json"));
 
   if (!state.bootstrapRefs.paymentHook || !state.scripts.paymentHookUnit) {
@@ -53,12 +54,23 @@ export async function publishPaymentHookReferenceScript(args: {
         configAssetName,
         coordinatorCredentialHash: state.scripts.coordinatorHash,
       });
-  const lovelacePerOutput = toBigInt(args.lovelacePerOutput, "lovelacePerOutput");
   const referenceAddress = scriptAddressFromValidator(await makeReferenceHolderValidator());
+  const coinsPerUtxoByte = lucid.config().protocolParameters?.coinsPerUtxoByte;
+  if (!coinsPerUtxoByte) {
+    throw new Error("Lucid protocol parameters did not expose coinsPerUtxoByte.");
+  }
+  const paymentHookMinLovelace = computeMinUtxoForScriptOutput({
+    coinsPerUtxoByte,
+    address: referenceAddress,
+    scriptRef: paymentHookValidator,
+  });
+  reportProgress(
+    `Computed min lovelace for reference-script outputs: paymentHookValidator=${paymentHookMinLovelace}`,
+  );
   const fundingUtxo = selectFundingUtxo(
     walletUtxos,
     [state.bootstrapRefs.config, state.bootstrapRefs.paymentHook],
-    lovelacePerOutput,
+    paymentHookMinLovelace,
     "payment-hook reference-script publish",
   );
 
@@ -66,9 +78,10 @@ export async function publishPaymentHookReferenceScript(args: {
   const txSignBuilder = await lucid
     .newTx()
     .collectFrom([fundingUtxo])
-    .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: lovelacePerOutput }, paymentHookValidator)
+    .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: paymentHookMinLovelace }, paymentHookValidator)
     .complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   let submittedTxHash: string | null = null;
   let confirmed = false;

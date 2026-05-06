@@ -174,29 +174,13 @@ function testBatchSnapshotRefresh(): void {
       accruedToHookLovelace: "0",
       minUtxoLovelace: "3000000",
     },
-    receiverUtxo: {
-      current: {
-        txHash: "client-receiver-tx",
-        outputIndex: 3,
-      },
-    },
   };
   client.datum.receiverCbor = "client-receiver-cbor";
 
   protocol.configState.protocolFeeLovelace = "2500000";
-  protocol.configUtxo.current = {
-    txHash: "protocol-config-tx",
-    outputIndex: 1,
-  };
   protocol.paymentHookState = {
     ...samplePaymentHookState(),
     accruedFeesLovelace: "9000000",
-  };
-  protocol.paymentHookUtxo = {
-    current: {
-      txHash: "protocol-hook-tx",
-      outputIndex: 2,
-    },
   };
   protocol.datum.configCbor = "protocol-config-cbor";
   protocol.datum.paymentHookCbor = "protocol-hook-cbor";
@@ -204,11 +188,8 @@ function testBatchSnapshotRefresh(): void {
   const refreshed = resolvePairArtifact(pair, client, protocol);
 
   assert.equal(refreshed.configState.protocolFeeLovelace, "2500000");
-  assert.equal(refreshed.configUtxo.current.txHash, "protocol-config-tx");
   assert.equal(refreshed.paymentHookState.accruedFeesLovelace, "9000000");
-  assert.equal(refreshed.paymentHookUtxo.current.txHash, "protocol-hook-tx");
   assert.equal(refreshed.receiver?.receiverState.balanceLovelace, "33000000");
-  assert.equal(refreshed.receiver?.receiverUtxo.current.txHash, "client-receiver-tx");
   assert.equal(refreshed.datum.configCbor, "protocol-config-cbor");
   assert.equal(refreshed.datum.paymentHookCbor, "protocol-hook-cbor");
   assert.equal(refreshed.datum.receiverCbor, "client-receiver-cbor");
@@ -271,7 +252,7 @@ function testProtocolStateInit(): void {
   );
   assert.equal(
     state.drafts?.paymentHookParameterize?.minUtxoLovelace,
-    "3000000",
+    state.configState.minUtxoLovelace,
   );
 }
 
@@ -1174,19 +1155,7 @@ function sampleConfigArtifact(): ConfigStateArtifact {
     },
     scripts: sampleScripts(),
     configState: sampleConfigState(),
-    configUtxo: {
-      current: {
-        txHash: "config-current",
-        outputIndex: 0,
-      },
-    },
     paymentHookState: samplePaymentHookState(),
-    paymentHookUtxo: {
-      current: {
-        txHash: "hook-current",
-        outputIndex: 0,
-      },
-    },
     compiledScripts: {
       configMintPolicy: "aa",
       configValidator: "bb",
@@ -1198,6 +1167,13 @@ function sampleConfigArtifact(): ConfigStateArtifact {
       configCbor: "config-cbor",
       paymentHookCbor: "hook-cbor",
     },
+    transactions: [
+      {
+        step: "preview:payment-hook:bootstrap",
+        submittedTxHash: "hook-bootstrap-tx",
+        confirmed: true,
+      },
+    ],
     drafts: {
       configParameterize: {
         configAssetLabel: "DIA_CONFIG",
@@ -1265,12 +1241,6 @@ function sampleReceiverArtifact() {
       accruedToHookLovelace: "0",
       minUtxoLovelace: "3000000",
     },
-    receiverUtxo: {
-      current: {
-        txHash: "receiver-current",
-        outputIndex: 0,
-      },
-    },
   };
 }
 
@@ -1287,10 +1257,6 @@ function samplePairArtifact(pairSuffix: string): PairStateArtifact {
       pairId: "555344432f555344",
       pairUnit,
       pairValidatorAddress: "addr_test1pair",
-      stateUtxo: {
-        txHash: `pair-current-${pairSuffix}`,
-        outputIndex: 0,
-      },
     },
     pairState: {
       pairId: "555344432f555344",
