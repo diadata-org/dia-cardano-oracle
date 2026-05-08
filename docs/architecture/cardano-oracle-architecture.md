@@ -20,7 +20,7 @@ Reference inputs to this document:
 | 3 | `payment_hook` | multivalidator (mint + spend) | 1 global | `bootstrap_ref_hook: OutputReference`, `hook_asset_name: AssetName`, `config_policy_id`, `config_asset_name`, `coordinator_credential: Credential` |
 | 4 | `receiver` | multivalidator (mint + spend) | 1 per client | `receiver_ref: OutputReference`, `receiver_asset_name: AssetName`, `config_policy_id`, `config_asset_name` |
 | 5 | `pair_state` | multivalidator (mint + spend) | 1 per client | `config_policy_id`, `config_asset_name`, `receiver_hash: ScriptHash` |
-| 6 | `reference_holder` | spend validator | 1 global | none |
+| 6 | `reference_holder` | spend validator | 1 global | `config_policy_id: PolicyId`, `config_asset_name: AssetName` |
 
 Notes:
 
@@ -28,7 +28,7 @@ Notes:
 - `receiver` is recompiled every time DIA onboards a new client. A fresh `receiver_ref` per client yields a different script hash and therefore a different address. The client is not an admin of their Receiver: they only prepay ADA and consume prices off-chain, matching the EVM behaviour. Every privileged action on the Receiver is signed by DIA admin (the `config_admins`).
 - `pair_state` is recompiled per client too, parametrized by that client's `receiver_hash`, so every client's pairs live in their own address, isolated from other clients' pairs.
 - `update_coordinator` runs once per update or settle transaction using the `withdraw 0` trigger. It centralizes shared logic (DIA signature checks on updates, fee accrual constraints, settle manifest and hook deltas) so the per-UTxO validators do not duplicate those checks.
-- `reference_holder` is used only as the address for reference-script UTxOs. It rejects spend attempts so these UTxOs are not spendable by the deploy wallet.
+- `reference_holder` is used as the address for reference-script UTxOs. It is parameterized with `config_policy_id` and `config_asset_name` so that DIA admin (the Config signers) can reclaim the ADA locked in these UTxOs when contracts are upgraded. Spend requires the Config NFT as a reference input and a valid Config signer key in the transaction.
 
 ### 1.2 Compile-time dependency graph
 
@@ -55,8 +55,8 @@ Solid arrows are compile-time inputs that change the script hash. Dashed arrows 
 
 **Global setup, done once by DIA.**
 
-1. Initialize the protocol artifact: record the deploy wallet, the `reference_holder` address, and empty protocol deployment slots.
-2. Parameterize Config scripts: select an existing wallet UTxO as `bootstrap_ref_config`, compile `config_state`, compile `update_coordinator`, and record `config_policy_id` plus `coordinator_credential`.
+1. Initialize the protocol artifact: record the deploy wallet and empty protocol deployment slots.
+2. Parameterize Config scripts: select an existing wallet UTxO as `bootstrap_ref_config`, compile `config_state`, `update_coordinator`, and `reference_holder` (parameterized with config policy), derive `config_policy_id`, `coordinator_credential`, and the `reference_holder` address.
 3. Submit Config bootstrap: consume `bootstrap_ref_config`, mint the Config NFT, and create the Config UTxO with its initial datum.
 4. Publish Config reference scripts: create ReferenceHolder UTxOs for `config_state` spend and `update_coordinator` withdraw.
 5. Parameterize PaymentHook scripts: select an existing wallet UTxO as `bootstrap_ref_hook`, compile `payment_hook`, and record the Hook policy, validator hash, and address.
@@ -68,7 +68,7 @@ Solid arrows are compile-time inputs that change the script hash. Dashed arrows 
 1. Initialize the client artifact from the live protocol artifact.
 2. Parameterize client Receiver scripts: select an existing wallet UTxO as `receiver_ref`, compile `receiver`, compile `pair_state`, and record the client's Receiver and Pair script metadata.
 3. Submit Receiver bootstrap: consume `receiver_ref`, mint the Receiver NFT, and create the Receiver UTxO with `balance_lovelace = 0`.
-4. Publish client reference scripts: create ReferenceHolder UTxOs for this client's `receiver` spend and `pair_state` spend scripts.
+4. Publish client reference scripts: create ReferenceHolder UTxOs for this client's `receiver` spend, `pair_state` spend, and `pair_state` mint scripts (all three in one transaction).
 5. Top up the Receiver before live updates. The first update for each subscribed pair mints the Pair NFT and creates the Pair UTxO from the signed intent's real datum.
 
 ### 1.4 Reference-script deployment (global)
@@ -105,8 +105,9 @@ flowchart LR
 
   Admin --> TX((Publish client<br/>reference scripts)):::tx
 
-  TX --> RSR[Reference-script UTxO<br/>script: receiver spend of client X<br/>at reference_holder addr]:::script
-  TX --> RSP[Reference-script UTxO<br/>script: pair_state spend of client X<br/>at reference_holder addr]:::script
+  TX --> RSR[Reference-script UTxO<br/>script: receiver spend of client X<br/>at reference_holder addr<br/>output 0]:::script
+  TX --> RSP[Reference-script UTxO<br/>script: pair_state spend of client X<br/>at reference_holder addr<br/>output 1]:::script
+  TX --> RSM[Reference-script UTxO<br/>script: pair_state mint of client X<br/>at reference_holder addr<br/>output 2]:::script
   TX --> Change([Admin change]):::wallet
 
   classDef wallet fill:#fff8dc,stroke:#aa8800,color:#111
@@ -116,9 +117,9 @@ flowchart LR
 
 - **Frequency:** once per onboarded client, after Receiver bootstrap for that client.
 - **Inputs:** admin wallet UTxOs.
-- **Outputs:** two reference-script UTxOs carrying the client-specific `receiver` and `pair_state` binaries.
-- **Isolation:** the binaries embed `receiver_ref` and `receiver_hash` respectively, so each client has its own pair of reference-script UTxOs with distinct hashes; they cannot be reused across clients.
-- **Minting policies:** Receiver minting is one-shot/bootstrap. Pair minting is client-scoped and used by update transactions when a pair does not exist yet; the Pair spend validator is published as a reference script.
+- **Outputs:** three reference-script UTxOs: output 0 = `receiver` spend, output 1 = `pair_state` spend, output 2 = `pair_state` mint policy — all carrying the client-specific compiled binaries.
+- **Isolation:** the binaries embed `receiver_ref` and `receiver_hash` respectively, so each client has its own set of reference-script UTxOs with distinct hashes; they cannot be reused across clients.
+- **Minting policies:** Receiver minting is one-shot/bootstrap and is NOT published as a reference script. The Pair minting policy is client-scoped and is published as a reference script (output 2); update transactions that create a new pair cite it by outRef instead of embedding it inline.
 
 ---
 
@@ -148,16 +149,17 @@ With `C` onboarded clients, client `i` subscribed to `N_i` pairs, the on-chain f
 | `update_coordinator` | 0 (withdraw validator, no state UTxO) | 1 |
 | `receiver` spend of client `i` | 1 (Receiver UTxO of client `i`) | 1 per client |
 | `pair_state` spend of client `i` | `N_i` (one per subscribed pair) | 1 per client |
+| `pair_state` mint of client `i` | — (minting policy, no state UTxO) | 1 per client |
 
 Totals:
 
-- **ReferenceHolder UTxOs:** `3` global + `2` per client.
+- **ReferenceHolder UTxOs:** `3` global + `3` per client.
 - **Global state UTxOs:** `1` Config + `1` Hook = `2`.
 - **Per-client state UTxOs:** `1` Receiver + `N_i` Pairs for client `i`.
 - **Total live state UTxOs on the chain:** `2 + sum_i (1 + N_i)`.
-- **Reference-script UTxOs:** `3` global + `2` per client. These are one-off immutable UTxOs, not "live state"; they only exist so consumers can cite the script hash instead of embedding the binary in every tx.
+- **Reference-script UTxOs:** `3` global + `3` per client. These are one-off immutable UTxOs, not "live state"; they only exist so consumers can cite the script hash instead of embedding the binary in every tx.
 
-Reference-script UTxOs are created at the `reference_holder` script address. The `reference_holder` validator rejects spend attempts, so these UTxOs are not spendable by the deploy wallet.
+Reference-script UTxOs are created at the `reference_holder` script address. The validator is admin-gated: any Config signer can reclaim the locked ADA (via `preview:reclaim-reference-script --script <name>`) when upgrading contracts. Reclaim names match publish commands 1:1: `config` reclaims global.config + global.coordinator together; `payment-hook` reclaims global.paymentHook alone; `client` reclaims client.receiver + client.pair + client.pairMint together. Each call spends the same UTxO set that the corresponding publish command created, carrying the Config NFT as a reference input and the signer's key. After reclaiming, the corresponding entries in the state artifact are cleared so stale outRefs cannot be reused.
 
 ---
 
@@ -979,7 +981,7 @@ truth, and which scripts are parameterized by what.
 | `pair_policy_id` (per-client) | `validators/pair_state.ak` (mint) | NFT bytes on each pair UTxO; embedded in `UpdateWitness.pair_policy_id` | `pairArtifact.scripts.pairPolicyId` | Read by `update_coordinator.valid_single_update` and `valid_batch_update` (`update_coordinator.ak:319, 367, 389`) |
 | `pair_token_name` (per pair) | same | NFT bytes; equal to `blake2b_256(pair_id)` | `pairArtifact.scripts.pairUnit` | Re-derived on-chain by `oracle_logic.pair_asset_name` (`oracle_logic.ak:50-52`) and asserted at `pair_state.ak:115` and `update_coordinator.ak` C7 / C7' |
 | `coordinator_credential` (stake credential) | `validators/update_coordinator.ak` (withdraw) | `ConfigDatum.update_coordinator_credential` (set at hook bootstrap, frozen unless config admin update edits it) | `state.scripts.coordinatorHash`, `state.scripts.coordinatorRewardAddress` | Read by `update_coordinator` (must equal `own_credential`); subscripts read the matching `Withdraw` entry in `tx.redeemers` via `coordinator_intent_matches` (`pair_state`, `receiver`, `payment_hook.ApplySettle`) |
-| `reference_holder` validator hash | `validators/reference_holder.ak` | UTxOs at the reference-holder address that carry the reference scripts | `state.referenceHolderAddress` | Not read by any other validator on-chain; this script's only purpose is to hold reference scripts (its `spend` returns `False`, so the UTxOs are forever consumable only as `reference_input`s) |
+| `reference_holder` validator hash | `validators/reference_holder.ak` | UTxOs at the reference-holder address that carry the reference scripts | `state.scripts.referenceHolderValidatorHash`, `state.scripts.referenceHolderAddress` | Not read by any other validator on-chain. Its `spend` is admin-gated (Config NFT as reference input + Config signer key), allowing DIA to reclaim locked ADA when upgrading contracts. All consumers cite these UTxOs as `reference_input`s. |
 
 ### 8.2 Table F — Identity NFTs
 
@@ -1020,6 +1022,6 @@ at compile time.
 | `receiver` | `bootstrap_ref`, `expected_asset_name`, `config_policy_id`, `config_asset_name` (`validators/receiver.ak:15-19`) | `config_policy_id` + `config_asset_name` are used by `find_visible_config_input` on every receiver mint and on `AccrueFee`/`Settle`/`Withdraw` spends. |
 | `pair_state` | `config_policy_id`, `config_asset_name`, `receiver_hash: ScriptHash` (`validators/pair_state.ak:20-23`) | `config_policy_id`/`asset_name` are searched on every mint and spend; `receiver_hash` is asserted by `receiver_input_present` on every pair spend, AND by every pair mint via `pair_intent_satisfied` + `receiver_input_present` (the pair mint requires the receiver UTxO to be in the tx). `pair_intent_satisfied` simultaneously binds the coordinator redeemer to this exact Pair NFT (`IntentForPair`) and re-asserts `intent_expiry_satisfied` locally on the matched witness. |
 | `update_coordinator` | `config_policy_id`, `config_asset_name` (`validators/update_coordinator.ak:30-33`) | Used to locate Config as a reference input on every coordinator withdraw (`update_coordinator.ak:39-48`). All other identifiers (hook NFT, receiver NFT, pair policy) come from runtime witnesses, not parameters. |
-| `reference_holder` | none (`validators/reference_holder.ak:3-6`) | The script's only purpose is to host reference UTxOs; its `spend` returns `False`, so the UTxOs can never be consumed and instead are forever available as `reference_input`s. |
+| `reference_holder` | `config_policy_id: PolicyId`, `config_asset_name: AssetName` (`validators/reference_holder.ak:2-3`) | Admin-gated spend: requires the Config NFT as a reference input and a Config signer key in the transaction. This allows DIA to reclaim locked ADA when upgrading contracts. All consumers cite UTxOs at this address as `reference_input`s; no on-chain check enforces which UTxOs are cited. |
 
 ---
