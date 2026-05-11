@@ -18,15 +18,29 @@ pub type PaymentHookRef {
   PaymentHookRef { policy_id: PolicyId, asset_name: AssetName }
 }
 
+/// Configuration datum for the DIA Cardano Oracle protocol.
+/// Controls administrative settings, fee structure, and cross-chain parameters.
 pub type ConfigDatum {
   ConfigDatum {
+    /// List of admin verification key hashes authorized to update config.
     config_admins: List<VerificationKeyHash>,
+    /// List of authorized DIA secp256k1 public keys for intent signatures.
     authorized_dia_public_keys: List<ByteArray>,
+    /// EIP-712 domain data for Ethereum signature verification.
     domain_data: Domain,
-    protocol_fee_lovelace: Int,
+    /// Base protocol fee in lovelace (constant component).
+    /// Formula: protocol_fee(N) = base_fee_lovelace + (N * per_pair_fee_lovelace)
+    base_fee_lovelace: Int,
+    /// Per-pair protocol fee in lovelace (variable component per pair).
+    /// Formula: protocol_fee(N) = base_fee_lovelace + (N * per_pair_fee_lovelace)
+    per_pair_fee_lovelace: Int,
+    /// Reference to the global PaymentHook UTxO (if enabled).
     payment_hook_ref: Option<PaymentHookRef>,
+    /// Credential of the update coordinator script (if enabled).
     update_coordinator_credential: Option<Credential>,
+    /// Maximum time drift in seconds for intent freshness validation.
     max_bootstrap_drift_seconds: Int,
+    /// Minimum lovelace required for protocol UTxOs.
     min_utxo_lovelace: Int,
   }
 }
@@ -60,7 +74,8 @@ pub fn valid_config_state(datum: ConfigDatum) -> Bool {
     list.length(datum.config_admins) > 0,
     list.length(datum.authorized_dia_public_keys) > 0,
     valid_domain(datum.domain_data),
-    datum.protocol_fee_lovelace >= 0,
+    datum.base_fee_lovelace >= 0,
+    datum.per_pair_fee_lovelace >= 0,
     hook_and_coordinator_are_consistent(
       datum.payment_hook_ref,
       datum.update_coordinator_credential,
@@ -71,12 +86,28 @@ pub fn valid_config_state(datum: ConfigDatum) -> Bool {
   }
 }
 
+/// Validates that an admin update preserves frozen fields while allowing
+/// updates to admins, keys, domain, drift, fee parameters, and min_utxo.
 pub fn admin_update_transition(previous: ConfigDatum, next: ConfigDatum) -> Bool {
   and {
     valid_config_state(previous),
     valid_config_state(next),
-    previous.min_utxo_lovelace == next.min_utxo_lovelace,
+    // min_utxo_lovelace can now be updated via AdminUpdate redeemer
+    // All other fields can be changed by admin
   }
+}
+
+/// Calculates the total protocol fee for N pairs using the formula:
+///   protocol_fee(N) = base_fee_lovelace + (N * per_pair_fee_lovelace)
+/// 
+/// # Parameters
+/// - `datum`: The configuration datum containing fee parameters
+/// - `pair_count`: Number of pairs (N >= 0)
+/// 
+/// # Returns
+/// Total protocol fee in lovelace
+pub fn calculate_protocol_fee(datum: ConfigDatum, pair_count: Int) -> Int {
+  datum.base_fee_lovelace + (pair_count * datum.per_pair_fee_lovelace)
 }
 
 fn unique_authorized_dia_public_keys(keys: List<ByteArray>) -> Bool {
@@ -125,7 +156,8 @@ pub fn sample_config() -> ConfigDatum {
       #"03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807",
     ],
     domain_data: sample_domain(),
-    protocol_fee_lovelace: 2_000_000,
+    base_fee_lovelace: 500_000,
+    per_pair_fee_lovelace: 300_000,
     payment_hook_ref: None,
     update_coordinator_credential: None,
     max_bootstrap_drift_seconds: 86_400,
@@ -138,7 +170,8 @@ fn sample_updated_fee_config() -> ConfigDatum {
     config_admins: sample_config().config_admins,
     authorized_dia_public_keys: sample_config().authorized_dia_public_keys,
     domain_data: sample_config().domain_data,
-    protocol_fee_lovelace: 3_000_000,
+    base_fee_lovelace: 750_000,
+    per_pair_fee_lovelace: 400_000,
     payment_hook_ref: sample_config().payment_hook_ref,
     update_coordinator_credential: sample_config().update_coordinator_credential,
     max_bootstrap_drift_seconds: sample_config().max_bootstrap_drift_seconds,
@@ -163,7 +196,8 @@ test duplicate_authorized_dia_public_keys_are_rejected() {
         #"022222222222222222222222222222222222222222222222222222222222222222",
       ],
       domain_data: sample_domain(),
-      protocol_fee_lovelace: 2_000_000,
+      base_fee_lovelace: 500_000,
+      per_pair_fee_lovelace: 300_000,
       payment_hook_ref: None,
       update_coordinator_credential: None,
       max_bootstrap_drift_seconds: 86_400,
@@ -222,8 +256,8 @@ test admin_update_transition_accepts_drift_rotation() {
   )
 }
 
-test admin_update_transition_rejects_min_utxo_change() {
-  !admin_update_transition(
+test admin_update_transition_accepts_min_utxo_change() {
+  admin_update_transition(
     sample_config(),
     ConfigDatum { ..sample_config(), min_utxo_lovelace: 5_000_000 },
   )

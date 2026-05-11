@@ -16,6 +16,8 @@ pub type PairMintAction {
 
 pub type PairSpendAction {
   ApplyUpdate
+  /// Admin-only update of min_utxo_lovelace. Requires config signer authorization.
+  UpdateMinUtxo { new_min_utxo_lovelace: Int }
 }
 
 validator pair_state(
@@ -72,8 +74,6 @@ validator pair_state(
     own_ref: OutputReference,
     self: Transaction,
   ) {
-    let ApplyUpdate = redeemer
-
     expect Some(current_datum) = maybe_datum
     expect Some(own_input) =
       list.find(self.inputs, fn(input) { input.output_reference == own_ref })
@@ -110,26 +110,55 @@ validator pair_state(
     expect InlineDatum(output_datum) = pair_output.datum
     expect next_datum: oracle_logic.PairDatum = output_datum
 
-    and {
-      oracle_logic.valid_pair_state(current_datum),
-      oracle_logic.valid_pair_state(next_datum),
-      assets.quantity_of(pair_output.value, own_policy_id, pair_token_name) == 1,
-      pair_output.address.payment_credential == Script(own_policy_id),
-      current_datum.pair_id == next_datum.pair_id,
-      current_datum.min_utxo_lovelace == next_datum.min_utxo_lovelace,
-      pair_token_name == oracle_logic.pair_asset_name(current_datum.pair_id),
-      receiver_input_present(self.inputs, receiver_hash),
-      config_logic.valid_config_state(config_datum),
-      oracle_logic.exact_locked_lovelace(own_input.output, current_datum),
-      oracle_logic.exact_locked_lovelace(pair_output, next_datum),
-      // Same defence-in-depth as the mint branch: bind to this Pair NFT
-      // AND enforce intent expiry locally on the spend path.
-      pair_intent_satisfied(
-        self,
-        config_datum,
-        own_policy_id,
-        pair_token_name,
-      ),
+    when redeemer is {
+      ApplyUpdate -> {
+        and {
+          oracle_logic.valid_pair_state(current_datum),
+          oracle_logic.valid_pair_state(next_datum),
+          assets.quantity_of(pair_output.value, own_policy_id, pair_token_name) == 1,
+          pair_output.address.payment_credential == Script(own_policy_id),
+          current_datum.pair_id == next_datum.pair_id,
+          current_datum.min_utxo_lovelace == next_datum.min_utxo_lovelace,
+          pair_token_name == oracle_logic.pair_asset_name(current_datum.pair_id),
+          receiver_input_present(self.inputs, receiver_hash),
+          config_logic.valid_config_state(config_datum),
+          oracle_logic.exact_locked_lovelace(own_input.output, current_datum),
+          oracle_logic.exact_locked_lovelace(pair_output, next_datum),
+          // Same defence-in-depth as the mint branch: bind to this Pair NFT
+          // AND enforce intent expiry locally on the spend path.
+          pair_intent_satisfied(
+            self,
+            config_datum,
+            own_policy_id,
+            pair_token_name,
+          ),
+        }
+      }
+
+      UpdateMinUtxo { new_min_utxo_lovelace } -> {
+        // Admin-only: config signer required
+        and {
+          config_logic.has_config_signer(config_datum, self),
+          new_min_utxo_lovelace > 0,
+          next_datum.min_utxo_lovelace == new_min_utxo_lovelace,
+          // All other fields must remain unchanged
+          next_datum.pair_id == current_datum.pair_id,
+          next_datum.price == current_datum.price,
+          next_datum.timestamp == current_datum.timestamp,
+          next_datum.nonce == current_datum.nonce,
+          next_datum.intent_hash == current_datum.intent_hash,
+          next_datum.signer == current_datum.signer,
+          // Basic validity and output checks
+          oracle_logic.valid_pair_state(current_datum),
+          oracle_logic.valid_pair_state(next_datum),
+          assets.quantity_of(pair_output.value, own_policy_id, pair_token_name) == 1,
+          pair_output.address.payment_credential == Script(own_policy_id),
+          pair_token_name == oracle_logic.pair_asset_name(current_datum.pair_id),
+          config_logic.valid_config_state(config_datum),
+          oracle_logic.exact_locked_lovelace(own_input.output, current_datum),
+          oracle_logic.exact_locked_lovelace(pair_output, next_datum),
+        }
+      }
     }
   }
 

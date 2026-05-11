@@ -55,11 +55,18 @@ pub fn oracle_intent_hash(
   domain: config_logic.Domain,
   intent: OracleIntent,
 ) -> ByteArray {
+  oracle_intent_hash_with_sep(domain_separator(domain), intent)
+}
+
+pub fn oracle_intent_hash_with_sep(
+  domain_sep: ByteArray,
+  intent: OracleIntent,
+) -> ByteArray {
   keccak_256(
     bytearray.concat(
       #"1901",
       bytearray.concat(
-        domain_separator(domain),
+        domain_sep,
         oracle_intent_struct_hash(intent),
       ),
     ),
@@ -133,6 +140,7 @@ pub fn intent_freshness_satisfied(
 
 pub fn has_valid_signature(
   config_datum: config_logic.ConfigDatum,
+  intent_hash: ByteArray,
   witness: UpdateWitness,
 ) -> Bool {
   and {
@@ -140,7 +148,7 @@ pub fn has_valid_signature(
     signer_is_authorized(config_datum, witness.signer_public_key),
     verify_ecdsa_signature(
       witness.signer_public_key,
-      oracle_intent_hash(config_datum.domain_data, witness.intent),
+      intent_hash,
       normalized_signature(witness.intent.signature),
     ),
   }
@@ -150,8 +158,11 @@ pub fn next_pair_matches_witness(
   previous: PairDatum,
   next: PairDatum,
   config_datum: config_logic.ConfigDatum,
+  domain_sep: ByteArray,
   witness: UpdateWitness,
 ) -> Bool {
+  let intent_hash = oracle_intent_hash_with_sep(domain_sep, witness.intent)
+
   and {
     valid_pair_state(previous),
     valid_pair_state(next),
@@ -161,35 +172,32 @@ pub fn next_pair_matches_witness(
     next.price == witness.intent.price,
     next.timestamp == witness.intent.timestamp,
     next.nonce == witness.intent.nonce,
-    next.intent_hash == oracle_intent_hash(
-      config_datum.domain_data,
-      witness.intent,
-    ),
+    next.intent_hash == intent_hash,
     next.signer == witness.intent.signer,
     witness.pair_token_name == pair_asset_name(next.pair_id),
     is_fresh_update(previous, witness.intent),
-    has_valid_signature(config_datum, witness),
+    has_valid_signature(config_datum, intent_hash, witness),
   }
 }
 
 pub fn initial_pair_matches_witness(
   datum: PairDatum,
   config_datum: config_logic.ConfigDatum,
+  domain_sep: ByteArray,
   witness: UpdateWitness,
 ) -> Bool {
+  let intent_hash = oracle_intent_hash_with_sep(domain_sep, witness.intent)
+
   and {
     valid_pair_state(datum),
     datum.pair_id == witness.intent.symbol,
     datum.price == witness.intent.price,
     datum.timestamp == witness.intent.timestamp,
     datum.nonce == witness.intent.nonce,
-    datum.intent_hash == oracle_intent_hash(
-      config_datum.domain_data,
-      witness.intent,
-    ),
+    datum.intent_hash == intent_hash,
     datum.signer == witness.intent.signer,
     witness.pair_token_name == pair_asset_name(datum.pair_id),
-    has_valid_signature(config_datum, witness),
+    has_valid_signature(config_datum, intent_hash, witness),
   }
 }
 
@@ -222,7 +230,7 @@ fn normalized_signature(signature: ByteArray) -> ByteArray {
   }
 }
 
-fn domain_separator(domain: config_logic.Domain) -> ByteArray {
+pub fn domain_separator(domain: config_logic.Domain) -> ByteArray {
   keccak_256(
     abi_words(
       [
@@ -305,12 +313,17 @@ fn sample_config() -> config_logic.ConfigDatum {
     config_admins: config_logic.sample_config().config_admins,
     authorized_dia_public_keys: config_logic.sample_config().authorized_dia_public_keys,
     domain_data: config_logic.sample_config().domain_data,
-    protocol_fee_lovelace: config_logic.sample_config().protocol_fee_lovelace,
+    base_fee_lovelace: config_logic.sample_config().base_fee_lovelace,
+    per_pair_fee_lovelace: config_logic.sample_config().per_pair_fee_lovelace,
     payment_hook_ref: None,
     update_coordinator_credential: None,
     max_bootstrap_drift_seconds: config_logic.sample_config().max_bootstrap_drift_seconds,
     min_utxo_lovelace: config_logic.sample_config().min_utxo_lovelace,
   }
+}
+
+fn sample_domain_sep() -> ByteArray {
+  domain_separator(sample_config().domain_data)
 }
 
 fn sample_pair_datum() -> PairDatum {
@@ -343,7 +356,11 @@ test valid_pair_state_accepts_sample_state() {
 }
 
 test real_dia_signature_is_accepted() {
-  has_valid_signature(sample_config(), sample_witness())
+  has_valid_signature(
+    sample_config(),
+    oracle_intent_hash(sample_config().domain_data, sample_witness().intent),
+    sample_witness(),
+  )
 }
 
 test negative_price_pair_state_is_rejected() {
@@ -353,6 +370,7 @@ test negative_price_pair_state_is_rejected() {
 test negative_price_intent_signature_is_rejected() {
   !has_valid_signature(
     sample_config(),
+    #"0000000000000000000000000000000000000000000000000000000000000000",
     UpdateWitness {
       ..sample_witness(),
       intent: OracleIntent { ..sample_intent(), price: -1 },
@@ -364,6 +382,7 @@ test initial_pair_matches_witness_accepts_first_real_update() {
   initial_pair_matches_witness(
     sample_pair_datum(),
     sample_config(),
+    sample_domain_sep(),
     sample_witness(),
   )
 }
@@ -383,6 +402,7 @@ test initial_pair_matches_witness_rejects_zero_placeholder() {
       min_utxo_lovelace: sample_pair_datum().min_utxo_lovelace,
     },
     sample_config(),
+    sample_domain_sep(),
     sample_witness(),
   )
 }
@@ -403,6 +423,7 @@ test next_pair_matches_witness_requires_fresh_data() {
     previous,
     sample_pair_datum(),
     sample_config(),
+    sample_domain_sep(),
     sample_witness(),
   )
 }
@@ -419,6 +440,7 @@ test stale_timestamp_is_rejected() {
     previous,
     sample_pair_datum(),
     sample_config(),
+    sample_domain_sep(),
     sample_witness(),
   )
 }
@@ -435,6 +457,7 @@ test stale_nonce_is_rejected() {
     previous,
     sample_pair_datum(),
     sample_config(),
+    sample_domain_sep(),
     sample_witness(),
   )
 }
@@ -445,6 +468,7 @@ test unauthorized_dia_signer_is_rejected() {
       ..sample_config(),
       authorized_dia_public_keys: [],
     },
+    oracle_intent_hash(sample_config().domain_data, sample_witness().intent),
     sample_witness(),
   )
 }
@@ -461,6 +485,7 @@ test wrong_pair_symbol_is_rejected() {
     },
     next,
     sample_config(),
+    sample_domain_sep(),
     sample_witness(),
   )
 }
@@ -475,6 +500,7 @@ test wrong_pair_nft_is_rejected() {
     },
     sample_pair_datum(),
     sample_config(),
+    sample_domain_sep(),
     UpdateWitness {
       ..sample_witness(),
       pair_token_name: #"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
@@ -577,6 +603,13 @@ test tampered_intent_timestamp_is_rejected() {
   // timestamp after signing must invalidate the signature.
   !has_valid_signature(
     sample_config(),
+    oracle_intent_hash(
+      sample_config().domain_data,
+      OracleIntent {
+        ..sample_intent(),
+        timestamp: sample_intent().timestamp + 1,
+      },
+    ),
     UpdateWitness {
       ..sample_witness(),
       intent: OracleIntent {
@@ -590,6 +623,13 @@ test tampered_intent_timestamp_is_rejected() {
 test tampered_intent_nonce_is_rejected() {
   !has_valid_signature(
     sample_config(),
+    oracle_intent_hash(
+      sample_config().domain_data,
+      OracleIntent {
+        ..sample_intent(),
+        nonce: sample_intent().nonce + 1,
+      },
+    ),
     UpdateWitness {
       ..sample_witness(),
       intent: OracleIntent {

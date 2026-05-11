@@ -70,7 +70,7 @@ pub fn withdraw_transition(
   amount: Int,
 ) -> Bool {
   and {
-    amount >= 0,
+    amount > 0,
     amount <= previous.accrued_fees_lovelace,
     next.withdraw_address == previous.withdraw_address,
     next.min_utxo_lovelace == previous.min_utxo_lovelace,
@@ -169,6 +169,10 @@ test withdraw_transition_decrements_accrued_balance() {
     },
     3_000_000,
   )
+}
+
+test withdraw_transition_rejects_zero_amount() {
+  !withdraw_transition(sample_payment_hook(), sample_payment_hook(), 0)
 }
 
 test apply_settle_transition_rejects_wrong_delta() {

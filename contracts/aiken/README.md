@@ -6,7 +6,7 @@ This package contains the Aiken on-chain implementation for the DIA Cardano Orac
 
 The current contract set follows the final Receiver-based architecture:
 
-- `config_state` mints and guards the global Config NFT. Config stores DIA admin keys, authorized DIA secp256k1 public keys, the EIP-712 domain, the protocol fee, the active PaymentHook reference, and the coordinator credential.
+- `config_state` mints and guards the global Config NFT. Config stores DIA admin keys, authorized DIA secp256k1 public keys, the EIP-712 domain, the protocol fee parameters (`base_fee_lovelace` and `per_pair_fee_lovelace`), the active PaymentHook reference, and the coordinator credential.
 - `update_coordinator` is the global withdrawal validator used once per update transaction. It is the authority for DIA intent validation, fee movement, pair creation, pair updates, and batch consistency.
 - `payment_hook` mints and guards the global PaymentHook NFT and accumulates protocol fees.
 - `receiver` is compiled once per client and guards that client's prepaid fee balance.
@@ -25,9 +25,9 @@ PaymentHook in two separate transactions:
 1. **Per update — `AccrueFee` on the Receiver.** Every single or batch
    oracle update spends the client's Receiver UTxO with the
    `AccrueFee` redeemer. The Receiver datum moves the protocol fee
-   (or `N × protocol_fee_lovelace` in batch updates) from
-   `balance_lovelace` into `accrued_to_hook_lovelace`. The total ADA
-   on the Receiver UTxO does not change — fees are reclassified, not
+   (calculated as `base_fee_lovelace + (N × per_pair_fee_lovelace)` for N pairs
+   in a batch) from `balance_lovelace` into `accrued_to_hook_lovelace`.
+   The total ADA on the Receiver UTxO does not change — fees are reclassified, not
    spent. The PaymentHook is **not** touched during oracle updates.
 2. **Periodically — `Settle`.** An admin-initiated Settle transaction
    spends one or more Receiver UTxOs with the `Settle` redeemer
@@ -42,6 +42,24 @@ This decoupling exists so that high-frequency price updates do not
 contend on the single global PaymentHook UTxO. The `Withdraw` redeemer
 on the Receiver explicitly cannot drain `accrued_to_hook_lovelace` —
 the only path from a Receiver to the PaymentHook is through Settle.
+
+## Admin-only maintenance operations
+
+### Updating minimum UTxO lovelace
+
+Four datums contain `min_utxo_lovelace`. Two use a **dedicated `UpdateMinUtxo` redeemer**,
+and two use the **general `AdminUpdate` redeemer** (which permits `min_utxo_lovelace` changes
+because the transition logic does not freeze this field):
+
+| Datum | Redeemer for min_uta update | Notes |
+|-------|---------------------------|-------|
+| `ReceiverDatum` | `UpdateMinUtxo` (dedicated) | Only `min_utxo` changes; `balance_lovelace`, `accrued_to_hook_lovelace` frozen |
+| `PairDatum` | `UpdateMinUtxo` (dedicated) | Only `min_utxo` changes; all price/intent fields frozen |
+| `ConfigDatum` | `AdminUpdate` (general) | No dedicated redeemer; `min_utxo` mutable via general update |
+| `PaymentHookDatum` | `AdminUpdate` (general) | No dedicated redeemer; `min_utxo` and `withdraw_address` mutable; economic fields frozen |
+
+**Common validation:** All four require `has_config_signer` authorization and enforce
+`exact_locked_lovelace` (output ADA must match the new datum minimums).
 
 ## Structure
 

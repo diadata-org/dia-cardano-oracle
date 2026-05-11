@@ -16,6 +16,9 @@ pub type ReceiverRedeemer {
   AccrueFee
   Settle
   Withdraw { amount: Int, recipient: Address }
+  /// Admin-only update of the min_utxo_lovelace field.
+  /// Requires config signer authorization at the validator level.
+  UpdateMinUtxo { new_min_utxo_lovelace: Int }
 }
 
 pub fn valid_receiver_state(datum: ReceiverDatum) -> Bool {
@@ -100,6 +103,22 @@ pub fn withdraw_transition(
     next.balance_lovelace == previous.balance_lovelace - amount,
     next.accrued_to_hook_lovelace == previous.accrued_to_hook_lovelace,
     next.min_utxo_lovelace == previous.min_utxo_lovelace,
+  }
+}
+
+/// Admin-only transition to update the min_utxo_lovelace field.
+/// All other fields must remain unchanged. The ADA at the UTxO must
+/// be adjusted externally to match the new min_utxo requirement.
+pub fn update_min_utxo_transition(
+  previous: ReceiverDatum,
+  next: ReceiverDatum,
+  new_min_utxo_lovelace: Int,
+) -> Bool {
+  and {
+    new_min_utxo_lovelace > 0,
+    next.min_utxo_lovelace == new_min_utxo_lovelace,
+    next.balance_lovelace == previous.balance_lovelace,
+    next.accrued_to_hook_lovelace == previous.accrued_to_hook_lovelace,
   }
 }
 
@@ -358,4 +377,52 @@ test withdraw_transition_rejects_accrued_drain() {
     }
 
   !withdraw_transition(previous, next, 1_000_000)
+}
+
+// --- UpdateMinUtxo transition tests ---
+
+test update_min_utxo_transition_accepts_valid_update() {
+  let previous = sample_receiver()
+  let next =
+    ReceiverDatum { ..previous, min_utxo_lovelace: 3_000_000 }
+
+  update_min_utxo_transition(previous, next, 3_000_000)
+}
+
+test update_min_utxo_transition_rejects_zero() {
+  let previous = sample_receiver()
+  !update_min_utxo_transition(previous, previous, 0)
+}
+
+test update_min_utxo_transition_rejects_negative() {
+  let previous = sample_receiver()
+  let next = ReceiverDatum { ..previous, min_utxo_lovelace: -1 }
+  !update_min_utxo_transition(previous, next, -1)
+}
+
+test update_min_utxo_transition_rejects_balance_change() {
+  // Balance must remain unchanged during min_utxo update
+  let previous = sample_receiver()
+  let next =
+    ReceiverDatum {
+      ..previous,
+      min_utxo_lovelace: 3_000_000,
+      balance_lovelace: previous.balance_lovelace - 1_000_000,
+    }
+
+  !update_min_utxo_transition(previous, next, 3_000_000)
+}
+
+test update_min_utxo_transition_rejects_accrued_change() {
+  // Accrued fees must remain unchanged during min_utxo update
+  let previous =
+    ReceiverDatum { ..sample_receiver(), accrued_to_hook_lovelace: 1_000_000 }
+  let next =
+    ReceiverDatum {
+      ..previous,
+      min_utxo_lovelace: 3_000_000,
+      accrued_to_hook_lovelace: 0,
+    }
+
+  !update_min_utxo_transition(previous, next, 3_000_000)
 }

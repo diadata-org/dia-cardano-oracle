@@ -164,6 +164,24 @@ validator receiver(
             receiver_logic.paid_to_recipient(self.outputs, recipient, amount),
           }
         }
+
+        // Admin-only update of min_utxo_lovelace. Requires config signer.
+        receiver_logic.UpdateMinUtxo { new_min_utxo_lovelace } -> {
+          expect Some(config_input) =
+            find_visible_config_input(self, config_policy_id, config_asset_name)
+          expect InlineDatum(config_datum_data) = config_input.output.datum
+          expect config_datum: config_logic.ConfigDatum = config_datum_data
+
+          and {
+            config_logic.valid_config_state(config_datum),
+            config_logic.has_config_signer(config_datum, self),
+            receiver_logic.update_min_utxo_transition(
+              current_datum,
+              next_datum,
+              new_min_utxo_lovelace,
+            ),
+          }
+        }
       },
     }
   }
