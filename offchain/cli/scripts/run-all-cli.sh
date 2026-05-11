@@ -2,7 +2,8 @@
 set -euo pipefail
 
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 CLI_DIR="$REPO/offchain/cli"
 
 CLEAN_PREVIOUS=false
@@ -11,12 +12,12 @@ EXPLICIT_RUN_ID="${RUN_ID:-}"
 
 usage() {
   cat <<'EOF'
-usage: preview-rerun.sh [--clean-previous=false|true] [--from-step N] [--run-id ID]
+usage: run-all-cli.sh [--clean-previous=false|true] [--from-step N] [--run-id ID]
 
 examples:
-  preview-rerun.sh
-  preview-rerun.sh --clean-previous=true
-  preview-rerun.sh --from-step 13 --run-id 20260506-030904
+  run-all-cli.sh
+  run-all-cli.sh --clean-previous=true
+  run-all-cli.sh --from-step 13 --run-id 20260506-030904
 EOF
 }
 
@@ -106,7 +107,8 @@ DOMAIN_NAME="DIA Oracle"
 DOMAIN_VERSION="1.0"
 DOMAIN_SOURCE_CHAIN_ID="100640"
 DOMAIN_VERIFYING_CONTRACT="0xF8c614A483A0427A13512F52ac72A576678bE317"
-PROTOCOL_FEE_LOVELACE="2000000"
+BASE_FEE_LOVELACE="600000"
+PER_PAIR_FEE_LOVELACE="400000"
 MAX_BOOTSTRAP_DRIFT_SECONDS="300"
 CONFIG_MIN_UTXO_LOVELACE="5000000"
 CONFIG_ASSET_LABEL="DIA_CONFIG"
@@ -409,7 +411,8 @@ DOMAIN_NAME="$DOMAIN_NAME" \
 DOMAIN_VERSION="$DOMAIN_VERSION" \
 DOMAIN_SOURCE_CHAIN_ID="$DOMAIN_SOURCE_CHAIN_ID" \
 DOMAIN_VERIFYING_CONTRACT="$DOMAIN_VERIFYING_CONTRACT" \
-PROTOCOL_FEE_LOVELACE="$PROTOCOL_FEE_LOVELACE" \
+BASE_FEE_LOVELACE="$BASE_FEE_LOVELACE" \
+PER_PAIR_FEE_LOVELACE="$PER_PAIR_FEE_LOVELACE" \
 MAX_BOOTSTRAP_DRIFT_SECONDS="$MAX_BOOTSTRAP_DRIFT_SECONDS" \
 CONFIG_MIN_UTXO_LOVELACE="$CONFIG_MIN_UTXO_LOVELACE" \
 CONFIG_ASSET_LABEL="$CONFIG_ASSET_LABEL" \
@@ -433,7 +436,8 @@ const data = {
     domainVersion: process.env.DOMAIN_VERSION,
     domainSourceChainId: process.env.DOMAIN_SOURCE_CHAIN_ID,
     domainVerifyingContract: process.env.DOMAIN_VERIFYING_CONTRACT,
-    protocolFeeLovelace: process.env.PROTOCOL_FEE_LOVELACE,
+    baseFeeLovelace: process.env.BASE_FEE_LOVELACE,
+    perPairFeeLovelace: process.env.PER_PAIR_FEE_LOVELACE,
     maxBootstrapDriftSeconds: process.env.MAX_BOOTSTRAP_DRIFT_SECONDS,
     configMinUtxoLovelace: process.env.CONFIG_MIN_UTXO_LOVELACE,
     configAssetLabel: process.env.CONFIG_ASSET_LABEL,
@@ -452,6 +456,13 @@ const data = {
 process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 NODE
 
+# Run contract and node tests first — always, on every full run and resume.
+# Logs are saved to the evidence directory so failures are captured as evidence.
+echo "[rerun] running contracts tests (aiken check)"
+bash "$SCRIPT_DIR/run-contracts-tests.sh" --evidence-dir "$EVIDENCE_ROOT"
+echo "[rerun] running node tests (npm test)"
+bash "$SCRIPT_DIR/run-node-tests.sh" --evidence-dir "$EVIDENCE_ROOT"
+
 # Capture initial wallet balance before any transaction. Only on a fresh full run;
 # on --from-step resumes the file already exists from the original run.
 if (( FROM_STEP == 1 )); then
@@ -460,7 +471,7 @@ fi
 
 if should_run_step 1; then
   run_cli_logged "01-protocol-init.log" \
-    "preview:protocol:init --valid-config-signers $CONFIG_SIGNER_PKH --authorized-dia-public-keys $AUTHORIZED_DIA_PUBLIC_KEY --domain-name \"$DOMAIN_NAME\" --domain-version $DOMAIN_VERSION --domain-source-chain-id $DOMAIN_SOURCE_CHAIN_ID --domain-verifying-contract $DOMAIN_VERIFYING_CONTRACT --protocol-fee-lovelace $PROTOCOL_FEE_LOVELACE --max-bootstrap-drift-seconds $MAX_BOOTSTRAP_DRIFT_SECONDS --min-utxo-lovelace $CONFIG_MIN_UTXO_LOVELACE --config-asset-label $CONFIG_ASSET_LABEL --payment-hook-asset-label $PAYMENT_HOOK_ASSET_LABEL --payment-hook-withdraw-address $PAYMENT_HOOK_WITHDRAW_ADDRESS --out $STATE_REL/config-bootstrap.json"
+    "preview:protocol:init --valid-config-signers $CONFIG_SIGNER_PKH --authorized-dia-public-keys $AUTHORIZED_DIA_PUBLIC_KEY --domain-name \"$DOMAIN_NAME\" --domain-version $DOMAIN_VERSION --domain-source-chain-id $DOMAIN_SOURCE_CHAIN_ID --domain-verifying-contract $DOMAIN_VERIFYING_CONTRACT --base-fee-lovelace $BASE_FEE_LOVELACE --per-pair-fee-lovelace $PER_PAIR_FEE_LOVELACE --max-bootstrap-drift-seconds $MAX_BOOTSTRAP_DRIFT_SECONDS --min-utxo-lovelace $CONFIG_MIN_UTXO_LOVELACE --config-asset-label $CONFIG_ASSET_LABEL --payment-hook-asset-label $PAYMENT_HOOK_ASSET_LABEL --payment-hook-withdraw-address $PAYMENT_HOOK_WITHDRAW_ADDRESS --out $STATE_REL/config-bootstrap.json"
 fi
 
 if should_run_step 2; then

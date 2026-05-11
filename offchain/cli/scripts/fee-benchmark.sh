@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Measures on-chain network fees for single update and batch(1..6), repeated CYCLES times.
-# Requires a bootstrapped state from preview-rerun.sh (--run-id).
+# Requires a bootstrapped state from run-all-cli.sh (--run-id).
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -19,7 +19,7 @@ usage() {
   cat <<'EOF'
 usage: fee-benchmark.sh --run-id RUN_ID [options]
 
-  --run-id RUN_ID        bootstrapped state from preview-rerun.sh (required)
+  --run-id RUN_ID        bootstrapped state from run-all-cli.sh (required)
   --cycles N             number of benchmark cycles (default: 5)
   --top-up-lovelace N    receiver top-up before benchmark in lovelace (default: 260000000)
   --bench-run-id ID      benchmark run ID (default: timestamp)
@@ -509,7 +509,7 @@ ${(() => {
 | Model | Formula | Example: 1 pair | Example: 6 pairs | Notes |
 |-------|---------|-----------------|------------------|-------|
 | **Flat per-pair** (current) | 2 ADA × N | 2 ADA | 12 ADA | Simple; over-collects at scale |
-| **Base + per-pair** | 0.5 + 0.30 × N ADA | 0.80 ADA | 2.30 ADA | Tracks real cost closely |
+| **Base + per-pair** | 0.6 + 0.40 × N ADA | 1.00 ADA | 3.00 ADA | Tracks real cost closely |
 
 ## Notes
 
