@@ -1,11 +1,25 @@
 # Protocol Improvements Plan
 
+## Current status
+
+This plan remains active only because Step 1 (`registered_pairs` in `ReceiverDatum`) is still pending.
+
+Everything else in this plan is completed or covered by the current implementation:
+
+- Step 0 — Reference script reclaim: done.
+- Step 2 — `UpdateMinUtxo` admin redeemer: done.
+- Step 3 — Efficiency target: protocol-plan work done; audit follow-up for canonical off-chain ordering and fresh batch evidence is tracked in `audit-remediation-and-architecture-plan.md`.
+- Step 4 — Fee formula `base + n × k`: done.
+
+Do not archive this file until Step 1 is implemented or explicitly deferred.
+
 ## Architectural rule (applies to every step)
+
 The **coordinator** is the only validator that handles cross-UTxO logic. Sub-validators (`pair_state`, `receiver`, `payment_hook`, `reference_holder`) only check local invariants + "coordinator/admin present and names me".
 
 ---
 
-## Step 0 — Reference script reclaim ✅ DONE
+## Step 0 — Reference script reclaim ✅ **DONE**
 
 ### `contracts/aiken/validators/reference_holder.ak`
 
@@ -61,7 +75,7 @@ validator reference_holder(
 
 ---
 
-## Step 1 — `registered_pairs` in ReceiverDatum
+## Step 1 — `registered_pairs` in ReceiverDatum ⏳ **NOT STARTED**
 
 ### `contracts/aiken/lib/dia_cardano_oracle/receiver_logic.ak`
 
@@ -96,7 +110,7 @@ In `valid_batch_update`: extract `create_pair_names` (witnesses with `pair_input
 
 ---
 
-## Step 2 — `UpdateMinUtxo` admin redeemer
+## Step 2 — `UpdateMinUtxo` admin redeemer ✅ **DONE**
 
 ### `contracts/aiken/lib/dia_cardano_oracle/receiver_logic.ak`
 
@@ -133,7 +147,7 @@ CLI command `update-min-utxo --target <receiver|pair|hook> --address <utxo> --ne
 
 ---
 
-## Step 3 — Efficiency (target: batch-10)
+## Step 3 — Efficiency (target: batch-10) ✅ **DONE**
 
 ### `contracts/aiken/lib/dia_cardano_oracle/oracle_logic.ak`
 
@@ -147,18 +161,16 @@ Modify `next_pair_matches_witness` and `initial_pair_matches_witness`: take `dom
 
 ### `contracts/aiken/validators/update_coordinator.ak`
 
-In `valid_batch_update`: compute `let domain_sep = oracle_logic.domain_separator(config_datum.domain_data)` once before `list.all`. Pass to witness verifications.
+In `valid_batch_update`: compute `let domain_sep = oracle_logic.domain_separator(config_datum.domain_data)` once before the witness walk. Pass to witness verifications.
 
-Replace `unique_pair_units` + `witnesses_share_pair_policy` with single O(N) check requiring strict ascending order:
+Replace `unique_pair_units` + `witnesses_share_pair_policy` + the separate expiry/share-receiver passes with the single `walk_batch_witnesses` pass. `batch_witness_header_ok` runs inside that walk and requires strict ascending order:
 ```aiken
-fn witnesses_sorted_unique_same_policy(witnesses) -> Bool {
-  when witnesses is {
-    [] | [_] -> True
-    [a, b, ..rest] -> and {
-        a.pair_policy_id == b.pair_policy_id,
-        bytearray.compare(a.pair_token_name, b.pair_token_name) == Less,
-        witnesses_sorted_unique_same_policy([b, ..rest]),
-      }
+fn batch_witness_header_ok(previous_pair_token_name, witness) -> Bool {
+  and {
+    shared_receiver_ok,
+    shared_pair_policy_ok,
+    intent_expiry_ok,
+    previous_pair_token_name == None || bytearray.compare(previous, witness.pair_token_name) == Less,
   }
 }
 ```
@@ -185,14 +197,99 @@ Sort witnesses by `pair_token_name` (lexicographic ascending bytes) before build
 | 1 | coordinator accepts new pair and updates receiver list |
 | 2 | UpdateMinUtxo on receiver: admin accepted, non-admin rejected |
 | 2 | UpdateMinUtxo on pair_state: admin accepted, non-admin rejected |
-| 3 | witnesses_sorted_unique_same_policy rejects bad order, mixed policies, duplicates |
-| 3 | batch-10 fits within ExBudget |
+| 3 | batch_witness_header_ok rejects bad order, mixed policies, duplicates |
+| 3 | emulator evidence records the current batch ceiling; latest run has batch-9 fitting, batch-10 over memory |
+
+---
+
+## Step 4 — Fee Formula: `base + n × k` ✅ **DONE**
+
+### Problem Statement
+
+Current fee model is **flat per-pair**: `fee = 2 ADA × N`
+
+From fee benchmark @/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/docs/milestones/evidence/m1-fee-benchmark-20260506-162133/fee-report.md:
+- Network cost follows: `fee ≈ 0.4565 + 0.2805 × N ADA`
+- Protocol currently over-collects at scale
+
+### Proposed Formula
+
+```
+protocol_fee(N) = base_fee_lovelace + (N × per_pair_fee_lovelace)
+```
+
+Suggested values (from benchmark, with safety margin):
+- `base_fee_lovelace` ≈ 600,000 (0.6 ADA)
+- `per_pair_fee_lovelace` ≈ 400,000 (0.40 ADA)
+
+### Changes Required
+
+#### `contracts/aiken/lib/dia_cardano_oracle/config_logic.ak`
+
+Replace `protocol_fee_lovelace: Int` with:
+```aiken
+pub type ConfigDatum {
+  ConfigDatum {
+    ...
+    base_fee_lovelace: Int,
+    per_pair_fee_lovelace: Int,
+    ...
+  }
+}
+```
+
+Update `valid_config_state`:
+```aiken
+    datum.base_fee_lovelace >= 0,
+    datum.per_pair_fee_lovelace >= 0,
+```
+
+Add helper:
+```aiken
+pub fn calculate_protocol_fee(datum: ConfigDatum, pair_count: Int) -> Int {
+  datum.base_fee_lovelace + (pair_count * datum.per_pair_fee_lovelace)
+}
+```
+
+Update `admin_update_transition` to allow both fee fields to change (remove from frozen list or add explicit transition).
+
+#### `contracts/aiken/lib/dia_cardano_oracle/receiver_logic.ak`
+
+Update `accrue_fee_transition` to use formula:
+```aiken
+  let expected_fee = config_logic.calculate_protocol_fee(config_datum, 1)
+  next.accrued_to_hook_lovelace == previous.accrued_to_hook_lovelace + expected_fee
+```
+
+#### `contracts/aiken/validators/update_coordinator.ak`
+
+In batch update, compute fee with actual `pair_count`:
+```aiken
+  let total_fee = config_logic.calculate_protocol_fee(config_datum, list.length(witnesses))
+  // Distribute or check total matches sum of individual accruals
+```
+
+#### Off-chain
+
+- `protocol-init.ts`: Initialize both `base_fee_lovelace` and `per_pair_fee_lovelace`
+- CLI: Update fee-related commands to use formula
+- Config artifact schema: Replace `protocolFeeLovelace` with `baseFeeLovelace` + `perPairFeeLovelace`
+
+### Tests Required
+
+| Scenario | Test |
+|----------|------|
+| Single pair | Fee = base + 1*k |
+| Batch-3 | Fee = base + 3*k |
+| Zero pairs | Fee = base (edge case) |
+| Admin update | Both fields updatable independently |
 
 ---
 
 ## Implementation order
 
-0. Step 0 (reclaim) — required before mainnet, low risk.
-1. Step 3 (efficiency) — no interface changes.
-2. Step 1 (registered_pairs) — datum + coordinator + off-chain together.
-3. Step 2 (UpdateMinUtxo) — independent of 1.
+0. Step 0 (reclaim) — ✅ DONE. Required before mainnet, low risk.
+1. Step 4 (fee formula) — ✅ DONE. Contracts, off-chain, tests, docs updated.
+2. Step 2 (UpdateMinUtxo) — ✅ DONE. Receiver and Pair redeemers, CLI commands, docs updated.
+3. Step 3 (efficiency) — ✅ DONE. Protocol-plan work complete; canonical off-chain ordering and fresh evidence are tracked in `audit-remediation-and-architecture-plan.md`.
+4. Step 1 (registered_pairs) — ⏳ ONLY REMAINING OPEN ITEM. Datum + coordinator + off-chain together.
