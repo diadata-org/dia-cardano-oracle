@@ -271,7 +271,7 @@ run_cli_logged() {
   shift
   local cli_cmd="$*"
   echo "[rerun] $cli_cmd"
-  script -q -e -c "npm run cli -- $cli_cmd" /dev/null | tee "$EVIDENCE_ROOT/$log_name"
+  npm run cli -- $cli_cmd | tee "$EVIDENCE_ROOT/$log_name"
 }
 
 append_cli_log() {
@@ -279,7 +279,7 @@ append_cli_log() {
   shift
   local cli_cmd="$*"
   echo "[rerun] $cli_cmd" | tee -a "$EVIDENCE_ROOT/$log_name"
-  script -q -e -c "npm run cli -- $cli_cmd" /dev/null | tee -a "$EVIDENCE_ROOT/$log_name"
+  npm run cli -- $cli_cmd | tee -a "$EVIDENCE_ROOT/$log_name"
 }
 
 run_tx_logged() {
@@ -322,7 +322,7 @@ append_tx_log() {
   shift
   local cli_cmd="$*"
   echo "[rerun] $cli_cmd" | tee -a "$EVIDENCE_ROOT/$log_name"
-  script -q -e -c "npm run cli -- $cli_cmd" /dev/null | tee -a "$EVIDENCE_ROOT/$log_name"
+  npm run cli -- $cli_cmd | tee -a "$EVIDENCE_ROOT/$log_name"
   if [[ "$POST_TX_DELAY_SECONDS" -gt 0 ]]; then
     sleep "$POST_TX_DELAY_SECONDS"
   fi
