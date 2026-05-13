@@ -1,0 +1,5 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 build
+> tsc -p tsconfig.json
+
+[node-tests] npm build PASSED

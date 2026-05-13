@@ -1,0 +1,725 @@
+{
+  "generatedAt": "2026-05-13T17:20:42.879Z",
+  "stateRoot": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260513-161549",
+  "successBatchSize": 10,
+  "protocolTransactions": [
+    {
+      "step": "preview:config:bootstrap",
+      "submittedTxHash": "75e095aecdeee31c52cfdbc057e8b7e46b1ad1b3a56d51e8ca60a5a9d721f35c",
+      "confirmed": true
+    },
+    {
+      "step": "preview:config:reference-scripts",
+      "submittedTxHash": "b12df211a12df29c89123f614fc7267e52a205514f7cf7740917ece9d9790377",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:bootstrap",
+      "submittedTxHash": "dcf00f353110b57a3970e4914019f1bcd3fcd36221edb7b7905fe2d0ac67deee",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:reference-script",
+      "submittedTxHash": "fb5abe2c4f62d90085255fff438bc01716d631d0e242b0dd2594f84b8124e31c",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "01f0123f5837ae0aba15425c4273f1659323ecbcbe4b1d04d3972929a294f854",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:withdraw",
+      "submittedTxHash": "753dee846f97850da8729e757a6b8f9f5a156154a6d9236147e25933b694ede0",
+      "confirmed": true
+    },
+    {
+      "step": "preview:reclaim-reference-script:payment-hook",
+      "submittedTxHash": "b566b7dc8775b5eb6d841d333ee50988b19817561cf8cf2dfd1e953d71b6336c",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:reference-script",
+      "submittedTxHash": "cb709efc50627b311485ef62ba63058f0c53e3b18fdd909e49d8fb1cde242089",
+      "confirmed": true
+    }
+  ],
+  "clientTransactions": [
+    {
+      "step": "preview:receiver:bootstrap",
+      "submittedTxHash": "dca872e424b538c8a7255c1d2a3ea164ca84da625b3a9ac5d1f5afd07d1984ea",
+      "confirmed": true
+    },
+    {
+      "step": "preview:reference-scripts:publish-client",
+      "submittedTxHash": "da75f89a0cf8332fa01914e3cd8c33f3c4c319424d5ef76d0e2147b4b53def70",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:top-up",
+      "submittedTxHash": "66d8a639cd101cd41a571b7f90ebf01d0167bb9c9947fc9f7545b4768f4b22f6",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:top-up",
+      "submittedTxHash": "d06d436667c01b52c1cfeef91d71f6f4ce7bd49e446860925c5c73a6a513305e",
+      "confirmed": true
+    },
+    {
+      "step": "preview:update:batch",
+      "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "01f0123f5837ae0aba15425c4273f1659323ecbcbe4b1d04d3972929a294f854",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:withdraw",
+      "submittedTxHash": "ebecad74e86f0d5d14cd7734da122c9961a11890e1e29f7b6de1934ded6cee65",
+      "confirmed": true
+    }
+  ],
+  "scripts": {
+    "configPolicyId": "a4a4d147a29d0fcacc8b8f8be93547718cb05d147c95648f9730fdb9",
+    "configUnit": "a4a4d147a29d0fcacc8b8f8be93547718cb05d147c95648f9730fdb94449415f434f4e464947",
+    "configValidatorHash": "a4a4d147a29d0fcacc8b8f8be93547718cb05d147c95648f9730fdb9",
+    "configValidatorAddress": "addr_test1wzj2f52852wsljkv3w8ch6f4gaccevzaz37f2ey0juc0mwgdzygm4",
+    "coordinatorHash": "6f7ef5df884dddfa17fd0c85f7bd212b9abd2d72b3619f31f936f002",
+    "coordinatorRewardAddress": "stake_test17phhaawl3pxam7shl5xgtaaayy4e40fdw2ekr8e3lym0qqsmmk67p",
+    "referenceHolderValidatorHash": "521cc3c16714eed6765c2d9c098b150ae9e1307f30f6eb2c23088f43",
+    "referenceHolderAddress": "addr_test1wpfpes7pvu2wa4nktskeczvtz59wncfs0uc0d6evyvyg7scnwtaej",
+    "paymentHookPolicyId": "30c194b294b139f60fade13556ea968e627dcf6b932bfaf2959d81e6",
+    "paymentHookUnit": "30c194b294b139f60fade13556ea968e627dcf6b932bfaf2959d81e64449415f5041594d454e545f484f4f4b",
+    "paymentHookValidatorHash": "30c194b294b139f60fade13556ea968e627dcf6b932bfaf2959d81e6",
+    "paymentHookValidatorAddress": "addr_test1wqcvr99jjjcnnas04hsn24h2j68xylw0dwfjh7hjjkwcresxm8nup"
+  },
+  "configState": {
+    "validConfigSigners": [
+      "50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2d"
+    ],
+    "authorizedDiaPublicKeys": [
+      "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531"
+    ],
+    "domain": {
+      "name": "DIA Oracle",
+      "version": "1.0",
+      "sourceChainId": "100640",
+      "verifyingContract": "f8c614a483a0427a13512f52ac72a576678be317"
+    },
+    "baseFeeLovelace": "600000",
+    "perPairFeeLovelace": "400000",
+    "maxBootstrapDriftSeconds": "300",
+    "paymentHookRef": {
+      "policyId": "30c194b294b139f60fade13556ea968e627dcf6b932bfaf2959d81e6",
+      "assetName": "4449415f5041594d454e545f484f4f4b",
+      "unit": "30c194b294b139f60fade13556ea968e627dcf6b932bfaf2959d81e64449415f5041594d454e545f484f4f4b"
+    },
+    "updateCoordinatorCredential": {
+      "type": "Script",
+      "hash": "6f7ef5df884dddfa17fd0c85f7bd212b9abd2d72b3619f31f936f002"
+    },
+    "minUtxoLovelace": "5000000"
+  },
+  "paymentHookState": {
+    "withdrawAddress": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
+    "accruedFeesLovelace": "5600000",
+    "lifetimeCollectedLovelace": "15600000",
+    "lifetimeWithdrawnLovelace": "10000000",
+    "minUtxoLovelace": "5000000"
+  },
+  "receiver": {
+    "clientId": "client-a",
+    "bootstrapRef": {
+      "txHash": "fb5abe2c4f62d90085255fff438bc01716d631d0e242b0dd2594f84b8124e31c",
+      "outputIndex": 1
+    },
+    "receiverAssetName": "4449415f52454345495645525f434c49454e545f41",
+    "receiverPolicyId": "7f822870de6f4d81f6105e9e2f8e6eba008c612e345939a89f2d8980",
+    "receiverUnit": "7f822870de6f4d81f6105e9e2f8e6eba008c612e345939a89f2d89804449415f52454345495645525f434c49454e545f41",
+    "receiverValidatorHash": "7f822870de6f4d81f6105e9e2f8e6eba008c612e345939a89f2d8980",
+    "receiverValidatorAddress": "addr_test1wplcy2rsmeh5mq0kzp0futuwd6aqprrp9c69jwdgnukcnqqwhskwl",
+    "receiverState": {
+      "balanceLovelace": "39400000",
+      "accruedToHookLovelace": "0",
+      "minUtxoLovelace": "5000000"
+    }
+  },
+  "referenceScripts": {
+    "protocol": {
+      "global": {
+        "config": {
+          "txHash": "b12df211a12df29c89123f614fc7267e52a205514f7cf7740917ece9d9790377",
+          "outputIndex": 0,
+          "scriptHash": "a4a4d147a29d0fcacc8b8f8be93547718cb05d147c95648f9730fdb9"
+        },
+        "coordinator": {
+          "txHash": "b12df211a12df29c89123f614fc7267e52a205514f7cf7740917ece9d9790377",
+          "outputIndex": 1,
+          "scriptHash": "6f7ef5df884dddfa17fd0c85f7bd212b9abd2d72b3619f31f936f002"
+        },
+        "paymentHook": {
+          "txHash": "cb709efc50627b311485ef62ba63058f0c53e3b18fdd909e49d8fb1cde242089",
+          "outputIndex": 0,
+          "scriptHash": "30c194b294b139f60fade13556ea968e627dcf6b932bfaf2959d81e6"
+        }
+      }
+    },
+    "client": {
+      "client": {
+        "receiver": {
+          "txHash": "da75f89a0cf8332fa01914e3cd8c33f3c4c319424d5ef76d0e2147b4b53def70",
+          "outputIndex": 0,
+          "scriptHash": "7f822870de6f4d81f6105e9e2f8e6eba008c612e345939a89f2d8980"
+        },
+        "pair": {
+          "txHash": "da75f89a0cf8332fa01914e3cd8c33f3c4c319424d5ef76d0e2147b4b53def70",
+          "outputIndex": 1,
+          "scriptHash": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a28"
+        },
+        "pairMint": {
+          "txHash": "da75f89a0cf8332fa01914e3cd8c33f3c4c319424d5ef76d0e2147b4b53def70",
+          "outputIndex": 2,
+          "scriptHash": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a28"
+        }
+      }
+    }
+  },
+  "pairs": {
+    "ada-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "04e5366fb69cdc906d0e8841d641628f09a50f7618e944de5cdb7a26b95e32b4",
+        "pairId": "4144412f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a2804e5366fb69cdc906d0e8841d641628f09a50f7618e944de5cdb7a26b95e32b4",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "4144412f555344",
+        "price": "751000000",
+        "timestamp": "1778691908",
+        "nonce": "1778691908000",
+        "intentHash": "0ac0ab17892c6adf2bd9bcc39d73382850310517d6fddbfa717c00e5d61d81a1",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778691908000",
+          "expiry": "1778695508",
+          "symbol": "ADA/USD",
+          "price": "751000000",
+          "timestamp": "1778691908",
+          "source": "DIA Oracle",
+          "signature": "9952b7adaddd0c593f1138f8cb7bd90df54e87cd7db82ee0712c2b536f577caa57b1adce70586b6456abce6d24534eafade591e88df4def7cbfa77df412467da1c",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f474144412f5553441a2cc359c01a6a04af441b0000019e224ca1a058200ac0ab17892c6adf2bd9bcc39d73382850310517d6fddbfa717c00e5d61d81a1542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "a9b927776db7870389a29a69280c41f0497ef62a1a830c00eb1cbed09542618f",
+          "confirmed": true
+        },
+        {
+          "step": "preview:update:batch",
+          "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+          "confirmed": true
+        }
+      ]
+    },
+    "bnb-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "09da81653014451f3a86d96589f6a9e5d97b4e8236a461c7b2edbe1bab30b101",
+        "pairId": "424e422f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a2809da81653014451f3a86d96589f6a9e5d97b4e8236a461c7b2edbe1bab30b101",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "424e422f555344",
+        "price": "61510000000",
+        "timestamp": "1778691934",
+        "nonce": "1778691934000",
+        "intentHash": "c2731e507afea095a223bd5fbe90879da21870fd584fb2190df20930de36778f",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778691934000",
+          "expiry": "1778695534",
+          "symbol": "BNB/USD",
+          "price": "61510000000",
+          "timestamp": "1778691934",
+          "source": "DIA Oracle",
+          "signature": "fee58a806ed204659ca88f8ad01c2663b9a6a9589b89e0671adfc6684f1e811175fe25fc7bf66b1ab8d95e9cde8c593a02d971c1c5f5ff00d478eefa4b4567df1c",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f47424e422f5553441b0000000e52481d801a6a04af5e1b0000019e224d07305820c2731e507afea095a223bd5fbe90879da21870fd584fb2190df20930de36778f542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "5df2374c12ac3696bf6c8994cd2fe281160b41533a5d2a8092eef487d70c03cf",
+          "confirmed": true
+        },
+        {
+          "step": "preview:update:batch",
+          "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+          "confirmed": true
+        }
+      ]
+    },
+    "btc-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "8a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497",
+        "pairId": "4254432f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a288a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "4254432f555344",
+        "price": "6001000000000",
+        "timestamp": "1778691908",
+        "nonce": "1778691908000",
+        "intentHash": "5aa2243e001b55e92cf437ffbce42b6def7b6ff3494ff4b57854089adee91366",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778691908000",
+          "expiry": "1778695508",
+          "symbol": "BTC/USD",
+          "price": "6001000000000",
+          "timestamp": "1778691908",
+          "source": "DIA Oracle",
+          "signature": "3da266419c0e9560b19fa448966223448c32682157c78f45b37c948590cf2c605b5229ef20e5c5c11568692e7cb05034293aec5d327672510d7c98e50e2646c61b",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f474254432f5553441b0000057537792a001a6a04af441b0000019e224ca1a058205aa2243e001b55e92cf437ffbce42b6def7b6ff3494ff4b57854089adee91366542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "b31701ba5e8422c5c28ac885e74fde98b31d9cee6fea5d2be595e02b5484423c",
+          "confirmed": true
+        },
+        {
+          "step": "preview:update:batch",
+          "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+          "confirmed": true
+        }
+      ]
+    },
+    "dai-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "0ae6401fc15363e085cf3d2f90ae10566e797d8686ab048ba30f5914c7ff2852",
+        "pairId": "4441492f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a280ae6401fc15363e085cf3d2f90ae10566e797d8686ab048ba30f5914c7ff2852",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "4441492f555344",
+        "price": "100100345",
+        "timestamp": "1778691934",
+        "nonce": "1778691934000",
+        "intentHash": "af3cdf1976a471b087ff243932eaf6294450f1d87156830a36fc247d8c70c3f1",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778691934000",
+          "expiry": "1778695534",
+          "symbol": "DAI/USD",
+          "price": "100100345",
+          "timestamp": "1778691934",
+          "source": "DIA Oracle",
+          "signature": "d12d4e5efb7d9d0c0bbe54fd373ba2c65b3709588a6936cc788ae8e669a5b3647337bc1284f709658be3d9df2f84dcb3593c5aed9c123526bb2b53277d0e9f261c",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f474441492f5553441a05f768f91a6a04af5e1b0000019e224d07305820af3cdf1976a471b087ff243932eaf6294450f1d87156830a36fc247d8c70c3f1542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "d1059163f805924220550069130e45ac60d0b41abb52d0cbf2b15f07ec2506f1",
+          "confirmed": true
+        },
+        {
+          "step": "preview:update:batch",
+          "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+          "confirmed": true
+        }
+      ]
+    },
+    "dot-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "ff3f796230b336b4e5c8d3af0440cbe0346a64cdab5e9cba4a8e2f476152daee",
+        "pairId": "444f542f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a28ff3f796230b336b4e5c8d3af0440cbe0346a64cdab5e9cba4a8e2f476152daee",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "444f542f555344",
+        "price": "421000000",
+        "timestamp": "1778691934",
+        "nonce": "1778691934000",
+        "intentHash": "abb702947c20490a27c20b79c3f6145a691551a7577e3f31e01071ee93accbe5",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778691934000",
+          "expiry": "1778695534",
+          "symbol": "DOT/USD",
+          "price": "421000000",
+          "timestamp": "1778691934",
+          "source": "DIA Oracle",
+          "signature": "cf40eac982cb2dda76437c805054d3a6fc6d8c9a6536918611eab100dc786eb43db7cfe02bcbde1bf4fa2ad303f350cb724a592ed0ab0b4c8cd4cdd3324a2eb41b",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f47444f542f5553441a1917f3401a6a04af5e1b0000019e224d07305820abb702947c20490a27c20b79c3f6145a691551a7577e3f31e01071ee93accbe5542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "7f2220e977dfb6239ebdc4a7f0fc0a49421aa86055026f09dad5888d5089ee72",
+          "confirmed": true
+        },
+        {
+          "step": "preview:update:batch",
+          "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+          "confirmed": true
+        }
+      ]
+    },
+    "eth-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "3d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4",
+        "pairId": "4554482f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a283d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "4554482f555344",
+        "price": "250100000000",
+        "timestamp": "1778691908",
+        "nonce": "1778691908000",
+        "intentHash": "141e7d3ae726bce4cd62c33c2dae1ae6826037030e04d38d324f77e30d1fce67",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778691908000",
+          "expiry": "1778695508",
+          "symbol": "ETH/USD",
+          "price": "250100000000",
+          "timestamp": "1778691908",
+          "source": "DIA Oracle",
+          "signature": "b365f2f4c4510e305ed820351c784897bbad2e0d0aa728ff6eab1a14c666ca9326235e014578cb42053fec41a8fad350217a53da0f423cfc68311d3bbe6c327d1c",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f474554482f5553441b0000003a3b1f25001a6a04af441b0000019e224ca1a05820141e7d3ae726bce4cd62c33c2dae1ae6826037030e04d38d324f77e30d1fce67542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "bebef78112adaa5cae7d35ec46d3fac1519f1b98662cd894341c2ef4402f1655",
+          "confirmed": true
+        },
+        {
+          "step": "preview:update:batch",
+          "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+          "confirmed": true
+        }
+      ]
+    },
+    "matic-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "d2a1402553abe60aecdea3464be08e7ced64530fea0989b8fdfd49351157e571",
+        "pairId": "4d415449432f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a28d2a1402553abe60aecdea3464be08e7ced64530fea0989b8fdfd49351157e571",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "4d415449432f555344",
+        "price": "981000000",
+        "timestamp": "1778691934",
+        "nonce": "1778691934000",
+        "intentHash": "9db9ee1b0dfafdc6e58e9d95084ab20f07959e94aecc7112e06ef5fb0143204a",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778691934000",
+          "expiry": "1778695534",
+          "symbol": "MATIC/USD",
+          "price": "981000000",
+          "timestamp": "1778691934",
+          "source": "DIA Oracle",
+          "signature": "1ef12694a9ed0e5b7712dd9805be15599473c5fc20a3abd33e6df1ba89886d374d9de5f7a2658d13aa6e762d6c1be787076adcc71276e478f1689dd488e595b01b",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f494d415449432f5553441a3a78df401a6a04af5e1b0000019e224d073058209db9ee1b0dfafdc6e58e9d95084ab20f07959e94aecc7112e06ef5fb0143204a542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "c2825170cd323631feeab4b6a2bdebc1fb6f5cebb91acbfe3e153078b9798613",
+          "confirmed": true
+        },
+        {
+          "step": "preview:update:batch",
+          "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+          "confirmed": true
+        }
+      ]
+    },
+    "sol-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "396545cb87b0103c8ddb5ff4329eeff88e2aef114f76b0807b21ce3d68bbbe64",
+        "pairId": "534f4c2f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a28396545cb87b0103c8ddb5ff4329eeff88e2aef114f76b0807b21ce3d68bbbe64",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "534f4c2f555344",
+        "price": "18510000000",
+        "timestamp": "1778691934",
+        "nonce": "1778691934000",
+        "intentHash": "307257f558c18be9422b4be94ba492840b8deb81b92d25c2b670e5a1f540bc74",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778691934000",
+          "expiry": "1778695534",
+          "symbol": "SOL/USD",
+          "price": "18510000000",
+          "timestamp": "1778691934",
+          "source": "DIA Oracle",
+          "signature": "f0b12543f191ef3afa8c80798e84661d2d1c93ebecb7e2efd7cb5db02b14a1d7737007917163e307f319bd37b34ddc6dbb9fef88241f1ea851318d0767eb0b7e1c",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f47534f4c2f5553441b000000044f482f801a6a04af5e1b0000019e224d07305820307257f558c18be9422b4be94ba492840b8deb81b92d25c2b670e5a1f540bc74542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "76cf01111d538e9e7fbf1d487d6bd76400c79f1ed12e57ffa2f8d092b00d4e46",
+          "confirmed": true
+        },
+        {
+          "step": "preview:update:batch",
+          "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+          "confirmed": true
+        }
+      ]
+    },
+    "usdc-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "0156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac",
+        "pairId": "555344432f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a280156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "555344432f555344",
+        "price": "100045678",
+        "timestamp": "1778690100",
+        "nonce": "1778690100000",
+        "intentHash": "befcd65eda1da8800be0d2e23afe350418b40bb81a41a16be3ae18a76b88bb21",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778690100000",
+          "expiry": "1778693700",
+          "symbol": "USDC/USD",
+          "price": "100045678",
+          "timestamp": "1778690100",
+          "source": "DIA Oracle",
+          "signature": "83afe46843a265a4f117063887b9b26a26259638e57e3c57dc3548e7970c50cd2995feb37ecb964f0e1629d216fba9c1dc4c8dcf1ad3c93047ab1d19440ebad01c",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f48555344432f5553441a05f6936e1a6a04a8341b0000019e22310b205820befcd65eda1da8800be0d2e23afe350418b40bb81a41a16be3ae18a76b88bb21542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "a141d6f739f199165455baebb3c6ffa506db312f291c999c327eb0cba86d8efc",
+          "confirmed": true
+        }
+      ]
+    },
+    "usdt-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "5ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315",
+        "pairId": "555344542f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a285ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "555344542f555344",
+        "price": "100101234",
+        "timestamp": "1778691934",
+        "nonce": "1778691934000",
+        "intentHash": "1d8fcd66afe97e859f98db65f51ab6f1f0198c367058ae830b961431252c6973",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778691934000",
+          "expiry": "1778695534",
+          "symbol": "USDT/USD",
+          "price": "100101234",
+          "timestamp": "1778691934",
+          "source": "DIA Oracle",
+          "signature": "467e8e97c32efa85459408f2317711b176c38710025437c81654ae04a4aed1145dfd906625c54d0005601430ef5fcc8afd7e38585a85ed3e8cc471c0e2621abf1b",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f48555344542f5553441a05f76c721a6a04af5e1b0000019e224d073058201d8fcd66afe97e859f98db65f51ab6f1f0198c367058ae830b961431252c6973542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "1fc861c5be93785394f58127c9d63baf9c3dea0c19949c8b017cd4d4a98fafc7",
+          "confirmed": true
+        },
+        {
+          "step": "preview:update:batch",
+          "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+          "confirmed": true
+        }
+      ]
+    },
+    "xrp-usd.json": {
+      "wallet": {
+        "source": "seed",
+        "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+      },
+      "pair": {
+        "tokenName": "bac7b9f5648596883156b7004ce94ebb55cc5049bd65b93188cd724e9feed0bc",
+        "pairId": "5852502f555344",
+        "pairUnit": "e48068e7cd0596c27f9613853aea5e857f320a27b4918639a7cd2a28bac7b9f5648596883156b7004ce94ebb55cc5049bd65b93188cd724e9feed0bc",
+        "pairValidatorAddress": "addr_test1wrjgq688e5zedsnljcfc2wh2t6zh7vs2y76frp3e5lxj52qcjxpl5"
+      },
+      "pairState": {
+        "pairId": "5852502f555344",
+        "price": "521000000",
+        "timestamp": "1778691934",
+        "nonce": "1778691934000",
+        "intentHash": "f04e443d37a69462fe0ff49996cc53aab42dc887bcb43de7cd70918179c9a247",
+        "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+        "minUtxoLovelace": "5000000",
+        "intent": {
+          "intentType": "OracleUpdate",
+          "version": "1.0",
+          "chainId": "100640",
+          "nonce": "1778691934000",
+          "expiry": "1778695534",
+          "symbol": "XRP/USD",
+          "price": "521000000",
+          "timestamp": "1778691934",
+          "source": "DIA Oracle",
+          "signature": "7103e530fa460f48232714d6867c2348e52bc85c9af9e74039908f867dd8c3cf77297f0021203f496c608dadd0db37acb2c3ddbe72b1208162a8f3392c5b443f1b",
+          "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+        }
+      },
+      "datum": {
+        "pairCbor": "d8799f475852502f5553441a1f0dd4401a6a04af5e1b0000019e224d07305820f04e443d37a69462fe0ff49996cc53aab42dc887bcb43de7cd70918179c9a247542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+      },
+      "transactions": [
+        {
+          "step": "preview:update",
+          "submittedTxHash": "0c800d017eecfa772c5529426986228ab82fa1e7cdc5df7b6f25e0ede01e40cf",
+          "confirmed": true
+        },
+        {
+          "step": "preview:update:batch",
+          "submittedTxHash": "fa28acd9dae75e30c8bd7a45c287e4646c956e68e68d6d856640cac6de9eaac1",
+          "confirmed": true
+        }
+      ]
+    }
+  }
+}

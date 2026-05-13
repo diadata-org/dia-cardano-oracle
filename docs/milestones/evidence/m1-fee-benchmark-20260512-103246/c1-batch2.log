@@ -1,0 +1,62 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts preview:update:batch --protocol-state ./state/preview_rerun_20260511-135140/config-bootstrap.json --client-state ./state/preview_rerun_20260511-135140/clients/client-a.json --manifest ./state/preview_rerun_20260511-135140/bench-20260512-103246/manifests/bench-bat2-c1.manifest.json --out ./state/preview_rerun_20260511-135140/bench-20260512-103246/results/bench-bat2-c1.result.json
+
+[1G[0K[preview:update:batch] Loading batch update manifest from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260511-135140/bench-20260512-103246/manifests/bench-bat2-c1.manifest.json
+[preview:update:batch] Connecting to Preview and selecting the configured wallet
+[preview:update:batch] Building Preview oracle batch update transaction
+[preview:update:batch] Tx resources: fee=1.082379 ADA (1082379 lovelace), cpu=1353331545, mem=3721103
+[preview:update:batch] Output[0] | addr=addr_test1wquf...90lu6e | lovelace=5.000000 ADA (5000000) | assets=389979173965...3849f4=1 | datum=inline(95B)
+[preview:update:batch] Output[1] | addr=addr_test1wquf...90lu6e | lovelace=5.000000 ADA (5000000) | assets=389979173965...c2a497=1 | datum=inline(95B)
+[preview:update:batch] Output[2] | addr=addr_test1wqfk...92mxpz | lovelace=195.600000 ADA (195600000) | assets=13605a0cbf39...545f41=1 | datum=inline(19B)
+[preview:update:batch] Output[3] | addr=addr_test1qpgp...quxj3j | lovelace=4265.101085 ADA (4265101085)
+[preview:update:batch] Unsigned transaction ready: 2d26d768875e21cbf71c2e67a40b8957b91b706b6e3bca9a262d9d0498861342
+[preview:update:batch] Submitted transaction hash: 2d26d768875e21cbf71c2e67a40b8957b91b706b6e3bca9a262d9d0498861342
+[preview:update:batch] Blockfrost did not see 2d26d768875e21cbf71c2e67a40b8957b91b706b6e3bca9a262d9d0498861342 within 120000ms; trying Koios.
+[preview:update:batch] Confirmed by Koios: oracle batch update transaction 2d26d768875e21cbf71c2e67a40b8957b91b706b6e3bca9a262d9d0498861342 at block 4274615.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260511-135140/bench-20260512-103246/results/bench-bat2-c1.result.json
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+  },
+  "receiver": {
+    "clientId": "client-a",
+    "bootstrapRef": {
+      "txHash": "b1f59210e68a3eaedba54a9f05fed77db8d947c9d928b4011762b3bb1a0e147f",
+      "outputIndex": 1
+    },
+    "receiverAssetName": "4449415f52454345495645525f434c49454e545f41",
+    "receiverPolicyId": "13605a0cbf39ab67adcc40e7332d99a15c27d54ecdd0c89a05eca34f",
+    "receiverUnit": "13605a0cbf39ab67adcc40e7332d99a15c27d54ecdd0c89a05eca34f4449415f52454345495645525f434c49454e545f41",
+    "receiverValidatorHash": "13605a0cbf39ab67adcc40e7332d99a15c27d54ecdd0c89a05eca34f",
+    "receiverValidatorAddress": "addr_test1wqfkqksvhuu6keade3qwwvednxs4cf74fmxapjy6qhk2xnc92mxpz",
+    "receiverState": {
+      "balanceLovelace": "187200000",
+      "accruedToHookLovelace": "3400000",
+      "minUtxoLovelace": "5000000"
+    }
+  },
+  "pairs": [
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260511-135140/clients/client-a/pairs/eth-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260511-135140/clients/client-a/pairs/eth-usd.json",
+      "pairId": "4554482f555344",
+      "pairUnit": "389979173965c6ef1e325eefb88ba55b36af19c5c7a0e732e686d49c3d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4"
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260511-135140/clients/client-a/pairs/btc-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260511-135140/clients/client-a/pairs/btc-usd.json",
+      "pairId": "4254432f555344",
+      "pairUnit": "389979173965c6ef1e325eefb88ba55b36af19c5c7a0e732e686d49c8a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497"
+    }
+  ],
+  "transactions": [
+    {
+      "step": "preview:update:batch",
+      "submittedTxHash": "2d26d768875e21cbf71c2e67a40b8957b91b706b6e3bca9a262d9d0498861342",
+      "confirmed": true
+    }
+  ]
+}
+[1G[0K⠙[1G[0K
