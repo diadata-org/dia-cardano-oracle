@@ -373,13 +373,13 @@ Side effect: the same tx carries a stake registration certificate for `update_co
    - `next_config.payment_hook_ref == Some(PaymentHookRef { policy_id = own_policy_id, asset_name = expected_asset_name })`.
    - `next_config.update_coordinator_credential == Some(coordinator_credential)` (parameter wired at compile time).
    - `has_config_signer(previous_config, tx)` ⇒ at least one `config_admins` key in `extra_signatories`.
-   - `has_valid_payment_hook_output`: an output holds the Hook NFT `qty 1` and inline `PaymentHookDatum`; output payment credential is `Script(hook_policy_id)`; `valid_payment_hook_state` (all four lovelace fields ≥ 0); `exact_locked_lovelace` ⇒ `lovelace == min_utxo + accrued_fees`.
+   - `has_valid_payment_hook_output`: an output holds the Hook NFT `qty 1` and inline `PaymentHookDatum`; output payment credential is `Script(hook_policy_id)`; `valid_payment_hook_state` (economic counters are `≥ 0`, and `min_utxo_lovelace > 0`); `exact_locked_lovelace` ⇒ `lovelace == min_utxo + accrued_fees`.
 
-2. **`config_state` spend** — redeemer `ConfigRedeemer::AdminUpdate`. Same checks as §5.3 below (the spend ensures the Config NFT is continuous and `min_utxo_lovelace` is frozen; the hook mint above pins the new datum's `payment_hook_ref` and `update_coordinator_credential`).
+2. **`config_state` spend** — redeemer `ConfigRedeemer::AdminUpdate`. Same checks as §5.3 below (the spend ensures the Config NFT is continuous and the Config output lovelace matches the next datum's `min_utxo_lovelace`; the hook mint above pins the new datum's `payment_hook_ref` and `update_coordinator_credential`).
 
 3. **Stake registration certificate** for `coordinator_credential` — witnessed by the admin signature.
 
-**Cross-script invariant.** The hook mint pins the new Config datum (this exact hook policy/asset, this exact coordinator credential), and the Config spend enforces that the Config UTxO is recreated under admin signature with `valid_config_state` and `min_utxo_lovelace` frozen. The two together force Config v1 (no hook, no coordinator) → Config v2 with both fields set, signed by an admin. Neither alone is enough.
+**Cross-script invariant.** The hook mint pins the new Config datum (this exact hook policy/asset, this exact coordinator credential), and the Config spend enforces that the Config UTxO is recreated under admin signature with `valid_config_state` and exact output lovelace. The two together force Config v1 (no hook, no coordinator) → Config v2 with both fields set, signed by an admin. Neither alone is enough.
 
 ### 5.3 Config update
 
@@ -402,7 +402,7 @@ flowchart LR
   classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
 ```
 
-- **Frequency:** rare (rotate signers, change fee, change domain, set/replace `payment_hook_ref` or `update_coordinator_credential`).
+- **Frequency:** rare (rotate signers, change fee, change domain, update Config min ADA, set/replace `payment_hook_ref` or `update_coordinator_credential`).
 - **Inputs:**
   - Config UTxO.
   - Admin wallet (network fee).
@@ -422,7 +422,7 @@ flowchart LR
    - `valid_config_state(current_datum)` AND `valid_config_state(next_datum)`.
    - `has_config_signer(current_datum, tx)` (admin authorization is read from the datum being CONSUMED, so an attacker cannot rotate admins and self-authorize in the same tx).
    - `lovelace_of(own_input.value) == current_datum.min_utxo_lovelace`; `lovelace_of(continuation.value) == next_datum.min_utxo_lovelace`.
-   - `admin_update_transition` ⇒ `previous.min_utxo_lovelace == next.min_utxo_lovelace` (this field is effectively immutable post-bootstrap).
+   - `admin_update_transition` ⇒ both datums are valid; `min_utxo_lovelace` is admin-updatable through this redeemer.
 
 No other protocol script fires.
 
@@ -627,7 +627,7 @@ PaymentHook is **not** involved. Fees are accrued locally on the Receiver and se
    - At least one minted pair entry; each has `qty == 1`.
    - For every minted name: an output holds that NFT `qty 1` and inline `PairDatum`; payment credential `Script(pair_policy_id)`; `pair_asset_name(datum.pair_id) == minted_name`; `valid_pair_state(datum)`; `exact_locked_lovelace`.
    - Config NFT visible as reference input `qty 1`; decodes as `ConfigDatum`; `valid_config_state(config_datum)`.
-   - **Coordinator intent binding + local expiry:** `pair_intent_satisfied(tx, config_datum, pair_policy_id, pair_token_name)` — the coordinator withdraw redeemer in `tx.redeemers` must decode as `ApplySingle` or `ApplyBatch` and name **this** minted pair (`pair_policy_id` + minted asset name) AND that witness's intent must satisfy `intent_expiry_satisfied` against the tx's finite upper validity bound. This blocks piggy-backing on `ApplySettle` or on another pair's update witness, and re-asserts intent expiry on the same code path that consumes the intent (defence in depth: expiry is enforced both here and in the coordinator).
+   - **Coordinator intent binding + local expiry:** `pair_mint_intent_satisfied(tx, config_datum, pair_policy_id, pair_token_name)` — the coordinator withdraw redeemer in `tx.redeemers` must decode as `ApplySingle` or `ApplyBatch` and name **this** minted pair (`pair_policy_id` + minted asset name) AND that witness's intent must satisfy `intent_expiry_satisfied` against the tx's finite upper validity bound. This blocks piggy-backing on `ApplySettle` or on another pair's update witness, and re-asserts intent expiry on the same code path that consumes the intent (defence in depth: expiry is enforced both here and in the coordinator).
 
 3. **`receiver` spend** — redeemer `ReceiverRedeemer::AccrueFee` (index 1). Validates:
    - All §5.5 common spend prefix.
@@ -700,17 +700,13 @@ PaymentHook is **not** an input or output in update transactions. This eliminate
    - `next_pair_matches_witness(prev_pair, next_pair, config, witness)` ⇒ `valid_pair_state` for both; `prev.pair_id == next.pair_id`; `prev.min_utxo == next.min_utxo`; same field bindings as §5.7's `initial_pair_matches_witness`; `is_fresh_update(prev, witness.intent)` ⇒ `intent.timestamp > prev.timestamp` AND `intent.nonce > prev.nonce`; signature path identical.
    - `intent_freshness_satisfied` is NOT required here because the prev-vs-next replay check provides freshness from the previous Pair datum.
 
-2. **`pair_state` spend** — redeemer `PairSpendAction::ApplyUpdate`. Validates:
+2. **`pair_state` spend** — redeemer `PairSpendAction::ApplyUpdate` (no fields). Validates only the local UTxO invariants that the coordinator does not own; everything else is enforced once by `update_coordinator` in the same tx, so duplicating it here would multiply the cost by N pair scripts inside a batch. Concretely:
    - Datum is `Some(current_datum)`; own input found at `own_ref` and is `Script(own_policy_id)`.
    - Tokens of own policy on own input form exactly one `Pair(pair_token_name, 1)` (no multi-token Pair UTxO).
-   - Config NFT visible as reference input `qty 1`; decodes as `ConfigDatum`; `valid_config_state(config_datum)`.
-   - Continuation output holds the same Pair NFT `qty 1` with inline `next_datum`; payment credential `Script(own_policy_id)`.
-   - `valid_pair_state` for both `current_datum` and `next_datum`.
-   - `current.pair_id == next.pair_id`; `current.min_utxo == next.min_utxo`.
-   - `pair_token_name == blake2b_256(current.pair_id)`.
-   - `receiver_input_present(tx.inputs, receiver_hash)` ⇒ a UTxO at the parameterized `Script(receiver_hash)` is being spent in the same tx (binds the pair to its client's Receiver).
-   - `exact_locked_lovelace` on input AND on continuation.
-   - **Coordinator intent binding + local expiry:** `pair_intent_satisfied(tx, config_datum, own_policy_id, pair_token_name)` — same as §5.7: coordinator must be a price-update branch naming **this** pair, and the bound witness's intent expiry must be honoured against the tx's finite upper validity bound. Defence in depth alongside the coordinator's own `intent_expiry_satisfied` check.
+   - Continuation output exists in `tx.outputs` carrying the same Pair NFT `qty 1` at `Script(own_policy_id)`. The continuation's `next_datum` is NOT decoded here — `next_pair_matches_witness(prev, next, ...)` inside the coordinator already enforces `prev.min_utxo == next.min_utxo` and the rest of the datum transition.
+   - `assets.lovelace_of(own_input.output.value) == current_datum.min_utxo_lovelace` AND `assets.lovelace_of(pair_output.value) == current_datum.min_utxo_lovelace`. Coordinator's update branch enforces `min_utxo` continuity, so checking against `current_datum` covers both sides without re-decoding the output datum.
+   - Config NFT visible as reference input `qty 1`; decodes as `ConfigDatum` ONLY to read `update_coordinator_credential` for the redeemer-binding check below. Full `valid_config_state(config_datum)` runs once in `update_coordinator` and is not repeated.
+   - **Coordinator update-mode binding:** `coordinator_in_update_mode(tx, config_datum)` — verifies a `Withdraw` redeemer at the coordinator credential exists and its outer constructor tag is `ApplySingle` or `ApplyBatch` (not `ApplySettle`). The helper uses `CoordinatorRedeemerFingerprint`, a structurally identical type with `Data` payload, so the `List<UpdateWitness>` is NOT recursively decoded inside each pair script. The witness-binding-by-name and intent-expiry checks live in the coordinator's batch walk (`batch_witness_header_ok` + `next_pair_matches_witness`), which establishes one-pair-input-per-witness accounting globally; an attacker who slips in a spurious pair input or substitutes the wrong witness will trip the coordinator's `length(pair_inputs) == N - create_count` count check.
 
 3. **`receiver` spend** — redeemer `ReceiverRedeemer::AccrueFee`. Same as §5.7.
 
@@ -769,26 +765,57 @@ N intents in one tx, each addressing the SAME pair policy and the SAME Receiver.
 **Validators invoked**
 
 1. **`update_coordinator` withdraw** — redeemer `CoordinatorRedeemer::ApplyBatch(witnesses)` (index 1). Same Config visibility/validity and coordinator-credential match as in §5.7, plus:
-   - `witnesses_share_receiver(witnesses)` ⇒ every witness names the same Receiver NFT.
-   - `list.all(witnesses, intent_expiry_satisfied)` (per-intent expiry).
    - `length(witnesses) > 0`.
-   - `unique_pair_units(witnesses)` ⇒ no duplicate `(pair_policy_id, pair_token_name)`.
-   - `witnesses_share_pair_policy(witnesses)`.
-   - `minted_pair_token_count(tx, shared_pair_policy_id) == create_witness_count(tx, witnesses)` ⇒ the count of minted Pair NFTs equals the count of "first update" witnesses (extras are rejected).
+   - `batch_witness_header_ok` inside the main witness walk ⇒ every witness names the same Receiver NFT, shares the same `pair_policy_id`, has a valid finite-expiry intent, and is strictly ascending by `bytearray.compare` on `pair_token_name`. Strict-less-than implies uniqueness and pins one canonical order. Off-chain builders must emit witnesses in this exact order; any other permutation is rejected before submission.
+   - `minted_pair_token_count(tx, shared_pair_policy_id) == create_count` ⇒ the count of minted Pair NFTs equals the count of "first update" witnesses (extras are rejected). `create_count` is accumulated inline by the single witness walk that also validates each create/update branch.
+   - `length(pair_outputs) == length(witnesses)` AND `length(witnesses) - create_count == length(pair_inputs)` ⇒ no spurious or duplicate pair outputs / pair inputs may slip in: every pair-policy NFT in the input/output sets is accounted for by exactly one witness.
    - For each witness: same per-witness assertions as §5.7 (`pair_input_count == 0`) OR §5.8 (`pair_input_count == 1`), depending on whether the Pair UTxO already exists.
    - `valid_batch_receiver_accrue_fee(tx, witnesses, fee = config.base_fee_lovelace + (config.per_pair_fee_lovelace × length(witnesses)))` ⇒ the Receiver datum delta MUST equal `base_fee + (N × per_pair_fee)`.
 
 2. **`pair_state` mint** — redeemer `MintPairs`. Same as §5.7. Fired once for the shared pair policy with all newly-minted Pair NFTs in `tx.mint`.
 
-3. **`pair_state` spend** — redeemer `ApplyUpdate`. Same as §5.8. Fired once per existing Pair UTxO being updated.
+3. **`pair_state` spend** — redeemer `ApplyUpdate` (no fields). Same as §5.8. Fired once per existing Pair UTxO being updated. The body is intentionally minimal: NFT continuity, exact ADA locking, and a `coordinator_in_update_mode` fingerprint check; the coordinator's batch walk handles everything else.
 
 4. **`receiver` spend** — redeemer `ReceiverRedeemer::AccrueFee`. Same as §5.7. Fired once for the single Receiver UTxO.
 
 **Cross-script invariants**
 
 - Per-pair fee accumulates linearly with batch size: coordinator wires receiver to `N × fee`; receiver `accrue_fee_transition` enforces the datum delta. Both must agree.
-- No witness can pair-mint twice inside a batch: `unique_pair_units` + `minted_pair_token_count == create_witness_count` + `witnesses_share_pair_policy`.
-- All N witnesses come from the same client (`witnesses_share_receiver` + the per-client Receiver NFT).
+- No witness can pair-mint twice inside a batch: strict canonical witness order + `minted_pair_token_count == create_count` + shared pair policy.
+- All N witnesses come from the same client (shared Receiver NFT enforced inside `batch_witness_header_ok`).
+
+#### Canonical batch order
+
+The off-chain builder and the on-chain coordinator agree on **one** canonical order for the witnesses inside `ApplyBatch` and for the pair outputs in `tx.outputs`. This alignment is what lets the coordinator validate a batch with a single linear pass over each list, instead of one scan per witness.
+
+- **Sort key:** `pair_token_name` bytes. Each `pair_token_name` is `blake2b_256(pair_id)` (32 raw bytes), derived by `oracle_logic.pair_asset_name` and serialized off-chain as a lowercase even-length hex string.
+- **Comparator:** Aiken's `bytearray.compare` on the raw bytes (enforced by `batch_witness_header_ok` during `walk_batch_witnesses` in `validators/update_coordinator.ak`). Off-chain code obtains the same order with a plain bytewise compare on the decoded bytes; a lexicographic compare on the normalized lowercase hex string is equivalent. `localeCompare` MUST NOT be used because some locales apply collation that diverges from byte order.
+- **Strictness:** ascending **strict less-than** — equality is rejected, so duplicate `pair_token_name` values are invalid by construction.
+- **Policy:** every witness must share the same `pair_policy_id`; mixed-client batches are invalid.
+
+Application to the three relevant lists in a batch tx:
+
+- **Witnesses (`ApplyBatch(witnesses)` redeemer):** off-chain emits witnesses in canonical order; on-chain re-asserts strict ascending order inside the main witness walk. For existing pairs, the same canonical position is encoded into that pair's `ApplyUpdate` spend redeemer so `pair_state` can bind directly to the intended witness.
+- **Pair outputs (`tx.outputs` filtered to the shared pair policy):** off-chain emits pair outputs in the same canonical order. The Cardano ledger preserves the builder's output order, so a single `list.filter` pass over `tx.outputs` yields a list already in canonical order. The coordinator walks witnesses and this filtered list in lockstep; the `i`-th pair output's token-name MUST equal `witnesses[i].pair_token_name`.
+- **Pair inputs (`tx.inputs` filtered to the shared pair policy):** the Cardano ledger reorders `tx.inputs` lexicographically by `OutputReference` before passing them to scripts (Plutus V3 behavior; CIP-0128, which would preserve submission order, is still in `Proposed` status and not active). The coordinator therefore CANNOT assume positional alignment with witnesses for inputs. Instead, it filters `tx.inputs` once and then performs a token-name lookup against the short filtered list (length ≤ N) per witness. The lookup is cheap because the heavy `assets.tokens` check has already been amortised across the single filter pass.
+
+#### Coordinator batch validation algorithm
+
+For a batch of N witnesses against a transaction with M_in inputs and M_out outputs:
+
+1. **Single filter pass over `tx.outputs`** (`collect_pair_outputs`) — keeps only outputs that carry exactly one token of the shared pair policy. Preserves order, so the result is canonical. Cost: one `assets.tokens` invocation per output.
+2. **Single filter pass over `tx.inputs`** (`collect_pair_inputs`) — same predicate; produces a short list in ledger-imposed (lex) order. Cost: one `assets.tokens` invocation per input.
+3. **One walk over witnesses** (`walk_batch_witnesses`) in lockstep with the canonical pair-output list. For each witness:
+   - `batch_witness_header_ok` validates shared receiver, shared pair policy, strict ascending token-name order, and intent expiry in the same pass.
+   - The corresponding pair output is the next element of the pair-output list. Its decoded token-name MUST equal the witness's `pair_token_name`.
+   - The corresponding pair input is looked up by token-name in the (short) pair-input list. If found, this is an **update**; if not, this is a **create** and the witness must satisfy the bootstrap rules (mint quantity = 1, intent freshness, locked lovelace, payment credential).
+   - Per-witness signature recovery, datum continuity, and intent expiry are enforced exactly as in §5.7 / §5.8.
+4. **Three closing equalities** that pin the global accounting:
+   - `length(pair_outputs) == length(witnesses)` — no spurious / duplicate pair outputs.
+   - `length(witnesses) - create_count == length(pair_inputs)` — no spurious / duplicate pair inputs (every pair input is referenced by exactly one update witness).
+   - `minted_pair_token_count(tx, pair_policy_id) == create_count` — Pair-NFT mints exactly match create witnesses.
+
+The total `assets.tokens` invocation count is `M_in + M_out`, independent of N. The per-witness work is reduced to a positional output access and a small token-name lookup on a list of length ≤ N. Off-chain enforcement of the canonical order lives in `sortBatchUpdatesByPairTokenName` in `offchain/cli/src/transactions/update-batch.ts`, which normalizes each token name through `normalizeHex` (rejecting non-hex / odd-length inputs) before sorting bytewise. Regression tests in `offchain/cli/src/__tests__/run-tests.ts` pin the equivalence to `bytearray.compare` on the decoded bytes.
 
 ### 5.10 PaymentHook withdraw
 
@@ -915,7 +942,7 @@ flowchart LR
    - `has_config_signer(config_datum, tx)` (defense-in-depth: admin must sign even though the coordinator is gating the tx, because the hook is the single most valuable UTxO in the protocol).
    - `apply_settle_transition(current_datum, next_datum, delta = next.accrued - current.accrued)` ⇒ same five-condition body as the coordinator's check above, but `delta` is **derived from the hook's own datum delta** here.
 
-**How "deferral to the coordinator" actually works.** The coordinator still performs the heavy cross-UTxO checks (signed intent, receiver accrual, settle manifest vs hook delta). Each subscript that used to rely only on "withdrawal present" now also calls `coordinator_intent_matches` (or, for `pair_state` mint/spend, the wrapper `pair_intent_satisfied` which adds a local `intent_expiry_satisfied` check on the matched witness), binding its spend/mint to the correct `CoordinatorRedeemer` variant and to the correct on-chain identity (this pair, this receiver, or hook settle). That removes redeemer confusion while keeping the coordinator as the single place for global arithmetic. The three scripts in a settle tx still all run; none can be omitted.
+**How "deferral to the coordinator" actually works.** The coordinator still performs the heavy cross-UTxO checks (signed intent, receiver accrual, settle manifest vs hook delta). Each subscript binds to the coordinator's redeemer by identity to defeat redeemer confusion. `receiver` and `payment_hook` use the full `coordinator_intent_matches` (it carries the on-chain identity they expect — receiver NFT or hook). `pair_state.mint` uses `pair_mint_intent_satisfied`, which decodes the coordinator's witness list to confirm a witness binds to each minted Pair NFT and locally re-asserts `intent_expiry_satisfied` (mint runs at most once per batch, so the cost is paid once). `pair_state.spend.ApplyUpdate` uses `coordinator_in_update_mode`, which decodes ONLY the outer `CoordinatorRedeemer` constructor tag via the `CoordinatorRedeemerFingerprint` type (rejecting `ApplySettle`); the per-pair witness-binding-by-name and expiry checks live in the coordinator's batch walk, so the spend body stays cheap even for batch-10. That removes redeemer confusion while keeping the coordinator as the single place for global arithmetic. The three scripts in a settle tx still all run; none can be omitted.
 
 **Cross-script invariants**
 
@@ -926,23 +953,34 @@ flowchart LR
 
 ### 5.12 Update min UTxO (admin only)
 
-Admin-only transactions to update the `min_utxo_lovelace` field on Receiver, Pair, or Config UTxOs. This allows adjusting the minimum ADA locked in UTxOs when protocol requirements change.
+Admin-only transactions to update the `min_utxo_lovelace` field on Receiver, Pair, Config, or PaymentHook UTxOs. This allows adjusting the minimum ADA locked in UTxOs when protocol requirements change. All four datums require `min_utxo_lovelace > 0`.
 
 ```mermaid
-flowchart LR
+flowchart TB
   Admin([DIA Admin Wallet]):::wallet
-  TargetIn[Target UTxO<br/>min_utxo v1]:::script
-  ConfigRef[Config UTxO]:::script
 
-  TargetV[/spend<br/>UpdateMinUtxo/]:::redeemer
+  ReceiverIn[Receiver UTxO<br/>min_utxo v1]:::script --> ReceiverTx((Receiver update)):::tx
+  ReceiverConfig[Config UTxO<br/>reference input]:::script -.-> ReceiverTx
+  ReceiverV[/UpdateMinUtxo/]:::redeemer -.-> ReceiverTx
+  Admin -. signs .-> ReceiverTx
+  ReceiverTx --> ReceiverOut[Receiver UTxO<br/>min_utxo v2]:::script
 
-  Admin --> TX((Update<br/>min UTxO)):::tx
-  TargetIn --> TX
-  ConfigRef -.-> TX
-  TargetV -.-> TX
+  PairIn[Pair UTxO<br/>min_utxo v1]:::script --> PairTx((Pair update)):::tx
+  PairConfig[Config UTxO<br/>reference input]:::script -.-> PairTx
+  PairV[/UpdateMinUtxo/]:::redeemer -.-> PairTx
+  Admin -. signs .-> PairTx
+  PairTx --> PairOut[Pair UTxO<br/>min_utxo v2]:::script
 
-  TX --> TargetOut[Target UTxO<br/>min_utxo v2]:::script
-  TX --> Change([Admin change]):::wallet
+  ConfigIn[Config UTxO<br/>min_utxo v1]:::script --> ConfigTx((Config update)):::tx
+  ConfigV[/AdminUpdate/]:::redeemer -.-> ConfigTx
+  Admin -. signs .-> ConfigTx
+  ConfigTx --> ConfigOut[Config UTxO<br/>min_utxo v2]:::script
+
+  HookIn[PaymentHook UTxO<br/>min_utxo v1]:::script --> HookTx((PaymentHook update)):::tx
+  HookConfig[Config UTxO<br/>reference input]:::script -.-> HookTx
+  HookV[/AdminUpdate/]:::redeemer -.-> HookTx
+  Admin -. signs .-> HookTx
+  HookTx --> HookOut[PaymentHook UTxO<br/>min_utxo v2]:::script
 
   classDef wallet fill:#fff8dc,stroke:#aa8800,color:#111
   classDef script fill:#e8f0ff,stroke:#3355aa,stroke-width:1.5px,color:#111
@@ -952,8 +990,13 @@ flowchart LR
 
 **Frequency:** as needed (admin-initiated), when the minimum UTxO requirement changes.
 
+Each row above is a separate alternative transaction. A min UTxO update spends exactly
+one target UTxO and uses exactly one redeemer, selected by datum type: Receiver and
+Pair use their dedicated `UpdateMinUtxo` redeemer; Config and PaymentHook use their
+general `AdminUpdate` redeemer.
+
 **Inputs:**
-- Target UTxO (Receiver, Pair, or Config).
+- Target UTxO (Receiver, Pair, Config, or PaymentHook).
 - DIA admin wallet (network fee and signer).
 
 **Reference inputs:**
@@ -1059,7 +1102,7 @@ truth, and which scripts are parameterized by what.
 | `payment_hook_asset_name` | same | NFT bytes; `ConfigDatum.payment_hook_ref.asset_name` | `state.scripts.paymentHookUnit` | Same as above |
 | `receiver_policy_id` | `validators/receiver.ak` (mint) | NFT bytes on the Receiver UTxO; embedded in `UpdateWitness.receiver_policy_id` (off-chain witness) | `clientState.receiver.receiverPolicyId` (per-client artifact) | Read by `update_coordinator` `valid_receiver_accrue_fee` (`update_coordinator.ak:107-126`) which finds the receiver via this NFT |
 | `receiver_asset_name` | same | NFT bytes; embedded in `UpdateWitness` | `clientState.receiver.receiverAssetName` | Same as above |
-| `receiver_validator_hash` | `validators/receiver.ak` (spend) | None — derived from script | `clientState.receiver.receiverValidatorHash` | Wired as compile-time parameter into `pair_state.receiver_hash` (`validators/pair_state.ak:23`); enforced at runtime by `pair_state.receiver_input_present` (`pair_state.ak:116, 161-170`) |
+| `receiver_validator_hash` | `validators/receiver.ak` (spend) | None — derived from script | `clientState.receiver.receiverValidatorHash` | Wired as compile-time parameter into `pair_state._receiver_hash` so each client's `pair_state` script has its own address. The parameter is no longer read inside the validator body — receiver presence and identity are enforced once by `update_coordinator` via `valid_receiver_accrue_fee` in the same tx. |
 | `pair_policy_id` (per-client) | `validators/pair_state.ak` (mint) | NFT bytes on each pair UTxO; embedded in `UpdateWitness.pair_policy_id` | `pairArtifact.scripts.pairPolicyId` | Read by `update_coordinator.valid_single_update` and `valid_batch_update` (`update_coordinator.ak:319, 367, 389`) |
 | `pair_token_name` (per pair) | same | NFT bytes; equal to `blake2b_256(pair_id)` | `pairArtifact.scripts.pairUnit` | Re-derived on-chain by `oracle_logic.pair_asset_name` (`oracle_logic.ak:50-52`) and asserted at `pair_state.ak:115` and `update_coordinator.ak` C7 / C7' |
 | `coordinator_credential` (stake credential) | `validators/update_coordinator.ak` (withdraw) | `ConfigDatum.update_coordinator_credential` (set at hook bootstrap, frozen unless config admin update edits it) | `state.scripts.coordinatorHash`, `state.scripts.coordinatorRewardAddress` | Read by `update_coordinator` (must equal `own_credential`); subscripts read the matching `Withdraw` entry in `tx.redeemers` via `coordinator_intent_matches` (`pair_state`, `receiver`, `payment_hook.ApplySettle`) |
@@ -1103,7 +1146,7 @@ at compile time.
 | `config_state` | `bootstrap_ref: OutputReference`, `expected_asset_name: AssetName` (`validators/config_state.ak:12-14`) | `bootstrap_ref` is consumed once at mint time and never again; `expected_asset_name` is checked on every spend (continuation must carry `(own_policy_id, expected_asset_name) qty 1`). |
 | `payment_hook` | `bootstrap_ref`, `expected_asset_name`, `config_policy_id`, `config_asset_name`, `coordinator_credential: Credential` (`validators/payment_hook.ak:15-20`) | `config_policy_id` + `config_asset_name` are used to find the Config NFT at runtime (`payment_hook.ak:36-46, 211-239`); `coordinator_credential` is wired into the initial `ConfigDatum` at hook bootstrap (`payment_hook.ak:75-76`) and from then on the coordinator credential is re-derived from `ConfigDatum.update_coordinator_credential` rather than from the parameter. The compile-time parameter is what allowed bootstrap to assert the new Config datum names this exact credential. |
 | `receiver` | `bootstrap_ref`, `expected_asset_name`, `config_policy_id`, `config_asset_name` (`validators/receiver.ak:15-19`) | `config_policy_id` + `config_asset_name` are used by `find_visible_config_input` on every receiver mint and on `AccrueFee`/`Settle`/`Withdraw` spends. |
-| `pair_state` | `config_policy_id`, `config_asset_name`, `receiver_hash: ScriptHash` (`validators/pair_state.ak:20-23`) | `config_policy_id`/`asset_name` are searched on every mint and spend; `receiver_hash` is asserted by `receiver_input_present` on every pair spend, AND by every pair mint via `pair_intent_satisfied` + `receiver_input_present` (the pair mint requires the receiver UTxO to be in the tx). `pair_intent_satisfied` simultaneously binds the coordinator redeemer to this exact Pair NFT (`IntentForPair`) and re-asserts `intent_expiry_satisfied` locally on the matched witness. |
+| `pair_state` | `config_policy_id`, `config_asset_name`, `_receiver_hash: ScriptHash` | `config_policy_id`/`asset_name` are searched on every mint and spend so the Config datum can be decoded to read the coordinator credential. `_receiver_hash` is now a script-identity parameter only — the validator body never reads it, because `update_coordinator` enforces receiver identity globally via `valid_receiver_accrue_fee`. `pair_state.mint` binds each minted Pair NFT through `pair_mint_intent_satisfied`, which decodes the coordinator's witness list once per batch mint and locally re-asserts `intent_expiry_satisfied`. `pair_state.spend.ApplyUpdate` uses `coordinator_in_update_mode`, which decodes ONLY the coordinator-redeemer constructor tag (rejecting `ApplySettle`); per-pair binding by name and intent expiry are not duplicated here. |
 | `update_coordinator` | `config_policy_id`, `config_asset_name` (`validators/update_coordinator.ak:30-33`) | Used to locate Config as a reference input on every coordinator withdraw (`update_coordinator.ak:39-48`). All other identifiers (hook NFT, receiver NFT, pair policy) come from runtime witnesses, not parameters. |
 | `reference_holder` | `config_policy_id: PolicyId`, `config_asset_name: AssetName` (`validators/reference_holder.ak:2-3`) | Admin-gated spend: requires the Config NFT as a reference input and a Config signer key in the transaction. This allows DIA to reclaim locked ADA when upgrading contracts. All consumers cite UTxOs at this address as `reference_input`s; no on-chain check enforces which UTxOs are cited. |
 
