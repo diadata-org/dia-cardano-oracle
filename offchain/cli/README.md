@@ -315,8 +315,8 @@ For every later update, generate a fresh signed intent with a new nonce, timesta
 
 `preview:update` is pair-aware:
 
-- If the pair artifact does not exist yet, it mints the Pair NFT and creates the first Pair UTxO with the signed intent's real price datum.
-- If the pair artifact already exists, it consumes the current Pair UTxO and writes the next datum.
+- If the pair artifact does not exist yet, it mints the Pair NFT and creates the first Pair UTxO. Pair creation is admin-gated — the configured wallet must be a `config_admins` signer.
+- If the pair artifact already exists, it consumes the current Pair UTxO and writes the next datum. Updates are not admin-gated.
 - New Pair UTxOs inherit the current `configState.minUtxoLovelace`; existing Pair UTxOs can later be adjusted with `preview:pair:update-min-utxo`.
 
 ```sh
@@ -365,16 +365,7 @@ for each pair update entry.
 
 ### 25. Submit a batch update
 
-`preview:update:batch` can update existing pairs and create missing pairs in the same transaction. New pairs inherit `minUtxoLovelace` from `configState.minUtxoLovelace` automatically.
-
-Batch updates accrue fees locally on the Receiver using the formula
-`total_fee = base_fee + (K * per_pair_fee)` where K is the number of pairs
-(`balance_lovelace -= total_fee`, `accrued_to_hook_lovelace += total_fee`).
-The PaymentHook is **not** touched during updates. The accrued lovelace is
-drained from one or more Receivers into the global PaymentHook in a
-separate admin-initiated transaction submitted with `preview:settle`.
-See `docs/architecture/cardano-oracle-architecture.md` §5.11 and §7.4.11
-for the full validation model.
+`preview:update:batch` can update existing pairs and create missing pairs in the same transaction. New pairs inherit `minUtxoLovelace` from `configState.minUtxoLovelace` automatically. If any pair in the manifest is being created, the configured wallet must be a `config_admins` signer; pure-update batches do not need admin authorisation.
 
 ```sh
 npm run cli -- preview:update:batch \
@@ -445,9 +436,22 @@ npm run cli -- preview:pair:update-min-utxo \
 
 All Pair datum fields except `min_utxo_lovelace` remain unchanged.
 
+### 29b. Burn a Pair (admin only)
+
+Burns the Pair NFT of an existing pair and recovers the locked min-ADA back to the admin wallet. Requires a `config_admins` signer.
+
+```sh
+npm run cli -- preview:pair:burn \
+  --protocol-state ./state/preview/config-bootstrap.json \
+  --client-state ./state/preview/clients/client-a.json \
+  --state ./state/preview/clients/client-a/pairs/usdc-usd.json
+```
+
+A subsequent `preview:update` for the same symbol will mint a fresh Pair NFT and rebuild pair state from a new signed intent. See architecture §5.13 for the on-chain validation.
+
 ### 30. Update min UTxO for Config (admin only)
 
-Updates the `min_utxo_lovelace` field on the global Config UTxO. Unlike Receiver and Pair, Config does **not** have a dedicated `UpdateMinUtxo` redeemer—changes are made through the general `AdminUpdate` redeemer, which permits modifying all Config fields including `min_utxo_lovelace`. Requires the wallet to be a Config signer.
+Updates `min_utxo_lovelace` on the Config UTxO through the general `AdminUpdate` flow (no dedicated `UpdateMinUtxo` redeemer; see architecture §5.3 + §5.12). Requires a Config signer.
 
 ```sh
 npm run cli -- preview:config:update \
@@ -455,11 +459,9 @@ npm run cli -- preview:config:update \
   --state ./state/preview/config-bootstrap.json
 ```
 
-The Config UTxO must be adjusted to hold the new minimum ADA. All other datum fields can also be updated in the same transaction via the update JSON.
-
 ### 31. Update min UTxO for PaymentHook (admin only)
 
-Updates the `min_utxo_lovelace` field on the global PaymentHook UTxO. Like Config, PaymentHook does **not** have a dedicated `UpdateMinUtxo` redeemer—changes are made through the general `AdminUpdate` redeemer. The PaymentHook's `admin_update_transition` only freezes economic fields (`accrued_fees_lovelace`, `lifetime_collected_lovelace`, `lifetime_withdrawn_lovelace`), leaving `min_utxo_lovelace` and `withdraw_address` mutable. Requires the wallet to be a Config signer.
+Updates `min_utxo_lovelace` on the PaymentHook UTxO through the general `AdminUpdate` flow (see architecture §5.12). Requires a Config signer.
 
 ```sh
 npm run cli -- preview:payment-hook:update \
@@ -467,7 +469,7 @@ npm run cli -- preview:payment-hook:update \
   --state ./state/preview/config-bootstrap.json
 ```
 
-The PaymentHook UTxO must be adjusted to hold `new_min_utxo + accrued_fees_lovelace` total lovelace.
+The PaymentHook UTxO output must hold `new_min_utxo + accrued_fees_lovelace` total lovelace.
 
 ### 32. Reclaim reference-script UTxOs
 

@@ -50,21 +50,18 @@ Step 1 can be skipped if you have not modified the contracts; the committed
 
 ## Operator Workflow
 
-Use [`offchain/cli/README.md`](offchain/cli/README.md) for the step-by-step Preview runbook:
+The end-to-end Preview runbook lives in
+[`offchain/cli/README.md`](offchain/cli/README.md). At a glance, the phases are:
 
-- protocol bootstrap (Config, PaymentHook, coordinator stake registration)
-- global and client reference-script publication
-- client onboarding (per-client Receiver and Pair scripts)
-- pair create/update through signed oracle intents
-- single and batch updates, including first-time pair creation
-- decoupled fee settlement with formula `base + n × per_pair`: every update
-  accrues the protocol fee on the Receiver datum (base fee + per-pair fee for
-  each pair in the batch); an admin-initiated Settle transaction periodically
-  drains the accrued fees from one or more Receivers into the global
-  PaymentHook in a single batched transaction
-- admin and withdrawal transactions
+1. Wallet setup.
+2. Protocol deployment (Config, PaymentHook, coordinator).
+3. Client deployment (per-client Receiver and Pair scripts).
+4. Oracle intent flow (create + sign).
+5. Live updates (single and batch).
+6. Maintenance transactions (settle, withdraws, min-UTxO updates, pair burn,
+   reference-script reclaim).
 
-The full transaction model, including Settle, is documented in the
-[architecture document](docs/architecture/cardano-oracle-architecture.md) — see
-§5 (per-transaction details) and §7.4 (per-transaction validation
-tables).
+For the protocol design behind each phase — datums, redeemers, cross-script
+invariants, fee flow, batch validation algorithm, trust model — see the
+[architecture document](docs/architecture/cardano-oracle-architecture.md)
+and [security notes](docs/security/m1-security-notes.md).
