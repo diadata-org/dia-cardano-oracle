@@ -1,5 +1,0 @@
-[contracts-tests] running: aiken build
-    Compiling protofire/dia-cardano-oracle 0.0.0 (.)
-    Compiling aiken-lang/stdlib v3.0.0 (./build/packages/aiken-lang-stdlib)
-   Generating project's blueprint (./plutus.json)
-[contracts-tests] BUILD PASSED

@@ -1,6 +1,0 @@
-
-> @protofire/dia-cardano-oracle-cli@0.1.0 test
-> tsx src/__tests__/run-tests.ts
-
-CLI tests passed
-[node-tests] npm test PASSED

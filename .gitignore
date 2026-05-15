@@ -6,12 +6,10 @@
 .windsurf
 
 # Local/archive notes are useful while working but are not part of the public docs.
-docs/_archived/
-docs/plans/archived/
-docs/plans/_archived/
+**/archived/
+**/_archived/
 
 # Generated CLI state artifacts. Keep only the state directory placeholder/docs.
-offchain/cli/state
 
 !offchain/cli/state/preview/
 !offchain/cli/state/preview/.gitkeep

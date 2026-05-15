@@ -1,9 +1,0 @@
-
-> @protofire/dia-cardano-oracle-cli@0.1.0 cli
-> tsx src/index.ts preview:update:batch --protocol-state ./state/preview_rerun_20260513-130106/config-bootstrap.json --client-state ./state/preview_rerun_20260513-130106/clients/client-a.json --manifest ./state/preview_rerun_20260513-130106/update-batches/batch-9.manifest.json --out ./state/preview_rerun_20260513-130106/update-batches/batch-9.result.json
-
-[1G[0K[preview:update:batch] Loading batch update manifest from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260513-130106/update-batches/batch-9.manifest.json
-[preview:update:batch] Connecting to Preview and selecting the configured wallet
-[preview:update:batch] Building Preview oracle batch update transaction
-{ Complete: "failed script execution Spend[0] the validator crashed / exited prematurely" }
-[1G[0K⠙[1G[0K[rerun] batch-9 did not produce a result artifact; treating it as a failed attempt
