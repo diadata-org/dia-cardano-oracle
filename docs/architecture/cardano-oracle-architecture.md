@@ -622,11 +622,12 @@ PaymentHook is **not** involved. Fees are accrued locally on the Receiver and se
    - `intent_freshness_satisfied(witness.intent, tx, config.max_bootstrap_drift_seconds)` ⇒ tx lower validity bound is finite AND `intent.timestamp × 1000 ≥ lower_ms - max_drift × 1000`. Rejects stale-intent replay on bootstrap.
    - `valid_receiver_accrue_fee(tx, witness.receiver_policy_id, witness.receiver_asset_name, fee = base_fee_lovelace + 1 × per_pair_fee_lovelace)`: locates a Receiver input/output pair carrying that NFT; both decode as `ReceiverDatum`; both pass `valid_receiver_state` AND `exact_locked_lovelace`; `accrue_fee_transition(prev, next, fee)` ⇒ `fee ≥ 0`, `fee ≤ prev.balance`, `next.balance == prev.balance - fee`, `next.accrued_to_hook == prev.accrued_to_hook + fee`, `next.min_utxo == prev.min_utxo`.
 
-2. **`pair_state` mint** — redeemer `PairMintAction::MintPairs`. Validates:
+2. **`pair_state` mint** — redeemer `PairMintAction::MintPairs` (index 0). Validates:
    - Mint redeemer is `MintPairs`.
    - At least one minted pair entry; each has `qty == 1`.
    - For every minted name: an output holds that NFT `qty 1` and inline `PairDatum`; payment credential `Script(pair_policy_id)`; `pair_asset_name(datum.pair_id) == minted_name`; `valid_pair_state(datum)`; `exact_locked_lovelace`.
    - Config NFT visible as reference input `qty 1`; decodes as `ConfigDatum`; `valid_config_state(config_datum)`.
+   - **Admin gate:** `has_config_signer(config_datum, tx)` — at least one `config_admins` payment key must appear in `tx.extra_signatories`. A signed DIA intent alone is NOT sufficient to create a Pair NFT: without this gate, an attacker holding a fresh DIA intent could replay it across two transactions to mint two NFTs with the same `pair_token_name`, since at creation time there is no prior on-chain `PairDatum` to anchor nonce uniqueness against. After this transaction the freshly stored `PairDatum.nonce` becomes the anti-replay anchor used by every later `is_fresh_update`. See `docs/security/m1-security-notes.md`.
    - **Coordinator intent binding + local expiry:** `pair_mint_intent_satisfied(tx, config_datum, pair_policy_id, pair_token_name)` — the coordinator withdraw redeemer in `tx.redeemers` must decode as `ApplySingle` or `ApplyBatch` and name **this** minted pair (`pair_policy_id` + minted asset name) AND that witness's intent must satisfy `intent_expiry_satisfied` against the tx's finite upper validity bound. This blocks piggy-backing on `ApplySettle` or on another pair's update witness, and re-asserts intent expiry on the same code path that consumes the intent (defence in depth: expiry is enforced both here and in the coordinator).
 
 3. **`receiver` spend** — redeemer `ReceiverRedeemer::AccrueFee` (index 1). Validates:
@@ -713,6 +714,18 @@ PaymentHook is **not** an input or output in update transactions. This eliminate
 **Cross-script invariants:** identical to §5.7, plus replay protection: `intent.timestamp > prev.timestamp` AND `intent.nonce > prev.nonce` (coordinator's `is_fresh_update`). Pair NFT cannot be duplicated mid-flight (no mint on this branch + single token of pair policy on own input + parametric NFT name = `blake2b_256(pair_id)`).
 
 ### 5.9 Price update (batch)
+
+#### Canonical batch model (TL;DR)
+
+- **Sort key:** `pair_token_name` = `blake2b_256(pair_id)` raw bytes.
+- **Witness list:** sorted strict-ascending by `pair_token_name`; the on-chain coordinator re-asserts this order inside `walk_batch_witnesses` (`batch_witness_header_ok`).
+- **Pair outputs:** emitted by the off-chain builder in the same canonical order; the ledger preserves builder output order, so a single `list.filter` over `tx.outputs` is already canonical.
+- **Pair inputs:** the ledger reorders inputs lexicographically by `OutputReference`; the coordinator looks up each witness's input by token-name against the short filtered list.
+- **Coordinator validates the correspondence:** witnesses ↔ pair outputs ↔ pair inputs ↔ mint count, all in a single linear pass per relevant list — `length(pair_outputs) == length(witnesses)`, `length(witnesses) - create_count == length(pair_inputs)`, `minted_pair_token_count == create_count`.
+- **Pair spend (`ApplyUpdate`) no longer decodes the full batch witness list.** It uses a `CoordinatorRedeemerFingerprint` (constructor-tag-only) to prove the coordinator is in `ApplySingle`/`ApplyBatch` mode and trusts the coordinator for everything else. This is what keeps per-pair execution cost flat as the batch grows.
+- **Preview-confirmed envelope:** `batch-10` fits in the per-tx exec-units limit (latest emulator run: `cpu=4,295,001,740 mem=10,810,449`, ~67.6% of memory cap). See `docs/milestones/evidence/` for run-by-run numbers.
+
+The §below sub-sections detail the validators, the canonical-order proof, and the validation algorithm.
 
 ```mermaid
 flowchart LR
@@ -1045,6 +1058,65 @@ general `AdminUpdate` redeemer.
 - All economic fields (balance, accrued fees) remain unchanged during min_utxo updates.
 - The target UTxO's total lovelace must be adjusted externally to match the new minimum.
 
+### 5.13 Pair burn (admin only)
+
+Burns the Pair NFT of an existing pair and releases the locked min-ADA back to the admin wallet. Two redeemers fire in lockstep, both admin-gated, so neither validator can be invoked alone:
+
+- `pair_state.spend.BurnPair` consumes the Pair UTxO with no continuation output.
+- `pair_state.mint.BurnPairs` burns the matching Pair NFT (`qty = -1`).
+
+There is no coordinator interaction on this path — no oracle update is being applied, no Receiver fee is accrued.
+
+```mermaid
+flowchart LR
+  Admin([DIA Admin Wallet]):::wallet
+  PairIn[Pair UTxO<br/>price, ts, nonce, min_utxo]:::script
+  ConfigRef[Config UTxO]:::script
+
+  PairSpend[/pair_state spend<br/>BurnPair/]:::redeemer
+  PairMintBurn[/pair_state mint<br/>BurnPairs/]:::redeemer
+
+  Admin --> TX((Pair burn)):::tx
+  PairIn --> TX
+  ConfigRef -.-> TX
+  PairSpend -.-> TX
+  PairMintBurn -.-> TX
+
+  TX --> Recovered([Admin wallet<br/>recovered min_utxo]):::wallet
+
+  classDef wallet fill:#fff8dc,stroke:#aa8800,color:#111
+  classDef script fill:#e8f0ff,stroke:#3355aa,stroke-width:1.5px,color:#111
+  classDef redeemer fill:#f8f8f8,stroke:#666,stroke-dasharray:3 2,color:#111
+  classDef tx fill:#ffffff,stroke:#000,stroke-width:2px,color:#111
+```
+
+- **Frequency:** rare, admin-initiated.
+- **Inputs:**
+  - Pair UTxO to be retired (single input under the per-client `pair_state` script).
+  - DIA admin wallet (pays network fee).
+- **Reference inputs:** Config UTxO.
+- **Mint:** `(pair_policy_id, pair_token_name, -1)`.
+- **Outputs:** none from `pair_state`; the recovered min-ADA goes to the admin wallet as change.
+- **Signers:** `config_admins`.
+
+**Validators**
+
+1. **`pair_state` spend** — redeemer `PairSpendAction::BurnPair` (index 2). Validates:
+   - Config NFT visible as reference input; decodes as `ConfigDatum`; `valid_config_state(config_datum)`.
+   - `has_config_signer(config_datum, tx)`.
+   - `assets.quantity_of(tx.mint, own_policy_id, pair_token_name) == -1` — the matching Pair NFT MUST be burned in the same tx. Anything else (e.g. moving the NFT to a wallet) would silently bypass the mint-policy's burn gate, since spends and mints run independently.
+
+2. **`pair_state` mint** — redeemer `PairMintAction::BurnPairs` (index 1). Validates:
+   - At least one minted pair entry; each has `qty == -1` (mixing `+1`/`-1` is rejected on either redeemer).
+   - Config NFT visible as reference input; decodes as `ConfigDatum`; `valid_config_state(config_datum)`.
+   - `has_config_signer(config_datum, tx)`.
+
+**Cross-script invariants**
+
+- **Burn cannot leak the NFT.** The mint-side burn requires the NFT to disappear from `tx.mint` net supply; the spend-side burn requires the Pair UTxO to be consumed under `BurnPair`. The only place the NFT lives between mint and burn is the `pair_state` script address (Pair NFTs cannot escape to a wallet — every spend-side update enforces continuation at the same script address), so the NFT must come from the spent UTxO.
+- **Both sides admin-gated.** Even if a malicious party constructed a tx that satisfied the mint-side burn predicate, they could not spend the Pair UTxO without the admin signature, and vice versa.
+- **No replay risk.** After confirmation, the Pair NFT supply for that `pair_token_name` is exactly zero. A future `preview:update` for the same symbol mints a fresh NFT under `MintPairs`, which is itself admin-gated, and freezes a new `PairDatum.nonce` from the new signed intent.
+
 ---
 
 ## 6. Finalized design decisions
@@ -1072,9 +1144,11 @@ general `AdminUpdate` redeemer.
 | `receiver` spend | 2 | `ReceiverRedeemer::Settle` | §5.11 |
 | `receiver` spend | 3 | `ReceiverRedeemer::Withdraw { amount, recipient }` | §5.6 |
 | `receiver` spend | 4 | `ReceiverRedeemer::UpdateMinUtxo { new_min_utxo_lovelace }` | §5.12 |
-| `pair_state` mint | — | `PairMintAction::MintPairs` | §5.7, §5.9 |
+| `pair_state` mint | 0 | `PairMintAction::MintPairs` (admin-gated) | §5.7, §5.9 |
+| `pair_state` mint | 1 | `PairMintAction::BurnPairs` (admin-gated) | §5.13 |
 | `pair_state` spend | 0 | `PairSpendAction::ApplyUpdate` | §5.8, §5.9 |
 | `pair_state` spend | 1 | `PairSpendAction::UpdateMinUtxo { new_min_utxo_lovelace }` | §5.12 |
+| `pair_state` spend | 2 | `PairSpendAction::BurnPair` (admin-gated) | §5.13 |
 | `update_coordinator` withdraw | 0 | `CoordinatorRedeemer::ApplySingle(UpdateWitness)` | §5.7, §5.8 |
 | `update_coordinator` withdraw | 1 | `CoordinatorRedeemer::ApplyBatch(List<UpdateWitness>)` | §5.9 |
 | `update_coordinator` withdraw | 2 | `CoordinatorRedeemer::ApplySettle(SettleManifest)` | §5.11 |
