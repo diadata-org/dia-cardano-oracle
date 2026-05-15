@@ -1,0 +1,61 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts preview:update --intent ./state/preview_rerun_20260515-130925/intents/bnb-usd.signed.json --protocol-state ./state/preview_rerun_20260515-130925/config-bootstrap.json --client-state ./state/preview_rerun_20260515-130925/clients/client-a.json --state ./state/preview_rerun_20260515-130925/clients/client-a/pairs/bnb-usd.json
+
+[1G[0K[preview:update] Loading signed intent from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260515-130925/intents/bnb-usd.signed.json
+[preview:update] Loading client and protocol state
+[preview:update] Connecting to Preview and selecting the configured wallet
+[preview:update] Building Preview oracle update transaction
+[preview:update] Tx resources: fee=0.794018 ADA (794018 lovelace), cpu=686750610, mem=1880170
+[preview:update] Output[0] | addr=addr_test1wqnv...j2r5ux | lovelace=5.000000 ADA (5000000) | assets=26c5e6803e58...30b101=1 | datum=inline(95B)
+[preview:update] Output[1] | addr=addr_test1wqyx...wuk7r3 | lovelace=35.000000 ADA (35000000) | assets=08615fb5721b...545f41=1 | datum=inline(19B)
+[preview:update] Output[2] | addr=addr_test1qpgp...quxj3j | lovelace=3269.157309 ADA (3269157309)
+[preview:update] Unsigned transaction ready: 33ff8a871bcf04d47b4e36927c07f2a53def4b24ba6cd9907377c834ea158b7a
+[preview:update] Submitted transaction hash: 33ff8a871bcf04d47b4e36927c07f2a53def4b24ba6cd9907377c834ea158b7a
+[preview:update] Confirmed by Blockfrost: oracle update transaction 33ff8a871bcf04d47b4e36927c07f2a53def4b24ba6cd9907377c834ea158b7a.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260515-130925/clients/client-a/pairs/bnb-usd.json
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+  },
+  "pair": {
+    "tokenName": "09da81653014451f3a86d96589f6a9e5d97b4e8236a461c7b2edbe1bab30b101",
+    "pairId": "424e422f555344",
+    "pairUnit": "26c5e6803e580f29201ba19557c516ff22a2f4c84a1afa164ae499d209da81653014451f3a86d96589f6a9e5d97b4e8236a461c7b2edbe1bab30b101",
+    "pairValidatorAddress": "addr_test1wqnvte5q8evq72fqrwse2479zmlj9gh5ep9p47skftjfn5sj2r5ux"
+  },
+  "pairState": {
+    "pairId": "424e422f555344",
+    "price": "61500000000",
+    "timestamp": "1778852744",
+    "nonce": "1778852744000",
+    "intentHash": "883e36eae71de51ea5954714f625260cd89722b9fb2dc0595dc856c095f509eb",
+    "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+    "minUtxoLovelace": "5000000",
+    "intent": {
+      "intentType": "OracleUpdate",
+      "version": "1.0",
+      "chainId": "100640",
+      "nonce": "1778852744000",
+      "expiry": "1778856344",
+      "symbol": "BNB/USD",
+      "price": "61500000000",
+      "timestamp": "1778852744",
+      "source": "DIA Oracle",
+      "signature": "07dc76fb682fac2f2b66016f562f127f468d0986ceed33f9265352b5564ee69603a119e9447b0a6a04c615f86d824933d927dc15f8ee400a15d415fb3185f1661b",
+      "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+    }
+  },
+  "datum": {
+    "pairCbor": "d8799f47424e422f5553441b0000000e51af87001a6a0723881b0000019e2be2cb405820883e36eae71de51ea5954714f625260cd89722b9fb2dc0595dc856c095f509eb542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+  },
+  "transactions": [
+    {
+      "step": "preview:update",
+      "submittedTxHash": "33ff8a871bcf04d47b4e36927c07f2a53def4b24ba6cd9907377c834ea158b7a",
+      "confirmed": true
+    }
+  ]
+}
+[1G[0K⠙[1G[0K

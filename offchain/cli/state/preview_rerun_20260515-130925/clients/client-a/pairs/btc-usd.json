@@ -1,0 +1,49 @@
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+  },
+  "pair": {
+    "tokenName": "8a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497",
+    "pairId": "4254432f555344",
+    "pairUnit": "26c5e6803e580f29201ba19557c516ff22a2f4c84a1afa164ae499d28a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497",
+    "pairValidatorAddress": "addr_test1wqnvte5q8evq72fqrwse2479zmlj9gh5ep9p47skftjfn5sj2r5ux"
+  },
+  "pairState": {
+    "pairId": "4254432f555344",
+    "price": "6001000000000",
+    "timestamp": "1778853622",
+    "nonce": "1778853622000",
+    "intentHash": "519144fd6587db4b9b955a0bee90798a087a34cb1b8f20ac4460110bb6dd41f2",
+    "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+    "minUtxoLovelace": "5000000",
+    "intent": {
+      "intentType": "OracleUpdate",
+      "version": "1.0",
+      "chainId": "100640",
+      "nonce": "1778853622000",
+      "expiry": "1778857222",
+      "symbol": "BTC/USD",
+      "price": "6001000000000",
+      "timestamp": "1778853622",
+      "source": "DIA Oracle",
+      "signature": "cce40137187e04910926cbfd57afc5a726437459d35c81422677cd8b1d35b0500014ffce76bdf6f644d1368776ce525f7d61bfe6170462e65e6dba4cd096151e1b",
+      "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+    }
+  },
+  "datum": {
+    "pairCbor": "d8799f474254432f5553441b0000057537792a001a6a0726f61b0000019e2bf030f05820519144fd6587db4b9b955a0bee90798a087a34cb1b8f20ac4460110bb6dd41f2542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+  },
+  "transactions": [
+    {
+      "step": "preview:update",
+      "submittedTxHash": "b0ab1a24a7e591b965a75a0a5bc29e19c9bca2941e4d77a653bbabe6e51f4f23",
+      "confirmed": true
+    },
+    {
+      "step": "preview:update:batch",
+      "submittedTxHash": "318ebdac0b1a04c36ccbc7a33de296b801ccbecd622ec68a85b8939757825362",
+      "confirmed": true
+    }
+  ]
+}

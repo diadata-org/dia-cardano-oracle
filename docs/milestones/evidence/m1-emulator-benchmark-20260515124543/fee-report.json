@@ -1,0 +1,953 @@
+{
+  "generatedAt": "2026-05-15T12:46:01.853Z",
+  "runId": "20260515124543",
+  "source": "lucid-emulator",
+  "steps": [
+    {
+      "label": "protocol:init",
+      "durationMs": 130,
+      "ok": true
+    },
+    {
+      "label": "config:parameterize",
+      "durationMs": 150,
+      "ok": true
+    },
+    {
+      "label": "config:bootstrap",
+      "durationMs": 130,
+      "ok": true,
+      "feeLovelace": "301032",
+      "cpu": "62435057",
+      "mem": "192880"
+    },
+    {
+      "label": "config:reference-scripts",
+      "durationMs": 51,
+      "ok": true,
+      "feeLovelace": "624949",
+      "cpu": "0",
+      "mem": "0"
+    },
+    {
+      "label": "payment-hook:parameterize",
+      "durationMs": 94,
+      "ok": true
+    },
+    {
+      "label": "payment-hook:bootstrap",
+      "durationMs": 85,
+      "ok": true,
+      "feeLovelace": "594183",
+      "cpu": "309385123",
+      "mem": "933989"
+    },
+    {
+      "label": "payment-hook:reference-script",
+      "durationMs": 42,
+      "ok": true,
+      "feeLovelace": "382289",
+      "cpu": "0",
+      "mem": "0"
+    },
+    {
+      "label": "client:init",
+      "durationMs": 5,
+      "ok": true
+    },
+    {
+      "label": "receiver:parameterize",
+      "durationMs": 123,
+      "ok": true
+    },
+    {
+      "label": "receiver:bootstrap",
+      "durationMs": 59,
+      "ok": true,
+      "feeLovelace": "429649",
+      "cpu": "94318163",
+      "mem": "298004"
+    },
+    {
+      "label": "reference-scripts:publish-client",
+      "durationMs": 46,
+      "ok": true,
+      "feeLovelace": "817889",
+      "cpu": "0",
+      "mem": "0"
+    },
+    {
+      "label": "receiver:top-up",
+      "durationMs": 57,
+      "ok": true,
+      "feeLovelace": "352295",
+      "cpu": "76281672",
+      "mem": "245076"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1",
+      "durationMs": 58,
+      "ok": true
+    },
+    {
+      "label": "update:pair-1",
+      "durationMs": 124,
+      "ok": true,
+      "feeLovelace": "782457",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-1",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "update:batch:1",
+      "durationMs": 128,
+      "ok": true,
+      "feeLovelace": "852891",
+      "cpu": "648187488",
+      "mem": "1746491"
+    },
+    {
+      "label": "intent:create-and-sign:pair-2",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "update:pair-2",
+      "durationMs": 110,
+      "ok": true,
+      "feeLovelace": "782457",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-2",
+      "durationMs": 43,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-2",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "update:batch:2",
+      "durationMs": 151,
+      "ok": true,
+      "feeLovelace": "1022940",
+      "cpu": "993815989",
+      "mem": "2568433"
+    },
+    {
+      "label": "intent:create-and-sign:pair-3",
+      "durationMs": 37,
+      "ok": true
+    },
+    {
+      "label": "update:pair-3",
+      "durationMs": 109,
+      "ok": true,
+      "feeLovelace": "782457",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-3",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-3",
+      "durationMs": 36,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-3",
+      "durationMs": 36,
+      "ok": true
+    },
+    {
+      "label": "update:batch:3",
+      "durationMs": 185,
+      "ok": true,
+      "feeLovelace": "1196577",
+      "cpu": "1353965334",
+      "mem": "3434415"
+    },
+    {
+      "label": "intent:create-and-sign:pair-4",
+      "durationMs": 36,
+      "ok": true
+    },
+    {
+      "label": "update:pair-4",
+      "durationMs": 116,
+      "ok": true,
+      "feeLovelace": "782457",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-4",
+      "durationMs": 36,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-4",
+      "durationMs": 36,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-4",
+      "durationMs": 36,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-4:batch-4",
+      "durationMs": 36,
+      "ok": true
+    },
+    {
+      "label": "update:batch:4",
+      "durationMs": 327,
+      "ok": true,
+      "feeLovelace": "1373802",
+      "cpu": "1728635523",
+      "mem": "4344437"
+    },
+    {
+      "label": "intent:create-and-sign:pair-5",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "update:pair-5",
+      "durationMs": 161,
+      "ok": true,
+      "feeLovelace": "782457",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-5",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-5",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-5",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-4:batch-5",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-5:batch-5",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "update:batch:5",
+      "durationMs": 496,
+      "ok": true,
+      "feeLovelace": "1565226",
+      "cpu": "2117826556",
+      "mem": "5298499"
+    },
+    {
+      "label": "intent:create-and-sign:pair-6",
+      "durationMs": 43,
+      "ok": true
+    },
+    {
+      "label": "update:pair-6",
+      "durationMs": 175,
+      "ok": true,
+      "feeLovelace": "782457",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-6",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-6",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-6",
+      "durationMs": 42,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-4:batch-6",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-5:batch-6",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-6:batch-6",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "update:batch:6",
+      "durationMs": 567,
+      "ok": true,
+      "feeLovelace": "1764090",
+      "cpu": "2521538433",
+      "mem": "6296601"
+    },
+    {
+      "label": "intent:create-and-sign:pair-7",
+      "durationMs": 42,
+      "ok": true
+    },
+    {
+      "label": "update:pair-7",
+      "durationMs": 167,
+      "ok": true,
+      "feeLovelace": "782457",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-7",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-7",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-7",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-4:batch-7",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-5:batch-7",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-6:batch-7",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-7:batch-7",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "update:batch:7",
+      "durationMs": 744,
+      "ok": true,
+      "feeLovelace": "1973847",
+      "cpu": "2960372112",
+      "mem": "7439591"
+    },
+    {
+      "label": "intent:create-and-sign:pair-8",
+      "durationMs": 43,
+      "ok": true
+    },
+    {
+      "label": "update:pair-8",
+      "durationMs": 180,
+      "ok": true,
+      "feeLovelace": "782457",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-8",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-8",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-8",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-4:batch-8",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-5:batch-8",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-6:batch-8",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-7:batch-8",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-8:batch-8",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "update:batch:8",
+      "durationMs": 883,
+      "ok": true,
+      "feeLovelace": "2172583",
+      "cpu": "3372524719",
+      "mem": "8424925"
+    },
+    {
+      "label": "intent:create-and-sign:pair-9",
+      "durationMs": 43,
+      "ok": true
+    },
+    {
+      "label": "update:pair-9",
+      "durationMs": 179,
+      "ok": true,
+      "feeLovelace": "782457",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-9",
+      "durationMs": 42,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-9",
+      "durationMs": 46,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-9",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-4:batch-9",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-5:batch-9",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-6:batch-9",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-7:batch-9",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-8:batch-9",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-9:batch-9",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "update:batch:9",
+      "durationMs": 1065,
+      "ok": true,
+      "feeLovelace": "2391950",
+      "cpu": "3847267072",
+      "mem": "9689611"
+    },
+    {
+      "label": "intent:create-and-sign:pair-10",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "update:pair-10",
+      "durationMs": 171,
+      "ok": true,
+      "feeLovelace": "782545",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-10",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-10",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-10",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-4:batch-10",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-5:batch-10",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-6:batch-10",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-7:batch-10",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-8:batch-10",
+      "durationMs": 37,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-9:batch-10",
+      "durationMs": 37,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-10:batch-10",
+      "durationMs": 37,
+      "ok": true
+    },
+    {
+      "label": "update:batch:10",
+      "durationMs": 1196,
+      "ok": true,
+      "feeLovelace": "2613824",
+      "cpu": "4312495818",
+      "mem": "10880681"
+    },
+    {
+      "label": "intent:create-and-sign:pair-11",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "update:pair-11",
+      "durationMs": 171,
+      "ok": true,
+      "feeLovelace": "782545",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-11",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-11",
+      "durationMs": 42,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-11",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-4:batch-11",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-5:batch-11",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-6:batch-11",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-7:batch-11",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-8:batch-11",
+      "durationMs": 38,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-9:batch-11",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-10:batch-11",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-11:batch-11",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "update:batch:11",
+      "durationMs": 1480,
+      "ok": true,
+      "feeLovelace": "2837115",
+      "cpu": "4757910478",
+      "mem": "11947711"
+    },
+    {
+      "label": "intent:create-and-sign:pair-12",
+      "durationMs": 63,
+      "ok": true
+    },
+    {
+      "label": "update:pair-12",
+      "durationMs": 178,
+      "ok": true,
+      "feeLovelace": "782545",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-12",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-12",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-12",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-4:batch-12",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-5:batch-12",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-6:batch-12",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-7:batch-12",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-8:batch-12",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-9:batch-12",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-10:batch-12",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-11:batch-12",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-12:batch-12",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "update:batch:12",
+      "durationMs": 1698,
+      "ok": true,
+      "feeLovelace": "3088342",
+      "cpu": "5286515842",
+      "mem": "13394941"
+    },
+    {
+      "label": "intent:create-and-sign:pair-13",
+      "durationMs": 43,
+      "ok": true
+    },
+    {
+      "label": "update:pair-13",
+      "durationMs": 183,
+      "ok": true,
+      "feeLovelace": "782545",
+      "cpu": "645226107",
+      "mem": "1733224"
+    },
+    {
+      "label": "intent:create-and-sign:pair-1:batch-13",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-2:batch-13",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-3:batch-13",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-4:batch-13",
+      "durationMs": 42,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-5:batch-13",
+      "durationMs": 41,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-6:batch-13",
+      "durationMs": 42,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-7:batch-13",
+      "durationMs": 44,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-8:batch-13",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-9:batch-13",
+      "durationMs": 45,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-10:batch-13",
+      "durationMs": 40,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-11:batch-13",
+      "durationMs": 44,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-12:batch-13",
+      "durationMs": 42,
+      "ok": true
+    },
+    {
+      "label": "intent:create-and-sign:pair-13:batch-13",
+      "durationMs": 39,
+      "ok": true
+    },
+    {
+      "label": "update:batch:13",
+      "durationMs": 1745,
+      "ok": false,
+      "error": "{ Complete: \"failed script execution Withdraw[0] execution went over budget Mem -1215 CPU 4400532576\" }"
+    },
+    {
+      "label": "settle",
+      "durationMs": 157,
+      "ok": true,
+      "feeLovelace": "760029",
+      "cpu": "548427494",
+      "mem": "1695687"
+    },
+    {
+      "label": "receiver:withdraw",
+      "durationMs": 83,
+      "ok": true,
+      "feeLovelace": "383244",
+      "cpu": "162802105",
+      "mem": "504047"
+    },
+    {
+      "label": "payment-hook:withdraw",
+      "durationMs": 76,
+      "ok": true,
+      "feeLovelace": "374890",
+      "cpu": "149604079",
+      "mem": "454090"
+    },
+    {
+      "label": "reclaim:payment-hook-reference-script",
+      "durationMs": 65,
+      "ok": true,
+      "feeLovelace": "310398",
+      "cpu": "39155379",
+      "mem": "129894"
+    },
+    {
+      "label": "republish:payment-hook-reference-script",
+      "durationMs": 40,
+      "ok": true,
+      "feeLovelace": "382289",
+      "cpu": "0",
+      "mem": "0"
+    },
+    {
+      "label": "pair:burn:pair-13",
+      "durationMs": 77,
+      "ok": true,
+      "feeLovelace": "436227",
+      "cpu": "140241544",
+      "mem": "447965"
+    }
+  ],
+  "batchAttempts": [
+    {
+      "size": 1,
+      "ok": true,
+      "feeLovelace": "852891",
+      "cpu": "648187488",
+      "mem": "1746491"
+    },
+    {
+      "size": 2,
+      "ok": true,
+      "feeLovelace": "1022940",
+      "cpu": "993815989",
+      "mem": "2568433"
+    },
+    {
+      "size": 3,
+      "ok": true,
+      "feeLovelace": "1196577",
+      "cpu": "1353965334",
+      "mem": "3434415"
+    },
+    {
+      "size": 4,
+      "ok": true,
+      "feeLovelace": "1373802",
+      "cpu": "1728635523",
+      "mem": "4344437"
+    },
+    {
+      "size": 5,
+      "ok": true,
+      "feeLovelace": "1565226",
+      "cpu": "2117826556",
+      "mem": "5298499"
+    },
+    {
+      "size": 6,
+      "ok": true,
+      "feeLovelace": "1764090",
+      "cpu": "2521538433",
+      "mem": "6296601"
+    },
+    {
+      "size": 7,
+      "ok": true,
+      "feeLovelace": "1973847",
+      "cpu": "2960372112",
+      "mem": "7439591"
+    },
+    {
+      "size": 8,
+      "ok": true,
+      "feeLovelace": "2172583",
+      "cpu": "3372524719",
+      "mem": "8424925"
+    },
+    {
+      "size": 9,
+      "ok": true,
+      "feeLovelace": "2391950",
+      "cpu": "3847267072",
+      "mem": "9689611"
+    },
+    {
+      "size": 10,
+      "ok": true,
+      "feeLovelace": "2613824",
+      "cpu": "4312495818",
+      "mem": "10880681"
+    },
+    {
+      "size": 11,
+      "ok": true,
+      "feeLovelace": "2837115",
+      "cpu": "4757910478",
+      "mem": "11947711"
+    },
+    {
+      "size": 12,
+      "ok": true,
+      "feeLovelace": "3088342",
+      "cpu": "5286515842",
+      "mem": "13394941"
+    },
+    {
+      "size": 13,
+      "ok": false,
+      "error": "{ Complete: \"failed script execution Withdraw[0] execution went over budget Mem -1215 CPU 4400532576\" }"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts preview:settle --protocol-state ./state/preview_rerun_20260515-130925/config-bootstrap.json --client-state ./state/preview_rerun_20260515-130925/clients/client-a.json
+
+[1G[0K[preview:settle] Loading protocol state from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260515-130925/config-bootstrap.json
+[preview:settle] Loading client state from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_rerun_20260515-130925/clients/client-a.json
+[preview:settle] Connecting to Preview and selecting the configured wallet
+[preview:settle] Settling 15600000 lovelace from receiver to payment hook
+[preview:settle] Building Preview settle transaction
+[preview:settle] Tx resources: fee=0.767763 ADA (767763 lovelace), cpu=576904731, mem=1795653
+[preview:settle] Output[0] | addr=addr_test1wqyx...wuk7r3 | lovelace=49.400000 ADA (49400000) | assets=08615fb5721b...545f41=1 | datum=inline(15B)
+[preview:settle] Output[1] | addr=addr_test1wzcc...zpsyl2 | lovelace=20.600000 ADA (20600000) | assets=b18f08dc412a...4f4f4b=1 | datum=inline(100B)
+[preview:settle] Output[2] | addr=addr_test1qpgp...quxj3j | lovelace=3218.003932 ADA (3218003932)
+[preview:settle] Unsigned transaction ready: 27decb1375b1e4fe5b0f92fe8d9b9529a10cc00fb54886235ffe5d7fa94a1df9
+[preview:settle] Submitted transaction hash: 27decb1375b1e4fe5b0f92fe8d9b9529a10cc00fb54886235ffe5d7fa94a1df9
+[preview:settle] Blockfrost did not see 27decb1375b1e4fe5b0f92fe8d9b9529a10cc00fb54886235ffe5d7fa94a1df9 within 120000ms; trying Koios.
+[preview:settle] Confirmed by Koios: settle transaction 27decb1375b1e4fe5b0f92fe8d9b9529a10cc00fb54886235ffe5d7fa94a1df9 at block 4283914.
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+  },
+  "settledReceivers": [
+    {
+      "clientId": "client-a",
+      "receiverUnit": "08615fb5721bd6528d1eefe5a5d06bc9bd48b0520d8e2a3781a1344e4449415f52454345495645525f434c49454e545f41",
+      "drainedLovelace": "15600000"
+    }
+  ],
+  "totalSettledLovelace": "15600000",
+  "transactions": [
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "27decb1375b1e4fe5b0f92fe8d9b9529a10cc00fb54886235ffe5d7fa94a1df9",
+      "confirmed": true
+    }
+  ]
+}
+[1G[0K⠙[1G[0K
