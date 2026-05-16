@@ -51,9 +51,12 @@ linked inline below.
   client's Receiver datum (`AccrueFee`); a separate admin `Settle` tx drains
   the accrual into the global PaymentHook. See architecture §5.11.
 - **Pair create + burn are admin-gated.** A signed DIA intent alone is not
-  enough to mint a Pair NFT; the tx must also be signed by a `config_admins`
-  key, so an intent cannot be replayed across two transactions to mint
-  duplicate pairs. The matching burn path is admin-gated on both the
+  enough to mint or burn a Pair NFT; the tx must also be signed by a
+  `config_admins` key. This prevents **unauthorized** creation or burn by a
+  relayer holding only DIA intents. It does **not**, by itself, provide
+  on-chain live-pair uniqueness: a config admin can still create duplicate
+  live pairs for the same `(client, symbol)` unless a live-pair registry is
+  added on-chain. The matching burn path is admin-gated on both the
   spend-side and mint-side validators. See
   [`docs/security/m1-security-notes.md`](../../docs/security/m1-security-notes.md)
   and architecture §5.7 + §5.13.
