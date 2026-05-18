@@ -4,7 +4,7 @@ Source of truth: [`final-cardano-milestones.md`](../../final-cardano-milestones.
 
 Scope: Milestone 1 validation on Cardano Mainnet.
 
-Verification date: **20260517-0** (chain walk + local tooling, current bytecode).
+Verification date: **2026-05-17** (chain walk + local tooling, current bytecode).
 
 Network: Cardano Mainnet.
 
@@ -77,7 +77,6 @@ Batch size **10** succeeded.
 
 | Step | Operation | Tx hash | Fee | Log |
 | --- | --- | --- | --- | --- |
-
 | 25 | `update:batch` (10 pairs) | `9877cce1b34b77929a32c26c72fe9b4a850f35ac4d947be68ae9750dab3569b4` | 2.663187 ADA | [`25-update-batch-10.log`](./25-update-batch-10.log) |
 
 ### Settle, withdrawals, reclaim + republish reference script, pair burn
@@ -98,10 +97,10 @@ Single wallet used for all operations (DIA admin = updater = funder).
 | Item | Value |
 | --- | --- |
 | Wallet address | `addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72` |
-| Initial wallet balance | **245.000000 ADA** (245,000,000 lovelace) |
+| Initial wallet balance | **345.000000 ADA** (345,000,000 lovelace) — total funded across two top-ups (245 at run start + 100 mid-run before step 23) |
 | Final wallet balance | **80.798772 ADA** (80,798,772 lovelace) |
 | Total on-chain fees paid | **17.957658 ADA** (17,957,658 lovelace) |
-| Net ADA locked in protocol | **146.243570 ADA** (initial − final − fees) |
+| Net ADA locked in protocol | **246.243570 ADA** (initial − final − fees) |
 
 ### ADA locked breakdown
 
