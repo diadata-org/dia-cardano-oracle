@@ -1,0 +1,97 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts protocol:init --valid-config-signers 831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3dd --authorized-dia-public-keys 02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531 --domain-name DIA Oracle --domain-version 1.0 --domain-source-chain-id 100640 --domain-verifying-contract 0xF8c614A483A0427A13512F52ac72A576678bE317 --base-fee-lovelace 600000 --per-pair-fee-lovelace 250000 --max-bootstrap-drift-seconds 300 --min-utxo-lovelace 5000000 --config-asset-label DIA_CONFIG --payment-hook-asset-label DIA_PAYMENT_HOOK --payment-hook-withdraw-address addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72 --out ./state/mainnet_run_20260517-063917/config-bootstrap.json
+
+[1G[0K[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/mainnet_run_20260517-063917/config-bootstrap.json
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72"
+  },
+  "bootstrapRefs": {
+    "config": {
+      "txHash": "",
+      "outputIndex": 0
+    },
+    "paymentHook": null
+  },
+  "scripts": {
+    "configPolicyId": "",
+    "configUnit": "",
+    "configValidatorHash": "",
+    "configValidatorAddress": "",
+    "coordinatorHash": "",
+    "coordinatorRewardAddress": "",
+    "referenceHolderValidatorHash": "",
+    "referenceHolderAddress": "",
+    "paymentHookPolicyId": "",
+    "paymentHookUnit": "",
+    "paymentHookValidatorHash": "",
+    "paymentHookValidatorAddress": ""
+  },
+  "configState": {
+    "validConfigSigners": [
+      "831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3dd"
+    ],
+    "authorizedDiaPublicKeys": [
+      "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531"
+    ],
+    "domain": {
+      "name": "DIA Oracle",
+      "version": "1.0",
+      "sourceChainId": "100640",
+      "verifyingContract": "0xF8c614A483A0427A13512F52ac72A576678bE317"
+    },
+    "baseFeeLovelace": "600000",
+    "perPairFeeLovelace": "250000",
+    "maxBootstrapDriftSeconds": "300",
+    "paymentHookRef": null,
+    "updateCoordinatorCredential": null,
+    "minUtxoLovelace": "5000000"
+  },
+  "paymentHookState": null,
+  "compiledScripts": {
+    "configMintPolicy": "",
+    "configValidator": "",
+    "coordinatorValidator": "",
+    "paymentHookMintPolicy": "",
+    "paymentHookValidator": "",
+    "referenceHolderValidator": ""
+  },
+  "drafts": {
+    "configParameterize": {
+      "configAssetLabel": "DIA_CONFIG",
+      "configAssetName": "4449415f434f4e464947"
+    },
+    "paymentHookParameterize": {
+      "paymentHookAssetLabel": "DIA_PAYMENT_HOOK",
+      "paymentHookAssetName": "4449415f5041594d454e545f484f4f4b",
+      "withdrawAddress": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72",
+      "minUtxoLovelace": "5000000"
+    }
+  },
+  "referenceScripts": {
+    "global": {
+      "config": {
+        "txHash": "",
+        "outputIndex": 0,
+        "scriptHash": ""
+      },
+      "coordinator": {
+        "txHash": "",
+        "outputIndex": 0,
+        "scriptHash": ""
+      },
+      "paymentHook": {
+        "txHash": "",
+        "outputIndex": 0,
+        "scriptHash": ""
+      }
+    }
+  },
+  "datum": {
+    "configCbor": "",
+    "paymentHookCbor": ""
+  }
+}
+[1G[0K⠙[1G[0K

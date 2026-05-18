@@ -1,0 +1,32 @@
+{
+  "updates": [
+    {
+      "statePath": "./state/mainnet_run_20260517-063917/clients/client-a/pairs/btc-usd.json",
+      "intentPath": "./state/mainnet_run_20260517-063917/intents/btc-usd-batch.signed.json"
+    },
+    {
+      "statePath": "./state/mainnet_run_20260517-063917/clients/client-a/pairs/eth-usd.json",
+      "intentPath": "./state/mainnet_run_20260517-063917/intents/eth-usd-batch.signed.json"
+    },
+    {
+      "statePath": "./state/mainnet_run_20260517-063917/clients/client-a/pairs/ada-usd.json",
+      "intentPath": "./state/mainnet_run_20260517-063917/intents/ada-usd-batch.signed.json"
+    },
+    {
+      "statePath": "./state/mainnet_run_20260517-063917/clients/client-a/pairs/usdt-usd.json",
+      "intentPath": "./state/mainnet_run_20260517-063917/intents/usdt-usd-batch.signed.json"
+    },
+    {
+      "statePath": "./state/mainnet_run_20260517-063917/clients/client-a/pairs/dai-usd.json",
+      "intentPath": "./state/mainnet_run_20260517-063917/intents/dai-usd-batch.signed.json"
+    },
+    {
+      "statePath": "./state/mainnet_run_20260517-063917/clients/client-a/pairs/sol-usd.json",
+      "intentPath": "./state/mainnet_run_20260517-063917/intents/sol-usd-batch.signed.json"
+    },
+    {
+      "statePath": "./state/mainnet_run_20260517-063917/clients/client-a/pairs/bnb-usd.json",
+      "intentPath": "./state/mainnet_run_20260517-063917/intents/bnb-usd-batch.signed.json"
+    }
+  ]
+}

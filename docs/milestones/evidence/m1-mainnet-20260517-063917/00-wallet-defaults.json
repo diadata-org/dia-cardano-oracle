@@ -1,0 +1,10 @@
+{
+  "source": "seed",
+  "address": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72",
+  "rewardAddress": "stake1uxre6w6garyc4s02a6l9e3n753arkrhztkc9nu0wu7enx0sxxjcnf",
+  "utxoCount": 6,
+  "defaults": {
+    "paymentKeyHash": "831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3dd",
+    "feeAddress": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72"
+  }
+}

@@ -1,0 +1,38 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts settle --protocol-state ./state/mainnet_run_20260517-063917/config-bootstrap.json --client-state ./state/mainnet_run_20260517-063917/clients/client-a.json
+
+[1G[0K[settle] Loading protocol state from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/mainnet_run_20260517-063917/config-bootstrap.json
+[settle] Loading client state from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/mainnet_run_20260517-063917/clients/client-a.json
+[settle] Connecting to Mainnet and selecting the configured wallet
+[settle] Settling 12450000 lovelace from receiver to payment hook
+[settle] Building Mainnet settle transaction
+[settle] Tx resources: fee=0.767491 ADA (767491 lovelace), cpu=575724580, mem=1792419
+[settle] Output[0] | addr=addr1w8f8djqxk...e9mxgw | lovelace=52.550000 ADA (52550000) | assets=d276c806b1be...545f41=1 | datum=inline(15B)
+[settle] Output[1] | addr=addr1w8qv3ujyc...vyvkwk | lovelace=17.450000 ADA (17450000) | assets=c0c8f244c75b...4f4f4b=1 | datum=inline(100B)
+[settle] Output[2] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=10.418057 ADA (10418057)
+[settle] Unsigned transaction ready: 0a2169dbbc1b6f590d1c28d459fcf35f10a6cffc1d44453f7d40c0b4970ac833
+[settle] Submitted transaction hash: 0a2169dbbc1b6f590d1c28d459fcf35f10a6cffc1d44453f7d40c0b4970ac833
+[settle] Confirmed by Blockfrost: settle transaction 0a2169dbbc1b6f590d1c28d459fcf35f10a6cffc1d44453f7d40c0b4970ac833.
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72"
+  },
+  "settledReceivers": [
+    {
+      "clientId": "client-a",
+      "receiverUnit": "d276c806b1beb5e04c71356bec048e0bbd39c07e267961cb7325726f4449415f52454345495645525f434c49454e545f41",
+      "drainedLovelace": "12450000"
+    }
+  ],
+  "totalSettledLovelace": "12450000",
+  "transactions": [
+    {
+      "step": "mainnet:settle",
+      "submittedTxHash": "0a2169dbbc1b6f590d1c28d459fcf35f10a6cffc1d44453f7d40c0b4970ac833",
+      "confirmed": true
+    }
+  ]
+}
+[1G[0K⠙[1G[0K

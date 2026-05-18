@@ -1,0 +1,5 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+[node-tests] npm typecheck PASSED

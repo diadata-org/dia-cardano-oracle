@@ -1,0 +1,110 @@
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts update:batch --protocol-state ./state/mainnet_run_20260517-063917/config-bootstrap.json --client-state ./state/mainnet_run_20260517-063917/clients/client-a.json --manifest ./state/mainnet_run_20260517-063917/update-batches/batch-10.manifest.json --out ./state/mainnet_run_20260517-063917/update-batches/batch-10.result.json
+
+[1G[0K[update:batch] Loading batch update manifest from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/mainnet_run_20260517-063917/update-batches/batch-10.manifest.json
+[update:batch] Connecting to Mainnet and selecting the configured wallet
+[update:batch] Building Mainnet oracle batch update transaction
+[update:batch] Tx resources: fee=2.663187 ADA (2663187 lovelace), cpu=4500351790, mem=11506037
+[update:batch] Output[0] | addr=addr1w9cawvn4m...0rwvyu | lovelace=5.000000 ADA (5000000) | assets=71d73275dfbb...5e32b4=1 | datum=inline(91B)
+[update:batch] Output[1] | addr=addr1w9cawvn4m...0rwvyu | lovelace=5.000000 ADA (5000000) | assets=71d73275dfbb...30b101=1 | datum=inline(95B)
+[update:batch] Output[2] | addr=addr1w9cawvn4m...0rwvyu | lovelace=5.000000 ADA (5000000) | assets=71d73275dfbb...ff2852=1 | datum=inline(91B)
+[update:batch] Output[3] | addr=addr1w9cawvn4m...0rwvyu | lovelace=5.000000 ADA (5000000) | assets=71d73275dfbb...bbbe64=1 | datum=inline(95B)
+[update:batch] Output[4] | addr=addr1w9cawvn4m...0rwvyu | lovelace=5.000000 ADA (5000000) | assets=71d73275dfbb...3849f4=1 | datum=inline(95B)
+[update:batch] Output[5] | addr=addr1w9cawvn4m...0rwvyu | lovelace=5.000000 ADA (5000000) | assets=71d73275dfbb...29d315=1 | datum=inline(92B)
+[update:batch] Output[6] | addr=addr1w9cawvn4m...0rwvyu | lovelace=5.000000 ADA (5000000) | assets=71d73275dfbb...c2a497=1 | datum=inline(95B)
+[update:batch] Output[7] | addr=addr1w9cawvn4m...0rwvyu | lovelace=5.000000 ADA (5000000) | assets=71d73275dfbb...eed0bc=1 | datum=inline(91B)
+[update:batch] Output[8] | addr=addr1w9cawvn4m...0rwvyu | lovelace=5.000000 ADA (5000000) | assets=71d73275dfbb...57e571=1 | datum=inline(93B)
+[update:batch] Output[9] | addr=addr1w9cawvn4m...0rwvyu | lovelace=5.000000 ADA (5000000) | assets=71d73275dfbb...52daee=1 | datum=inline(91B)
+[update:batch] Output[10] | addr=addr1w8f8djqxk...e9mxgw | lovelace=65.000000 ADA (65000000) | assets=d276c806b1be...545f41=1 | datum=inline(19B)
+[update:batch] Output[11] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=11.185548 ADA (11185548)
+[update:batch] Unsigned transaction ready: 9877cce1b34b77929a32c26c72fe9b4a850f35ac4d947be68ae9750dab3569b4
+[update:batch] Submitted transaction hash: 9877cce1b34b77929a32c26c72fe9b4a850f35ac4d947be68ae9750dab3569b4
+node:internal/deps/undici/undici:14902
+      Error.captureStackTrace(err);
+            ^
+
+TypeError: fetch failed
+[90m    at node:internal/deps/undici/undici:14902:13[39m
+[90m    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)[39m
+    at async Timeout._onTimeout [90m(file:///home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/[39mnode_modules/[4m@lucid-evolution/provider[24m/dist/index.js:275:29[90m)[39m {
+  [cause]: AggregateError [ETIMEDOUT]: 
+  [90m    at internalConnectMultiple (node:net:1122:18)[39m
+  [90m    at internalConnectMultiple (node:net:1190:5)[39m
+  [90m    at Timeout.internalConnectMultipleTimeout (node:net:1716:5)[39m
+  [90m    at listOnTimeout (node:internal/timers:583:11)[39m
+  [90m    at process.processTimers (node:internal/timers:519:7)[39m {
+    code: [32m'ETIMEDOUT'[39m,
+    [errors]: [
+      Error: connect ETIMEDOUT 104.26.0.171:443
+      [90m    at createConnectionError (node:net:1652:14)[39m
+      [90m    at Timeout.internalConnectMultipleTimeout (node:net:1711:38)[39m
+      [90m    at listOnTimeout (node:internal/timers:583:11)[39m
+      [90m    at process.processTimers (node:internal/timers:519:7)[39m {
+        errno: [33m-110[39m,
+        code: [32m'ETIMEDOUT'[39m,
+        syscall: [32m'connect'[39m,
+        address: [32m'104.26.0.171'[39m,
+        port: [33m443[39m
+      },
+      Error: connect ENETUNREACH 2606:4700:20::ac43:4637:443 - Local (:::0)
+      [90m    at internalConnectMultiple (node:net:1186:16)[39m
+      [90m    at Timeout.internalConnectMultipleTimeout (node:net:1716:5)[39m
+      [90m    at listOnTimeout (node:internal/timers:583:11)[39m
+      [90m    at process.processTimers (node:internal/timers:519:7)[39m {
+        errno: [33m-101[39m,
+        code: [32m'ENETUNREACH'[39m,
+        syscall: [32m'connect'[39m,
+        address: [32m'2606:4700:20::ac43:4637'[39m,
+        port: [33m443[39m
+      },
+      Error: connect ETIMEDOUT 104.26.1.171:443
+      [90m    at createConnectionError (node:net:1652:14)[39m
+      [90m    at Timeout.internalConnectMultipleTimeout (node:net:1711:38)[39m
+      [90m    at listOnTimeout (node:internal/timers:583:11)[39m
+      [90m    at process.processTimers (node:internal/timers:519:7)[39m {
+        errno: [33m-110[39m,
+        code: [32m'ETIMEDOUT'[39m,
+        syscall: [32m'connect'[39m,
+        address: [32m'104.26.1.171'[39m,
+        port: [33m443[39m
+      },
+      Error: connect ENETUNREACH 2606:4700:20::681a:1ab:443 - Local (:::0)
+      [90m    at internalConnectMultiple (node:net:1186:16)[39m
+      [90m    at Timeout.internalConnectMultipleTimeout (node:net:1716:5)[39m
+      [90m    at listOnTimeout (node:internal/timers:583:11)[39m
+      [90m    at process.processTimers (node:internal/timers:519:7)[39m {
+        errno: [33m-101[39m,
+        code: [32m'ENETUNREACH'[39m,
+        syscall: [32m'connect'[39m,
+        address: [32m'2606:4700:20::681a:1ab'[39m,
+        port: [33m443[39m
+      },
+      Error: connect ETIMEDOUT 172.67.70.55:443
+      [90m    at createConnectionError (node:net:1652:14)[39m
+      [90m    at Timeout.internalConnectMultipleTimeout (node:net:1711:38)[39m
+      [90m    at listOnTimeout (node:internal/timers:583:11)[39m
+      [90m    at process.processTimers (node:internal/timers:519:7)[39m {
+        errno: [33m-110[39m,
+        code: [32m'ETIMEDOUT'[39m,
+        syscall: [32m'connect'[39m,
+        address: [32m'172.67.70.55'[39m,
+        port: [33m443[39m
+      },
+      Error: connect ENETUNREACH 2606:4700:20::681a:ab:443 - Local (:::0)
+      [90m    at internalConnectMultiple (node:net:1186:16)[39m
+      [90m    at Timeout.internalConnectMultipleTimeout (node:net:1716:5)[39m
+      [90m    at listOnTimeout (node:internal/timers:583:11)[39m
+      [90m    at process.processTimers (node:internal/timers:519:7)[39m {
+        errno: [33m-101[39m,
+        code: [32m'ENETUNREACH'[39m,
+        syscall: [32m'connect'[39m,
+        address: [32m'2606:4700:20::681a:ab'[39m,
+        port: [33m443[39m
+      }
+    ]
+  }
+}
+
+Node.js v20.20.1
+[1G[0K⠙[1G[0K[run] batch-10 did not produce a result artifact; treating it as a failed attempt

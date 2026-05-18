@@ -1,0 +1,28 @@
+[run] intent:create-and-sign --state ./state/mainnet_run_20260517-063917/config-bootstrap.json --intent-type OracleUpdate --symbol MATIC/USD --price 980000000 --source "DIA Oracle" --out ./state/mainnet_run_20260517-063917/intents/matic-usd.signed.json
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts intent:create-and-sign --state ./state/mainnet_run_20260517-063917/config-bootstrap.json --intent-type OracleUpdate --symbol MATIC/USD --price 980000000 --source DIA Oracle --out ./state/mainnet_run_20260517-063917/intents/matic-usd.signed.json
+
+[1G[0K[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/mainnet_run_20260517-063917/intents/matic-usd.signed.json
+{
+  "intent": {
+    "intentType": "OracleUpdate",
+    "version": "1.0",
+    "chainId": "100640",
+    "nonce": "1779002452000",
+    "expiry": "1779006052",
+    "symbol": "MATIC/USD",
+    "price": "980000000",
+    "timestamp": "1779002452",
+    "source": "DIA Oracle",
+    "signature": "0x0c4bfe1204c062eb36365a8e57e873f071f84e2f1ac720f24b0ccff752d4c6924d4bd4db955cb989dc9543e1880568d20dd9e6425665b81f02390a71fb4ed3db1b",
+    "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+  },
+  "witness": {
+    "signerPublicKey": "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531",
+    "signerAddress": "0x2b1c7eff297766569966b630a6862947a8e5285a",
+    "intentHash": "b42e4ebc577e25134b3dbac81bf6e3fcc488f071765f8057370709f8474d90b4",
+    "compactSignature": "0c4bfe1204c062eb36365a8e57e873f071f84e2f1ac720f24b0ccff752d4c6924d4bd4db955cb989dc9543e1880568d20dd9e6425665b81f02390a71fb4ed3db"
+  }
+}
+[1G[0K⠙[1G[0K

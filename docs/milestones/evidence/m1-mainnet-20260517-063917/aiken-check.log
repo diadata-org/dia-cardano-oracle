@@ -1,0 +1,1171 @@
+[contracts-tests] running: aiken check
+    Compiling protofire/dia-cardano-oracle 0.0.0 (.)
+    Compiling aiken-lang/stdlib v3.0.0 (./build/packages/aiken-lang-stdlib)
+   Collecting all tests scenarios across all modules
+      Testing ...
+{
+  "seed": 1807366967,
+  "summary": {
+    "total": 117,
+    "passed": 117,
+    "failed": 0,
+    "kind": {
+      "unit": 117,
+      "property": 0
+    }
+  },
+  "modules": [
+    {
+      "name": "dia_cardano_oracle/config_logic",
+      "summary": {
+        "total": 11,
+        "passed": 11,
+        "failed": 0,
+        "kind": {
+          "unit": 11,
+          "property": 0
+        }
+      },
+      "tests": [
+        {
+          "title": "valid_config_state_requires_non_empty_admins_and_domain",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 66080,
+            "cpu": 21816351
+          }
+        },
+        {
+          "title": "admin_update_transition_accepts_fee_rotation",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 176301,
+            "cpu": 59002851
+          }
+        },
+        {
+          "title": "duplicate_authorized_dia_public_keys_are_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 68158,
+            "cpu": 21644370
+          }
+        },
+        {
+          "title": "negative_max_bootstrap_drift_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 73628,
+            "cpu": 24062313
+          }
+        },
+        {
+          "title": "empty_config_admins_are_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 15843,
+            "cpu": 4038310
+          }
+        },
+        {
+          "title": "empty_authorized_dia_public_keys_are_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 22399,
+            "cpu": 6195009
+          }
+        },
+        {
+          "title": "hook_set_without_coordinator_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 58442,
+            "cpu": 19174559
+          }
+        },
+        {
+          "title": "coordinator_set_without_hook_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 58642,
+            "cpu": 19206559
+          }
+        },
+        {
+          "title": "admin_update_transition_accepts_drift_rotation",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 138193,
+            "cpu": 46559632
+          }
+        },
+        {
+          "title": "admin_update_transition_accepts_min_utxo_change",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 138625,
+            "cpu": 46697481
+          }
+        },
+        {
+          "title": "valid_config_state_rejects_zero_min_utxo",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 77045,
+            "cpu": 25585230
+          }
+        }
+      ]
+    },
+    {
+      "name": "dia_cardano_oracle/coordinator_logic",
+      "summary": {
+        "total": 14,
+        "passed": 14,
+        "failed": 0,
+        "kind": {
+          "unit": 14,
+          "property": 0
+        }
+      },
+      "tests": [
+        {
+          "title": "intent_for_receiver_accrue_rejects_apply_settle",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 84337,
+            "cpu": 28363762
+          }
+        },
+        {
+          "title": "intent_for_receiver_settle_rejects_apply_single",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 142603,
+            "cpu": 45392571
+          }
+        },
+        {
+          "title": "intent_for_receiver_settle_accepts_manifest_entry",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 108214,
+            "cpu": 35719363
+          }
+        },
+        {
+          "title": "intent_for_hook_settle_rejects_apply_single",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 138083,
+            "cpu": 44098869
+          }
+        },
+        {
+          "title": "intent_for_hook_settle_accepts_apply_settle",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 79016,
+            "cpu": 26866011
+          }
+        },
+        {
+          "title": "pair_mint_intent_satisfied_accepts_apply_single_when_expiry_in_range",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 168179,
+            "cpu": 55431566
+          }
+        },
+        {
+          "title": "pair_mint_intent_satisfied_rejects_expired_intent_on_apply_single",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 168880,
+            "cpu": 55619615
+          }
+        },
+        {
+          "title": "pair_mint_intent_satisfied_rejects_open_upper_bound",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 151571,
+            "cpu": 49139546
+          }
+        },
+        {
+          "title": "pair_mint_intent_satisfied_rejects_apply_settle",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 89195,
+            "cpu": 30108507
+          }
+        },
+        {
+          "title": "pair_mint_intent_satisfied_rejects_mismatched_pair_id",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 155799,
+            "cpu": 50127241
+          }
+        },
+        {
+          "title": "coordinator_in_update_mode_accepts_apply_single",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 70270,
+            "cpu": 24971944
+          }
+        },
+        {
+          "title": "coordinator_in_update_mode_accepts_apply_batch",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 73570,
+            "cpu": 25919284
+          }
+        },
+        {
+          "title": "coordinator_in_update_mode_rejects_apply_settle",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 67265,
+            "cpu": 23599272
+          }
+        },
+        {
+          "title": "coordinator_in_update_mode_rejects_missing_coordinator_redeemer",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 42843,
+            "cpu": 14356405
+          }
+        }
+      ]
+    },
+    {
+      "name": "dia_cardano_oracle/oracle_logic",
+      "summary": {
+        "total": 23,
+        "passed": 23,
+        "failed": 0,
+        "kind": {
+          "unit": 23,
+          "property": 0
+        }
+      },
+      "tests": [
+        {
+          "title": "valid_pair_state_accepts_sample_state",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 180610,
+            "cpu": 101532369
+          }
+        },
+        {
+          "title": "real_dia_signature_is_accepted",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 271071,
+            "cpu": 175409310
+          }
+        },
+        {
+          "title": "negative_price_pair_state_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 168058,
+            "cpu": 96777897
+          }
+        },
+        {
+          "title": "zero_min_utxo_pair_state_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 188883,
+            "cpu": 104426898
+          }
+        },
+        {
+          "title": "negative_price_intent_signature_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 100501,
+            "cpu": 33915725
+          }
+        },
+        {
+          "title": "initial_pair_matches_witness_accepts_first_real_update",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 487404,
+            "cpu": 292195070
+          }
+        },
+        {
+          "title": "initial_pair_matches_witness_rejects_zero_placeholder",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 856264,
+            "cpu": 490801312
+          }
+        },
+        {
+          "title": "next_pair_matches_witness_requires_fresh_data",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 1481629,
+            "cpu": 874605686
+          }
+        },
+        {
+          "title": "stale_timestamp_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 631200,
+            "cpu": 338232366
+          }
+        },
+        {
+          "title": "stale_nonce_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 635449,
+            "cpu": 339916582
+          }
+        },
+        {
+          "title": "unauthorized_dia_signer_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 262408,
+            "cpu": 129108352
+          }
+        },
+        {
+          "title": "wrong_pair_symbol_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 883347,
+            "cpu": 501111923
+          }
+        },
+        {
+          "title": "wrong_pair_nft_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 937547,
+            "cpu": 522709530
+          }
+        },
+        {
+          "title": "intent_expiry_satisfied_when_upper_bound_within_expiry",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 31839,
+            "cpu": 11021165
+          }
+        },
+        {
+          "title": "intent_expiry_satisfied_when_upper_bound_equals_expiry",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 31437,
+            "cpu": 10855957
+          }
+        },
+        {
+          "title": "intent_expiry_rejected_when_upper_bound_after_expiry",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 32340,
+            "cpu": 11177214
+          }
+        },
+        {
+          "title": "intent_expiry_rejected_when_upper_bound_is_open",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 8411,
+            "cpu": 3005508
+          }
+        },
+        {
+          "title": "intent_freshness_satisfied_when_timestamp_within_drift",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 35589,
+            "cpu": 12660858
+          }
+        },
+        {
+          "title": "intent_freshness_satisfied_when_timestamp_inside_drift_window",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 35991,
+            "cpu": 12826066
+          }
+        },
+        {
+          "title": "intent_freshness_rejected_when_outside_drift_window",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 38392,
+            "cpu": 13717520
+          }
+        },
+        {
+          "title": "intent_freshness_rejected_when_lower_bound_is_open",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 8779,
+            "cpu": 2987845
+          }
+        },
+        {
+          "title": "tampered_intent_timestamp_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 296380,
+            "cpu": 184464285
+          }
+        },
+        {
+          "title": "tampered_intent_nonce_is_rejected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 284956,
+            "cpu": 180249581
+          }
+        }
+      ]
+    },
+    {
+      "name": "dia_cardano_oracle/payment_hook_logic",
+      "summary": {
+        "total": 20,
+        "passed": 20,
+        "failed": 0,
+        "kind": {
+          "unit": 20,
+          "property": 0
+        }
+      },
+      "tests": [
+        {
+          "title": "valid_payment_hook_state_accepts_positive_min_utxo_and_non_negative_counters",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 14431,
+            "cpu": 4815535
+          }
+        },
+        {
+          "title": "apply_settle_transition_increments_balances",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 53646,
+            "cpu": 19463842
+          }
+        },
+        {
+          "title": "apply_settle_transition_rejects_zero_delta",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 10586,
+            "cpu": 2536120
+          }
+        },
+        {
+          "title": "apply_settle_transition_rejects_lifetime_collected_mismatch",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 50098,
+            "cpu": 17960632
+          }
+        },
+        {
+          "title": "apply_settle_transition_rejects_lifetime_withdrawn_mutation",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 55013,
+            "cpu": 19885142
+          }
+        },
+        {
+          "title": "withdraw_transition_decrements_accrued_balance",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 49324,
+            "cpu": 18224346
+          }
+        },
+        {
+          "title": "withdraw_transition_rejects_zero_amount",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 10586,
+            "cpu": 2536120
+          }
+        },
+        {
+          "title": "apply_settle_transition_rejects_wrong_delta",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 35406,
+            "cpu": 12916569
+          }
+        },
+        {
+          "title": "withdraw_transition_rejects_above_accrued_fees",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 28456,
+            "cpu": 8804211
+          }
+        },
+        {
+          "title": "valid_payment_hook_state_rejects_negative_accrued",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 10711,
+            "cpu": 3112064
+          }
+        },
+        {
+          "title": "valid_payment_hook_state_rejects_negative_lifetime_collected",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 14201,
+            "cpu": 4414925
+          }
+        },
+        {
+          "title": "valid_payment_hook_state_rejects_negative_lifetime_withdrawn",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 17923,
+            "cpu": 5831449
+          }
+        },
+        {
+          "title": "valid_payment_hook_state_rejects_negative_min_utxo",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 20612,
+            "cpu": 6931714
+          }
+        },
+        {
+          "title": "valid_payment_hook_state_rejects_zero_min_utxo",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 20612,
+            "cpu": 6931714
+          }
+        },
+        {
+          "title": "withdraw_transition_rejects_accrued_not_decremented_by_amount",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 30688,
+            "cpu": 11687029
+          }
+        },
+        {
+          "title": "withdraw_transition_rejects_lifetime_withdrawn_not_incremented",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 39825,
+            "cpu": 15195478
+          }
+        },
+        {
+          "title": "admin_update_transition_accepts_withdraw_address_rotation",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 20209,
+            "cpu": 6614714
+          }
+        },
+        {
+          "title": "admin_update_transition_rejects_accrued_change",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 15727,
+            "cpu": 4788628
+          }
+        },
+        {
+          "title": "admin_update_transition_rejects_lifetime_collected_change",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 22605,
+            "cpu": 7266960
+          }
+        },
+        {
+          "title": "admin_update_transition_rejects_lifetime_withdrawn_change",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 29246,
+            "cpu": 9784569
+          }
+        }
+      ]
+    },
+    {
+      "name": "dia_cardano_oracle/receiver_logic",
+      "summary": {
+        "total": 27,
+        "passed": 27,
+        "failed": 0,
+        "kind": {
+          "unit": 27,
+          "property": 0
+        }
+      },
+      "tests": [
+        {
+          "title": "valid_receiver_state_accepts_positive_min_utxo_and_non_negative_balances",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 7785,
+            "cpu": 2493573
+          }
+        },
+        {
+          "title": "valid_receiver_state_rejects_negative_balance",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 6391,
+            "cpu": 1769265
+          }
+        },
+        {
+          "title": "valid_receiver_state_rejects_negative_accrued",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 9849,
+            "cpu": 2990463
+          }
+        },
+        {
+          "title": "valid_receiver_state_rejects_negative_min_utxo",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 12074,
+            "cpu": 3863402
+          }
+        },
+        {
+          "title": "valid_receiver_state_rejects_zero_min_utxo",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 12074,
+            "cpu": 3863402
+          }
+        },
+        {
+          "title": "exact_locked_lovelace_includes_balance_and_accrued",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 37371,
+            "cpu": 11106806
+          }
+        },
+        {
+          "title": "exact_locked_lovelace_rejects_missing_accrued",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 47256,
+            "cpu": 13918645
+          }
+        },
+        {
+          "title": "top_up_transition_accepts_strictly_positive_addition",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 78165,
+            "cpu": 23578603
+          }
+        },
+        {
+          "title": "top_up_transition_rejects_zero_addition",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 64277,
+            "cpu": 18385788
+          }
+        },
+        {
+          "title": "top_up_transition_rejects_accrued_mutation",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 73917,
+            "cpu": 21916732
+          }
+        },
+        {
+          "title": "accrue_fee_transition_moves_fee_from_balance_to_accrued",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 23080,
+            "cpu": 7851250
+          }
+        },
+        {
+          "title": "accrue_fee_transition_rejects_fee_above_balance",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 13711,
+            "cpu": 4343184
+          }
+        },
+        {
+          "title": "accrue_fee_transition_rejects_balance_underflow",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 19796,
+            "cpu": 6543366
+          }
+        },
+        {
+          "title": "accrue_fee_transition_rejects_min_utxo_change",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 25411,
+            "cpu": 8572062
+          }
+        },
+        {
+          "title": "settle_transition_drains_accrued_to_zero",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 20479,
+            "cpu": 6727220
+          }
+        },
+        {
+          "title": "settle_transition_rejects_zero_accrued",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 5363,
+            "cpu": 1365625
+          }
+        },
+        {
+          "title": "settle_transition_rejects_balance_mutation",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 19289,
+            "cpu": 6182679
+          }
+        },
+        {
+          "title": "settle_transition_rejects_partial_drain",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 14237,
+            "cpu": 4318006
+          }
+        },
+        {
+          "title": "withdraw_transition_decrements_balance",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 19820,
+            "cpu": 6647373
+          }
+        },
+        {
+          "title": "withdraw_transition_rejects_zero_amount",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 3502,
+            "cpu": 696198
+          }
+        },
+        {
+          "title": "withdraw_transition_rejects_amount_above_balance",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 9523,
+            "cpu": 2742286
+          }
+        },
+        {
+          "title": "withdraw_transition_rejects_accrued_drain",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 23214,
+            "cpu": 7673601
+          }
+        },
+        {
+          "title": "update_min_utxo_transition_accepts_valid_update",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 15262,
+            "cpu": 4974048
+          }
+        },
+        {
+          "title": "update_min_utxo_transition_rejects_zero",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 3202,
+            "cpu": 648198
+          }
+        },
+        {
+          "title": "update_min_utxo_transition_rejects_negative",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 6990,
+            "cpu": 1861978
+          }
+        },
+        {
+          "title": "update_min_utxo_transition_rejects_balance_change",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 13472,
+            "cpu": 4341321
+          }
+        },
+        {
+          "title": "update_min_utxo_transition_rejects_accrued_change",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 18055,
+            "cpu": 5881215
+          }
+        }
+      ]
+    },
+    {
+      "name": "pair_state",
+      "summary": {
+        "total": 12,
+        "passed": 12,
+        "failed": 0,
+        "kind": {
+          "unit": 12,
+          "property": 0
+        }
+      },
+      "tests": [
+        {
+          "title": "mint_pairs_rejects_without_admin_signer",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 503606,
+            "cpu": 239370300
+          }
+        },
+        {
+          "title": "mint_pairs_accepts_with_admin_signer",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 794265,
+            "cpu": 335991498
+          }
+        },
+        {
+          "title": "mint_pairs_rejects_non_admin_signer",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 506736,
+            "cpu": 240273948
+          }
+        },
+        {
+          "title": "duplicate_create_without_admin_signer_fails",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 997577,
+            "cpu": 477348253
+          }
+        },
+        {
+          "title": "batch_with_create_without_admin_signer_fails",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 504270,
+            "cpu": 239572514
+          }
+        },
+        {
+          "title": "apply_update_does_not_require_admin_signer",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 1009962,
+            "cpu": 532677563
+          }
+        },
+        {
+          "title": "burn_pairs_rejects_without_admin_signer",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 209317,
+            "cpu": 60735344
+          }
+        },
+        {
+          "title": "burn_pairs_accepts_with_admin_signer",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 275441,
+            "cpu": 83346186
+          }
+        },
+        {
+          "title": "burn_pairs_rejects_positive_quantity",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 214350,
+            "cpu": 62096989
+          }
+        },
+        {
+          "title": "burn_pair_spend_rejects_without_admin_signer",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 629492,
+            "cpu": 323532853
+          }
+        },
+        {
+          "title": "burn_pair_spend_accepts_with_admin_and_burn",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 841155,
+            "cpu": 434677108
+          }
+        },
+        {
+          "title": "burn_pair_spend_rejects_without_matching_burn",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 690390,
+            "cpu": 344880808
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_coordinator",
+      "summary": {
+        "total": 10,
+        "passed": 10,
+        "failed": 0,
+        "kind": {
+          "unit": 10,
+          "property": 0
+        }
+      },
+      "tests": [
+        {
+          "title": "batch_witness_header_ok_accepts_strict_order_step",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 48303,
+            "cpu": 17352943
+          }
+        },
+        {
+          "title": "batch_witness_header_ok_rejects_bad_order_step",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 50006,
+            "cpu": 17806577
+          }
+        },
+        {
+          "title": "batch_witness_header_ok_rejects_mixed_policy_step",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 25469,
+            "cpu": 7708099
+          }
+        },
+        {
+          "title": "batch_witness_header_ok_rejects_duplicate_token_step",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 50006,
+            "cpu": 17806577
+          }
+        },
+        {
+          "title": "unique_settle_receivers_accepts_empty_manifest",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 4032,
+            "cpu": 757094
+          }
+        },
+        {
+          "title": "unique_settle_receivers_accepts_distinct_receivers",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 21411,
+            "cpu": 5758915
+          }
+        },
+        {
+          "title": "unique_settle_receivers_rejects_duplicate_receiver",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 17107,
+            "cpu": 4933058
+          }
+        },
+        {
+          "title": "unique_settle_receivers_rejects_duplicate_at_tail",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 23294,
+            "cpu": 6952719
+          }
+        },
+        {
+          "title": "walk_batch_witnesses_rejects_output_order_mismatch",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 218352,
+            "cpu": 65602134
+          }
+        },
+        {
+          "title": "walk_batch_witnesses_aligned_order_passes_token_check",
+          "status": "pass",
+          "on_failure": "fail_immediately",
+          "execution_units": {
+            "mem": 55993,
+            "cpu": 15680315
+          }
+        }
+      ]
+    }
+  ]
+}
+[contracts-tests] PASSED

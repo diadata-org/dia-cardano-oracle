@@ -1,0 +1,28 @@
+[run] intent:create-and-sign --state ./state/mainnet_run_20260517-063917/config-bootstrap.json --intent-type OracleUpdate --symbol XRP/USD --price 520000000 --source "DIA Oracle" --out ./state/mainnet_run_20260517-063917/intents/xrp-usd.signed.json
+
+> @protofire/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts intent:create-and-sign --state ./state/mainnet_run_20260517-063917/config-bootstrap.json --intent-type OracleUpdate --symbol XRP/USD --price 520000000 --source DIA Oracle --out ./state/mainnet_run_20260517-063917/intents/xrp-usd.signed.json
+
+[1G[0K[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/mainnet_run_20260517-063917/intents/xrp-usd.signed.json
+{
+  "intent": {
+    "intentType": "OracleUpdate",
+    "version": "1.0",
+    "chainId": "100640",
+    "nonce": "1779002288000",
+    "expiry": "1779005888",
+    "symbol": "XRP/USD",
+    "price": "520000000",
+    "timestamp": "1779002288",
+    "source": "DIA Oracle",
+    "signature": "0x09e773ebfcc2c24c0f3106c31b12630aad2a8e90d9d2806c1fbd8cc5c9430b48725803101f22d40e0df733e6296a25a8de85dd0c7845fd6aa29e5c4cc3c62c2e1c",
+    "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+  },
+  "witness": {
+    "signerPublicKey": "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531",
+    "signerAddress": "0x2b1c7eff297766569966b630a6862947a8e5285a",
+    "intentHash": "c7b3298e3f80edf8e6cc4a36391c1de59ef3c148ef641abd692a0d399cca47c1",
+    "compactSignature": "09e773ebfcc2c24c0f3106c31b12630aad2a8e90d9d2806c1fbd8cc5c9430b48725803101f22d40e0df733e6296a25a8de85dd0c7845fd6aa29e5c4cc3c62c2e"
+  }
+}
+[1G[0K⠙[1G[0K

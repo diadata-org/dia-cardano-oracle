@@ -1,0 +1,30 @@
+{
+  "clientId": "client-a",
+  "provider": "Blockfrost",
+  "signer": {
+    "configSignerPkh": "831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3dd",
+    "authorizedDiaPublicKey": "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531",
+    "paymentHookWithdrawAddress": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72"
+  },
+  "protocol": {
+    "domainName": "DIA Oracle",
+    "domainVersion": "1.0",
+    "domainSourceChainId": "100640",
+    "domainVerifyingContract": "0xF8c614A483A0427A13512F52ac72A576678bE317",
+    "baseFeeLovelace": "600000",
+    "perPairFeeLovelace": "250000",
+    "maxBootstrapDriftSeconds": "300",
+    "configMinUtxoLovelace": "5000000",
+    "configAssetLabel": "DIA_CONFIG",
+    "paymentHookAssetLabel": "DIA_PAYMENT_HOOK"
+  },
+  "client": {
+    "receiverAssetLabel": "DIA_RECEIVER_CLIENT_A"
+  },
+  "transactionParams": {
+    "receiverTopUp1Lovelace": "30000000",
+    "receiverTopUp2Lovelace": "30000000",
+    "receiverWithdrawLovelace": "5000000",
+    "paymentHookWithdrawLovelace": "10000000"
+  }
+}

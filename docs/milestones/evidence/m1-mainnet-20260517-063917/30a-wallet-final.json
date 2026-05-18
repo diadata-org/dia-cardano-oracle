@@ -1,0 +1,63 @@
+{
+  "source": "seed",
+  "address": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72",
+  "utxoCount": 7,
+  "utxos": [
+    {
+      "txHash": "fbd96e64ad49abc7fd04e1cb4235101aaa49108a90a5bb93479b44f28de10962",
+      "outputIndex": 2,
+      "lovelace": "2272418",
+      "assets": {
+        "lovelace": "2272418"
+      }
+    },
+    {
+      "txHash": "40b75a78e304a1544b33ae73974cd8c834835034b07b721359d58bec02819131",
+      "outputIndex": 1,
+      "lovelace": "5000000",
+      "assets": {
+        "lovelace": "5000000"
+      }
+    },
+    {
+      "txHash": "4981daaa754e920bc014e0221bb9c4551266674ad713980883272a642c74dea3",
+      "outputIndex": 1,
+      "lovelace": "10000000",
+      "assets": {
+        "lovelace": "10000000"
+      }
+    },
+    {
+      "txHash": "4981daaa754e920bc014e0221bb9c4551266674ad713980883272a642c74dea3",
+      "outputIndex": 2,
+      "lovelace": "9659826",
+      "assets": {
+        "lovelace": "9659826"
+      }
+    },
+    {
+      "txHash": "5143fe6dc88edfe6d6039d397c7d8b45312960cba511058bba9dae899777790e",
+      "outputIndex": 0,
+      "lovelace": "21601818",
+      "assets": {
+        "lovelace": "21601818"
+      }
+    },
+    {
+      "txHash": "f32157880e43b1ddfc73bf78c98e14690305136348582b659d2ed0657a0c90ab",
+      "outputIndex": 1,
+      "lovelace": "27705847",
+      "assets": {
+        "lovelace": "27705847"
+      }
+    },
+    {
+      "txHash": "bc0b5dab76964ee9c4a053b3337f585dfcc9162e576741247d7d3bd48e47e8ee",
+      "outputIndex": 0,
+      "lovelace": "4558863",
+      "assets": {
+        "lovelace": "4558863"
+      }
+    }
+  ]
+}

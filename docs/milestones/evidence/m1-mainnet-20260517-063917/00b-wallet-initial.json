@@ -1,0 +1,23 @@
+{
+  "source": "seed",
+  "address": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72",
+  "utxoCount": 2,
+  "utxos": [
+    {
+      "txHash": "1792a131a700fa7d559fb9aea2177d519e1c4420849a849110e59ec66bcc0a58",
+      "outputIndex": 0,
+      "lovelace": "5000000",
+      "assets": {
+        "lovelace": "5000000"
+      }
+    },
+    {
+      "txHash": "2d867fb69d99451eb235f3986c7c05db2898e9928eacb1a69d657227bcb4a7d6",
+      "outputIndex": 0,
+      "lovelace": "240000000",
+      "assets": {
+        "lovelace": "240000000"
+      }
+    }
+  ]
+}
