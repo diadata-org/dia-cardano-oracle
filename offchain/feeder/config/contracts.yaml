@@ -1,0 +1,113 @@
+# Source-chain contracts the feeder reads from.
+#
+# Only `OracleIntentRegistry` is needed: the scanner watches its
+# `IntentRegistered` event and the enricher calls `getIntent(bytes32)`.
+# Cardano scripts are not listed here — they are addressed by NFT unit
+# and script address, not EVM ABI.
+#
+# The ABI is kept minimal — only the event and the single view method
+# that the feeder actually calls. Keeping it tight makes any on-chain
+# ABI drift immediately visible.
+#
+# Field reference:
+#   name      — human-readable label, used in logs.
+#   chain_id  — must match the entry in chains.yaml and infrastructure.source.chain_id.
+#   address   — deployed contract address (hex, checksummed).
+#   type      — "registry" marks this as the source of IntentRegistered events.
+#   enabled   — set false to disable without removing the entry.
+#   abi       — inline JSON ABI (only the consumed fragment).
+
+contracts:
+  intent-registry-testnet:
+    name: OracleIntentRegistry (DIA Testnet)
+    chain_id: 10050
+    address: "0xF8c614A483A0427A13512F52ac72A576678bE317"
+    type: registry
+    enabled: true
+    abi: |
+      [
+        {
+          "type": "event",
+          "name": "IntentRegistered",
+          "anonymous": false,
+          "inputs": [
+            { "name": "intentHash", "type": "bytes32", "indexed": true },
+            { "name": "symbol",     "type": "string",  "indexed": true  },
+            { "name": "price",      "type": "uint256", "indexed": true  },
+            { "name": "timestamp",  "type": "uint256", "indexed": false },
+            { "name": "signer",     "type": "address", "indexed": false }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "getIntent",
+          "stateMutability": "view",
+          "inputs":  [ { "name": "intentHash", "type": "bytes32" } ],
+          "outputs": [
+            {
+              "name": "intent",
+              "type": "tuple",
+              "components": [
+                { "name": "intentType", "type": "string"  },
+                { "name": "version",    "type": "string"  },
+                { "name": "chainId",    "type": "uint256" },
+                { "name": "nonce",      "type": "uint256" },
+                { "name": "expiry",     "type": "uint256" },
+                { "name": "symbol",     "type": "string"  },
+                { "name": "price",      "type": "uint256" },
+                { "name": "timestamp",  "type": "uint256" },
+                { "name": "source",     "type": "string"  },
+                { "name": "signature",  "type": "bytes"   },
+                { "name": "signer",     "type": "address" }
+              ]
+            }
+          ]
+        }
+      ]
+
+  intent-registry-mainnet:
+    name: OracleIntentRegistry (DIA Mainnet)
+    chain_id: 1050
+    address: "0x5612599CF48032d7428399d5Fcb99eDcc75c06A7"
+    type: registry
+    enabled: true
+    abi: |
+      [
+        {
+          "type": "event",
+          "name": "IntentRegistered",
+          "anonymous": false,
+          "inputs": [
+            { "name": "intentHash", "type": "bytes32", "indexed": true },
+            { "name": "symbol",     "type": "string",  "indexed": true  },
+            { "name": "price",      "type": "uint256", "indexed": true  },
+            { "name": "timestamp",  "type": "uint256", "indexed": false },
+            { "name": "signer",     "type": "address", "indexed": false }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "getIntent",
+          "stateMutability": "view",
+          "inputs":  [ { "name": "intentHash", "type": "bytes32" } ],
+          "outputs": [
+            {
+              "name": "intent",
+              "type": "tuple",
+              "components": [
+                { "name": "intentType", "type": "string"  },
+                { "name": "version",    "type": "string"  },
+                { "name": "chainId",    "type": "uint256" },
+                { "name": "nonce",      "type": "uint256" },
+                { "name": "expiry",     "type": "uint256" },
+                { "name": "symbol",     "type": "string"  },
+                { "name": "price",      "type": "uint256" },
+                { "name": "timestamp",  "type": "uint256" },
+                { "name": "source",     "type": "string"  },
+                { "name": "signature",  "type": "bytes"   },
+                { "name": "signer",     "type": "address" }
+              ]
+            }
+          ]
+        }
+      ]

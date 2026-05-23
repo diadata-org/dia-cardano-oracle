@@ -1,12 +1,6 @@
 import path from "node:path";
-import { stepId , getCliConfig} from "../core/config.js";
-import { Constr } from "@lucid-evolution/lucid";
-import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
+import { stepId, getCliConfig } from "../core/config.js";
 
-import {
-  spendingValidatorFromCompiledScript,
-  withdrawalValidatorFromCompiledScript,
-} from "../core/contracts.js";
 import {
   makeConfiguredLucid,
   selectConfiguredWallet,
@@ -18,21 +12,16 @@ import {
   type ConfigStateArtifact,
   type ClientStateArtifact,
 } from "../core/state.js";
-import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
-import { getNetworkNow, slotBackoffUnixTimeMs } from "../core/network-time.js";
+import { getNetworkNow } from "../core/network-time.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { readClientContext } from "../core/artifact-context.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   buildPaymentHookDatumCbor,
   buildReceiverDatumCbor,
-  decodePaymentHookDatum,
-  decodeReceiverDatum,
   findSingleUtxoAtUnit,
-  requireInlineDatum,
-  splitUnit,
   waitForWalletSettlement,
   waitForUnitUtxoReplacement,
   writeJsonFile,
@@ -42,6 +31,7 @@ import {
   assertSettleManifestMatchesSingleClientReceiver,
   assertSettleReceiverAccruedPositive,
 } from "../preflight/index.js";
+import { buildSettleTx } from "../lib/transactions/build-settle.js";
 
 type SettleResult = {
   wallet: {
@@ -128,22 +118,16 @@ export async function settleAccruedFees(args: {
       ),
     ]);
 
-  const currentReceiverState = decodeReceiverDatum(
-    requireInlineDatum(currentReceiverUtxo, "receiver"),
+  // Pre-flight: check accrued balance before handing off to the builder
+  // (the builder also checks, but we want the CLI-specific error message here)
+  const preflightAccrued = BigInt(
+    clientState.receiver.receiverState?.accruedToHookLovelace ?? "0",
   );
-  const currentPaymentHookState = decodePaymentHookDatum(
-    requireInlineDatum(currentPaymentHookUtxo, "payment hook"),
-    protocolState.paymentHookState.withdrawAddress,
-  );
-
-  const accruedLovelace = BigInt(currentReceiverState.accruedToHookLovelace);
   assertSettleReceiverAccruedPositive(
-    accruedLovelace,
-    currentReceiverState.accruedToHookLovelace,
+    preflightAccrued,
+    clientState.receiver.receiverState?.accruedToHookLovelace ?? "0",
     clientState.receiver.receiverUnit,
   );
-
-  reportProgress(`Settling ${accruedLovelace} lovelace from receiver to payment hook`);
 
   assertSettleManifestMatchesSingleClientReceiver(
     [
@@ -158,146 +142,25 @@ export async function settleAccruedFees(args: {
     },
   );
 
-  // --- Compute next states ---
-  const nextReceiverState = {
-    ...currentReceiverState,
-    accruedToHookLovelace: "0",
-  };
-  const nextPaymentHookState = {
-    ...currentPaymentHookState,
-    accruedFeesLovelace: (
-      BigInt(currentPaymentHookState.accruedFeesLovelace) + accruedLovelace
-    ).toString(),
-    lifetimeCollectedLovelace: (
-      BigInt(currentPaymentHookState.lifetimeCollectedLovelace) + accruedLovelace
-    ).toString(),
-  };
-
-  // --- Build redeemers ---
-  // Receiver: Settle = Constr(2, [])
-  const receiverRedeemer = Data.to(new Constr(2, []));
-  // PaymentHook: ApplySettle = Constr(0, [])
-  const paymentHookRedeemer = Data.to(new Constr(0, []));
-  // Coordinator: ApplySettle(SettleManifest) = Constr(2, [SettleManifest])
-  // SettleManifest { receivers: List<SettleReceiver> }
-  // SettleReceiver { receiver_policy_id, receiver_asset_name }
-  const settleManifest = new Constr<PlutusData>(0, [
-    [
-      new Constr<PlutusData>(0, [
-        clientState.receiver.receiverPolicyId,
-        clientState.receiver.receiverAssetName,
-      ]),
-    ],
-  ]);
-  const coordinatorRedeemer = Data.to(
-    new Constr<PlutusData>(2, [settleManifest]),
-  );
-
-  // --- Build validators ---
-  if (!clientState.compiledScripts?.receiverValidator) {
-    throw new Error("receiverValidator compiled script not found. Run receiver:parameterize first.");
-  }
-  const receiverValidator = spendingValidatorFromCompiledScript(clientState.compiledScripts.receiverValidator);
-
-  if (!protocol.compiledScripts?.paymentHookValidator) {
-    throw new Error("paymentHookValidator compiled script not found. Run payment-hook:parameterize first.");
-  }
-  const paymentHookValidator = spendingValidatorFromCompiledScript(protocol.compiledScripts.paymentHookValidator);
-
-  if (!protocol.compiledScripts?.coordinatorValidator) {
-    throw new Error("coordinatorValidator compiled script not found. Run config:parameterize first.");
-  }
-  const coordinatorValidator = withdrawalValidatorFromCompiledScript(protocol.compiledScripts.coordinatorValidator);
-
-  // --- Load reference scripts ---
-  const { utxos: referenceScriptUtxos, missing: missingReferenceScripts } =
-    await loadReferenceScriptUtxos(
-      [
-        {
-          key: "coordinator",
-          label: "coordinator",
-          outRef: protocol.referenceScripts?.global?.coordinator
-            ? {
-                txHash: protocol.referenceScripts.global.coordinator.txHash,
-                outputIndex: protocol.referenceScripts.global.coordinator.outputIndex,
-              }
-            : null,
-        },
-        {
-          key: "paymentHook",
-          label: "payment hook",
-          outRef: protocol.referenceScripts?.global?.paymentHook
-            ? {
-                txHash: protocol.referenceScripts.global.paymentHook.txHash,
-                outputIndex: protocol.referenceScripts.global.paymentHook.outputIndex,
-              }
-            : null,
-        },
-        {
-          key: "receiver",
-          label: "receiver",
-          outRef: clientState.referenceScripts?.client?.receiver
-            ? {
-                txHash: clientState.referenceScripts.client.receiver.txHash,
-                outputIndex: clientState.referenceScripts.client.receiver.outputIndex,
-              }
-            : null,
-        },
-      ] as const,
-      reportProgress,
-    );
-
-  // --- Build transaction ---
   reportProgress(`Building ${getCliConfig().cardanoNetwork} settle transaction`);
-  // Settle does not consume an intent, but the coordinator's
-  // ApplySettle path still runs alongside other validators that may
-  // require finite bounds (defence in depth). A 30-min window is safe.
   const networkNow = await getNetworkNow(lucid);
-  let txBuilder = lucid
-    .newTx()
-    .validFrom(slotBackoffUnixTimeMs(lucid, networkNow.slot))
-    .validTo(networkNow.unixTimeMs + 30 * 60_000)
-    .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
-    .collectFrom([currentReceiverUtxo], receiverRedeemer)
-    .collectFrom([currentPaymentHookUtxo], paymentHookRedeemer)
-    .withdraw(protocol.scripts.coordinatorRewardAddress, 0n, coordinatorRedeemer)
-    .addSignerKey(walletDefaults.paymentKeyHash)
-    .pay.ToContract(
-      clientState.receiver.receiverValidatorAddress,
-      { kind: "inline", value: buildReceiverDatumCbor(nextReceiverState) },
-      {
-        lovelace:
-          BigInt(nextReceiverState.minUtxoLovelace) +
-          BigInt(nextReceiverState.balanceLovelace) +
-          BigInt(nextReceiverState.accruedToHookLovelace),
-        [clientState.receiver.receiverUnit]: 1n,
-      },
-    )
-    .pay.ToContract(
-      protocol.scripts.paymentHookValidatorAddress!,
-      { kind: "inline", value: buildPaymentHookDatumCbor(nextPaymentHookState) },
-      {
-        lovelace:
-          BigInt(nextPaymentHookState.minUtxoLovelace) +
-          BigInt(nextPaymentHookState.accruedFeesLovelace),
-        [protocol.scripts.paymentHookUnit!]: 1n,
-      },
-    );
 
-  if (missingReferenceScripts.receiver) {
-    reportProgress("Reference script for receiver is missing on-chain; attaching inline.");
-    txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
-  }
-  if (missingReferenceScripts.paymentHook) {
-    reportProgress("Reference script for payment hook is missing on-chain; attaching inline.");
-    txBuilder = txBuilder.attach.SpendingValidator(paymentHookValidator);
-  }
-  if (missingReferenceScripts.coordinator) {
-    reportProgress("Reference script for coordinator is missing on-chain; attaching inline.");
-    txBuilder = txBuilder.attach.WithdrawalValidator(coordinatorValidator);
-  }
+  const {
+    txSignBuilder,
+    accruedLovelace,
+    nextReceiverState,
+    nextPaymentHookState,
+  } = await buildSettleTx(lucid, {
+    networkNow,
+    currentConfigUtxo,
+    currentReceiverUtxo,
+    currentPaymentHookUtxo,
+    walletPaymentKeyHash: walletDefaults.paymentKeyHash,
+    protocolState: protocol,
+    clientState,
+  });
 
-  const txSignBuilder = await txBuilder.complete();
+  reportProgress(`Settling ${accruedLovelace} lovelace from receiver to payment hook`);
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();

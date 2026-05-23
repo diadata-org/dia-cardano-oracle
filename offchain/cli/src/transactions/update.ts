@@ -1,17 +1,14 @@
 import { unlink } from "node:fs/promises";
-import { stepId , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig } from "../core/config.js";
 import path from "node:path";
 import { confirm } from "@inquirer/prompts";
-import { Constr, type UTxO } from "@lucid-evolution/lucid";
-import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
 import {
   mintingPolicyFromCompiledScript,
-  spendingValidatorFromCompiledScript,
   policyIdFromMintingPolicy,
   scriptAddressFromValidator,
   scriptHashFromValidator,
-  withdrawalValidatorFromCompiledScript,
+  spendingValidatorFromCompiledScript,
 } from "../core/contracts.js";
 import {
   assertDiaOracleIntentNotExpired,
@@ -40,24 +37,16 @@ import {
   type PairStateArtifact,
 } from "../core/state.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
-import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
-import { getNetworkNow, slotBackoffUnixTimeMs } from "../core/network-time.js";
+import { getNetworkNow } from "../core/network-time.js";
 import { readClientContext } from "../core/artifact-context.js";
 import {
-  buildPairDatumCbor,
-  buildReceiverDatumCbor,
-  decodeReceiverDatum,
   findSingleUtxoAtUnit,
-  requireInlineDatum,
-  selectFundingUtxo,
-  splitUnit,
-  updateWitnessData,
   waitForWalletSettlement,
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
-import { buildPairApplyUpdateRedeemer } from "../core/redeemers.js";
+import { buildOracleUpdateTx } from "../lib/transactions/build-oracle-update.js";
 
 export async function submitOracleUpdate(args: {
   intentPath: string;
@@ -83,6 +72,7 @@ export async function submitOracleUpdate(args: {
     throw new Error("Oracle update requires client state after Receiver/Pair parameterization.");
   }
   assertOracleUpdateBootstrapRefsResolved(protocol.bootstrapRefs);
+
   let existingPair = await readOptionalPairState(statePath);
   if (
     existingPair &&
@@ -91,12 +81,8 @@ export async function submitOracleUpdate(args: {
     reportProgress(
       `Pair state file ${statePath} is from a different deployment. If you continue, the file will be deleted and recreated from the signed intent.`,
     );
-    reportProgress(
-      `  state file pair address: ${existingPair.pair.pairValidatorAddress}`,
-    );
-    reportProgress(
-      `  current deployment    : ${client.scripts.pairValidatorAddress}`,
-    );
+    reportProgress(`  state file pair address: ${existingPair.pair.pairValidatorAddress}`);
+    reportProgress(`  current deployment    : ${client.scripts.pairValidatorAddress}`);
     const proceed = await confirm({
       message:
         "Delete the stale pair state file and continue (the next update will mint a new Pair NFT and create the Pair UTxO from the signed intent)?",
@@ -109,6 +95,7 @@ export async function submitOracleUpdate(args: {
     reportProgress(`Removed stale pair state file ${statePath}`);
     existingPair = null;
   }
+
   if (!client.compiledScripts.pairMintPolicy) {
     throw new Error("pairMintPolicy compiled script not found. Run receiver:parameterize first.");
   }
@@ -124,19 +111,11 @@ export async function submitOracleUpdate(args: {
   const pairValidatorAddress = scriptAddressFromValidator(pairValidator);
   const pairId = diaPairIdHex(intent);
   const isCreate = !existingPair;
-  const minUtxoLovelace = existingPair?.pairState.minUtxoLovelace ??
-    protocol.configState.minUtxoLovelace;
+  const minUtxoLovelace = existingPair?.pairState.minUtxoLovelace ?? protocol.configState.minUtxoLovelace;
+
   const pair: PairStateArtifact = existingPair ?? {
-    wallet: {
-      source: "seed",
-      address: "",
-    },
-    pair: {
-      tokenName: pairTokenName,
-      pairId,
-      pairUnit,
-      pairValidatorAddress,
-    },
+    wallet: { source: "seed", address: "" },
+    pair: { tokenName: pairTokenName, pairId, pairUnit, pairValidatorAddress },
     pairState: {
       pairId,
       price: "0",
@@ -147,26 +126,16 @@ export async function submitOracleUpdate(args: {
       minUtxoLovelace,
       intent: diaIntentToState(intent),
     },
-    datum: {
-      pairCbor: "",
-    },
+    datum: { pairCbor: "" },
   };
+
   const state = {
     ...pair,
     bootstrapRefs: protocol.bootstrapRefs,
-    scripts: {
-      ...protocol.scripts,
-      ...client.scripts,
-    },
+    scripts: { ...protocol.scripts, ...client.scripts },
     configState: protocol.configState,
-    compiledScripts: {
-      ...protocol.compiledScripts,
-      ...client.compiledScripts,
-    },
-    referenceScripts: {
-      ...protocol.referenceScripts,
-      ...client.referenceScripts,
-    },
+    compiledScripts: { ...protocol.compiledScripts, ...client.compiledScripts },
+    referenceScripts: { ...protocol.referenceScripts, ...client.referenceScripts },
     receiver: client.receiver,
     datum: {
       configCbor: protocol.datum.configCbor,
@@ -174,6 +143,33 @@ export async function submitOracleUpdate(args: {
       pairCbor: pair.datum.pairCbor,
     },
   };
+
+  if (pairValidatorHash !== state.scripts.pairValidatorHash) {
+    throw new Error("Pair validator hash does not match the current blueprint.");
+  }
+
+  const domain = normalizeDiaEip712Domain({
+    name: state.configState.domain.name,
+    version: state.configState.domain.version,
+    sourceChainId: state.configState.domain.sourceChainId,
+    verifyingContract: state.configState.domain.verifyingContract,
+  });
+  const witness = recoverDiaOracleIntentWitness(domain, intent);
+  if (!state.configState.authorizedDiaPublicKeys.includes(witness.signerPublicKey)) {
+    throw new Error(
+      "The recovered DIA signer public key is not authorized in the provided config state.",
+    );
+  }
+  if (normalizeHex(state.pair.pairId, "pair.pairId") !== normalizeHex(pairId, "intent.symbol")) {
+    throw new Error(`Intent symbol ${intent.symbol} does not match pair id ${state.pair.pairId}.`);
+  }
+  assertOracleIntentTimestampAndNonceMonotonic({
+    isCreate,
+    intentTimestamp: intent.timestamp,
+    intentNonce: intent.nonce,
+    pairStateTimestamp: state.pairState.timestamp,
+    pairStateNonce: state.pairState.nonce,
+  });
 
   reportProgress(`Connecting to ${getCliConfig().cardanoNetwork} and selecting the configured wallet`);
   const lucid = await makeConfiguredLucid();
@@ -184,6 +180,7 @@ export async function submitOracleUpdate(args: {
     wallet.getUtxos(),
   ]);
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
+
   if (isCreate) {
     // Pair creation is admin-gated on-chain (pair_state.mint MintPairs).
     // Fail loudly here rather than producing a tx the chain will reject.
@@ -196,52 +193,9 @@ export async function submitOracleUpdate(args: {
       },
     );
   }
-  const { utxos: referenceScriptUtxos, missing: missingReferenceScripts } =
-    await loadReferenceScriptUtxos(
-      [
-        {
-          key: "coordinator",
-          label: "coordinator",
-          outRef: state.referenceScripts?.global?.coordinator
-            ? {
-                txHash: state.referenceScripts.global.coordinator.txHash,
-                outputIndex: state.referenceScripts.global.coordinator.outputIndex,
-              }
-            : null,
-        },
-        {
-          key: "receiver",
-          label: "receiver",
-          outRef: state.referenceScripts?.client?.receiver
-            ? {
-                txHash: state.referenceScripts.client.receiver.txHash,
-                outputIndex: state.referenceScripts.client.receiver.outputIndex,
-              }
-            : null,
-        },
-        {
-          key: "pair",
-          label: "pair",
-          outRef: state.referenceScripts?.client?.pair
-            ? {
-                txHash: state.referenceScripts.client.pair.txHash,
-                outputIndex: state.referenceScripts.client.pair.outputIndex,
-              }
-            : null,
-        },
-        {
-          key: "pairMint",
-          label: "pairMint",
-          outRef: state.referenceScripts?.client?.pairMint
-            ? {
-                txHash: state.referenceScripts.client.pairMint.txHash,
-                outputIndex: state.referenceScripts.client.pairMint.outputIndex,
-              }
-            : null,
-        },
-      ] as const,
-      reportProgress,
-    );
+
+  const networkNow = await getNetworkNow(lucid);
+  assertDiaOracleIntentNotExpired(intent, networkNow.unixTimeSec);
 
   const currentConfigUtxo = await findSingleUtxoAtUnit(
     lucid,
@@ -263,171 +217,25 @@ export async function submitOracleUpdate(args: {
     state.receiver.receiverUnit,
     "receiver",
   );
-  const currentReceiverState = decodeReceiverDatum(
-    requireInlineDatum(currentReceiverUtxo, "receiver"),
-  );
-  const walletFundingUtxo = selectFundingUtxo(
-    walletUtxos,
-    [state.bootstrapRefs.config],
-    5_000_000n,
-    "oracle update",
-  );
-
-  if (pairValidatorHash !== state.scripts.pairValidatorHash) {
-    throw new Error("Pair validator hash does not match the current blueprint.");
-  }
-
-  if (!state.compiledScripts.coordinatorValidator) {
-    throw new Error("coordinatorValidator compiled script not found. Run config:parameterize first.");
-  }
-  const coordinatorValidator = withdrawalValidatorFromCompiledScript(state.compiledScripts.coordinatorValidator);
-  if (!state.compiledScripts.receiverValidator) {
-    throw new Error("receiverValidator compiled script not found. Run receiver:parameterize first.");
-  }
-  const receiverValidator = spendingValidatorFromCompiledScript(state.compiledScripts.receiverValidator);
-  const receiverValidatorHash = scriptHashFromValidator(receiverValidator);
-  if (receiverValidatorHash !== state.receiver.receiverValidatorHash) {
-    throw new Error("Receiver validator hash does not match the current blueprint.");
-  }
-
-  const domain = normalizeDiaEip712Domain({
-    name: state.configState.domain.name,
-    version: state.configState.domain.version,
-    sourceChainId: state.configState.domain.sourceChainId,
-    verifyingContract: state.configState.domain.verifyingContract,
-  });
-  const witness = recoverDiaOracleIntentWitness(domain, intent);
-  if (!state.configState.authorizedDiaPublicKeys.includes(witness.signerPublicKey)) {
-    throw new Error(
-      "The recovered DIA signer public key is not authorized in the provided config state.",
-    );
-  }
-
-  if (normalizeHex(state.pair.pairId, "pair.pairId") !== normalizeHex(pairId, "intent.symbol")) {
-    throw new Error(`Intent symbol ${intent.symbol} does not match pair id ${state.pair.pairId}.`);
-  }
-
-  assertOracleIntentTimestampAndNonceMonotonic({
-    isCreate,
-    intentTimestamp: intent.timestamp,
-    intentNonce: intent.nonce,
-    pairStateTimestamp: state.pairState.timestamp,
-    pairStateNonce: state.pairState.nonce,
-  });
-
-  const networkNow = await getNetworkNow(lucid);
-  assertDiaOracleIntentNotExpired(intent, networkNow.unixTimeSec);
-
-  const nextPairState = {
-    ...state.pairState,
-    price: intent.price.toString(),
-    timestamp: intent.timestamp.toString(),
-    nonce: intent.nonce.toString(),
-    intentHash: witness.intentHash,
-    signer: intent.signer,
-    intent: diaIntentToState(intent),
-  };
-  const protocolFee =
-    BigInt(state.configState.baseFeeLovelace) +
-    BigInt(state.configState.perPairFeeLovelace);
-  const nextReceiverState = {
-    ...currentReceiverState,
-    balanceLovelace: (
-      BigInt(currentReceiverState.balanceLovelace) - protocolFee
-    ).toString(),
-    accruedToHookLovelace: (
-      BigInt(currentReceiverState.accruedToHookLovelace) + protocolFee
-    ).toString(),
-  };
-  if (BigInt(nextReceiverState.balanceLovelace) < 0n) {
-    throw new Error("Receiver balance is not sufficient to pay the protocol fee.");
-  }
-
-  const pairRedeemer = buildPairApplyUpdateRedeemer();
-  const pairMintRedeemer = Data.to(new Constr<PlutusData>(0, []));
-  const receiverRedeemer = Data.to(new Constr(1, [])); // AccrueFee redeemer
-  const coordinatorRedeemer = Data.to(
-    new Constr<PlutusData>(0, [
-      updateWitnessData(
-        intent,
-        state.receiver.receiverPolicyId,
-        state.receiver.receiverAssetName,
-        splitUnit(state.pair.pairUnit).policyId,
-        state.pair.tokenName,
-        witness.signerPublicKey,
-      ),
-    ]),
-  );
-  const nextPairDatumCbor = buildPairDatumCbor(nextPairState);
-  const nextReceiverDatumCbor = buildReceiverDatumCbor(nextReceiverState);
-
   reportProgress(`Building ${getCliConfig().cardanoNetwork} oracle update transaction`);
-  // The on-chain coordinator and pair_state binding require a finite tx
-  // validity range so intent expiry / bootstrap freshness can be evaluated.
-  // Cap the upper bound below the signed intent's expiry.
-  const txValidFromMs = slotBackoffUnixTimeMs(lucid, networkNow.slot);
-  const intentExpiryMs = Number(intent.expiry) * 1000;
-  const txValidToMs = Math.min(
-    networkNow.unixTimeMs + 30 * 60_000,
-    intentExpiryMs - 60_000,
-  );
-  let txBuilder = lucid
-    .newTx()
-    .validFrom(txValidFromMs)
-    .validTo(txValidToMs)
-    .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
-    .collectFrom([currentReceiverUtxo], receiverRedeemer)
-    .collectFrom([walletFundingUtxo])
-    .withdraw(state.scripts.coordinatorRewardAddress, 0n, coordinatorRedeemer)
-    .pay.ToContract(
-      state.pair.pairValidatorAddress,
-      { kind: "inline", value: nextPairDatumCbor },
-      {
-        lovelace: BigInt(nextPairState.minUtxoLovelace),
-        [state.pair.pairUnit]: 1n,
-      },
-    )
-    .pay.ToContract(
-      state.receiver.receiverValidatorAddress,
-      { kind: "inline", value: nextReceiverDatumCbor },
-      {
-        lovelace:
-          BigInt(nextReceiverState.minUtxoLovelace) +
-          BigInt(nextReceiverState.balanceLovelace) +
-          BigInt(nextReceiverState.accruedToHookLovelace),
-        [state.receiver.receiverUnit]: 1n,
-      },
-    );
+  const { txSignBuilder, nextPairState, nextPairDatumCbor } = await buildOracleUpdateTx(lucid, {
+    isCreate,
+    intent,
+    witness,
+    networkNow,
+    currentConfigUtxo,
+    currentPairUtxo,
+    currentReceiverUtxo,
+    walletPaymentKeyHash: walletDefaults.paymentKeyHash,
+    scripts: state.scripts,
+    compiledScripts: state.compiledScripts,
+    referenceScripts: state.referenceScripts,
+    configState: state.configState,
+    pairState: state.pairState,
+    pair: state.pair,
+    receiver: state.receiver,
+  });
 
-  if (isCreate) {
-    // Admin signer is required by `pair_state.mint(MintPairs)`. Without
-    // it the on-chain validator rejects pair creation (anti-replay of
-    // signed DIA intents — see security notes).
-    txBuilder = txBuilder
-      .mintAssets({ [state.pair.pairUnit]: 1n }, pairMintRedeemer)
-      .addSignerKey(walletDefaults.paymentKeyHash);
-    if (missingReferenceScripts.pairMint) {
-      reportProgress("Reference script for pairMint is missing on-chain; attaching the pair minting policy inline.");
-      txBuilder = txBuilder.attach.MintingPolicy(pairMintPolicy);
-    }
-  } else {
-    txBuilder = txBuilder.collectFrom([currentPairUtxo!], pairRedeemer);
-  }
-
-  if (missingReferenceScripts.receiver) {
-    reportProgress("Reference script for receiver is missing on-chain; attaching the receiver validator inline.");
-    txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
-  }
-  if (missingReferenceScripts.coordinator) {
-    reportProgress("Reference script for coordinator is missing on-chain; attaching the coordinator validator inline.");
-    txBuilder = txBuilder.attach.WithdrawalValidator(coordinatorValidator);
-  }
-  if (!isCreate && missingReferenceScripts.pair) {
-    reportProgress("Reference script for pair is missing on-chain; attaching the pair validator inline.");
-    txBuilder = txBuilder.attach.SpendingValidator(pairValidator);
-  }
-
-  const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
@@ -441,7 +249,7 @@ export async function submitOracleUpdate(args: {
     reportProgress(`Submitted transaction hash: ${submittedTxHash}`);
     confirmed = await awaitTxConfirmation({
       lucid,
-      txHash: submittedTxHash,
+      txHash: submittedTxHash!,
       reportProgress,
       label: "oracle update transaction",
     });
@@ -450,11 +258,11 @@ export async function submitOracleUpdate(args: {
         `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
       );
     }
-
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [walletFundingUtxo],
+      spentUtxos: [],
+      requireChangeWhenNoSpentUtxos: true,
       label: "oracle update",
     });
   }
@@ -479,17 +287,10 @@ export async function submitOracleUpdate(args: {
   }
 
   return {
-    wallet: {
-      source,
-      address: walletAddress,
-    },
-    pair: {
-      ...state.pair,
-    },
+    wallet: { source, address: walletAddress },
+    pair: { ...state.pair },
     pairState: nextPairState,
-    datum: {
-      pairCbor: nextPairDatumCbor,
-    },
+    datum: { pairCbor: nextPairDatumCbor },
     transactions: appendTransactionRecord(state.transactions, {
       step: stepId("update"),
       submittedTxHash,

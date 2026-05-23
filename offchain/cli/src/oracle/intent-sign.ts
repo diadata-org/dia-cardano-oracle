@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { getCliConfig } from "../core/config.js";
 import {
   signDiaOracleIntentInput,
   type DiaEip712DomainInput,
@@ -23,11 +24,13 @@ type SignedPreviewOracleIntent = {
 };
 
 function requireIntentSigningPrivateKey(): string {
-  const privateKey = process.env.DIA_EVM_PRIVATE_KEY?.trim();
-  if (!privateKey) {
-    throw new Error("Missing required environment variable: DIA_EVM_PRIVATE_KEY");
+  const { diaEvmPrivateKey, networkSuffix } = getCliConfig();
+  if (!diaEvmPrivateKey) {
+    throw new Error(
+      `Missing required environment variable: DIA_EVM_PRIVATE_KEY_${networkSuffix}`,
+    );
   }
-  return privateKey;
+  return diaEvmPrivateKey;
 }
 
 export function signPreviewOracleIntentFromInput(args: {

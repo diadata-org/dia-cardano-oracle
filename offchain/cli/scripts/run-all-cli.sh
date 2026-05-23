@@ -129,10 +129,34 @@ else
 fi
 
 CLIENT_ID="client-a"
-DOMAIN_NAME="DIA Oracle"
-DOMAIN_VERSION="1.0"
-DOMAIN_SOURCE_CHAIN_ID="100640"
-DOMAIN_VERIFYING_CONTRACT="0xF8c614A483A0427A13512F52ac72A576678bE317"
+
+# Resolve DIA EIP-712 domain + signer key from the suffixed env block.
+# Suffix is TESTNET when CARDANO_NETWORK=Preview, MAINNET when Mainnet.
+case "$CARDANO_NETWORK" in
+  Preview) NETWORK_SUFFIX="TESTNET" ;;
+  Mainnet) NETWORK_SUFFIX="MAINNET" ;;
+  *)
+    echo "[run] unsupported CARDANO_NETWORK=$CARDANO_NETWORK" >&2
+    exit 1
+    ;;
+esac
+
+DOMAIN_NAME="${DIA_DOMAIN_NAME:-DIA Oracle}"
+DOMAIN_VERSION="${DIA_DOMAIN_VERSION:-1.0}"
+
+DOMAIN_SOURCE_CHAIN_ID_VAR="DIA_SOURCE_CHAIN_ID_${NETWORK_SUFFIX}"
+DOMAIN_VERIFYING_CONTRACT_VAR="DIA_REGISTRY_ADDRESS_${NETWORK_SUFFIX}"
+DIA_EVM_PRIVATE_KEY_VAR="DIA_EVM_PRIVATE_KEY_${NETWORK_SUFFIX}"
+
+DOMAIN_SOURCE_CHAIN_ID="${!DOMAIN_SOURCE_CHAIN_ID_VAR:-}"
+DOMAIN_VERIFYING_CONTRACT="${!DOMAIN_VERIFYING_CONTRACT_VAR:-}"
+DIA_EVM_PRIVATE_KEY="${!DIA_EVM_PRIVATE_KEY_VAR:-}"
+export DIA_EVM_PRIVATE_KEY
+
+if [[ -z "$DOMAIN_SOURCE_CHAIN_ID" || -z "$DOMAIN_VERIFYING_CONTRACT" ]]; then
+  echo "[run] $DOMAIN_SOURCE_CHAIN_ID_VAR and $DOMAIN_VERIFYING_CONTRACT_VAR must be set in .env" >&2
+  exit 1
+fi
 BASE_FEE_LOVELACE="600000"
 PER_PAIR_FEE_LOVELACE="250000"
 MAX_BOOTSTRAP_DRIFT_SECONDS="300"
@@ -273,7 +297,7 @@ export CARDANO_NETWORK
 export CARDANO_PROVIDER
 
 if [[ -z "${DIA_EVM_PRIVATE_KEY:-}" ]]; then
-  echo "[run] DIA_EVM_PRIVATE_KEY is required for explicit non-interactive intent signing" >&2
+  echo "[run] $DIA_EVM_PRIVATE_KEY_VAR is required for explicit non-interactive intent signing" >&2
   exit 1
 fi
 
@@ -427,11 +451,13 @@ CONFIG_SIGNER_PKH="$(read_json_field "$WALLET_DEFAULTS_JSON_PATH" "defaults.paym
 PAYMENT_HOOK_WITHDRAW_ADDRESS="$(read_json_field "$WALLET_DEFAULTS_JSON_PATH" "address")"
 
 AUTHORIZED_DIA_PUBLIC_KEY="$(
+  DIA_EVM_PRIVATE_KEY="$DIA_EVM_PRIVATE_KEY" \
+  DIA_EVM_PRIVATE_KEY_VAR="$DIA_EVM_PRIVATE_KEY_VAR" \
   node --input-type=module -e '
     import { SigningKey } from "ethers";
     const privateKey = process.env.DIA_EVM_PRIVATE_KEY?.trim();
     if (!privateKey) {
-      throw new Error("Missing DIA_EVM_PRIVATE_KEY.");
+      throw new Error(`Missing ${process.env.DIA_EVM_PRIVATE_KEY_VAR}.`);
     }
     process.stdout.write(
       new SigningKey(privateKey).compressedPublicKey.replace(/^0x/i, "").toLowerCase(),

@@ -16,10 +16,10 @@ export function createWallet(): {
   stakePrivateKey: string | null;
   env: {
     CARDANO_NETWORK: CardanoNetwork;
-    CARDANO_WALLET_SEED: string;
+    [walletSeedVar: string]: string;
   };
 } {
-  const network = getCliConfig().cardanoNetwork;
+  const { cardanoNetwork: network, networkSuffix } = getCliConfig();
   const mnemonic = entropyToMnemonic(randomBytes(32));
   const wallet = walletFromSeed(mnemonic, { network });
   const details = getAddressDetails(wallet.address);
@@ -27,6 +27,8 @@ export function createWallet(): {
   if (!details.paymentCredential || details.paymentCredential.type !== "Key") {
     throw new Error("Generated wallet address does not expose a key-based payment credential.");
   }
+
+  const walletSeedVar = `CARDANO_WALLET_SEED_${networkSuffix}`;
 
   return {
     mnemonic,
@@ -37,7 +39,7 @@ export function createWallet(): {
     stakePrivateKey: wallet.stakeKey,
     env: {
       CARDANO_NETWORK: network,
-      CARDANO_WALLET_SEED: mnemonic,
+      [walletSeedVar]: mnemonic,
     },
   };
 }

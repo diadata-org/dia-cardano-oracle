@@ -48,7 +48,8 @@ function printUsage(): void {
   npm run cli -- wallet:utxos
   npm run cli -- wallet:defaults
   npm run cli -- ethereum-wallet:create
-  npm run cli -- protocol:init [--valid-config-signers <pkh[,pkh...]> --authorized-dia-public-keys <pubkey[,pubkey...]> --domain-name "DIA Oracle" --domain-version 1.0 --domain-source-chain-id 100640 --domain-verifying-contract 0xF8c614A483A0427A13512F52ac72A576678bE317 --base-fee-lovelace 600000 --per-pair-fee-lovelace 400000 --max-bootstrap-drift-seconds 300 --min-utxo-lovelace 5000000 --config-asset-label DIA_CONFIG --payment-hook-asset-label DIA_PAYMENT_HOOK --payment-hook-withdraw-address <addr>] [--out ./state/<network>/config-bootstrap.json]
+  npm run cli -- protocol:init [--valid-config-signers <pkh[,pkh...]> --authorized-dia-public-keys <pubkey[,pubkey...]> --domain-name <name> --domain-version <ver> --domain-source-chain-id <id> --domain-verifying-contract <addr> --base-fee-lovelace 600000 --per-pair-fee-lovelace 400000 --max-bootstrap-drift-seconds 300 --min-utxo-lovelace 5000000 --config-asset-label DIA_CONFIG --payment-hook-asset-label DIA_PAYMENT_HOOK --payment-hook-withdraw-address <addr>] [--out ./state/<network>/config-bootstrap.json]
+        (DIA domain / chain id / registry default to the *_TESTNET or *_MAINNET block in .env based on CARDANO_NETWORK.)
   npm run cli -- client:init [--state ./state/<network>/config-bootstrap.json] [--client-id client-a --receiver-asset-label DIA_RECEIVER_CLIENT_A] [--out ./state/<network>/clients/client-a.json]
   npm run cli -- intent:create [--state ./state/<network>/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ./state/<network>/intents/usdc-usd.unsigned.json]
   npm run cli -- intent:sign [--input ./state/<network>/intents/usdc-usd.unsigned.json] [--out ./state/<network>/intents/usdc-usd.signed.json]

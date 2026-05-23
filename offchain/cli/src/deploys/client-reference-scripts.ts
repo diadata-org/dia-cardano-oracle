@@ -23,7 +23,7 @@ import {
 } from "../core/output-logging.js";
 import {
   buildReceiverDatumCbor,
-  selectFundingUtxo,
+  waitForOutRefAvailable,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
 
@@ -65,7 +65,6 @@ export async function publishClientReferenceScripts(args: {
       "Client reference-script publish requires a client artifact produced by receiver:parameterize.",
     );
   }
-  const latestWalletUtxos = walletUtxos;
   const receiver = await resolveReceiverArtifact(state);
   if (!state.compiledScripts?.receiverValidator) {
     throw new Error("receiverValidator compiled script not found. Run receiver:parameterize first.");
@@ -104,15 +103,8 @@ export async function publishClientReferenceScripts(args: {
   );
 
   reportProgress(`Building ${getCliConfig().cardanoNetwork} client reference-script publish transaction`);
-  const fundingUtxo = selectFundingUtxo(
-    latestWalletUtxos,
-    [receiver.bootstrapRef],
-    receiverMinLovelace + pairMinLovelace + pairMintMinLovelace,
-    "client reference-script publish",
-  );
   const txBuilder = lucid
     .newTx()
-    .collectFrom([fundingUtxo])
     .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: receiverMinLovelace }, receiverValidator)
     .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: pairMinLovelace }, pairValidator)
     .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: pairMintMinLovelace }, pairMintPolicy);
@@ -144,9 +136,28 @@ export async function publishClientReferenceScripts(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [fundingUtxo],
+      spentUtxos: [],
       label: "client reference-script publish",
+      requireChangeWhenNoSpentUtxos: true,
     });
+
+    await Promise.all([
+      waitForOutRefAvailable({
+        lucid,
+        outRef: { txHash: submittedTxHash!, outputIndex: 0 },
+        label: "receiver reference-script",
+      }),
+      waitForOutRefAvailable({
+        lucid,
+        outRef: { txHash: submittedTxHash!, outputIndex: 1 },
+        label: "pair reference-script",
+      }),
+      waitForOutRefAvailable({
+        lucid,
+        outRef: { txHash: submittedTxHash!, outputIndex: 2 },
+        label: "pair-mint reference-script",
+      }),
+    ]);
   }
 
   return {

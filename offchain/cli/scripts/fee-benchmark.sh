@@ -152,8 +152,17 @@ cd "$CLI_DIR"
 set -a; source "$CLI_DIR/.env"; set +a
 export CARDANO_PROVIDER
 
+case "${CARDANO_NETWORK:-Preview}" in
+  Preview) BENCH_NETWORK_SUFFIX="TESTNET" ;;
+  Mainnet) BENCH_NETWORK_SUFFIX="MAINNET" ;;
+  *) echo "[bench] unsupported CARDANO_NETWORK=${CARDANO_NETWORK}" >&2; exit 1 ;;
+esac
+BENCH_DIA_EVM_KEY_VAR="DIA_EVM_PRIVATE_KEY_${BENCH_NETWORK_SUFFIX}"
+DIA_EVM_PRIVATE_KEY="${!BENCH_DIA_EVM_KEY_VAR:-}"
+export DIA_EVM_PRIVATE_KEY
+
 [[ -n "${DIA_EVM_PRIVATE_KEY:-}" ]] \
-  || { echo "[bench] DIA_EVM_PRIVATE_KEY is required" >&2; exit 1; }
+  || { echo "[bench] ${BENCH_DIA_EVM_KEY_VAR} is required" >&2; exit 1; }
 
 echo "[bench] bench run id : $BENCH_RUN_ID"
 echo "[bench] mode         : $MODE"

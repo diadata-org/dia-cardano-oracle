@@ -23,6 +23,7 @@ import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   findSingleUtxoAtUnit,
+  waitForOutRefGone,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
 import {
@@ -196,6 +197,12 @@ export async function pairBurn(args: {
       spentUtxos: [currentPairUtxo],
       label: "pair burn",
       requireChangeWhenNoSpentUtxos: false,
+    });
+
+    await waitForOutRefGone({
+      lucid,
+      outRef: currentPairUtxo,
+      label: "pair",
     });
   }
 

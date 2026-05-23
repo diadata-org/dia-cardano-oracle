@@ -20,7 +20,7 @@
 // report under `docs/milestones/evidence/m1-emulator-benchmark-<run-id>/`.
 //
 // Prerequisites:
-//   - `DIA_EVM_PRIVATE_KEY` set in `.env` (same env var as the bash
+//   - `DIA_EVM_PRIVATE_KEY_<TESTNET|MAINNET>` set in `.env` (same env block as the bash
 //     script — used both to sign intents and to derive the authorized
 //     DIA signer public key for the Config datum).
 //
@@ -32,6 +32,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { getCliConfig } from "../src/core/config.js";
 import { makeOracleEmulatorLucid } from "../src/__tests__/emulator/harness.js";
 import { runEmulatorProtocolFlow } from "../src/emulator/protocol-flow.js";
 import { writeEmulatorBenchmarkReport } from "../src/emulator/report.js";
@@ -97,16 +98,18 @@ Options:
                          failed run. Default: cleaned up.
 
 Prereq:
-  DIA_EVM_PRIVATE_KEY must be set in offchain/cli/.env. The benchmark
-  reads the same env var that run-all-cli.sh uses, so an env that runs
-  the bash benchmark on Preview also runs this one.
+  DIA_EVM_PRIVATE_KEY_<TESTNET|MAINNET> (matching CARDANO_NETWORK) must
+  be set in offchain/cli/.env. The benchmark reads the same env block
+  that run-all-cli.sh uses, so an env that runs the bash benchmark on
+  Preview also runs this one.
 `);
 }
 
 async function main(): Promise<void> {
-  if (!process.env.DIA_EVM_PRIVATE_KEY?.trim()) {
+  const { diaEvmPrivateKey, networkSuffix } = getCliConfig();
+  if (!diaEvmPrivateKey) {
     console.error(
-      "[benchmark:emulator] DIA_EVM_PRIVATE_KEY is required (set it in offchain/cli/.env).",
+      `[benchmark:emulator] DIA_EVM_PRIVATE_KEY_${networkSuffix} is required (set it in offchain/cli/.env).`,
     );
     process.exit(1);
   }

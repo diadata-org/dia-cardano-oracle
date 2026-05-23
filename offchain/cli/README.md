@@ -79,18 +79,41 @@ The normal flow is:
 
 ## Environment
 
-Create `.env` from `.env.example` and set:
+Create `.env` from `.env.example`. **Every per-network variable is suffixed
+`_TESTNET` (used when `CARDANO_NETWORK=Preview`) or `_MAINNET` (used when
+`CARDANO_NETWORK=Mainnet`).** A single `.env` carries both environments' creds
+side by side; switching networks is one line.
+
+Unsuffixed variables (selector / network-agnostic):
 
 - `CARDANO_NETWORK` — `Preview` or `Mainnet`. Drives state/evidence dirs, step
-  IDs, and the default Blockfrost endpoint.
-- `BLOCKFROST_PROJECT_ID` — must match the network selected above.
-- optional `BLOCKFROST_API_URL` — defaults to the matching Blockfrost endpoint
-  for `CARDANO_NETWORK`.
-- optional `KOIOS_API_URL`
-- either `CARDANO_WALLET_SEED` or `CARDANO_PRIVATE_KEY`
-- optional `DIA_EVM_PRIVATE_KEY` for signing EIP-712 oracle intents
+  IDs, and which `*_TESTNET` / `*_MAINNET` block the CLI reads.
+- `CARDANO_PROVIDER` — `Blockfrost` (default) or `Koios`.
+- `DIA_DOMAIN_NAME`, `DIA_DOMAIN_VERSION` — EIP-712 domain (network-independent).
 
-By default the CLI uses Blockfrost for UTxOs, protocol parameters, submission, and confirmation. Set `CARDANO_PROVIDER=Koios` to use Koios as the Lucid provider instead.
+Per-network variables (set BOTH the `_TESTNET` and `_MAINNET` variant of each;
+`.env.example` ships with the canonical confirmed values pre-filled):
+
+| Base name | Purpose |
+|---|---|
+| `BLOCKFROST_PROJECT_ID_*` | Blockfrost project id matching the network |
+| `BLOCKFROST_API_URL_*` | Blockfrost REST endpoint |
+| `KOIOS_API_URL_*` | Koios endpoint (used only when `CARDANO_PROVIDER=Koios`) |
+| `CARDANO_WALLET_SEED_*` | Mnemonic of the funder wallet |
+| `CARDANO_PRIVATE_KEY_*` | Alt. to seed; one of the two must be set |
+| `DIA_SOURCE_CHAIN_ID_*` | DIA chain id (Testnet=`10050`, Mainnet=`1050`) |
+| `DIA_RPC_URL_*` | DIA EVM JSON-RPC endpoint |
+| `DIA_WS_URL_*` | DIA WebSocket endpoint base |
+| `DIA_REGISTRY_ADDRESS_*` | `OracleIntentRegistry` address |
+| `DIA_EXPLORER_URL_*` | DIA explorer base URL |
+| `DIA_EVM_PRIVATE_KEY_*` | Signs EIP-712 OracleIntents on that network |
+| `DIA_WS_CREDENTIAL_*` | Conduit path-style credential for the WS endpoint |
+
+So a fresh setup looks like: `cp .env.example .env`, fill the two
+`BLOCKFROST_PROJECT_ID_*` values + the two `CARDANO_WALLET_SEED_*` values +
+the two `DIA_EVM_PRIVATE_KEY_*` and `DIA_WS_CREDENTIAL_*` values, leave the
+rest as-is. Set `CARDANO_NETWORK=Preview` (or `Mainnet`) to choose which side
+the CLI uses today.
 
 ## Install
 
@@ -122,7 +145,7 @@ npm run cli -- protocol
 npm run cli -- wallet:create
 ```
 
-Set `CARDANO_WALLET_SEED` in `.env` with the generated mnemonic. The command also prints the derived `paymentKeyHash`, which is the default config-admin signer used later by `protocol:init`.
+Set `CARDANO_WALLET_SEED_TESTNET` (or `_MAINNET`, depending on `CARDANO_NETWORK`) in `.env` with the generated mnemonic. The command also prints the derived `paymentKeyHash`, which is the default config-admin signer used later by `protocol:init`.
 
 ### 4. Create an Ethereum wallet
 
@@ -130,7 +153,7 @@ Set `CARDANO_WALLET_SEED` in `.env` with the generated mnemonic. The command als
 npm run cli -- ethereum-wallet:create
 ```
 
-Set `DIA_EVM_PRIVATE_KEY` in `.env` with the generated private key. The printed compressed `publicKey` becomes the default authorized DIA signer used later by `protocol:init`.
+Set `DIA_EVM_PRIVATE_KEY_TESTNET` (or `_MAINNET`, depending on `CARDANO_NETWORK`) in `.env` with the generated private key. The printed compressed `publicKey` becomes the default authorized DIA signer used later by `protocol:init`.
 
 ### 5. Fund and inspect the Cardano wallet
 

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-journal
+# Runtime state owned by the feeder (checkpoints, future DB files).
+state/

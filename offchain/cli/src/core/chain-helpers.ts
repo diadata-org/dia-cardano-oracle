@@ -46,6 +46,47 @@ export { splitUnit, toBigInt } from "./primitives.js";
 
 export const BOOTSTRAP_REF_MIN_LOVELACE = 1_000_000n;
 
+// ---------------------------------------------------------------------------
+// Wait helpers — three flavors for the three things we ever wait on.
+//
+// Every non-deploy tx in this codebase follows the same skeleton at the end:
+//     wait 1  awaitTxConfirmation       (tx accepted into a block)
+//     wait 2  waitForWalletSettlement   (wallet UTxOs reflect change/spent)
+//     wait 3  one of the helpers below  (the script-side UTxO landed/moved)
+//
+// "wait 3" comes in three variants because the script-side outcome differs:
+//
+//   * Replacement (the unit lives on, at a NEW outRef) → waitForUnitUtxoReplacement
+//     Used by every stateful update where the NFT-bearing UTxO is spent and
+//     re-created with a new datum (oracle update, settle, top-up, etc.).
+//
+//   * Creation (a unit appears for the first time) → findSingleUtxoAtUnit
+//     Used by bootstraps where the NFT is freshly minted at a script address.
+//
+//   * Creation of an output WITHOUT a unit (e.g. reference-script publishes,
+//     which live at the reference-holder address with no NFT) → waitForOutRefAvailable
+//
+//   * Destruction (the previous outRef must disappear, with NO replacement —
+//     burn, reclaim) → waitForOutRefGone
+//
+// Why both unit-based and outRef-based variants exist: the unit-based ones
+// query `lucid.utxosAtWithUnit(address, unit)` and are the cheapest poll when
+// an NFT marks the UTxO. The outRef-based ones use `lucid.utxosByOutRef(...)`
+// and exist for UTxOs that carry no marker NFT (reference scripts) or whose
+// unit no longer exists anywhere on chain after the tx (burns/reclaims).
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the single on-chain UTxO at `address` that carries `unit`.
+ *
+ * Polls `utxosAtWithUnit` up to 10 times (1.5s between attempts). Used both
+ * as a pre-build lookup (locate the Config/Receiver/Pair/PaymentHook script
+ * UTxO to spend) AND as the "wait 3" after **bootstrap** txs where the NFT
+ * is being created for the first time. Not appropriate for replacement waits
+ * — it cannot tell the new UTxO from the old one if both ever co-exist.
+ *
+ * @throws if no single UTxO with that unit is observed within the budget.
+ */
 export async function findSingleUtxoAtUnit(
   lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>,
   address: string,
@@ -74,6 +115,21 @@ export async function findSingleUtxoAtUnit(
   );
 }
 
+/**
+ * Wait until the unique UTxO carrying `unit` at `address` has been
+ * **replaced** — i.e. exactly one UTxO is visible AND its outRef differs
+ * from `previousOutRef`.
+ *
+ * This is the "wait 3" used after every stateful update where an NFT-bearing
+ * script UTxO is spent and re-created (oracle update, settle, top-up,
+ * receiver/payment-hook updates, withdraws that leave the NFT in place,
+ * config-update, etc.). It ensures the indexer has caught up so the next
+ * CLI step can resolve the new UTxO without retries.
+ *
+ * Not appropriate when the NFT is being created for the first time
+ * (use `findSingleUtxoAtUnit`) or when the NFT is destroyed (use
+ * `waitForOutRefGone`).
+ */
 export async function waitForUnitUtxoReplacement(args: {
   lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>;
   address: string;
@@ -200,6 +256,119 @@ export function selectBootstrapUtxo(
     })[0] ?? null;
 }
 
+/**
+ * Wait until a specific outRef (txHash + outputIndex) is visible at the
+ * indexer.
+ *
+ * "wait 3" used by reference-script publishes
+ * (`config-reference-scripts`, `payment-hook-reference-script`,
+ * `client-reference-scripts`) where the new outputs live at the
+ * reference-holder address **without** any NFT to key on. Polls
+ * `lucid.utxosByOutRef([outRef])` and resolves when the outRef appears.
+ *
+ * Use this whenever a tx creates an output that the next CLI step will
+ * read by outRef rather than by unit. For NFT-bearing outputs, prefer
+ * `findSingleUtxoAtUnit` (first-time creation) or
+ * `waitForUnitUtxoReplacement` (existing unit, new outRef).
+ */
+export async function waitForOutRefAvailable(args: {
+  lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>;
+  outRef: OutRefLike;
+  label: string;
+  maxAttempts?: number;
+  delayMs?: number;
+}): Promise<UTxO> {
+  const maxAttempts = args.maxAttempts ?? 20;
+  const delayMs = args.delayMs ?? 1_500;
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const utxos = await args.lucid.utxosByOutRef([
+        { txHash: args.outRef.txHash, outputIndex: args.outRef.outputIndex },
+      ]);
+      if (utxos.length === 1) {
+        return utxos[0];
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  const detail = lastError
+    ? ` Last provider error: ${describeUnknownError(lastError)}.`
+    : "";
+  throw new Error(
+    `Transaction confirmation was observed, but the ${args.label} UTxO ${args.outRef.txHash}#${args.outRef.outputIndex} did not appear at the indexer.${detail}`,
+  );
+}
+
+/**
+ * Wait until a specific outRef is no longer visible at the indexer.
+ *
+ * "wait 3" used when a tx **destroys** an output with no replacement —
+ * `pair-burn` (the Pair NFT is burned, so the unit will exist nowhere)
+ * and `reclaim-reference-script` (the reference-holder UTxOs are spent
+ * back to the wallet). Polls `lucid.utxosByOutRef([outRef])` and resolves
+ * when the result is empty.
+ *
+ * Counterpart to `waitForOutRefAvailable`. Use this only when no
+ * replacement UTxO is expected; for NFT-bearing replacements use
+ * `waitForUnitUtxoReplacement`.
+ */
+export async function waitForOutRefGone(args: {
+  lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>;
+  outRef: OutRefLike;
+  label: string;
+  maxAttempts?: number;
+  delayMs?: number;
+}): Promise<void> {
+  const maxAttempts = args.maxAttempts ?? 20;
+  const delayMs = args.delayMs ?? 1_500;
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const utxos = await args.lucid.utxosByOutRef([
+        { txHash: args.outRef.txHash, outputIndex: args.outRef.outputIndex },
+      ]);
+      if (utxos.length === 0) {
+        return;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  const detail = lastError
+    ? ` Last provider error: ${describeUnknownError(lastError)}.`
+    : "";
+  throw new Error(
+    `Transaction confirmation was observed, but the ${args.label} UTxO ${args.outRef.txHash}#${args.outRef.outputIndex} is still visible at the indexer.${detail}`,
+  );
+}
+
+/**
+ * "wait 2" — wait until the wallet's UTxO set reflects the submitted tx:
+ * the spent inputs are no longer visible AND the wallet snapshot has
+ * changed since `previousUtxos`. Used by every non-deploy and deploy tx
+ * after `awaitTxConfirmation` and before any script-side wait.
+ *
+ * Behavior knobs:
+ *  - `spentUtxos: []` + `requireChangeWhenNoSpentUtxos: true` → wait
+ *    purely on snapshot change (Lucid picked the inputs; we don't know
+ *    which). This is the right shape when no explicit `.collectFrom` was
+ *    used.
+ *  - `spentUtxos: [...]` → also wait until each named outRef has left the
+ *    wallet snapshot. Use when we explicitly collected from a known
+ *    wallet UTxO (bootstrap seed inputs).
+ *  - `spentUtxos: []` + `requireChangeWhenNoSpentUtxos: false` (default)
+ *    → short-circuits and returns the current snapshot immediately. Only
+ *    legitimate for the rare case where nothing in the wallet should
+ *    change.
+ */
 export async function waitForWalletSettlement(args: {
   wallet: WalletUtxoReader;
   previousUtxos: UTxO[];

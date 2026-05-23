@@ -1,16 +1,13 @@
 import { readFile } from "node:fs/promises";
-import { stepId , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig } from "../core/config.js";
 import path from "node:path";
-import { Constr } from "@lucid-evolution/lucid";
-import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
 import {
   mintingPolicyFromCompiledScript,
   policyIdFromMintingPolicy,
-  spendingValidatorFromCompiledScript,
   scriptAddressFromValidator,
   scriptHashFromValidator,
-  withdrawalValidatorFromCompiledScript,
+  spendingValidatorFromCompiledScript,
 } from "../core/contracts.js";
 import {
   assertDiaOracleIntentNotExpired,
@@ -20,8 +17,8 @@ import {
   normalizeDiaEip712Domain,
   normalizeDiaOracleIntent,
   normalizeHex,
-  readSignedIntentInput,
   recoverDiaOracleIntentWitness,
+  readSignedIntentInput,
   type DiaOracleIntent,
 } from "../core/dia-intent.js";
 import {
@@ -46,24 +43,19 @@ import {
   type ReferenceScriptsState,
 } from "../core/state.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
-import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
-import { getNetworkNow, slotBackoffUnixTimeMs } from "../core/network-time.js";
+import { getNetworkNow } from "../core/network-time.js";
 import { readClientContext } from "../core/artifact-context.js";
 import {
   buildPairDatumCbor,
   buildReceiverDatumCbor,
-  decodeReceiverDatum,
   findSingleUtxoAtUnit,
-  requireInlineDatum,
-  splitUnit,
-  updateWitnessData,
   waitForWalletSettlement,
   waitForUnitUtxoReplacement,
   writeJsonFile,
 } from "../core/chain-helpers.js";
-import { buildPairApplyUpdateRedeemer } from "../core/redeemers.js";
+import { buildBatchOracleUpdateTx } from "../lib/transactions/build-batch-oracle-update.js";
 
 type BatchUpdateEntry = {
   statePath: string;
@@ -204,72 +196,6 @@ export async function submitBatchOracleUpdate(args: {
       },
     );
   }
-  const { utxos: referenceScriptUtxos, missing: missingReferenceScripts } =
-    await loadReferenceScriptUtxos(
-      [
-        {
-          key: "coordinator",
-          label: "coordinator",
-          outRef: state.referenceScripts?.global?.coordinator
-            ? {
-                txHash: state.referenceScripts.global.coordinator.txHash,
-                outputIndex: state.referenceScripts.global.coordinator.outputIndex,
-              }
-            : null,
-        },
-        {
-          key: "receiver",
-          label: "receiver",
-          outRef: state.referenceScripts?.client?.receiver
-            ? {
-                txHash: state.referenceScripts.client.receiver.txHash,
-                outputIndex: state.referenceScripts.client.receiver.outputIndex,
-              }
-            : null,
-        },
-        {
-          key: "pair",
-          label: "pair",
-          outRef: state.referenceScripts?.client?.pair
-            ? {
-                txHash: state.referenceScripts.client.pair.txHash,
-                outputIndex: state.referenceScripts.client.pair.outputIndex,
-              }
-            : null,
-        },
-        {
-          key: "pairMint",
-          label: "pairMint",
-          outRef: state.referenceScripts?.client?.pairMint
-            ? {
-                txHash: state.referenceScripts.client.pairMint.txHash,
-                outputIndex: state.referenceScripts.client.pairMint.outputIndex,
-              }
-            : null,
-        },
-      ] as const,
-      reportProgress,
-    );
-
-  const [currentConfigUtxo, currentReceiverUtxo] =
-    await Promise.all([
-      findSingleUtxoAtUnit(
-        lucid,
-        state.scripts.configValidatorAddress,
-        state.scripts.configUnit,
-        "config",
-      ),
-      findSingleUtxoAtUnit(
-        lucid,
-        state.receiver.receiverValidatorAddress,
-        state.receiver.receiverUnit,
-        "receiver",
-      ),
-    ]);
-  const currentReceiverState = decodeReceiverDatum(
-    requireInlineDatum(currentReceiverUtxo, "receiver"),
-  );
-
   const pairValidatorHash = scriptHashFromValidator(pairValidator);
   if (pairValidatorHash !== state.scripts.pairValidatorHash) {
     throw new Error("Pair validator hash does not match the current blueprint.");
@@ -284,11 +210,6 @@ export async function submitBatchOracleUpdate(args: {
     throw new Error("Receiver validator hash does not match the current blueprint.");
   }
 
-  if (!state.compiledScripts.coordinatorValidator) {
-    throw new Error("coordinatorValidator compiled script not found. Run config:parameterize first.");
-  }
-  const coordinatorValidator = withdrawalValidatorFromCompiledScript(state.compiledScripts.coordinatorValidator);
-
   const domain = normalizeDiaEip712Domain({
     name: state.configState.domain.name,
     version: state.configState.domain.version,
@@ -298,8 +219,7 @@ export async function submitBatchOracleUpdate(args: {
 
   const networkNow = await getNetworkNow(lucid);
 
-  const preparedUpdates = sortBatchUpdatesByPairTokenName(
-    states.map(({ entry, artifact, intent: loadedIntent, isCreate }) => {
+  const batchEntries = states.map(({ entry, artifact, intent: loadedIntent, isCreate }) => {
     const intent = normalizeDiaOracleIntent(loadedIntent);
     const witness = recoverDiaOracleIntentWitness(domain, intent);
 
@@ -311,12 +231,6 @@ export async function submitBatchOracleUpdate(args: {
         `Recovered DIA signer public key ${witness.signerPublicKey} is not authorized for ${entry.statePath}.`,
       );
     }
-    if (
-      normalizeHex(artifact.pair.pairId, "pair.pairId") !==
-      normalizeHex(diaPairIdHex(intent), "intent.symbol")
-    ) {
-      throw new Error(`Intent symbol ${intent.symbol} does not match pair id ${artifact.pair.pairId}.`);
-    }
     assertOracleIntentTimestampAndNonceMonotonic({
       isCreate,
       intentTimestamp: intent.timestamp,
@@ -325,72 +239,26 @@ export async function submitBatchOracleUpdate(args: {
       pairStateNonce: artifact.pairState.nonce,
       batchStatePath: entry.statePath,
     });
-
     assertDiaOracleIntentNotExpired(intent, networkNow.unixTimeSec);
 
-    const nextPairState = {
-      ...artifact.pairState,
-      price: intent.price.toString(),
-      timestamp: intent.timestamp.toString(),
-      nonce: intent.nonce.toString(),
-      intentHash: witness.intentHash,
-      signer: intent.signer,
-      intent: diaIntentToState(intent),
-    };
+    return { entry, pairArtifact: artifact, intent, witness, isCreate };
+  });
 
-    return {
-      entry,
-      artifact,
-      intent,
-      witness,
-      nextPairState,
-      isCreate,
-    };
-  }),
-  );
-
-  const totalFee =
-    BigInt(state.configState.baseFeeLovelace) +
-    BigInt(state.configState.perPairFeeLovelace) * BigInt(preparedUpdates.length);
-  const nextReceiverState = {
-    ...currentReceiverState,
-    balanceLovelace: (
-      BigInt(currentReceiverState.balanceLovelace) - totalFee
-    ).toString(),
-    accruedToHookLovelace: (
-      BigInt(currentReceiverState.accruedToHookLovelace) + totalFee
-    ).toString(),
-  };
-  if (BigInt(nextReceiverState.balanceLovelace) < 0n) {
-    throw new Error("Receiver balance is not sufficient to pay the protocol fee batch.");
-  }
-
-  const receiverRedeemer = Data.to(new Constr(1, []));
-  const coordinatorRedeemer = Data.to(
-    new Constr<PlutusData>(1, [
-      preparedUpdates.map(({ intent, witness, artifact }) =>
-        updateWitnessData(
-          intent,
-          artifact.receiver!.receiverPolicyId,
-          artifact.receiver!.receiverAssetName,
-          splitUnit(artifact.pair.pairUnit).policyId,
-          artifact.pair.tokenName,
-          witness.signerPublicKey,
-        ),
-      ),
-    ]),
-  );
+  const [currentConfigUtxo, currentReceiverUtxo] = await Promise.all([
+    findSingleUtxoAtUnit(lucid, state.scripts.configValidatorAddress, state.scripts.configUnit, "config"),
+    findSingleUtxoAtUnit(lucid, state.receiver.receiverValidatorAddress, state.receiver.receiverUnit, "receiver"),
+  ]);
 
   const currentPairEntries = await Promise.all(
-    preparedUpdates
+    batchEntries
       .filter(({ isCreate }) => !isCreate)
-      .map(async ({ artifact }) => ({
-        unit: artifact.pair.pairUnit,
+      .map(async ({ pairArtifact }) => ({
+        unit: pairArtifact.pair.pairUnit,
         utxo: await findSingleUtxoAtUnit(
           lucid,
-          artifact.pair.pairValidatorAddress,
-          artifact.pair.pairUnit,
-          `pair ${artifact.pair.pairId}`,
+          pairArtifact.pair.pairValidatorAddress,
+          pairArtifact.pair.pairUnit,
+          `pair ${pairArtifact.pair.pairId}`,
         ),
       })),
   );
@@ -399,87 +267,32 @@ export async function submitBatchOracleUpdate(args: {
   );
 
   reportProgress(`Building ${getCliConfig().cardanoNetwork} oracle batch update transaction`);
-  // Finite tx validity range required by the on-chain coordinator
-  // (intent_expiry_satisfied) and pair_state indexed witness binding.
-  // Cap upper bound below the earliest intent expiry in the batch.
-  const earliestExpirySec = preparedUpdates.reduce(
-    (min, u) => (u.intent.expiry < min ? u.intent.expiry : min),
-    preparedUpdates[0].intent.expiry,
+  const {
+    txSignBuilder,
+    nextReceiverState,
+    nextReceiverDatumCbor: _nextReceiverDatumCbor,
+    updatedPairStates,
+  } = await buildBatchOracleUpdateTx(lucid, {
+    entries: batchEntries.map(({ pairArtifact, intent, witness, isCreate }) => ({
+      intent,
+      witness,
+      pairArtifact,
+      isCreate,
+    })),
+    networkNow,
+    currentConfigUtxo,
+    currentReceiverUtxo,
+    currentPairUtxoByUnit,
+    walletPaymentKeyHash: walletDefaults.paymentKeyHash,
+    protocolState,
+    clientState,
+  });
+
+  // Build a map from pairUnit -> nextPairState for result assembly below
+  const nextPairStateByUnit = new Map(
+    updatedPairStates.map(({ pairUnit, nextPairState }) => [pairUnit, nextPairState]),
   );
-  const txValidFromMs = slotBackoffUnixTimeMs(lucid, networkNow.slot);
-  const txValidToMs = Math.min(
-    networkNow.unixTimeMs + 30 * 60_000,
-    Number(earliestExpirySec) * 1000 - 60_000,
-  );
-  let txBuilder = lucid
-    .newTx()
-    .validFrom(txValidFromMs)
-    .validTo(txValidToMs)
-    .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
-    .collectFrom([currentReceiverUtxo], receiverRedeemer)
-    .withdraw(state.scripts.coordinatorRewardAddress, 0n, coordinatorRedeemer);
 
-  for (const { utxo } of currentPairEntries) {
-    txBuilder = txBuilder.collectFrom([utxo], buildPairApplyUpdateRedeemer());
-  }
-
-  if (missingReferenceScripts.receiver) {
-    reportProgress("Reference script for receiver is missing on-chain; attaching the receiver validator inline.");
-    txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
-  }
-  if (missingReferenceScripts.coordinator) {
-    reportProgress("Reference script for coordinator is missing on-chain; attaching the coordinator validator inline.");
-    txBuilder = txBuilder.attach.WithdrawalValidator(coordinatorValidator);
-  }
-  if (missingReferenceScripts.pair) {
-    reportProgress("Reference script for pair is missing on-chain; attaching the pair validator inline.");
-    txBuilder = txBuilder.attach.SpendingValidator(pairValidator);
-  }
-
-  const mintAssets: Record<string, bigint> = {};
-  for (const { artifact, isCreate } of preparedUpdates) {
-    if (isCreate) {
-      mintAssets[artifact.pair.pairUnit] = 1n;
-    }
-  }
-  if (Object.keys(mintAssets).length > 0) {
-    // Admin signer is required by `pair_state.mint(MintPairs)` for any
-    // batch that creates one or more pairs (anti-replay gate on signed
-    // DIA intents — see security notes).
-    txBuilder = txBuilder
-      .mintAssets(mintAssets, Data.to(new Constr<PlutusData>(0, [])))
-      .addSignerKey(walletDefaults.paymentKeyHash);
-    if (missingReferenceScripts.pairMint) {
-      reportProgress("Reference script for pairMint is missing on-chain; attaching the pair minting policy inline.");
-      txBuilder = txBuilder.attach.MintingPolicy(pairMintPolicy);
-    }
-  }
-
-  for (const { artifact, nextPairState } of preparedUpdates) {
-    txBuilder = txBuilder.pay.ToContract(
-      artifact.pair.pairValidatorAddress,
-      { kind: "inline", value: buildPairDatumCbor(nextPairState) },
-      {
-        lovelace: BigInt(nextPairState.minUtxoLovelace),
-        [artifact.pair.pairUnit]: 1n,
-      },
-    );
-  }
-
-  txBuilder = txBuilder
-    .pay.ToContract(
-      state.receiver.receiverValidatorAddress,
-      { kind: "inline", value: buildReceiverDatumCbor(nextReceiverState) },
-      {
-        lovelace:
-          BigInt(nextReceiverState.minUtxoLovelace) +
-          BigInt(nextReceiverState.balanceLovelace) +
-          BigInt(nextReceiverState.accruedToHookLovelace),
-        [state.receiver.receiverUnit]: 1n,
-      },
-    );
-
-  const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
@@ -514,13 +327,13 @@ export async function submitBatchOracleUpdate(args: {
 
   if (!args.buildOnly && confirmed) {
     await Promise.all([
-      ...preparedUpdates.map(({ artifact }) =>
+      ...batchEntries.map(({ pairArtifact }) =>
         waitForUnitUtxoReplacement({
           lucid,
-          address: artifact.pair.pairValidatorAddress,
-          unit: artifact.pair.pairUnit,
-          label: `pair ${artifact.pair.pairId}`,
-          previousOutRef: currentPairUtxoByUnit.get(artifact.pair.pairUnit),
+          address: pairArtifact.pair.pairValidatorAddress,
+          unit: pairArtifact.pair.pairUnit,
+          label: `pair ${pairArtifact.pair.pairId}`,
+          previousOutRef: currentPairUtxoByUnit.get(pairArtifact.pair.pairUnit),
         }),
       ),
       waitForUnitUtxoReplacement({
@@ -534,7 +347,8 @@ export async function submitBatchOracleUpdate(args: {
   }
 
 
-  const updatedArtifacts = preparedUpdates.map(({ entry, artifact, nextPairState }) => {
+  const updatedArtifacts = batchEntries.map(({ entry, pairArtifact: artifact }) => {
+    const nextPairState = nextPairStateByUnit.get(artifact.pair.pairUnit)!;
     const updatedArtifact: PairStateArtifact = {
       wallet: {
         source,

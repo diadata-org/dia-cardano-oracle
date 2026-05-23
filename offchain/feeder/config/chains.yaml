@@ -1,0 +1,29 @@
+# Source-chain registry.
+#
+# Reference data for every EVM chain the feeder may scan. The active
+# chain is selected at runtime via infrastructure.source.chain_id; these
+# entries are cross-checked by the config validator.
+#
+# Cardano is NOT listed here — it is the destination chain, managed
+# through the `cardano:` blocks in config/routers/*.yaml.
+
+chains:
+  dia-testnet:
+    # chain_id: numeric EVM chain ID. Must match infrastructure.source.chain_id
+    #   and the chain_id in contracts.yaml for this network.
+    chain_id: 10050
+    # name: human-readable label used in logs and diagnostics.
+    name: DIA Testnet
+    # rpc_urls: canonical HTTP JSON-RPC endpoints for this chain.
+    #   The actual URLs used at runtime come from infrastructure.source.rpc_urls.
+    rpc_urls:
+      - https://testnet-rpc.diadata.org
+    # enabled: set false to disable this chain entry in validation.
+    enabled: true
+
+  dia-mainnet:
+    chain_id: 1050
+    name: DIA Mainnet
+    rpc_urls:
+      - https://rpc.diadata.org
+    enabled: true

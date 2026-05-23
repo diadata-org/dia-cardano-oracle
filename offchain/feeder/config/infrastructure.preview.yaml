@@ -1,0 +1,172 @@
+# Feeder infrastructure config — Cardano Preview ↔ DIA Testnet.
+# Loaded automatically when CARDANO_NETWORK=Preview.
+#
+# Priority rule: YAML values win over env-var equivalents when both are
+# present, EXCEPT for secrets (wallet seeds, Blockfrost keys) which live
+# exclusively in .env and are never placed in this file.
+
+infrastructure:
+
+  # --------------------------------------------------------------------------
+  # database — persistence layer for the processed-events log and chain state.
+  # --------------------------------------------------------------------------
+  database:
+    # driver: "sqlite" (default) or "postgres".
+    #   sqlite  → uses the local file at `path`.
+    #   postgres → requires DATABASE_DSN_TESTNET env var (DSN string).
+    # Overrideable via DATABASE_DRIVER env var.
+    driver: sqlite
+    # path: SQLite file path, relative to the feeder working directory.
+    # Overrideable via DATABASE_PATH_TESTNET env var.
+    path: state/preview/feeder.sqlite
+
+  # --------------------------------------------------------------------------
+  # source — the EVM chain the feeder scans for OracleIntent events.
+  # --------------------------------------------------------------------------
+  source:
+    # chain_id: numeric EVM chain ID. Must match an entry in contracts.yaml.
+    chain_id: 10050
+    # name: human-readable label used in logs.
+    name: DIA Testnet
+    # rpc_urls: JSON-RPC HTTP endpoints tried in order (failover on error).
+    rpc_urls:
+      - https://testnet-rpc.diadata.org
+    # ws_url: WebSocket endpoint for the --transport ws mode.
+    #   The DIA_WS_CREDENTIAL_TESTNET secret from .env is appended
+    #   automatically as a path segment.
+    ws_url: wss://testnet-rpc.diadata.org
+    # start_block: block to begin scanning from on a cold start (no saved
+    #   checkpoint). Once the feeder has written a checkpoint the persisted
+    #   value takes precedence and this setting is ignored.
+    #   Set to a recent block to skip all historical data on first run.
+    start_block: 7108000
+
+  # --------------------------------------------------------------------------
+  # event_monitor — WebSocket reconnection policy (--transport ws only).
+  # --------------------------------------------------------------------------
+  event_monitor:
+    enabled: true
+    # reconnect_interval: wait between reconnect attempts. Accepts "Xs", "Xm".
+    reconnect_interval: 5s
+    # max_reconnect_attempts: give up and exit after this many consecutive
+    #   failures, so the process manager (Docker, systemd) can restart it.
+    max_reconnect_attempts: 60
+
+  # --------------------------------------------------------------------------
+  # block_scanner — HTTP polling scanner knobs (--transport http only).
+  # --------------------------------------------------------------------------
+  block_scanner:
+    enabled: true
+    # scan_interval: idle wait between polling ticks when caught up to HEAD.
+    scan_interval: 10s
+    # block_range: max blocks per eth_getLogs request.
+    block_range: 500
+    # max_block_gap: max block distance the scanner tolerates before
+    #   triggering a backward sync to fill the gap. Deferred to M3.
+    max_block_gap: 5000
+    # backward_sync: when true, the scanner detects and backfills missed
+    #   block ranges after a reconnect. Deferred to M3.
+    backward_sync: true
+
+  # --------------------------------------------------------------------------
+  # event_processor — dedup cache controlling duplicate suppression.
+  # --------------------------------------------------------------------------
+  event_processor:
+    # batch_size: max intents processed per pipeline tick in parallel
+    #   worker mode. Deferred to M3 (parallel processing not yet implemented;
+    #   events are processed one at a time).
+    batch_size: 16
+    # validation_timeout: max time to wait for enrichment per event in
+    #   parallel mode. Deferred to M3.
+    validation_timeout: 30s
+    # dedup_cache_size: max entries in the in-memory LRU dedup set.
+    dedup_cache_size: 4096
+    # dedup_cache_ttl: how long an intentHash is remembered to suppress
+    #   re-processing. Must outlive any realistic re-org window.
+    dedup_cache_ttl: 1h
+    # enable_parallel_mode: process multiple events concurrently with a
+    #   worker pool. Deferred to M3 (sequential is sufficient for M2 QPS).
+    enable_parallel_mode: false
+
+  # --------------------------------------------------------------------------
+  # worker_pool — Cardano submission queue concurrency.
+  # --------------------------------------------------------------------------
+  worker_pool:
+    # max_workers: max concurrent Cardano tx builders. Each uses one Blockfrost
+    #   connection; keep ≤ 4 to avoid hitting Blockfrost rate limits.
+    max_workers: 4
+    # task_queue_size: bounded channel depth for the worker pool in parallel
+    #   mode. Deferred to M3 (parallel worker pool not yet implemented).
+    task_queue_size: 64
+    # task_timeout: max wall-clock time for a single submit+confirm cycle.
+    task_timeout: 60s
+    # retry_delay: wait before retrying a failed submission.
+    retry_delay: 5s
+    # max_retries: give up after this many consecutive submission failures
+    #   for a single intent.
+    max_retries: 3
+
+  # --------------------------------------------------------------------------
+  # health_check — controls the /readyz liveness probe behaviour.
+  # --------------------------------------------------------------------------
+  health_check:
+    enabled: true
+    # check_interval: how often the health-checker goroutine runs its full
+    #   suite of probes. Deferred to M3 (health is currently checked inline
+    #   on each /readyz request).
+    check_interval: 30s
+    # timeout: max time for a single health probe before marking unhealthy.
+    #   Deferred to M3.
+    timeout: 10s
+    # max_processing_lag: if no IntentRegistered event has been processed
+    #   within this window, /readyz returns 503. Active now.
+    max_processing_lag: 5m
+    # max_queue_size: mark unhealthy when the submission queue exceeds this
+    #   depth. Deferred to M3.
+    max_queue_size: 128
+
+  # --------------------------------------------------------------------------
+  # recovery — automatic circuit-breaker. Deferred to M3.
+  #
+  # When implemented: after min_failures consecutive errors the feeder
+  # pauses and retries up to max_attempts times with retry_interval between
+  # attempts, aborting if recovery_timeout elapses. Currently the process
+  # exits and the process manager (Docker / systemd) handles restart.
+  # --------------------------------------------------------------------------
+  recovery:
+    enabled: true
+    min_failures: 3
+    max_attempts: 10
+    retry_interval: 30s
+    recovery_timeout: 30m
+
+  # --------------------------------------------------------------------------
+  # api — HTTP API server (health, readyz, metrics, prices endpoints).
+  # --------------------------------------------------------------------------
+  api:
+    enabled: true
+    # listen_addr: "[host]:port". Omit host to bind on all interfaces.
+    # Overrideable via API_LISTEN_ADDR env var.
+    listen_addr: ":8080"
+    # enable_cors: set true only when the API is consumed from a browser.
+    enable_cors: false
+
+  # --------------------------------------------------------------------------
+  # metrics — Prometheus exposition.
+  # --------------------------------------------------------------------------
+  metrics:
+    # enabled: exposes GET /metrics in Prometheus text format.
+    # Overrideable via METRICS_ENABLED=true env var.
+    enabled: true
+    # namespace: prefix for every metric name, e.g. dia_cardano_feeder_events_scanned_total.
+    # Overrideable via METRICS_NAMESPACE env var.
+    namespace: dia_cardano_feeder
+
+  # --------------------------------------------------------------------------
+  # dry_run — skip actual Cardano submissions for the whole process.
+  # --------------------------------------------------------------------------
+  # dry_run: when true the feeder runs the full pipeline (scan → enrich →
+  #   route) but logs "[dry-run] would submit" instead of building a tx.
+  #   Also settable via --dry-run CLI flag or DRY_RUN=true env var.
+  #   Any of the three sources being true activates dry-run mode.
+  dry_run: false

@@ -18,7 +18,7 @@ import {
   logEffectiveOutputs,
 } from "../core/output-logging.js";
 import {
-  selectFundingUtxo,
+  waitForOutRefAvailable,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
 
@@ -60,17 +60,9 @@ export async function publishPaymentHookReferenceScript(args: {
   reportProgress(
     `Computed min lovelace for reference-script outputs: paymentHookValidator=${paymentHookMinLovelace}`,
   );
-  const fundingUtxo = selectFundingUtxo(
-    walletUtxos,
-    [state.bootstrapRefs.config, state.bootstrapRefs.paymentHook],
-    paymentHookMinLovelace,
-    "payment-hook reference-script publish",
-  );
-
   reportProgress(`Building ${getCliConfig().cardanoNetwork} payment-hook reference-script publish transaction`);
   const txSignBuilder = await lucid
     .newTx()
-    .collectFrom([fundingUtxo])
     .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: paymentHookMinLovelace }, paymentHookValidator)
     .complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
@@ -99,8 +91,15 @@ export async function publishPaymentHookReferenceScript(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [fundingUtxo],
+      spentUtxos: [],
       label: "payment-hook reference-script publish",
+      requireChangeWhenNoSpentUtxos: true,
+    });
+
+    await waitForOutRefAvailable({
+      lucid,
+      outRef: { txHash: submittedTxHash!, outputIndex: 0 },
+      label: "payment-hook reference-script",
     });
   }
 

@@ -1,0 +1,90 @@
+# DIA Cardano Oracle Feeder — docker-compose dev setup.
+#
+# Two profiles:
+#
+#   sqlite   (default) — feeder only; state written to ./state/<network>/
+#   postgres           — feeder + postgres-15 sidecar
+#
+# Usage:
+#   docker-compose --profile sqlite   up
+#   docker-compose --profile postgres up
+#
+# Both profiles expect:
+#   - ./config/              — modular YAML config directory (read-only mount)
+#   - .env                   — secrets and selectors (see .env.example)
+
+version: "3.9"
+
+services:
+  feeder-sqlite:
+    profiles: ["sqlite"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: dia-cardano-feeder:local
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/config:ro
+      - feeder-state-sqlite:/state
+    env_file:
+      - .env
+    environment:
+      DATABASE_DRIVER: sqlite
+      DATABASE_PATH_PREVIEW: /state/preview/feeder.sqlite
+      DATABASE_PATH_MAINNET: /state/mainnet/feeder.sqlite
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  feeder-postgres:
+    profiles: ["postgres"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: dia-cardano-feeder:local
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/config:ro
+    env_file:
+      - .env
+    environment:
+      DATABASE_DRIVER: postgres
+      # DATABASE_DSN_PREVIEW and DATABASE_DSN_MAINNET come from .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: feeder
+      POSTGRES_USER: feeder
+      POSTGRES_PASSWORD: feeder
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feeder -d feeder"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  feeder-state-sqlite:
+  postgres-data:

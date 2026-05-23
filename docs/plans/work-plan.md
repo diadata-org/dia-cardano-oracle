@@ -9,7 +9,8 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 - [Final Cardano Milestones](../milestones/final-cardano-milestones.md) — Catalyst milestone text.
 - [Milestone 1 Preview Evidence](../milestones/evidence/m1-preview-20260516-090057/milestone-1-preview-evidence.md) — M1 Preview verification log.
 - [Milestone 1 Mainnet Evidence](../milestones/evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) — M1 Mainnet verification log (latest run).
-- [Milestone 2 Feeder Strategy](./milestone-2-feeder-strategy.md) — recommended feeder split, DIA stack glossary, and M2 implementation direction.
+- [Milestone 2 Feeder Strategy](./milestone-2-feeder-strategy.md) — conceptual reference: feeder split, DIA stack glossary, canonical endpoints (chain ids and registries confirmed by DIA), open questions still pending DIA confirmation.
+- [Milestone 2 Plan](./milestone-2-plan.md) — operational task breakdown for M2 (phases 0–5, acceptance criteria, evidence layout).
 - [Audit report](../audit/) — `audit-report-20260515.md`.
 
 ## Scope
@@ -69,12 +70,32 @@ Tasks:
 
 ## Workstream C — Data feeder (bridge)
 
-Tasks:
+The Cardano-side feeder service that reads DIA-signed `OracleIntent`
+payloads from `OracleIntentRegistry` (DIA Lasernet), routes each intent to
+the matching Cardano client receiver, and submits the corresponding Cardano
+oracle update transactions, plus the operational surface (health, metrics,
+inflight tracking, evidence packaging) required by the M2 acceptance
+criteria in [`final-cardano-milestones.md`](../milestones/final-cardano-milestones.md).
 
-- [ ] Service that subscribes to DIA `OracleIntent` sources and pushes the corresponding Cardano update transactions.
-- [ ] Submission strategy covering single and batch updates, retries, and fee-budget guards.
-- [ ] Integration tests against the Preview network using real DIA fixtures.
-- [ ] Uptime and accuracy reports aligned with the acceptance criteria in `final-cardano-milestones.md`.
+The full operational task breakdown for this workstream — phases,
+acceptance criteria, evidence layout, and dependencies on DIA
+confirmations (signer set, WebSocket creds, repo location, wallet custody,
+update cadence) — lives in [`milestone-2-plan.md`](./milestone-2-plan.md).
+The conceptual reference (why and how, glossary, canonical endpoints)
+lives in [`milestone-2-feeder-strategy.md`](./milestone-2-feeder-strategy.md).
+
+High-level deliverables tracked here:
+
+- [ ] Feeder service under `offchain/feeder/` (pending repo-location
+  confirmation from DIA): registry scanner, router, submitter, inflight
+  tracker, ops surface.
+- [ ] CLI tx builders refactored into a reusable library so the feeder
+  imports them in-process (Phase 2 of the M2 plan).
+- [ ] Cardano `Config` re-pointed to the canonical DIA domain on Preview
+  and Mainnet before the first live feed (Phase 1 of the M2 plan).
+- [ ] M2 evidence packs (Preview and Mainnet) under
+  `docs/milestones/evidence/` with verified Cardano tx hashes covering
+  the 10 Catalyst-listed pairs.
 
 ## Workstream D — Indexer
 

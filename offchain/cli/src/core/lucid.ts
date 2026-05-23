@@ -2,7 +2,7 @@ import { Lucid } from "@lucid-evolution/lucid";
 import { Blockfrost, Koios } from "@lucid-evolution/provider";
 import type { Provider } from "@lucid-evolution/core-types";
 
-import { getCliConfig } from "./config.js";
+import { getCliConfig, type CliConfig } from "./config.js";
 
 type ProtocolParameters = Awaited<
   ReturnType<Blockfrost["getProtocolParameters"]>
@@ -92,21 +92,20 @@ async function makeRealConfiguredLucid(): Promise<LucidInstance> {
 async function selectRealConfiguredWallet(
   lucid: LucidInstance,
 ): Promise<WalletSource> {
-  const seed = process.env.CARDANO_WALLET_SEED?.trim();
-  const privateKey = process.env.CARDANO_PRIVATE_KEY?.trim();
+  const { cardanoWalletSeed, cardanoPrivateKey, networkSuffix } = getCliConfig();
 
-  if (seed) {
-    lucid.selectWallet.fromSeed(seed);
+  if (cardanoWalletSeed) {
+    lucid.selectWallet.fromSeed(cardanoWalletSeed);
     return "seed";
   }
 
-  if (privateKey) {
-    lucid.selectWallet.fromPrivateKey(privateKey);
+  if (cardanoPrivateKey) {
+    lucid.selectWallet.fromPrivateKey(cardanoPrivateKey);
     return "private-key";
   }
 
   throw new Error(
-    "Missing wallet configuration. Set CARDANO_WALLET_SEED or CARDANO_PRIVATE_KEY.",
+    `Missing wallet configuration. Set CARDANO_WALLET_SEED_${networkSuffix} or CARDANO_PRIVATE_KEY_${networkSuffix}.`,
   );
 }
 
@@ -125,6 +124,53 @@ export async function selectConfiguredWallet(
   lucid: LucidInstance,
 ): Promise<WalletSource> {
   return activeWalletSelector(lucid);
+}
+
+// ---------------------------------------------------------------------------
+// Config-explicit variants — used by the feeder when it wants to pass
+// a pre-resolved CliConfig instead of relying on the global env-based
+// getCliConfig(). These keep the original env-based functions working
+// (backwards compatibility) while allowing explicit dependency injection.
+// ---------------------------------------------------------------------------
+
+export async function makeConfiguredLucidWithConfig(
+  config: CliConfig,
+): Promise<LucidInstance> {
+  const provider = await makeProviderWithConfig(config);
+  return Lucid(provider, config.cardanoNetwork);
+}
+
+export async function selectConfiguredWalletWithConfig(
+  lucid: LucidInstance,
+  config: CliConfig,
+): Promise<WalletSource> {
+  if (config.cardanoWalletSeed) {
+    lucid.selectWallet.fromSeed(config.cardanoWalletSeed);
+    return "seed";
+  }
+  if (config.cardanoPrivateKey) {
+    lucid.selectWallet.fromPrivateKey(config.cardanoPrivateKey);
+    return "private-key";
+  }
+  throw new Error(
+    `Missing wallet configuration. Set CARDANO_WALLET_SEED_${config.networkSuffix} or CARDANO_PRIVATE_KEY_${config.networkSuffix}.`,
+  );
+}
+
+async function makeProviderWithConfig(config: CliConfig): Promise<ConfiguredProvider> {
+  if (config.cardanoProvider === "Koios") {
+    return new Koios(config.koiosApiUrl);
+  }
+  const provider = new Blockfrost(
+    config.blockfrostApiUrl,
+    config.blockfrostProjectId,
+  );
+  provider.getProtocolParameters = async (): Promise<ProtocolParameters> =>
+    fetchBlockfrostProtocolParameters(
+      config.blockfrostApiUrl,
+      config.blockfrostProjectId,
+    );
+  return provider;
 }
 
 // Override the Lucid factory. Subsequent calls to `makeConfiguredLucid()`

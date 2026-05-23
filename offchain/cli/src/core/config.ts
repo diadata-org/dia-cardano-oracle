@@ -1,24 +1,56 @@
 import { config as loadDotenv } from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-loadDotenv();
+// Load .env from the CLI's own directory, not from cwd.
+// This allows the feeder to import CLI modules from a different working directory.
+const cliDir = path.dirname(fileURLToPath(import.meta.url));
+loadDotenv({ path: path.resolve(cliDir, "../../.env") });
 
 export type CardanoNetwork = "Preview" | "Mainnet";
+export type NetworkSuffix = "TESTNET" | "MAINNET";
+
+export type DiaSourceConfig = {
+  sourceChainId: string;
+  rpcUrl: string;
+  wsUrl: string;
+  registryAddress: string;
+  explorerUrl: string;
+  domainName: string;
+  domainVersion: string;
+};
 
 export type CliConfig = {
   cardanoNetwork: CardanoNetwork;
+  networkSuffix: NetworkSuffix;
   cardanoProvider: "Koios" | "Blockfrost";
   blockfrostProjectId: string;
   blockfrostApiUrl: string;
   koiosApiUrl: string;
+  cardanoWalletSeed: string | null;
+  cardanoPrivateKey: string | null;
+  diaEvmPrivateKey: string | null;
+  diaWsCredential: string | null;
+  dia: DiaSourceConfig;
 };
 
-function required(name: string): string {
-  const value = process.env[name]?.trim();
+// All per-network env vars live in offchain/cli/.env with suffix
+// _TESTNET (CARDANO_NETWORK=Preview) or _MAINNET (CARDANO_NETWORK=Mainnet).
+// `pickNetworkEnv` is the single read path — never reach into
+// `process.env.<UNSUFFIXED>` for a per-network value elsewhere.
+function pickNetworkEnv(suffix: NetworkSuffix, baseName: string): string | null {
+  const value = process.env[`${baseName}_${suffix}`]?.trim();
+  return value && value.length > 0 ? value : null;
+}
 
+function requireNetworkEnv(suffix: NetworkSuffix, baseName: string): string {
+  const value = pickNetworkEnv(suffix, baseName);
   if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
+    throw new Error(
+      `Missing required environment variable: ${baseName}_${suffix}. ` +
+        `Active CARDANO_NETWORK requires the *_${suffix} variant of every per-network setting.`,
+    );
   }
-
   return value;
 }
 
@@ -28,39 +60,63 @@ function requireSupportedNetwork(value: string): CardanoNetwork {
       `Unsupported CARDANO_NETWORK "${value}". Supported values: Preview, Mainnet.`,
     );
   }
-
   return value;
 }
 
-function defaultBlockfrostUrl(network: CardanoNetwork): string {
-  return network === "Mainnet"
-    ? "https://cardano-mainnet.blockfrost.io/api/v0"
-    : "https://cardano-preview.blockfrost.io/api/v0";
-}
-
-function defaultKoiosUrl(network: CardanoNetwork): string {
-  return network === "Mainnet"
-    ? "https://api.koios.rest/api/v1"
-    : "https://preview.koios.rest/api/v1";
+function suffixForNetwork(network: CardanoNetwork): NetworkSuffix {
+  return network === "Mainnet" ? "MAINNET" : "TESTNET";
 }
 
 export function getCliConfig(): CliConfig {
   const cardanoNetwork = requireSupportedNetwork(
     process.env.CARDANO_NETWORK?.trim() ?? "Preview",
   );
+  const suffix = suffixForNetwork(cardanoNetwork);
 
   return {
     cardanoNetwork,
+    networkSuffix: suffix,
     cardanoProvider:
       process.env.CARDANO_PROVIDER?.trim() === "Koios"
         ? "Koios"
         : "Blockfrost",
-    blockfrostProjectId: required("BLOCKFROST_PROJECT_ID"),
-    blockfrostApiUrl:
-      process.env.BLOCKFROST_API_URL?.trim() ??
-      defaultBlockfrostUrl(cardanoNetwork),
-    koiosApiUrl:
-      process.env.KOIOS_API_URL?.trim() ?? defaultKoiosUrl(cardanoNetwork),
+    blockfrostProjectId: requireNetworkEnv(suffix, "BLOCKFROST_PROJECT_ID"),
+    blockfrostApiUrl: requireNetworkEnv(suffix, "BLOCKFROST_API_URL"),
+    koiosApiUrl: requireNetworkEnv(suffix, "KOIOS_API_URL"),
+    cardanoWalletSeed: pickNetworkEnv(suffix, "CARDANO_WALLET_SEED"),
+    cardanoPrivateKey: pickNetworkEnv(suffix, "CARDANO_PRIVATE_KEY"),
+    diaEvmPrivateKey: pickNetworkEnv(suffix, "DIA_EVM_PRIVATE_KEY"),
+    diaWsCredential: pickNetworkEnv(suffix, "DIA_WS_CREDENTIAL"),
+    dia: {
+      sourceChainId: requireNetworkEnv(suffix, "DIA_SOURCE_CHAIN_ID"),
+      rpcUrl: requireNetworkEnv(suffix, "DIA_RPC_URL"),
+      wsUrl: requireNetworkEnv(suffix, "DIA_WS_URL"),
+      registryAddress: requireNetworkEnv(suffix, "DIA_REGISTRY_ADDRESS"),
+      explorerUrl: requireNetworkEnv(suffix, "DIA_EXPLORER_URL"),
+      domainName: process.env.DIA_DOMAIN_NAME?.trim() || "DIA Oracle",
+      domainVersion: process.env.DIA_DOMAIN_VERSION?.trim() || "1.0",
+    },
+  };
+}
+
+// Variant of `getCliConfig()` that resolves the per-network block for a
+// caller-supplied suffix instead of the active CARDANO_NETWORK. Used by
+// ops tools (e.g. probe-dia-ws.ts) that intentionally exercise BOTH
+// networks in a single run.
+export function getDiaSourceConfigFor(suffix: NetworkSuffix): DiaSourceConfig & {
+  evmPrivateKey: string | null;
+  wsCredential: string | null;
+} {
+  return {
+    sourceChainId: requireNetworkEnv(suffix, "DIA_SOURCE_CHAIN_ID"),
+    rpcUrl: requireNetworkEnv(suffix, "DIA_RPC_URL"),
+    wsUrl: requireNetworkEnv(suffix, "DIA_WS_URL"),
+    registryAddress: requireNetworkEnv(suffix, "DIA_REGISTRY_ADDRESS"),
+    explorerUrl: requireNetworkEnv(suffix, "DIA_EXPLORER_URL"),
+    domainName: process.env.DIA_DOMAIN_NAME?.trim() || "DIA Oracle",
+    domainVersion: process.env.DIA_DOMAIN_VERSION?.trim() || "1.0",
+    evmPrivateKey: pickNetworkEnv(suffix, "DIA_EVM_PRIVATE_KEY"),
+    wsCredential: pickNetworkEnv(suffix, "DIA_WS_CREDENTIAL"),
   };
 }
 

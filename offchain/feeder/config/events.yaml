@@ -1,0 +1,86 @@
+# Source-chain event definitions.
+#
+# Each entry describes one EVM event the pipeline processes:
+#
+#   abi             — JSON ABI fragment used to decode the raw log.
+#   data_extraction — maps log fields to named pipeline variables.
+#                     The `event.*` namespace refers to decoded log fields.
+#   enrichment      — optional view-call that fetches additional data
+#                     not present in the log itself.
+#
+# For `IntentRegistered` the `symbol` topic is `string indexed`, so
+# the log carries only its keccak256 hash. The human-readable symbol
+# and the full signed payload (price, expiry, signature …) come from
+# the enrichment call to `getIntent(intentHash)`. Routers then filter
+# and dispatch on the resulting `fullIntent`.
+
+event_definitions:
+  IntentRegistered:
+    # contract: prefix used to look up the registry ABI in contracts.yaml.
+    #   The feeder appends "-testnet" or "-mainnet" automatically.
+    contract: intent-registry
+    # abi: minimal ABI fragment for decoding the log on-chain.
+    abi: |
+      {
+        "type": "event",
+        "name": "IntentRegistered",
+        "anonymous": false,
+        "inputs": [
+          { "name": "intentHash", "type": "bytes32", "indexed": true },
+          { "name": "symbol",     "type": "string",  "indexed": true  },
+          { "name": "price",      "type": "uint256", "indexed": true  },
+          { "name": "timestamp",  "type": "uint256", "indexed": false },
+          { "name": "signer",     "type": "address", "indexed": false }
+        ]
+      }
+    # data_extraction: maps decoded log fields to named pipeline variables.
+    #   intentHash — the keccak256 hash identifying this intent on-chain.
+    #   symbolHash — the keccak256 of the asset symbol (NOT the readable string;
+    #                the readable symbol comes from fullIntent.symbol via enrichment).
+    #   price      — raw price from the log (18-decimal fixed point).
+    #   timestamp  — UNIX timestamp (seconds) when the intent was signed.
+    #   signer     — EVM address that signed the intent.
+    data_extraction:
+      intentHash: event.intentHash
+      symbolHash: event.symbol
+      price:      event.price
+      timestamp:  event.timestamp
+      signer:     event.signer
+    # enrichment: view-call to fetch the full OracleIntent struct.
+    #   method  — contract function name declared in contracts.yaml ABI.
+    #   params  — arguments forwarded to the call (intentHash from the log).
+    #   returns — maps the return tuple field(s) to pipeline variable names.
+    #             `fullIntent` is available as `enriched.fullIntent` in router
+    #             conditions and as the payload forwarded to the Cardano bridge.
+    enrichment:
+      method: getIntent
+      abi: |
+        {
+          "type": "function",
+          "name": "getIntent",
+          "stateMutability": "view",
+          "inputs":  [ { "name": "intentHash", "type": "bytes32" } ],
+          "outputs": [
+            {
+              "name": "intent",
+              "type": "tuple",
+              "components": [
+                { "name": "intentType", "type": "string"  },
+                { "name": "version",    "type": "string"  },
+                { "name": "chainId",    "type": "uint256" },
+                { "name": "nonce",      "type": "uint256" },
+                { "name": "expiry",     "type": "uint256" },
+                { "name": "symbol",     "type": "string"  },
+                { "name": "price",      "type": "uint256" },
+                { "name": "timestamp",  "type": "uint256" },
+                { "name": "source",     "type": "string"  },
+                { "name": "signature",  "type": "bytes"   },
+                { "name": "signer",     "type": "address" }
+              ]
+            }
+          ]
+        }
+      params:
+        - ${event.intentHash}
+      returns:
+        fullIntent: intent

@@ -33,7 +33,6 @@ import {
   findSingleUtxoAtUnit,
   findUtxoByOutRef,
   selectBootstrapUtxo,
-  selectFundingUtxo,
   splitUnit,
   toBigInt,
   waitForWalletSettlement,
@@ -150,23 +149,6 @@ export async function configBootstrap(args: {
   };
   const configDatumCbor = buildConfigDatumCbor(nextConfigState);
   const mintRedeemer = Data.to(new Constr(0, []));
-  const fundingUtxos =
-    (walletBootstrapUtxo.assets.lovelace ?? 0n) >=
-    resolvedInput.minUtxoLovelace + 2_000_000n
-      ? []
-      : [
-          selectFundingUtxo(
-            walletUtxos,
-            [
-              bootstrapOutRef,
-              ...(previousState?.bootstrapRefs.paymentHook
-                ? [previousState.bootstrapRefs.paymentHook]
-                : []),
-            ],
-            resolvedInput.minUtxoLovelace + 2_000_000n,
-            "config bootstrap",
-          ),
-        ];
 
   reportProgress(`Building ${getCliConfig().cardanoNetwork} config bootstrap transaction`);
   assertNftBootstrapDestinationIsNotFundingWallet(
@@ -176,7 +158,7 @@ export async function configBootstrap(args: {
   );
   const txBuilder = lucid
     .newTx()
-    .collectFrom([walletBootstrapUtxo, ...fundingUtxos])
+    .collectFrom([walletBootstrapUtxo])
     .attach.MintingPolicy(configMintPolicy)
     .mintAssets({ [configUnit]: 1n }, mintRedeemer)
     .pay.ToContract(
@@ -220,7 +202,7 @@ export async function configBootstrap(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [walletBootstrapUtxo, ...fundingUtxos],
+      spentUtxos: [walletBootstrapUtxo],
       label: "config bootstrap",
     });
   }

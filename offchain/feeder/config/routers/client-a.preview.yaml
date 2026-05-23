@@ -1,0 +1,79 @@
+# Router config — client-a on Cardano Preview.
+#
+# Each router file maps a set of DIA oracle intents to one or more
+# Cardano destinations. The feeder loads every *.yaml under config/routers/
+# at startup; one router per file is the recommended layout.
+#
+# Add a new file here (e.g. client-b.preview.yaml) to onboard another
+# client without touching any other config.
+
+routers:
+  client_a_preview:
+    # id: unique key across all router files. Used in logs and metrics.
+    id: client_a_preview
+    # name: human-readable label for dashboards.
+    name: client-a → Cardano Preview (10 Catalyst pairs)
+    # customer: optional tag, used in logs.
+    customer: client-a
+    # type: always "event" for the Cardano feeder (Spectra compat field).
+    type: event
+    # enabled: set false to pause this router without removing the file.
+    enabled: true
+    # private_key_env: name of the env var holding the Cardano wallet
+    #   mnemonic seed (from .env). The wallet pays the Cardano tx fees and
+    #   signs each oracle-update transaction.
+    private_key_env: CARDANO_WALLET_SEED_TESTNET
+
+    triggers:
+      # events: list of EVM event names this router reacts to.
+      #   Only "IntentRegistered" is supported by the Cardano feeder.
+      events:
+        - IntentRegistered
+      # conditions: filter intents before routing. Evaluated against the
+      #   enriched intent returned by getIntent(). All conditions must
+      #   pass (AND logic). "in" checks membership in a list.
+      conditions:
+        - field: ${enrichment.fullIntent.Symbol}
+          operator: in
+          value:
+            - BTC/USD
+            - ETH/USD
+            - USDC/USD
+            - USDT/USD
+            - ARB/USD
+            - SOL/USD
+            - WETH/USD
+            - DAI/USD
+            - LINK/USD
+            - ADA/USD
+            - DEX:SERV/USD
+
+    processing:
+      # datasource: "enrichment" — use the full OracleIntent from getIntent().
+      datasource: enrichment
+      # transformations: field-level transforms applied before routing.
+      #   Leave empty ([]) for the Cardano feeder; non-empty arrays are
+      #   rejected with an actionable error.
+      transformations: []
+      validationenabled: true
+
+    destinations:
+      - cardano:
+          # network: "Preview" or "Mainnet". Must match CARDANO_NETWORK env var.
+          network: Preview
+          # client_state_path: path (relative to feeder working dir) to the
+          #   client-a.json artifact produced by the CLI bootstrap command.
+          #   Run `npm run cli bootstrap` to regenerate it.
+          client_state_path: state/preview/clients/client-a.json
+          # protocol_state_path: path to the config-bootstrap.json artifact
+          #   produced by the CLI bootstrap command.
+          protocol_state_path: state/preview/config-bootstrap.json
+          # tx_mode: "single" — one Cardano tx per intent (only mode supported).
+          tx_mode: single
+        # time_threshold: minimum time between two updates for the same symbol
+        #   on this destination. Prevents hammering the chain with every tick.
+        time_threshold: 1m
+        # price_deviation: minimum relative price change to trigger an update.
+        #   "0.1%" means skip the update if the new price is within ±0.1% of
+        #   the last submitted price.
+        price_deviation: "0.1%"

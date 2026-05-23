@@ -2,6 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { input } from "@inquirer/prompts";
 
+import { getCliConfig } from "../core/config.js";
 import {
   makeConfiguredLucid,
   selectConfiguredWallet,
@@ -25,19 +26,18 @@ type PromptDefaults = {
   intent: IntentSignInput["intent"];
 };
 
-const DEFAULT_DOMAIN = {
-  name: "DIA Oracle",
-  version: "1.0",
-  sourceChainId: "100640",
-  verifyingContract: "0xF8c614A483A0427A13512F52ac72A576678bE317",
-};
-
 function with0x(value: string): string {
   return value.startsWith("0x") || value.startsWith("0X") ? value : `0x${value}`;
 }
 
 async function resolvePromptDefaults(statePath?: string): Promise<PromptDefaults> {
-  let domain = DEFAULT_DOMAIN;
+  const cliConfig = getCliConfig();
+  let domain = {
+    name: cliConfig.dia.domainName,
+    version: cliConfig.dia.domainVersion,
+    sourceChainId: cliConfig.dia.sourceChainId,
+    verifyingContract: cliConfig.dia.registryAddress,
+  };
   let defaultIntent: IntentSignInput["intent"] = {
     intentType: "OracleUpdate",
     version: domain.version,

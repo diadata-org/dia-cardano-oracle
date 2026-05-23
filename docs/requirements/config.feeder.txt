@@ -1,0 +1,45 @@
+# Intent Forwarder Router - 
+# Forwards IntentRegistered events to 
+
+config:
+  routers:
+    dia_demo_somnia_testnet:
+      router:
+        id: dia_demo_somnia_testnet
+        name: IntentRegistered Event Forwarder - 
+        customer: dia
+        type: event
+        enabled: true
+        private_key_env: BRIDGE_PRIVATE_KEY
+        triggers:
+          events:
+            - IntentRegistered
+          conditions:
+            - field: ${enrichment.fullIntent.Symbol}
+              operator: in
+              value:
+                 - ETH/USD
+                 - BTC/USD
+                 - USDT/USD
+                 - USDC/USD
+                 - ARB/USD
+                 - SOL/USD
+                 - SOMI/USD
+                 - WETH/USD
+        processing:
+          datasource: enrichment
+          transformations: []
+          validationenabled: true
+        destinations:
+          - chain_id: 50312
+            contract: 0xCACcFE65575211a486172dD43055cdAaA55146c9
+            time_threshold: 1m
+            price_deviation: "0.1%"
+            method:
+              name: handleIntentUpdate
+              abi: '{"name":"handleIntentUpdate","type":"function","inputs":[{"name":"intent","type":"tuple","components":[{"name":"intentType","type":"string"},{"name":"version","type":"string"},{"name":"chainId","type":"uint256"},{"name":"nonce","type":"uint256"},{"name":"expiry","type":"uint256"},{"name":"symbol","type":"string"},{"name":"price","type":"uint256"},{"name":"timestamp","type":"uint256"},{"name":"source","type":"string"},{"name":"signature","type":"bytes"},{"name":"signer","type":"address"}]}]}'
+              params:
+                intent: ${enrichment.fullIntent}
+              value: "0"
+              gaslimit: 400000
+              gasmultiplier: 1.2

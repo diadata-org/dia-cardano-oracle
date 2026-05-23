@@ -30,7 +30,6 @@ import {
   findSingleUtxoAtUnit,
   findUtxoByOutRef,
   selectBootstrapUtxo,
-  selectFundingUtxo,
   splitUnit,
   toBigInt,
   waitForWalletSettlement,
@@ -108,18 +107,6 @@ export async function paymentHookBootstrap(args: {
     "minUtxoLovelace",
   );
   assertPositiveMinUtxoLovelace(paymentHookMinUtxoLovelace, "PaymentHook");
-  const fundingUtxos =
-    (paymentHookBootstrapUtxo.assets.lovelace ?? 0n) >=
-    paymentHookMinUtxoLovelace + 4_000_000n
-      ? []
-      : [
-          selectFundingUtxo(
-            walletUtxos,
-            [state.bootstrapRefs.config, paymentHookBootstrapOutRef],
-            paymentHookMinUtxoLovelace + 4_000_000n,
-            "payment-hook bootstrap",
-          ),
-        ];
 
   if (!state.compiledScripts?.configValidator) {
     throw new Error("configValidator compiled script not found. Run config:parameterize first.");
@@ -186,7 +173,7 @@ export async function paymentHookBootstrap(args: {
   const txBuilder = lucid
     .newTx()
     .collectFrom([currentConfigUtxo], adminUpdateRedeemer)
-    .collectFrom([paymentHookBootstrapUtxo, ...fundingUtxos])
+    .collectFrom([paymentHookBootstrapUtxo])
     .addSignerKey(walletDefaults.paymentKeyHash)
     .register.Stake(state.scripts.coordinatorRewardAddress)
     .attach.SpendingValidator(configValidator)
@@ -233,7 +220,7 @@ export async function paymentHookBootstrap(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [paymentHookBootstrapUtxo, ...fundingUtxos],
+      spentUtxos: [paymentHookBootstrapUtxo],
       label: "payment-hook bootstrap",
     });
   }

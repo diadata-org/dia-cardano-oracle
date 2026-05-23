@@ -20,6 +20,7 @@ import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { assertPaymentKeyHashIsConfigSigner } from "../preflight/index.js";
 import {
   findSingleUtxoAtUnit,
+  waitForOutRefGone,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
@@ -259,9 +260,19 @@ async function buildAndSubmit(args: {
     await waitForWalletSettlement({
       wallet: args.lucid.wallet(),
       previousUtxos: args.walletUtxos,
-      spentUtxos: [],
+      spentUtxos: args.targetUtxos,
       label: `reclaim-reference-script (${args.script})`,
     });
+
+    await Promise.all(
+      args.targetUtxos.map((utxo) =>
+        waitForOutRefGone({
+          lucid: args.lucid,
+          outRef: { txHash: utxo.txHash, outputIndex: utxo.outputIndex },
+          label: `reclaim-reference-script (${args.script})`,
+        }),
+      ),
+    );
   }
 
   return { submittedTxHash, confirmed };

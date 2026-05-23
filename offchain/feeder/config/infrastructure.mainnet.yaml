@@ -1,0 +1,120 @@
+# Feeder infrastructure config — Cardano Mainnet ↔ DIA Mainnet.
+# Loaded automatically when CARDANO_NETWORK=Mainnet.
+#
+# Priority rule: YAML values win over env-var equivalents when both are
+# present, EXCEPT for secrets (wallet seeds, Blockfrost keys) which live
+# exclusively in .env and are never placed in this file.
+#
+# See infrastructure.preview.yaml for full field-level documentation.
+# Only values that differ from Preview are annotated here.
+
+infrastructure:
+
+  # --------------------------------------------------------------------------
+  # database
+  # --------------------------------------------------------------------------
+  database:
+    # Overrideable via DATABASE_DRIVER env var.
+    driver: sqlite
+    # Overrideable via DATABASE_PATH_MAINNET env var.
+    path: state/mainnet/feeder.sqlite
+
+  # --------------------------------------------------------------------------
+  # source — DIA Mainnet (chain_id 1050).
+  # --------------------------------------------------------------------------
+  source:
+    chain_id: 1050
+    name: DIA Mainnet
+    # rpc_urls: tried in order; failover on any request error.
+    rpc_urls:
+      - https://rpc.diadata.org
+    # ws_url: DIA_WS_CREDENTIAL_MAINNET from .env is appended automatically.
+    ws_url: wss://rpc.diadata.org
+    # start_block: set to a recent block to avoid replaying all of mainnet
+    #   history on first run. 0 = scan from the very first block.
+    start_block: 0
+
+  # --------------------------------------------------------------------------
+  # event_monitor — WebSocket reconnection policy.
+  # --------------------------------------------------------------------------
+  event_monitor:
+    enabled: true
+    reconnect_interval: 5s
+    max_reconnect_attempts: 60
+
+  # --------------------------------------------------------------------------
+  # block_scanner — HTTP polling knobs.
+  # --------------------------------------------------------------------------
+  block_scanner:
+    enabled: true
+    scan_interval: 10s
+    block_range: 500
+    max_block_gap: 5000        # gap detection before backward sync. Deferred to M3.
+    backward_sync: true        # backfill missed block ranges after reconnect. Deferred to M3.
+
+  # --------------------------------------------------------------------------
+  # event_processor — dedup cache.
+  # --------------------------------------------------------------------------
+  event_processor:
+    batch_size: 16             # max events per tick in parallel mode. Deferred to M3.
+    validation_timeout: 30s    # enrichment timeout in parallel mode. Deferred to M3.
+    dedup_cache_size: 4096
+    dedup_cache_ttl: 1h
+    enable_parallel_mode: false  # concurrent event processing. Deferred to M3.
+
+  # --------------------------------------------------------------------------
+  # worker_pool — Cardano submission queue.
+  # --------------------------------------------------------------------------
+  worker_pool:
+    # Keep max_workers ≤ 4 to avoid Blockfrost rate limits.
+    max_workers: 4
+    task_queue_size: 64        # worker pool channel depth in parallel mode. Deferred to M3.
+    task_timeout: 60s
+    retry_delay: 5s
+    max_retries: 3
+
+  # --------------------------------------------------------------------------
+  # health_check — /readyz probe.
+  # --------------------------------------------------------------------------
+  health_check:
+    enabled: true
+    check_interval: 30s        # health-checker goroutine cadence. Deferred to M3.
+    timeout: 10s               # single probe timeout. Deferred to M3.
+    max_processing_lag: 5m     # /readyz returns 503 if exceeded. Active now.
+    max_queue_size: 128        # unhealthy threshold for queue depth. Deferred to M3.
+
+  # --------------------------------------------------------------------------
+  # recovery — automatic circuit-breaker. Deferred to M3.
+  #
+  # When implemented: pauses after min_failures consecutive errors and
+  # retries up to max_attempts times. Currently the process exits and
+  # the process manager (Docker / systemd) handles restart.
+  # --------------------------------------------------------------------------
+  recovery:
+    enabled: true
+    min_failures: 3
+    max_attempts: 10
+    retry_interval: 30s
+    recovery_timeout: 30m
+
+  # --------------------------------------------------------------------------
+  # api — HTTP server.
+  # --------------------------------------------------------------------------
+  api:
+    enabled: true
+    # Overrideable via API_LISTEN_ADDR env var.
+    listen_addr: ":8080"
+    enable_cors: false
+
+  # --------------------------------------------------------------------------
+  # metrics — Prometheus.
+  # --------------------------------------------------------------------------
+  metrics:
+    # Overrideable via METRICS_ENABLED / METRICS_NAMESPACE env vars.
+    enabled: true
+    namespace: dia_cardano_feeder
+
+  # --------------------------------------------------------------------------
+  # dry_run — any of YAML/--dry-run/DRY_RUN=true activates it.
+  # --------------------------------------------------------------------------
+  dry_run: false

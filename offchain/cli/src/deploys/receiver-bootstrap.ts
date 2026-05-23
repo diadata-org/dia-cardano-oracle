@@ -1,6 +1,6 @@
 import path from "node:path";
 import { stepId, networkTag , getCliConfig} from "../core/config.js";
-import { Constr, type OutRef, type UTxO } from "@lucid-evolution/lucid";
+import { Constr, type OutRef } from "@lucid-evolution/lucid";
 import { Data } from "@lucid-evolution/plutus";
 
 import {
@@ -27,7 +27,6 @@ import {
   findSingleUtxoAtUnit,
   findUtxoByOutRef,
   selectBootstrapUtxo,
-  selectFundingUtxo,
   toBigInt,
   waitForWalletSettlement,
 } from "../core/chain-helpers.js";
@@ -142,21 +141,6 @@ export async function receiverBootstrap(args: {
     ).toString(),
   };
   const receiverOutputLovelace = BigInt(receiverState.minUtxoLovelace);
-  const fundingUtxos =
-    (receiverBootstrapUtxo.assets.lovelace ?? 0n) >= receiverOutputLovelace + 2_000_000n
-      ? []
-      : [
-          selectFundingUtxo(
-            walletUtxos,
-            [
-              protocol.bootstrapRefs.config,
-              protocol.bootstrapRefs.paymentHook!,
-              receiverBootstrapOutRef,
-            ],
-            receiverOutputLovelace + 2_000_000n,
-            "receiver bootstrap",
-          ),
-        ];
   const receiverDatumCbor = buildReceiverDatumCbor(receiverState);
   const mintRedeemer = Data.to(new Constr(0, []));
 
@@ -169,7 +153,7 @@ export async function receiverBootstrap(args: {
   const txBuilder = lucid
     .newTx()
     .readFrom([currentConfigUtxo])
-    .collectFrom([receiverBootstrapUtxo, ...fundingUtxos])
+    .collectFrom([receiverBootstrapUtxo])
     .addSignerKey(walletDefaults.paymentKeyHash)
     .attach.MintingPolicy(receiverMintPolicy)
     .mintAssets({ [receiverUnit]: 1n }, mintRedeemer)
@@ -209,7 +193,7 @@ export async function receiverBootstrap(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [receiverBootstrapUtxo, ...fundingUtxos],
+      spentUtxos: [receiverBootstrapUtxo],
       label: "receiver bootstrap",
     });
   }

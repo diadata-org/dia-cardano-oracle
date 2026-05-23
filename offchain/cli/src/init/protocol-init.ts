@@ -1,6 +1,7 @@
 import { input as promptInput } from "@inquirer/prompts";
 
 import { toBigInt } from "../core/chain-helpers.js";
+import { getCliConfig } from "../core/config.js";
 import {
   deriveCompressedPublicKeyFromPrivateKey,
   normalizeEthereumAddressHex,
@@ -20,14 +21,6 @@ import {
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 
-const DEFAULT_AUTHORIZED_DIA_PUBLIC_KEY =
-  "03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807";
-const DEFAULT_DOMAIN = {
-  name: "DIA Oracle",
-  version: "1.0",
-  sourceChainId: "100640",
-  verifyingContract: "0xF8c614A483A0427A13512F52ac72A576678bE317",
-};
 const DEFAULT_BASE_FEE_LOVELACE = "600000"; // 0.6 ADA base fee
 const DEFAULT_PER_PAIR_FEE_LOVELACE = "400000"; // 0.40 ADA per pair
 const DEFAULT_MAX_BOOTSTRAP_DRIFT_SECONDS = "300"; // 5 minutes
@@ -61,20 +54,20 @@ function defaultProtocolConfigInput(
   defaultSigner: string,
   walletAddress: string,
 ): ProtocolInitConfigInput {
-  const configuredEthereumPrivateKey = process.env.DIA_EVM_PRIVATE_KEY?.trim();
-  const defaultAuthorizedDiaPublicKeys = configuredEthereumPrivateKey
-    ? [deriveCompressedPublicKeyFromPrivateKey(configuredEthereumPrivateKey)]
-    : [DEFAULT_AUTHORIZED_DIA_PUBLIC_KEY];
+  const { dia, diaEvmPrivateKey } = getCliConfig();
+  const defaultAuthorizedDiaPublicKeys = diaEvmPrivateKey
+    ? [deriveCompressedPublicKeyFromPrivateKey(diaEvmPrivateKey)]
+    : [];
 
   return {
     validConfigSigners: [defaultSigner],
     authorizedDiaPublicKeys: defaultAuthorizedDiaPublicKeys,
     domain: {
-      name: DEFAULT_DOMAIN.name,
-      version: DEFAULT_DOMAIN.version,
-      sourceChainId: DEFAULT_DOMAIN.sourceChainId,
+      name: dia.domainName,
+      version: dia.domainVersion,
+      sourceChainId: dia.sourceChainId,
       verifyingContract: normalizeEthereumAddressHex(
-        DEFAULT_DOMAIN.verifyingContract,
+        dia.registryAddress,
         "domain.verifyingContract",
       ),
     },
@@ -218,7 +211,7 @@ async function promptForProtocolConfigInput(
     defaultValue: defaults.validConfigSigners.join(", "),
   });
   const authorizedDiaPublicKeysRaw = await promptForText({
-    message: "Authorized DIA public keys (comma-separated compressed secp256k1 pubkeys from DIA_EVM_PRIVATE_KEY or Step 5 output)",
+    message: "Authorized DIA public keys (comma-separated compressed secp256k1 pubkeys; derived from DIA_EVM_PRIVATE_KEY_<network suffix> or from Step 5 output)",
     defaultValue: defaults.authorizedDiaPublicKeys.join(", "),
   });
   const domainName = await promptForText({
