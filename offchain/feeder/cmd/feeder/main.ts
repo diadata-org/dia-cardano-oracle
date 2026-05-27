@@ -66,7 +66,7 @@ Flags:
   --clean               Delete feeder-generated state before starting:
                           logs/, feeder-checkpoint.json, feeder.sqlite*,
                           clients/*/pairs/*.json
-                        CLI bootstrap artifacts are never touched:
+                        CLI bootstrap state files are never touched:
                           config-bootstrap.json, clients/*.json
   --help, -h            Show this help message and exit.
 

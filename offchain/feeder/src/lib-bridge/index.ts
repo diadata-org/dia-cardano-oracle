@@ -157,7 +157,7 @@ export type RealBridgeOptions = {
  * oracle-update submission to the CLI's `buildOracleUpdateTx` builder.
  *
  * The implementation mirrors `cli/src/transactions/update.ts`:
- *   1. Read client + protocol state artifacts.
+ *   1. Read client + protocol state files.
  *   2. Normalise the intent (bigint fields) and recover the EIP-712 witness.
  *   3. Fetch current chain UTxOs.
  *   4. Build, sign, submit the Cardano tx.
@@ -204,7 +204,7 @@ export function createRealOracleIntentBridge(
       // ------------------------------------------------------------------
       const configMod = cliPath("core/config.js");
       const lucidMod = cliPath("core/lucid.js");
-      const artifactMod = cliPath("core/artifact-context.js");
+      const stateContextMod = cliPath("core/artifact-context.js");
       const diaIntentMod = cliPath("core/dia-intent.js");
       const networkTimeMod = cliPath("core/network-time.js");
       const chainHelpersMod = cliPath("core/chain-helpers.js");
@@ -262,7 +262,7 @@ export function createRealOracleIntentBridge(
       ] = await Promise.all([
         import(configMod),
         import(lucidMod),
-        import(artifactMod),
+        import(stateContextMod),
         import(diaIntentMod),
         import(networkTimeMod),
         import(chainHelpersMod),
@@ -439,7 +439,7 @@ export function createRealOracleIntentBridge(
         diaIntentToState,
       });
       // Cast through a minimal typed view so property access below typechecks.
-      // All fields come from the CLI's JSON artifacts; the actual shape is
+      // All fields come from the CLI's JSON state files; the actual shape is
       // validated at runtime by the CLI helpers themselves.
       const state = rawState as {
         scripts: Record<string, string>;
@@ -648,7 +648,7 @@ export function createRealOracleIntentBridge(
 
       const configMod = cliPath("core/config.js");
       const lucidMod = cliPath("core/lucid.js");
-      const artifactMod = cliPath("core/artifact-context.js");
+      const stateContextMod = cliPath("core/artifact-context.js");
       const diaIntentMod = cliPath("core/dia-intent.js");
       const networkTimeMod = cliPath("core/network-time.js");
       const chainHelpersMod = cliPath("core/chain-helpers.js");
@@ -706,7 +706,7 @@ export function createRealOracleIntentBridge(
       ] = await Promise.all([
         import(configMod),
         import(lucidMod),
-        import(artifactMod),
+        import(stateContextMod),
         import(diaIntentMod),
         import(networkTimeMod),
         import(chainHelpersMod),
@@ -1190,7 +1190,7 @@ async function capturePostConfirmState(args: {
 
 /**
  * Assemble the combined state object expected by `buildOracleUpdateTx`,
- * merging client + protocol artifacts the same way `update.ts` does.
+ * merging client + protocol state files the same way `update.ts` does.
  */
 function buildState(args: {
   client: Record<string, unknown>;

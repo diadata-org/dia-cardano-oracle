@@ -79,7 +79,7 @@ async function runInitBootstrap(options: InitCmdOptions): Promise<number> {
     await mkdir(dirname(target), { recursive: true });
     await copyFile(sourcePath, target);
     report(`init bootstrap: wrote ${target}`);
-    out(`\n  Done. Bootstrap artifact ready at ${target}`);
+    out(`\n  Done. Bootstrap state file ready at ${target}`);
     return 0;
   } finally {
     rl.close();
@@ -265,7 +265,7 @@ ${pairsBlock}
     destinations:
       - cardano:
           network: ${opts.network}
-          # Paths to the CLI bootstrap artifacts (see: feeder init bootstrap/client).
+          # Paths to the CLI bootstrap state files (see: feeder init bootstrap/client).
           client_state_path: ${opts.clientStatePath}
           protocol_state_path: ${opts.protocolStatePath}
         # Minimum time between two updates for the same symbol.

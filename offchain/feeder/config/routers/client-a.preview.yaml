@@ -61,10 +61,10 @@ routers:
           # network: "Preview" or "Mainnet". Must match CARDANO_NETWORK env var.
           network: Preview
           # client_state_path: path (relative to feeder working dir) to the
-          #   client-a.json artifact produced by the CLI bootstrap command.
+          #   client-a.json state file produced by the CLI bootstrap command.
           #   Run `npm run cli bootstrap` to regenerate it.
           client_state_path: state/preview/clients/client-a.json
-          # protocol_state_path: path to the config-bootstrap.json artifact
+          # protocol_state_path: path to the config-bootstrap.json state file
           #   produced by the CLI bootstrap command.
           protocol_state_path: state/preview/config-bootstrap.json
         # time_threshold: minimum time between two updates for the same symbol

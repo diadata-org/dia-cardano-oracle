@@ -1,4 +1,4 @@
-// Tests for cleanFeederState and checkBootstrapArtifacts.
+// Tests for cleanFeederState and checkBootstrapStateFiles.
 //
 // Both functions use a stateBase parameter (default "state") so tests can
 // point at a temp directory without touching the real feeder state.
@@ -9,7 +9,7 @@ import { mkdtemp, mkdir, writeFile, rm, access } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { cleanFeederState, checkBootstrapArtifacts } from "../daemon-cmd.js";
+import { cleanFeederState, checkBootstrapStateFiles } from "../daemon-cmd.js";
 import type { ModularConfig } from "../../../src/config/index.js";
 
 // ---------------------------------------------------------------------------
@@ -22,7 +22,7 @@ async function exists(p: string): Promise<boolean> {
 
 function noop(_: string): void {}
 
-// Minimal ModularConfig shape sufficient for checkBootstrapArtifacts.
+// Minimal ModularConfig shape sufficient for checkBootstrapStateFiles.
 function makeConfig(
   clientStatePath: string,
   protocolStatePath = "ignored",
@@ -74,7 +74,7 @@ describe("cleanFeederState", () => {
     await mkdir(pairsDir, { recursive: true });
     await writeFile(join(pairsDir, "btc-usd.json"), "{}", "utf8");
 
-    // Bootstrap artifacts — must survive
+    // Bootstrap state files — must survive
     await writeFile(join(base, "config-bootstrap.json"), "{}", "utf8");
     await writeFile(join(base, "clients", "client-a.json"), "{}", "utf8");
   });
@@ -109,7 +109,7 @@ describe("cleanFeederState", () => {
     assert.equal(await exists(join(tmpDir, "preview", "config-bootstrap.json")), true);
   });
 
-  it("preserves clients/<name>.json bootstrap artifact", async () => {
+  it("preserves clients/<name>.json bootstrap state file", async () => {
     assert.equal(await exists(join(tmpDir, "preview", "clients", "client-a.json")), true);
   });
 
@@ -124,10 +124,10 @@ describe("cleanFeederState", () => {
 });
 
 // ---------------------------------------------------------------------------
-// checkBootstrapArtifacts
+// checkBootstrapStateFiles
 // ---------------------------------------------------------------------------
 
-describe("checkBootstrapArtifacts", () => {
+describe("checkBootstrapStateFiles", () => {
   let tmpDir: string;
 
   before(async () => {
@@ -140,14 +140,14 @@ describe("checkBootstrapArtifacts", () => {
 
   it("returns false and reports hint when config-bootstrap.json is missing", async () => {
     const messages: string[] = [];
-    const result = await checkBootstrapArtifacts(
+    const result = await checkBootstrapStateFiles(
       makeConfig(join(tmpDir, "clients", "client-a.json")),
       "Preview",
       (m) => messages.push(m),
       tmpDir,
     );
     assert.equal(result, false);
-    assert.ok(messages.some(m => m.includes("missing bootstrap artifact")));
+    assert.ok(messages.some(m => m.includes("missing bootstrap state file")));
     assert.ok(messages.some(m => m.includes("init bootstrap")));
   });
 
@@ -158,7 +158,7 @@ describe("checkBootstrapArtifacts", () => {
 
     const messages: string[] = [];
     const clientPath = join(base, "clients", "client-a.json");
-    const result = await checkBootstrapArtifacts(
+    const result = await checkBootstrapStateFiles(
       makeConfig(clientPath),
       "Preview",
       (m) => messages.push(m),
@@ -169,7 +169,7 @@ describe("checkBootstrapArtifacts", () => {
     assert.ok(messages.some(m => m.includes("init client")));
   });
 
-  it("returns true when all artifacts are present", async () => {
+  it("returns true when all state files are present", async () => {
     const base = join(tmpDir, "preview2");
     const clientsDir = join(base, "clients");
     await mkdir(clientsDir, { recursive: true });
@@ -177,7 +177,7 @@ describe("checkBootstrapArtifacts", () => {
     const clientPath = join(clientsDir, "client-a.json");
     await writeFile(clientPath, "{}", "utf8");
 
-    const result = await checkBootstrapArtifacts(
+    const result = await checkBootstrapStateFiles(
       makeConfig(clientPath),
       "Preview",
       noop,
@@ -205,7 +205,7 @@ describe("checkBootstrapArtifacts", () => {
       },
     } as unknown as ModularConfig;
 
-    const result = await checkBootstrapArtifacts(configNoCardano, "Preview", noop, tmpDir);
+    const result = await checkBootstrapStateFiles(configNoCardano, "Preview", noop, tmpDir);
     assert.equal(result, true);
   });
 });

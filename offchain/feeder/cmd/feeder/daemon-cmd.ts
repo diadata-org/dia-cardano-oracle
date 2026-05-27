@@ -159,7 +159,7 @@ function parsePositiveInteger(raw: number | undefined): number | undefined {
 
 /**
  * Delete all feeder-generated state for the given network so the next
- * run starts clean.  Never touches CLI bootstrap artifacts:
+ * run starts clean.  Never touches CLI bootstrap state files:
  *   config-bootstrap.json, clients/<name>.json.
  *
  * Deleted:
@@ -267,7 +267,7 @@ async function fileExists(p: string): Promise<boolean> {
   try { await access(p); return true; } catch { return false; }
 }
 
-export async function checkBootstrapArtifacts(
+export async function checkBootstrapStateFiles(
   config: ModularConfig,
   network: string,
   report: (line: string) => void,
@@ -275,7 +275,7 @@ export async function checkBootstrapArtifacts(
 ): Promise<boolean> {
   const bootstrapPath = `${stateBase}/${network.toLowerCase()}/config-bootstrap.json`;
   if (!await fileExists(bootstrapPath)) {
-    report(`daemon: missing bootstrap artifact: ${bootstrapPath}`);
+    report(`daemon: missing bootstrap state file: ${bootstrapPath}`);
     report(`daemon: hint → npm run feeder:dev -- init bootstrap`);
     return false;
   }
@@ -331,9 +331,9 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }
 
   // ------------------------------------------------------------------
-  // 1b. Bootstrap artifact check — fast-fail with actionable hint.
+  // 1b. Bootstrap state-file check — fast-fail with actionable hint.
   // ------------------------------------------------------------------
-  if (!await checkBootstrapArtifacts(config, network, report)) return 1;
+  if (!await checkBootstrapStateFiles(config, network, report)) return 1;
 
   // dry_run: YAML true || CLI --dry-run flag || DRY_RUN=true env var.
   const dryRun =

@@ -71,7 +71,7 @@ export function createJsonCheckpoint(options: JsonCheckpointOptions): Checkpoint
 
 /**
  * Default checkpoint path for a given network. Lives under the same
- * `state/<network>/` tree the CLI uses for its on-chain artifacts so
+ * `state/<network>/` tree the CLI uses for its state files so
  * everything related to one network sits together.
  */
 export function defaultCheckpointPath(network: CardanoNetwork): string {
