@@ -14,6 +14,7 @@
 
 import path from "node:path";
 
+import { seedCheckpointIfNeeded } from "./checkpoint-seed.js";
 import {
   loadModularConfig,
   validateModularConfig,
@@ -48,6 +49,8 @@ export type ScanCmdOptions = {
   network: CardanoNetwork;
   transport: "http" | "ws";
   dryRun: boolean;
+  fromBlock?: string;
+  fromLatest: boolean;
   /** Logger sink. */
   report: (line: string) => void;
   /** Modular config directory. */
@@ -119,9 +122,20 @@ export async function runScan(options: ScanCmdOptions): Promise<number> {
 
   const checkpointPath = options.checkpointPath ?? defaultCheckpointPath(network);
   const checkpoint = createJsonCheckpoint({ filePath: checkpointPath });
+  await seedCheckpointIfNeeded({
+    checkpoint,
+    fromBlock: options.fromBlock,
+    fromLatest: options.fromLatest,
+    getLatestBlock: async () => {
+      const c = createPublicClient({ transport: http(source.rpcUrls[0]) });
+      return c.getBlockNumber();
+    },
+    report,
+  });
+
   const dedupCache = createDedupCache({
-    capacity: options.dedupCapacity ?? DEFAULTS.dedupCapacity,
-    ttlMs: options.dedupTtlMs ?? DEFAULTS.dedupTtlMs,
+    capacity: options.dedupCapacity ?? config.infrastructure?.event_processor?.dedup_cache_size ?? DEFAULTS.dedupCapacity,
+    ttlMs: options.dedupTtlMs ?? parseDurationMs(config.infrastructure?.event_processor?.dedup_cache_ttl, DEFAULTS.dedupTtlMs),
   });
 
   const enricherClient = createPublicClient({ transport: http(source.rpcUrls[0]) });
@@ -145,10 +159,10 @@ export async function runScan(options: ScanCmdOptions): Promise<number> {
   try {
     switch (transport) {
       case "http":
-        await runHttpTransport({ ...options, source, checkpoint, handleBatch, signal });
+        await runHttpTransport({ ...options, config, source, checkpoint, handleBatch, signal });
         break;
       case "ws":
-        await runWsTransport({ ...options, source, checkpoint, handleBatch, signal });
+        await runWsTransport({ ...options, config, source, checkpoint, handleBatch, signal });
         break;
     }
     return 0;
@@ -163,22 +177,30 @@ export async function runScan(options: ScanCmdOptions): Promise<number> {
 // ---------------------------------------------------------------------------
 
 type TransportInputs = ScanCmdOptions & {
+  config: ModularConfig;
   source: ResolvedSource;
   checkpoint: Checkpoint;
   handleBatch: (batch: ScannedBatch) => Promise<void>;
 };
 
 async function runHttpTransport(inputs: TransportInputs): Promise<void> {
+  const infra = inputs.config.infrastructure;
   const client: RegistryClient = createHttpRegistryClient(inputs.source);
   try {
     await runHttpScanner({
       client,
       eventAbi: inputs.source.eventAbi,
       checkpoint: inputs.checkpoint,
-      startBlock: inputs.startBlock ?? DEFAULTS.startBlock,
-      blockRange: inputs.blockRange ?? DEFAULTS.blockRange,
-      scanIntervalMs: inputs.scanIntervalMs ?? DEFAULTS.scanIntervalMs,
-      confirmations: inputs.confirmations ?? DEFAULTS.confirmations,
+      startBlock:
+        inputs.startBlock ??
+        (infra?.source?.start_block !== undefined ? BigInt(infra.source.start_block) : DEFAULTS.startBlock),
+      blockRange:
+        inputs.blockRange ??
+        (infra?.block_scanner?.block_range !== undefined ? BigInt(infra.block_scanner.block_range) : DEFAULTS.blockRange),
+      scanIntervalMs: inputs.scanIntervalMs ?? parseDurationMs(infra?.block_scanner?.scan_interval, DEFAULTS.scanIntervalMs),
+      confirmations:
+        inputs.confirmations ??
+        (infra?.block_scanner?.confirmations !== undefined ? BigInt(infra.block_scanner.confirmations) : DEFAULTS.confirmations),
       onBatch: inputs.handleBatch,
       log: inputs.report,
       signal: inputs.signal,
@@ -186,6 +208,18 @@ async function runHttpTransport(inputs: TransportInputs): Promise<void> {
   } finally {
     await client.close();
   }
+}
+
+function parseDurationMs(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const trimmed = raw.trim();
+  const num = parseFloat(trimmed);
+  if (Number.isNaN(num)) return fallback;
+  if (trimmed.endsWith("ms")) return Math.round(num);
+  if (trimmed.endsWith("s")) return Math.round(num * 1_000);
+  if (trimmed.endsWith("m")) return Math.round(num * 60_000);
+  if (trimmed.endsWith("h")) return Math.round(num * 3_600_000);
+  return Math.round(num * 1_000);
 }
 
 async function runWsTransport(inputs: TransportInputs): Promise<void> {

@@ -67,8 +67,6 @@ routers:
           # protocol_state_path: path to the config-bootstrap.json artifact
           #   produced by the CLI bootstrap command.
           protocol_state_path: state/preview/config-bootstrap.json
-          # tx_mode: "single" — one Cardano tx per intent (only mode supported).
-          tx_mode: single
         # time_threshold: minimum time between two updates for the same symbol
         #   on this destination. Prevents hammering the chain with every tick.
         time_threshold: 5m

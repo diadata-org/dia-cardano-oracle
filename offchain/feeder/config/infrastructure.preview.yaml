@@ -61,6 +61,9 @@ infrastructure:
     scan_interval: 10s
     # block_range: max blocks per eth_getLogs request.
     block_range: 500
+    # confirmations: source blocks kept behind the tip before a range is
+    #   treated as final and checkpointed.
+    confirmations: 6
     # max_block_gap: max block distance the scanner tolerates before
     #   triggering a backward sync to fill the gap. Deferred to M3.
     max_block_gap: 5000
@@ -69,87 +72,88 @@ infrastructure:
     backward_sync: true
 
   # --------------------------------------------------------------------------
-  # event_processor — dedup cache controlling duplicate suppression.
+  # event_processor — dedup cache + lane coalescing.
   # --------------------------------------------------------------------------
   event_processor:
-    # batch_size: max intents processed per pipeline tick in parallel
-    #   worker mode. Deferred to M3 (parallel processing not yet implemented;
-    #   events are processed one at a time).
-    batch_size: 16
-    # validation_timeout: max time to wait for enrichment per event in
-    #   parallel mode. Deferred to M3.
-    validation_timeout: 30s
     # dedup_cache_size: max entries in the in-memory LRU dedup set.
     dedup_cache_size: 4096
     # dedup_cache_ttl: how long an intentHash is remembered to suppress
     #   re-processing. Must outlive any realistic re-org window.
     dedup_cache_ttl: 1h
-    # enable_parallel_mode: process multiple events concurrently with a
-    #   worker pool. Deferred to M3 (sequential is sufficient for M2 QPS).
-    enable_parallel_mode: false
+    # coalesce_window: accumulation window before a lane flushes its first
+    #   buffered batch. New intents arriving while a tx is in flight are
+    #   flushed immediately after confirmation with no extra wait.
+    coalesce_window: 2s
+    # max_intent_age: drop buffered intents older than this at flush time.
+    #   Omit to disable age-based dropping.
+    max_intent_age: 15m
+    # max_batch_size: max symbols included in one Cardano batch update tx.
+    #   Larger flushes are split into successive submissions.
+    max_batch_size: 10
+    # size_fallback_enabled: if a batch still exceeds protocol limits, split
+    #   it into smaller chunks and retry automatically.
+    size_fallback_enabled: true
+    # ---- M3 placeholders — declared so YAMLs reserve the keys, not read by code yet.
+    # Spectra parity: parallel enrichment + gas estimation pipeline.
+    # Enable in M3 when high-throughput sources require it.
+    # enable_parallel_mode: false
+    # parallel_worker_count: 4
+    # parallel_queue_size: 256
+    # parallel_timeout: 30s
 
   # --------------------------------------------------------------------------
-  # worker_pool — Cardano submission queue concurrency.
+  # worker_pool — submission queue knobs.
+  #
+  # NOTE on Cardano vs Spectra: Spectra creates a worker pool per router
+  # with N concurrent workers (`max_workers`, `task_queue_size`). On Cardano
+  # the EUTxO model forces per-receiver serialization, so we use a "lane"
+  # model: one serial queue per (client, receiver). Cross-lane parallelism
+  # comes from running multiple lanes (multiple clients), not multiple
+  # workers within a lane. `max_workers` / `task_queue_size` therefore do
+  # not apply here and are intentionally absent.
   # --------------------------------------------------------------------------
   worker_pool:
-    # max_workers: max concurrent Cardano tx builders. Each uses one Blockfrost
-    #   connection; keep ≤ 4 to avoid hitting Blockfrost rate limits.
-    max_workers: 4
-    # task_queue_size: bounded channel depth for the worker pool in parallel
-    #   mode. Deferred to M3 (parallel worker pool not yet implemented).
-    task_queue_size: 64
-    # task_timeout: max wall-clock time for a single submit+confirm cycle.
-    task_timeout: 60s
+    # task_timeout: M3 — Spectra parity (worker-pool task ceiling). Not
+    #   read by this feeder. Our equivalent is `inflight_timeout_ms` below.
+    # task_timeout: 60s
     # retry_delay: wait before retrying a failed submission.
     retry_delay: 5s
     # max_retries: give up after this many consecutive submission failures
     #   for a single intent.
     max_retries: 3
+    # inflight_timeout_ms: how long a submitted tx remains in the in-flight
+    #   table (blocking new submissions on the same receiver UTxO) before
+    #   the lock is considered stuck and released. No silent default — the
+    #   feeder validator rejects load if this is missing.
+    #   Unit: milliseconds. 15 min = 900_000 ms.
+    inflight_timeout_ms: 900000
 
   # --------------------------------------------------------------------------
-  # health_check — controls the /readyz liveness probe behaviour.
+  # health_check — controls the /health/ready probe behaviour.
   # --------------------------------------------------------------------------
   health_check:
     enabled: true
-    # check_interval: how often the health-checker goroutine runs its full
-    #   suite of probes. Deferred to M3 (health is currently checked inline
-    #   on each /readyz request).
+    # check_interval: cadence of the periodic health probe loop. Spectra
+    #   uses a background ticker; in our feeder this is informational
+    #   until the ticker-based probe lands (M3). /health/ready is also
+    #   evaluated inline on each request.
     check_interval: 30s
-    # timeout: max time for a single health probe before marking unhealthy.
-    #   Deferred to M3.
-    timeout: 10s
     # max_processing_lag: if no IntentRegistered event has been processed
-    #   within this window, /readyz returns 503. Active now.
+    #   within this window, /health/ready returns 503.
+    #   Cardano-feeder extension (Spectra declares but never reads this).
     max_processing_lag: 5m
-    # max_queue_size: mark unhealthy when the submission queue exceeds this
-    #   depth. Deferred to M3.
-    max_queue_size: 128
 
   # --------------------------------------------------------------------------
-  # recovery — automatic circuit-breaker. Deferred to M3.
-  #
-  # When implemented: after min_failures consecutive errors the feeder
-  # pauses and retries up to max_attempts times with retry_interval between
-  # attempts, aborting if recovery_timeout elapses. Currently the process
-  # exits and the process manager (Docker / systemd) handles restart.
-  # --------------------------------------------------------------------------
-  recovery:
-    enabled: true
-    min_failures: 3
-    max_attempts: 10
-    retry_interval: 30s
-    recovery_timeout: 30m
-
-  # --------------------------------------------------------------------------
-  # api — HTTP API server (health, readyz, metrics, prices endpoints).
+  # api — HTTP API server.
   # --------------------------------------------------------------------------
   api:
     enabled: true
-    # listen_addr: "[host]:port". Omit host to bind on all interfaces.
-    # Overrideable via API_LISTEN_ADDR env var.
-    listen_addr: ":8080"
+    host: 0.0.0.0
+    port: 8080
     # enable_cors: set true only when the API is consumed from a browser.
     enable_cors: false
+    readiness:
+      max_last_confirmed_age: 15m
 
   # --------------------------------------------------------------------------
   # metrics — Prometheus exposition.
@@ -158,9 +162,72 @@ infrastructure:
     # enabled: exposes GET /metrics in Prometheus text format.
     # Overrideable via METRICS_ENABLED=true env var.
     enabled: true
-    # namespace: prefix for every metric name, e.g. dia_cardano_feeder_events_scanned_total.
+    # namespace: prefix for every metric name, e.g. dia_bridge_events_detected_total.
     # Overrideable via METRICS_NAMESPACE env var.
-    namespace: dia_cardano_feeder
+    namespace: dia_bridge
+
+  # --------------------------------------------------------------------------
+  # cardano — destination-chain confirmation policy.
+  # --------------------------------------------------------------------------
+  cardano:
+    # confirmation_depth: number of Cardano blocks the feeder waits past
+    #   the inclusion block before declaring `tx_confirmed`. Default 1 is
+    #   practically final for oracle feeds. Higher values trade latency
+    #   for rollback safety. The price-cache `confirmedAtDepth` field
+    #   exposes whatever value the feeder actually waited.
+    confirmation_depth: 1
+
+  # --------------------------------------------------------------------------
+  # cron_service — Spectra parity (`internal/cron/cron_service.go`).
+  #
+  # When enabled, the feeder runs a periodic resubmission loop that
+  # guarantees each cron-enabled destination is updated at least every
+  # `time_threshold` regardless of whether DIA events arrived. Without
+  # this, a pair can stay stale if the router's price-deviation filter
+  # drops every event (e.g. the price barely moves for hours).
+  #
+  # Per-destination opt-in: set `cron: true` and `time_threshold: ...`
+  # on the destination in `routers/<router>.yaml`.
+  # --------------------------------------------------------------------------
+  cron_service:
+    enabled: true
+    # tick_interval: how often the cron service inspects every cron-enabled
+    #   destination. Each destination's own `time_threshold` gates per-pair
+    #   cadence; this is just the scan interval. Duration string ("30s", "1m").
+    tick_interval: 30s
+
+  # --------------------------------------------------------------------------
+  # alerting — canonical thresholds for both feeder-emitted warnings and
+  #   Prometheus alert rules in monitoring/alerts.yml. Every alert rule in
+  #   alerts.yml carries an inline comment naming the YAML key here; values
+  #   must stay in sync. The feeder code reads these too (e.g. to emit
+  #   `dia_bridge_cardano_receiver_topup_warnings_total` when the balance
+  #   drops below `receiver_balance_low_lovelace`).
+  #
+  # Units: balances in lovelace (1 ADA = 1_000_000 lovelace); time in
+  #   seconds; deviation in percent (0–100).
+  # --------------------------------------------------------------------------
+  alerting:
+    # Receiver `balanceLovelace` below this value → ReceiverBalanceLow alert
+    # and warning counter emitted by the feeder. Action: `receiver:top-up`.
+    receiver_balance_low_lovelace: 2000000000          # 2 ADA
+    # Receiver `accruedToHookLovelace` above this value → SettleOverdue
+    # alert. Action: CLI `settle` to move fees to the PaymentHook.
+    settle_overdue_lovelace: 10000000                  # 10 ADA accrued
+    # PaymentHook `accruedFeesLovelace` above this value →
+    # PaymentHookWithdrawReady alert. Action: CLI `payment-hook:withdraw`.
+    payment_hook_withdraw_ready_lovelace: 50000000     # 50 ADA accumulated
+    # Admin (signer) wallet total lovelace below this → AdminWalletLow.
+    # Action: refill the operator wallet that pays Cardano tx fees.
+    admin_wallet_low_lovelace: 5000000000              # 5 ADA
+    # Seconds since a symbol was last confirmed on-chain → OraclePairStale.
+    oracle_pair_stale_seconds: 3600                    # 1 h
+    # p95 of observed price deviation in percent → PriceDeviationHigh
+    # (possible misreported price).
+    price_deviation_high_percent: 5                    # 5 %
+    # p95 of incoming price-data age (seconds at processing time) →
+    # PriceAgeHigh (DIA source publishing stale prices).
+    price_age_high_seconds: 600                        # 10 min
 
   # --------------------------------------------------------------------------
   # dry_run — skip actual Cardano submissions for the whole process.

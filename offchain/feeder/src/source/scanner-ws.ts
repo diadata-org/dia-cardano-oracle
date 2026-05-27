@@ -40,6 +40,7 @@ import {
 import type { Checkpoint } from "./checkpoint.js";
 import type { RegistryLog } from "./registry-client.js";
 import { processLogBatch, type ScanHandler } from "./scan-handler.js";
+import type { ScannerMetricsSink } from "./scanner-http.js";
 
 export type WsScannerOptions = {
   /** Full WS URL including the path-style credential. Compose with
@@ -55,6 +56,10 @@ export type WsScannerOptions = {
   maxReconnects: number;
   log?: (line: string) => void;
   signal?: AbortSignal;
+  /** Optional Prometheus emitter — shared shape with the HTTP scanner. */
+  metrics?: ScannerMetricsSink;
+  /** Numeric source chain id used as the `chain_id` label. */
+  chainId?: number;
 };
 
 /**
@@ -64,7 +69,8 @@ export type WsScannerOptions = {
  */
 export async function runWsScanner(options: WsScannerOptions): Promise<void> {
   const log = options.log ?? (() => {});
-  const { signal } = options;
+  const { signal, metrics } = options;
+  const chainIdLabel = options.chainId !== undefined ? String(options.chainId) : "unknown";
 
   let attempt = 0;
   while (!signal?.aborted) {
@@ -80,12 +86,15 @@ export async function runWsScanner(options: WsScannerOptions): Promise<void> {
         onBatch: options.onBatch,
         log,
         signal,
+        metrics,
+        chainIdLabel,
       });
       // Graceful disconnect (abort signal). Stop the loop.
       log("scanner-ws: aborted");
       return;
     } catch (error) {
       log(`scanner-ws: connection lost (${(error as Error).message})`);
+      metrics?.incRpcError({ chain_id: chainIdLabel, error_type: "websocket" });
     } finally {
       closeClientSocket(client);
     }
@@ -117,6 +126,8 @@ type WatchInputs = {
   onBatch: ScanHandler;
   log: (line: string) => void;
   signal?: AbortSignal;
+  metrics?: ScannerMetricsSink;
+  chainIdLabel: string;
 };
 
 /**
@@ -130,7 +141,7 @@ type WatchInputs = {
  */
 function watchUntilDisconnect(inputs: WatchInputs): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const { client, registryAddress, eventAbi, checkpoint, onBatch, log, signal } = inputs;
+    const { client, registryAddress, eventAbi, checkpoint, onBatch, log, signal, metrics, chainIdLabel } = inputs;
 
     let stopped = false;
     const stop = (cause: "abort" | { error: Error }): void => {
@@ -180,6 +191,8 @@ function watchUntilDisconnect(inputs: WatchInputs): Promise<void> {
         checkpoint,
         onBatch,
       });
+      // Update head-tracking gauge whenever the WS stream delivers a log.
+      metrics?.setLastBlock({ chain_id: chainIdLabel, scanner_type: "ws" }, Number(maxBlock));
       log(`scanner-ws: delivered ${decoded.length} log(s) (blocks ${minBlock}..${maxBlock})`);
     }
   });

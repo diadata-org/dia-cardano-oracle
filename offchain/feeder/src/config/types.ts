@@ -63,9 +63,10 @@ export type InfrastructureConfig = {
   event_processor?: EventProcessorConfig;
   worker_pool?: WorkerPoolConfig;
   health_check?: HealthCheckConfig;
-  recovery?: RecoveryConfig;
   api?: APIConfig;
   metrics?: MetricsConfig;
+  cardano?: CardanoRuntimeConfig;
+  alerting?: AlertingConfig;
   /** Not consumed yet (replica failover). Kept typed for Spectra parity. */
   replica?: ReplicaConfig;
   dry_run?: boolean;
@@ -107,6 +108,7 @@ export type BlockScannerConfig = {
   enabled: boolean;
   scan_interval?: string;
   block_range?: number;
+  confirmations?: number;
   max_block_gap?: number;
   backward_sync?: boolean;
   head_tracker_interval?: string;
@@ -114,13 +116,18 @@ export type BlockScannerConfig = {
 };
 
 export type EventProcessorConfig = {
-  batch_size?: number;
-  validation_timeout?: string;
   dedup_cache_size?: number;
   dedup_cache_ttl?: string;
+  /** M3 — parallel event processing (parallel enrichment + gas-est in
+   *  Spectra). Declared so YAMLs can reserve the keys; not read by code
+   *  in M2. Reactivate together with `parallel_worker_count`,
+   *  `parallel_queue_size`, `parallel_timeout`. */
   enable_parallel_mode?: boolean;
+  /** M3 — see `enable_parallel_mode`. */
   parallel_worker_count?: number;
+  /** M3 — see `enable_parallel_mode`. */
   parallel_queue_size?: number;
+  /** M3 — see `enable_parallel_mode`. */
   parallel_timeout?: string;
   /** Accumulation window on the idle→accumulating lane edge.
    *  Accepts duration strings ("2s", "500ms"). Default: "2s". */
@@ -128,41 +135,99 @@ export type EventProcessorConfig = {
   /** Drop buffered intents older than this at flush time.
    *  Accepts duration strings ("60s", "5m"). Default: no limit. */
   max_intent_age?: string;
+  /** Maximum number of intents included in a single Cardano batch update.
+   *  When omitted the coalescer flushes the full lane buffer in one go. */
+  max_batch_size?: number;
+  /** When true, a batch-size failure is retried by splitting the batch into
+   *  progressively smaller chunks until it succeeds or reaches size 1. */
+  size_fallback_enabled?: boolean;
 };
 
 export type WorkerPoolConfig = {
-  max_workers?: number;
-  task_queue_size?: number;
   task_timeout?: string;
   retry_delay?: string;
   max_retries?: number;
+  /** Inflight-lock timeout in milliseconds. How long a submitted Cardano
+   *  tx is treated as still in-flight (blocking new submissions on the
+   *  same receiver UTxO) before the lock is considered stuck and released.
+   *  Source of truth — there is no hardcoded default; the loader requires
+   *  this value to be set. Documented in
+   *  `infrastructure.<network>.yaml::worker_pool.inflight_timeout_ms`. */
+  inflight_timeout_ms?: number;
 };
 
 export type HealthCheckConfig = {
   enabled: boolean;
+  /** Cadence of the periodic health probe loop. Used by Spectra's
+   *  background ticker; in our feeder it is informational until the
+   *  ticker-based probe lands (M3). */
   check_interval?: string;
-  timeout?: string;
+  /** Cardano-feeder extension (not in Spectra). If no IntentRegistered
+   *  event has been processed within this window, `/health/ready`
+   *  returns 503. */
   max_processing_lag?: string;
-  max_queue_size?: number;
-};
-
-export type RecoveryConfig = {
-  enabled: boolean;
-  min_failures?: number;
-  max_attempts?: number;
-  retry_interval?: string;
-  recovery_timeout?: string;
 };
 
 export type APIConfig = {
   enabled: boolean;
   listen_addr?: string;
+  host?: string;
+  port?: number;
   enable_cors?: boolean;
+  readiness?: {
+    max_last_confirmed_age?: string;
+  };
 };
 
 export type MetricsConfig = {
   enabled: boolean;
   namespace?: string;
+};
+
+export type CardanoRuntimeConfig = {
+  /** Number of Cardano blocks the feeder waits before it records a
+   *  submission as confirmed. The feeder waits this many blocks past the
+   *  block that included the tx before emitting `tx_confirmed` and
+   *  updating the price cache. Default 1 — practically final for oracle
+   *  feeds. Operators needing stricter guarantees set it higher. */
+  confirmation_depth?: number;
+};
+
+/**
+ * Operational alert thresholds. Canonical source for every numeric
+ * threshold used either by the feeder code (e.g. low-balance warnings)
+ * or by the Prometheus alerting rules in `monitoring/alerts.yml`.
+ *
+ * Units convention:
+ *   - `*_lovelace` fields are lovelace (1 ADA = 1_000_000 lovelace).
+ *   - `*_seconds` fields are seconds.
+ *   - `*_percent` fields are percent (0–100).
+ *
+ * Any value here MUST also be mirrored in `monitoring/alerts.yml` (each
+ * alert rule carries an inline comment pointing back at the YAML key).
+ */
+export type AlertingConfig = {
+  /** Receiver balance below this lovelace value warns the operator that
+   *  a `receiver:top-up` is needed. Emits `cardanoReceiverTopupWarnings`. */
+  receiver_balance_low_lovelace?: number;
+  /** Receiver `accruedToHookLovelace` above this value means a `settle`
+   *  is overdue (fees pending transfer to the PaymentHook). */
+  settle_overdue_lovelace?: number;
+  /** PaymentHook `accruedFeesLovelace` above this value means DIA can run
+   *  `payment-hook:withdraw` to collect accumulated fees. */
+  payment_hook_withdraw_ready_lovelace?: number;
+  /** Admin wallet balance below this lovelace value warns the operator
+   *  that the signer wallet needs a refill. */
+  admin_wallet_low_lovelace?: number;
+  /** Pair last-confirmed timestamp older than this many seconds triggers
+   *  the OraclePairStale alert. */
+  oracle_pair_stale_seconds?: number;
+  /** Price-deviation p95 (in percent) above this value triggers the
+   *  PriceDeviationHigh alert (possible misreported price). */
+  price_deviation_high_percent?: number;
+  /** Incoming price-data age p95 (in seconds) above this value triggers
+   *  the PriceAgeHigh alert (DIA source publishing stale prices). */
+  price_age_high_seconds?: number;
 };
 
 export type ReplicaConfig = {
@@ -171,9 +236,21 @@ export type ReplicaConfig = {
   monitor_chain_id?: number;
 };
 
+/**
+ * Cron-service config — Spectra parity (`internal/cron/cron_service.go`).
+ * When enabled, the feeder runs a periodic resubmission loop that
+ * guarantees each cron-enabled destination is updated at least every
+ * `time_threshold` regardless of whether new DIA events arrived. See
+ * `src/cron/cron-service.ts`.
+ */
 export type CronServiceConfig = {
+  /** Master switch — when false, the cron service does not start. */
   enabled: boolean;
-  interval?: string;
+  /** How often the cron service inspects every cron-enabled destination
+   *  (duration string, e.g. "30s"). Applied uniformly across destinations;
+   *  per-destination cadence is gated by each destination's own
+   *  `time_threshold`. */
+  tick_interval?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -348,14 +425,11 @@ export type DestinationMethodConfig = {
 
 /**
  * Feeder extension over Spectra: a Cardano destination is addressed by
- * the (network, client_state, protocol_state, tx_mode) tuple instead of
- * by an EVM `(chain_id, contract, method_abi)` triple.
+ * the (network, client_state, protocol_state) tuple instead of by an
+ * EVM `(chain_id, contract, method_abi)` triple.
  */
 export type CardanoDestinationConfig = {
   network: "Preview" | "Mainnet";
   client_state_path: string;
   protocol_state_path: string;
-  /** single: one tx per intent. batch: always batch. auto: batch when N>1,
-   *  single when N=1. Default: auto. */
-  tx_mode: "single" | "batch" | "auto";
 };

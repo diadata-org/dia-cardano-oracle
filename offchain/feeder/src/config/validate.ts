@@ -39,7 +39,6 @@ const VALID_OPERATORS: readonly TriggerConditionOperator[] = [
 
 const VALID_DATABASE_DRIVERS = ["sqlite", "postgres"] as const;
 const VALID_CARDANO_NETWORKS = ["Preview", "Mainnet"] as const;
-const VALID_TX_MODES = ["single", "batch"] as const;
 
 /**
  * Validate the whole `ModularConfig`. Returns every issue found across
@@ -83,6 +82,11 @@ function validateInfrastructure(
   }
   validateDatabase(infra.database, c.scope("database"));
   validateSource(infra.source, c.scope("source"));
+  validateBlockScanner(infra.block_scanner, c.scope("block_scanner"));
+  validateApiConfig(infra.api, c.scope("api"));
+  validateCardanoRuntime(infra.cardano, c.scope("cardano"));
+  validateWorkerPool(infra.worker_pool, c.scope("worker_pool"));
+  validateAlerting(infra.alerting, c.scope("alerting"));
 }
 
 function validateDatabase(db: InfrastructureConfig["database"], c: IssueCollector): void {
@@ -111,6 +115,126 @@ function validateSource(source: InfrastructureConfig["source"], c: IssueCollecto
   c.required("chain_id", source.chain_id);
   c.required("name", source.name);
   c.required("rpc_urls", source.rpc_urls);
+}
+
+function validateBlockScanner(
+  scanner: InfrastructureConfig["block_scanner"],
+  c: IssueCollector,
+): void {
+  if (!scanner) return;
+  validatePositiveInteger("block_range", scanner.block_range, c);
+  validatePositiveInteger("confirmations", scanner.confirmations, c);
+}
+
+function validateApiConfig(
+  api: InfrastructureConfig["api"],
+  c: IssueCollector,
+): void {
+  if (!api) return;
+  validatePositiveInteger("port", api.port, c);
+}
+
+function validateCardanoRuntime(
+  cardano: InfrastructureConfig["cardano"],
+  c: IssueCollector,
+): void {
+  if (!cardano) return;
+  validatePositiveInteger("confirmation_depth", cardano.confirmation_depth, c);
+}
+
+function validateWorkerPool(
+  worker: InfrastructureConfig["worker_pool"],
+  c: IssueCollector,
+): void {
+  if (!worker) {
+    c.error(
+      "",
+      "Missing worker_pool block. Required keys: inflight_timeout_ms, retry_delay, max_retries.",
+    );
+    return;
+  }
+  if (worker.inflight_timeout_ms === undefined) {
+    c.error(
+      "inflight_timeout_ms",
+      "Required. How long (ms) an in-flight tx lock is held before being released. Set in infrastructure.<network>.yaml.",
+    );
+  } else {
+    validatePositiveInteger("inflight_timeout_ms", worker.inflight_timeout_ms, c);
+  }
+  if (worker.max_retries === undefined) {
+    c.error(
+      "max_retries",
+      "Required. Max retries per failed submission before the intent is dropped.",
+    );
+  } else if (!Number.isInteger(worker.max_retries) || worker.max_retries < 0) {
+    c.error("max_retries", "Expected a non-negative integer.");
+  }
+  if (worker.retry_delay === undefined) {
+    c.error(
+      "retry_delay",
+      "Required. Wait between retries (duration string, e.g. \"5s\").",
+    );
+  }
+}
+
+function validateAlerting(
+  alerting: InfrastructureConfig["alerting"],
+  c: IssueCollector,
+): void {
+  if (!alerting) {
+    c.error(
+      "",
+      "Missing alerting block. Required keys (lovelace unless suffix says otherwise): " +
+        "receiver_balance_low_lovelace, settle_overdue_lovelace, " +
+        "payment_hook_withdraw_ready_lovelace, admin_wallet_low_lovelace, " +
+        "oracle_pair_stale_seconds, price_deviation_high_percent, price_age_high_seconds.",
+    );
+    return;
+  }
+  validatePositiveInteger("receiver_balance_low_lovelace", alerting.receiver_balance_low_lovelace, c);
+  validatePositiveInteger("settle_overdue_lovelace", alerting.settle_overdue_lovelace, c);
+  validatePositiveInteger("payment_hook_withdraw_ready_lovelace", alerting.payment_hook_withdraw_ready_lovelace, c);
+  validatePositiveInteger("admin_wallet_low_lovelace", alerting.admin_wallet_low_lovelace, c);
+  validatePositiveInteger("oracle_pair_stale_seconds", alerting.oracle_pair_stale_seconds, c);
+  validatePositiveNumber("price_deviation_high_percent", alerting.price_deviation_high_percent, c);
+  validatePositiveInteger("price_age_high_seconds", alerting.price_age_high_seconds, c);
+
+  const required: Array<[string, unknown]> = [
+    ["receiver_balance_low_lovelace", alerting.receiver_balance_low_lovelace],
+    ["settle_overdue_lovelace", alerting.settle_overdue_lovelace],
+    ["payment_hook_withdraw_ready_lovelace", alerting.payment_hook_withdraw_ready_lovelace],
+    ["admin_wallet_low_lovelace", alerting.admin_wallet_low_lovelace],
+    ["oracle_pair_stale_seconds", alerting.oracle_pair_stale_seconds],
+    ["price_deviation_high_percent", alerting.price_deviation_high_percent],
+    ["price_age_high_seconds", alerting.price_age_high_seconds],
+  ];
+  for (const [field, value] of required) {
+    if (value === undefined) {
+      c.error(field, "Required — every alerting threshold must be set explicitly (no silent defaults).");
+    }
+  }
+}
+
+function validatePositiveNumber(
+  field: string,
+  value: number | undefined,
+  c: IssueCollector,
+): void {
+  if (value === undefined) return;
+  if (!Number.isFinite(value) || value <= 0) {
+    c.error(field, "Expected a positive finite number.");
+  }
+}
+
+function validatePositiveInteger(
+  field: string,
+  value: number | undefined,
+  c: IssueCollector,
+): void {
+  if (value === undefined) return;
+  if (!Number.isInteger(value) || value <= 0) {
+    c.error(field, "Expected a positive integer.");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -491,7 +615,12 @@ function validateCardanoDestination(
   c.oneOf("network", cardano.network, VALID_CARDANO_NETWORKS);
   c.required("client_state_path", cardano.client_state_path);
   c.required("protocol_state_path", cardano.protocol_state_path);
-  c.oneOf("tx_mode", cardano.tx_mode, VALID_TX_MODES);
+  if ("tx_mode" in (cardano as Record<string, unknown>)) {
+    c.error(
+      "tx_mode",
+      "Remove `tx_mode`. The feeder selects single-intent or batch submission automatically from the flush size.",
+    );
+  }
 }
 
 function validateOptionalContractRef(

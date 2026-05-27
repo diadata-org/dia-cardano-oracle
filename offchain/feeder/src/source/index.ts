@@ -32,7 +32,11 @@ export {
   type JsonCheckpointOptions,
 } from "./checkpoint.js";
 
-export { runHttpScanner, type HttpScannerOptions } from "./scanner-http.js";
+export {
+  runHttpScanner,
+  type HttpScannerOptions,
+  type ScannerMetricsSink,
+} from "./scanner-http.js";
 export { runWsScanner, type WsScannerOptions } from "./scanner-ws.js";
 export { processLogBatch, type ScanHandler, type ScannedBatch } from "./scan-handler.js";
 

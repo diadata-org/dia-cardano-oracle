@@ -9,8 +9,10 @@
 //   - `--scan [--transport http|ws] [--dry-run]` runs the source
 //     pipeline (scanner + dedup + enricher) without submitting txs;
 //     used for QA, replays, and early bring-up.
-//   - default: long-running daemon. Wiring lands in 3.4+; today this
-//     mode parks on a shutdown signal.
+//   - `init bootstrap` copies config-bootstrap.json from a CLI state dir.
+//   - `init client`    copies a client JSON and generates a router YAML
+//     interactively.
+//   - default: long-running daemon.
 //
 // This file stays thin: it parses args, resolves the active network,
 // dispatches to the right handler, and orchestrates graceful shutdown
@@ -22,6 +24,7 @@ import { parseArgs, type FeederMode, type ParsedArgs } from "./args.js";
 import { runScan } from "./scan-cmd.js";
 import { runValidateOnly } from "./validate-cmd.js";
 import { runDaemon } from "./daemon-cmd.js";
+import { runInit } from "./init-cmd.js";
 
 const HELP_TEXT = `dia-cardano-oracle-feeder
 
@@ -33,6 +36,8 @@ Usage:
   feeder --config <dir> [--log-level <level>]
   feeder --config <dir> --validate-only
   feeder --config <dir> --scan [--transport http|ws] [--dry-run]
+  feeder init bootstrap [--from <cli-state-dir-or-file>] [--force]
+  feeder init client    [--from <client.json>]           [--force]
   feeder --help
 
 Flags:
@@ -50,12 +55,35 @@ Flags:
   --transport <kind>    Applies to --scan. http (default) or ws.
   --dry-run             Print enriched intents but never submit a
                         Cardano tx. Also reachable via DRY_RUN=true.
+  --from-block <N>      Seed the block-scanner checkpoint to block N
+                        before starting. The scanner will process from
+                        block N onwards. Mutually exclusive with
+                        --from-latest.
+  --from-latest         Query the current chain tip and seed the
+                        checkpoint to that block. Only new intents
+                        (arriving after startup) will be processed.
+                        Mutually exclusive with --from-block.
   --clean               Delete feeder-generated state before starting:
                           logs/, feeder-checkpoint.json, feeder.sqlite*,
                           clients/*/pairs/*.json
                         CLI bootstrap artifacts are never touched:
                           config-bootstrap.json, clients/*.json
   --help, -h            Show this help message and exit.
+
+Init sub-commands (one-time setup):
+  init bootstrap        Copy config-bootstrap.json from a CLI state dir
+                        into state/<network>/. Auto-scans ../cli/state/
+                        for matching network run dirs; use --from to
+                        supply a path explicitly.
+  init client           Copy a client JSON from a CLI state dir into
+                        state/<network>/clients/, then run an interactive
+                        wizard to generate config/routers/<id>.<network>.yaml.
+                        Use --from <client.json> to skip auto-scan.
+
+  --from <path>         Source path for init sub-commands. For 'bootstrap':
+                        a CLI state dir or the JSON file directly. For
+                        'client': the client JSON file.
+  --force               Skip the overwrite confirmation prompt (init only).
 
 The active network (Preview <-> DIA Testnet, Mainnet <-> DIA Mainnet)
 is selected by CARDANO_NETWORK in .env, matching the CLI behavior.
@@ -121,6 +149,8 @@ async function dispatch(args: ParsedArgs): Promise<number> {
         configPath: args.configPath,
         transport: args.transport,
         dryRun: args.dryRun,
+        fromBlock: args.fromBlock,
+        fromLatest: args.fromLatest,
         report,
         signal: shutdown.signal,
       });
@@ -135,10 +165,21 @@ async function dispatch(args: ParsedArgs): Promise<number> {
         dryRun: args.dryRun,
         cleanState: args.cleanState,
         logLevel: args.logLevel,
+        fromBlock: args.fromBlock,
+        fromLatest: args.fromLatest,
         report,
         signal: shutdown.signal,
       });
     }
+
+    case "init":
+      return runInit({
+        subCommand: args.initSubCommand!,
+        network,
+        from: args.initFrom,
+        force: args.force,
+        report,
+      });
   }
 }
 

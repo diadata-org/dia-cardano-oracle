@@ -196,3 +196,151 @@ describe("parseArgs — combined flags", () => {
     assert.equal(result.showHelp, false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// init sub-commands
+// ---------------------------------------------------------------------------
+
+describe("parseArgs — init bootstrap", () => {
+  it("sets mode=init and subCommand=bootstrap", () => {
+    const r = parseArgs(["init", "bootstrap"]);
+    assert.equal(r.mode, "init");
+    assert.equal(r.initSubCommand, "bootstrap");
+    assert.equal(r.force, false);
+    assert.equal(r.initFrom, undefined);
+  });
+
+  it("--from sets initFrom", () => {
+    const r = parseArgs(["init", "bootstrap", "--from", "/some/dir"]);
+    assert.equal(r.initFrom, "/some/dir");
+  });
+
+  it("--force sets force", () => {
+    const r = parseArgs(["init", "bootstrap", "--force"]);
+    assert.equal(r.force, true);
+  });
+
+  it("--help inside init sets showHelp", () => {
+    const r = parseArgs(["init", "bootstrap", "--help"]);
+    assert.equal(r.showHelp, true);
+  });
+
+  it("throws on unknown flag inside init bootstrap", () => {
+    assert.throws(
+      () => parseArgs(["init", "bootstrap", "--config", "x"]),
+      /Unknown argument for 'init bootstrap'/,
+    );
+  });
+});
+
+describe("parseArgs — init client", () => {
+  it("sets mode=init and subCommand=client", () => {
+    const r = parseArgs(["init", "client"]);
+    assert.equal(r.mode, "init");
+    assert.equal(r.initSubCommand, "client");
+  });
+
+  it("--from and --force together", () => {
+    const r = parseArgs(["init", "client", "--from", "/client.json", "--force"]);
+    assert.equal(r.initFrom, "/client.json");
+    assert.equal(r.force, true);
+  });
+});
+
+describe("parseArgs — init errors", () => {
+  it("throws when no sub-command given", () => {
+    assert.throws(() => parseArgs(["init"]), /requires a sub-command/);
+  });
+
+  it("throws on unknown init sub-command", () => {
+    assert.throws(() => parseArgs(["init", "badcmd"]), /requires a sub-command/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --from-block
+// ---------------------------------------------------------------------------
+
+describe("parseArgs — --from-block", () => {
+  it("sets fromBlock to the string value", () => {
+    const r = parseArgs(["--from-block", "7200000"]);
+    assert.equal(r.fromBlock, "7200000");
+    assert.equal(r.fromLatest, false);
+  });
+
+  it("accepts block 0", () => {
+    assert.equal(parseArgs(["--from-block", "0"]).fromBlock, "0");
+  });
+
+  it("throws when value is missing", () => {
+    assert.throws(() => parseArgs(["--from-block"]), /--from-block requires a value/);
+  });
+
+  it("throws on non-integer value", () => {
+    assert.throws(() => parseArgs(["--from-block", "abc"]), /non-negative integer/);
+  });
+
+  it("throws on negative value", () => {
+    assert.throws(() => parseArgs(["--from-block", "-1"]), /non-negative integer/);
+  });
+
+  it("throws on decimal value", () => {
+    assert.throws(() => parseArgs(["--from-block", "1.5"]), /non-negative integer/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --from-latest
+// ---------------------------------------------------------------------------
+
+describe("parseArgs — --from-latest", () => {
+  it("sets fromLatest to true", () => {
+    const r = parseArgs(["--from-latest"]);
+    assert.equal(r.fromLatest, true);
+    assert.equal(r.fromBlock, undefined);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --from-block / --from-latest mutual exclusion
+// ---------------------------------------------------------------------------
+
+describe("parseArgs — --from-block and --from-latest mutual exclusion", () => {
+  it("throws when --from-block comes before --from-latest", () => {
+    assert.throws(
+      () => parseArgs(["--from-block", "100", "--from-latest"]),
+      /mutually exclusive/,
+    );
+  });
+
+  it("throws when --from-latest comes before --from-block", () => {
+    assert.throws(
+      () => parseArgs(["--from-latest", "--from-block", "100"]),
+      /mutually exclusive/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --from-block / --from-latest combined with other flags
+// ---------------------------------------------------------------------------
+
+describe("parseArgs — checkpoint flags combined with other flags", () => {
+  it("--clean --from-latest parses correctly", () => {
+    const r = parseArgs(["--clean", "--from-latest"]);
+    assert.equal(r.cleanState, true);
+    assert.equal(r.fromLatest, true);
+  });
+
+  it("--clean --from-block N parses correctly", () => {
+    const r = parseArgs(["--clean", "--from-block", "7800000"]);
+    assert.equal(r.cleanState, true);
+    assert.equal(r.fromBlock, "7800000");
+  });
+
+  it("--scan --from-latest parses correctly", () => {
+    const r = parseArgs(["--scan", "--from-latest"]);
+    assert.equal(r.mode, "scan");
+    assert.equal(r.fromLatest, true);
+  });
+});

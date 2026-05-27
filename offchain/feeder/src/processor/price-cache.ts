@@ -8,7 +8,7 @@
 //      last price and timestamp for that (route, destination, symbol)
 //      pair to decide whether the update is worth submitting.
 //
-//   2. `api/prices.ts` — the `/prices` HTTP endpoint. Same cache,
+//   2. `api/prices.ts` — the `/api/v1/prices` HTTP endpoint. Same cache,
 //      read-only from the API side.
 //
 // Spectra equivalent: `internal/processor/price_cache.go`
@@ -27,10 +27,12 @@ export type PriceCacheEntry = {
   price: bigint;
   /** Intent timestamp (unix seconds, as bigint). */
   timestamp: bigint;
-  /** EVM intent hash (`0x…`) for correlation in logs and `/prices`. */
+  /** EVM intent hash (`0x…`) for correlation in logs and `/api/v1/prices`. */
   intentHash: string;
   /** Cardano tx hash once confirmed; `undefined` until then. */
   cardanoTxHash?: string;
+  /** Block depth at which the feeder declared the Cardano tx confirmed. */
+  confirmedAtDepth?: number;
   /** Wall-clock time the entry was last written (ms since epoch). */
   updatedAtMs: number;
 };
@@ -47,9 +49,9 @@ export type PriceCache = {
   set(key: PriceCacheKey, entry: PriceCacheEntry): void;
   /** Retrieve the last recorded entry, or `undefined` if none. */
   get(key: PriceCacheKey): PriceCacheEntry | undefined;
-  /** All entries, for the `/prices` API. Returns a snapshot array. */
+  /** All entries, for the `/api/v1/prices` API. Returns a snapshot array. */
   all(): PriceCacheEntry[];
-  /** All (key, entry) pairs — used by the `/prices` endpoint. */
+  /** All (key, entry) pairs — used by the `/api/v1/prices` endpoint. */
   entries(): IterableIterator<[PriceCacheKey, PriceCacheEntry]>;
   /** Total distinct keys recorded. */
   size(): number;

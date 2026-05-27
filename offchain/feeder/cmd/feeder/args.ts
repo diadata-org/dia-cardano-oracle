@@ -11,13 +11,21 @@
 //   --transport <kind>   one of: http | ws (default: http, applies to --scan)
 //   --dry-run            also reachable via DRY_RUN=true (see .env.example)
 //   --clean              delete feeder-generated state before starting
+//   --force              skip overwrite confirmation prompts (init only)
+//   --from <path>        source path for init sub-commands
 //   --help, -h
+//
+// Positional sub-commands:
+//
+//   init bootstrap       copy config-bootstrap.json from CLI state
+//   init client          copy client JSON + generate router YAML interactively
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type Transport = "http" | "ws";
+export type InitSubCommand = "bootstrap" | "client";
 
 /** Mutually exclusive top-level "mode" the binary runs in. */
-export type FeederMode = "daemon" | "validate" | "scan";
+export type FeederMode = "daemon" | "validate" | "scan" | "init";
 
 export type ParsedArgs = {
   configPath: string;
@@ -27,6 +35,13 @@ export type ParsedArgs = {
   dryRun: boolean;
   cleanState: boolean;
   showHelp: boolean;
+  // Checkpoint seeding (mutually exclusive)
+  fromBlock?: string;   // "N" → scan starts from block N
+  fromLatest: boolean;  // scan starts from current chain tip
+  // init-specific
+  initSubCommand?: InitSubCommand;
+  initFrom?: string;
+  force: boolean;
 };
 
 const VALID_LOG_LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error"];
@@ -40,6 +55,8 @@ const DEFAULTS: ParsedArgs = {
   dryRun: false,
   cleanState: false,
   showHelp: false,
+  fromLatest: false,
+  force: false,
 };
 
 /**
@@ -48,6 +65,12 @@ const DEFAULTS: ParsedArgs = {
  * point can print usage and exit non-zero.
  */
 export function parseArgs(argv: string[]): ParsedArgs {
+  // `init bootstrap` / `init client` — positional sub-command handled first
+  // before the flag loop so the loop can use its standard switch/case.
+  if (argv[0] === "init") {
+    return parseInitArgs(argv);
+  }
+
   const parsed: ParsedArgs = { ...DEFAULTS };
   applyEnvOverrides(parsed);
 
@@ -70,6 +93,18 @@ export function parseArgs(argv: string[]): ParsedArgs {
       case "--clean":
         parsed.cleanState = true;
         break;
+      case "--from-block":
+        if (parsed.fromLatest) {
+          throw new Error("--from-block and --from-latest are mutually exclusive");
+        }
+        parsed.fromBlock = parseBlockNumber(requireValue(argv, ++i, "--from-block"));
+        break;
+      case "--from-latest":
+        if (parsed.fromBlock !== undefined) {
+          throw new Error("--from-block and --from-latest are mutually exclusive");
+        }
+        parsed.fromLatest = true;
+        break;
       case "--config":
         parsed.configPath = requireValue(argv, ++i, "--config");
         break;
@@ -81,6 +116,40 @@ export function parseArgs(argv: string[]): ParsedArgs {
         break;
       default:
         throw new Error(`Unknown argument: ${arg}`);
+    }
+  }
+
+  return parsed;
+}
+
+function parseInitArgs(argv: string[]): ParsedArgs {
+  const sub = argv[1] as InitSubCommand | undefined;
+  if (sub !== "bootstrap" && sub !== "client") {
+    throw new Error(
+      `'init' requires a sub-command: bootstrap or client\n` +
+      `  feeder init bootstrap [--from <cli-state-dir>] [--force]\n` +
+      `  feeder init client    [--from <client.json>]   [--force]`,
+    );
+  }
+
+  const parsed: ParsedArgs = { ...DEFAULTS, mode: "init", initSubCommand: sub };
+  applyEnvOverrides(parsed);
+
+  for (let i = 2; i < argv.length; i += 1) {
+    const arg = argv[i];
+    switch (arg) {
+      case "--help":
+      case "-h":
+        parsed.showHelp = true;
+        break;
+      case "--from":
+        parsed.initFrom = requireValue(argv, ++i, "--from");
+        break;
+      case "--force":
+        parsed.force = true;
+        break;
+      default:
+        throw new Error(`Unknown argument for 'init ${sub}': ${arg}`);
     }
   }
 
@@ -126,4 +195,11 @@ function parseTransport(raw: string): Transport {
     );
   }
   return raw as Transport;
+}
+
+function parseBlockNumber(raw: string): string {
+  if (!/^\d+$/.test(raw.trim())) {
+    throw new Error(`--from-block must be a non-negative integer, got "${raw}"`);
+  }
+  return raw.trim();
 }

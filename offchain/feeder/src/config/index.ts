@@ -20,7 +20,6 @@ export type {
   EventProcessorConfig,
   WorkerPoolConfig,
   HealthCheckConfig,
-  RecoveryConfig,
   APIConfig,
   MetricsConfig,
   ReplicaConfig,

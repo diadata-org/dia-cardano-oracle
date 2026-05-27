@@ -5,4 +5,5 @@ export {
   type ProcessedEventRow,
   type ChainStateRow,
   type TransactionLogRow,
+  type TransactionViewRow,
 } from "./db.js";

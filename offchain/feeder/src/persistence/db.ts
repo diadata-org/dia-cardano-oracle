@@ -64,6 +64,27 @@ export type TransactionLogRow = {
   confirmedAtMs?: number;
 };
 
+export type TransactionViewRow = {
+  intentHash: string;
+  sourceChainId: number;
+  sourceBlockNumber: bigint;
+  sourceTxHash: string;
+  sourceLogIndex: number;
+  symbol: string;
+  price: string;
+  timestamp: string;
+  signer: string;
+  processedAtMs: number;
+  cardanoTxHash: string;
+  routerId: string;
+  destinationIndex: number;
+  clientStatePath: string;
+  status: "submitted" | "confirmed" | "failed";
+  errorMessage?: string;
+  submittedAtMs: number;
+  confirmedAtMs?: number;
+};
+
 export type Db = {
   /** Idempotent schema setup. Run once at startup. */
   migrate(): Promise<void>;
@@ -84,6 +105,9 @@ export type Db = {
     update: Pick<TransactionLogRow, "status" | "errorMessage" | "confirmedAtMs">,
   ): Promise<void>;
   getTransactionLog(intentHash: string): Promise<TransactionLogRow[]>;
+  listSymbolUpdates(symbol: string, limit: number): Promise<TransactionViewRow[]>;
+  getTransactionsByHash(cardanoTxHash: string): Promise<TransactionViewRow[]>;
+  listChainStates(): Promise<ChainStateRow[]>;
 
   close(): Promise<void>;
 };
@@ -181,6 +205,82 @@ async function createSqliteDb(filePath: string): Promise<Db> {
       return rows.map(fromSqliteTransactionLogRow);
     },
 
+    async listSymbolUpdates(symbol, limit) {
+      const rows = db.prepare(`
+        SELECT
+          pe.intent_hash,
+          pe.chain_id,
+          pe.block_number,
+          pe.tx_hash,
+          pe.log_index,
+          pe.symbol,
+          pe.price,
+          pe.timestamp,
+          pe.signer,
+          pe.processed_at_ms,
+          tl.cardano_tx_hash,
+          tl.router_id,
+          tl.destination_index,
+          tl.client_state_path,
+          tl.status,
+          tl.error_message,
+          tl.submitted_at_ms,
+          tl.confirmed_at_ms
+        FROM transaction_log tl
+        INNER JOIN processed_events pe ON pe.intent_hash = tl.intent_hash
+        WHERE pe.symbol = ?
+        ORDER BY tl.submitted_at_ms DESC, tl.id DESC
+        LIMIT ?
+      `).all(symbol, limit) as unknown as SqliteTransactionViewRow[];
+      return rows.map(fromSqliteTransactionViewRow);
+    },
+
+    async getTransactionsByHash(cardanoTxHash) {
+      const rows = db.prepare(`
+        SELECT
+          pe.intent_hash,
+          pe.chain_id,
+          pe.block_number,
+          pe.tx_hash,
+          pe.log_index,
+          pe.symbol,
+          pe.price,
+          pe.timestamp,
+          pe.signer,
+          pe.processed_at_ms,
+          tl.cardano_tx_hash,
+          tl.router_id,
+          tl.destination_index,
+          tl.client_state_path,
+          tl.status,
+          tl.error_message,
+          tl.submitted_at_ms,
+          tl.confirmed_at_ms
+        FROM transaction_log tl
+        INNER JOIN processed_events pe ON pe.intent_hash = tl.intent_hash
+        WHERE tl.cardano_tx_hash = ?
+        ORDER BY tl.submitted_at_ms ASC, tl.id ASC
+      `).all(cardanoTxHash) as unknown as SqliteTransactionViewRow[];
+      return rows.map(fromSqliteTransactionViewRow);
+    },
+
+    async listChainStates() {
+      const rows = db.prepare(
+        "SELECT chain_id, contract_id, last_processed_block, updated_at_ms FROM chain_state ORDER BY chain_id ASC, contract_id ASC",
+      ).all() as unknown as Array<{
+        chain_id: number;
+        contract_id: string;
+        last_processed_block: string;
+        updated_at_ms: number;
+      }>;
+      return rows.map((row) => ({
+        chainId: row.chain_id,
+        contractId: row.contract_id,
+        lastProcessedBlock: BigInt(row.last_processed_block),
+        updatedAtMs: row.updated_at_ms,
+      }));
+    },
+
     async close() {
       db.close();
     },
@@ -275,6 +375,84 @@ async function createPostgresDb(dsn: string): Promise<Db> {
         [intentHash],
       );
       return (r.rows as unknown as PgTransactionLogRow[]).map(fromPgTransactionLogRow);
+    },
+
+    async listSymbolUpdates(symbol, limit) {
+      const r = await pool.query(
+        `SELECT
+           pe.intent_hash,
+           pe.chain_id,
+           pe.block_number,
+           pe.tx_hash,
+           pe.log_index,
+           pe.symbol,
+           pe.price,
+           pe.timestamp,
+           pe.signer,
+           pe.processed_at_ms,
+           tl.cardano_tx_hash,
+           tl.router_id,
+           tl.destination_index,
+           tl.client_state_path,
+           tl.status,
+           tl.error_message,
+           tl.submitted_at_ms,
+           tl.confirmed_at_ms
+         FROM transaction_log tl
+         INNER JOIN processed_events pe ON pe.intent_hash = tl.intent_hash
+         WHERE pe.symbol = $1
+         ORDER BY tl.submitted_at_ms DESC, tl.id DESC
+         LIMIT $2`,
+        [symbol, limit],
+      );
+      return (r.rows as unknown as PgTransactionViewRow[]).map(fromPgTransactionViewRow);
+    },
+
+    async getTransactionsByHash(cardanoTxHash) {
+      const r = await pool.query(
+        `SELECT
+           pe.intent_hash,
+           pe.chain_id,
+           pe.block_number,
+           pe.tx_hash,
+           pe.log_index,
+           pe.symbol,
+           pe.price,
+           pe.timestamp,
+           pe.signer,
+           pe.processed_at_ms,
+           tl.cardano_tx_hash,
+           tl.router_id,
+           tl.destination_index,
+           tl.client_state_path,
+           tl.status,
+           tl.error_message,
+           tl.submitted_at_ms,
+           tl.confirmed_at_ms
+         FROM transaction_log tl
+         INNER JOIN processed_events pe ON pe.intent_hash = tl.intent_hash
+         WHERE tl.cardano_tx_hash = $1
+         ORDER BY tl.submitted_at_ms ASC, tl.id ASC`,
+        [cardanoTxHash],
+      );
+      return (r.rows as unknown as PgTransactionViewRow[]).map(fromPgTransactionViewRow);
+    },
+
+    async listChainStates() {
+      const r = await pool.query(
+        "SELECT chain_id, contract_id, last_processed_block, updated_at_ms FROM chain_state ORDER BY chain_id ASC, contract_id ASC",
+      );
+      return (r.rows as Array<{
+        chain_id: number;
+        contract_id: string;
+        last_processed_block: string;
+        updated_at_ms: string;
+      }>).map((row) => ({
+        chainId: row.chain_id,
+        contractId: row.contract_id,
+        lastProcessedBlock: BigInt(row.last_processed_block),
+        updatedAtMs: Number(row.updated_at_ms),
+      }));
     },
 
     async close() {
@@ -405,10 +583,54 @@ type SqliteTransactionLogRow = {
   confirmed_at_ms: number | null;
 };
 
+type SqliteTransactionViewRow = {
+  intent_hash: string;
+  chain_id: number;
+  block_number: string;
+  tx_hash: string;
+  log_index: number;
+  symbol: string;
+  price: string;
+  timestamp: string;
+  signer: string;
+  processed_at_ms: number;
+  cardano_tx_hash: string;
+  router_id: string;
+  destination_index: number;
+  client_state_path: string;
+  status: string;
+  error_message: string | null;
+  submitted_at_ms: number;
+  confirmed_at_ms: number | null;
+};
+
 function fromSqliteTransactionLogRow(r: SqliteTransactionLogRow): TransactionLogRow {
   return {
     id: r.id,
     intentHash: r.intent_hash,
+    cardanoTxHash: r.cardano_tx_hash,
+    routerId: r.router_id,
+    destinationIndex: r.destination_index,
+    clientStatePath: r.client_state_path,
+    status: r.status as TransactionLogRow["status"],
+    errorMessage: r.error_message ?? undefined,
+    submittedAtMs: r.submitted_at_ms,
+    confirmedAtMs: r.confirmed_at_ms ?? undefined,
+  };
+}
+
+function fromSqliteTransactionViewRow(r: SqliteTransactionViewRow): TransactionViewRow {
+  return {
+    intentHash: r.intent_hash,
+    sourceChainId: r.chain_id,
+    sourceBlockNumber: BigInt(r.block_number),
+    sourceTxHash: r.tx_hash,
+    sourceLogIndex: r.log_index,
+    symbol: r.symbol,
+    price: r.price,
+    timestamp: r.timestamp,
+    signer: r.signer,
+    processedAtMs: r.processed_at_ms,
     cardanoTxHash: r.cardano_tx_hash,
     routerId: r.router_id,
     destinationIndex: r.destination_index,
@@ -433,10 +655,54 @@ type PgTransactionLogRow = {
   confirmed_at_ms: string | null;
 };
 
+type PgTransactionViewRow = {
+  intent_hash: string;
+  chain_id: number;
+  block_number: string;
+  tx_hash: string;
+  log_index: number;
+  symbol: string;
+  price: string;
+  timestamp: string;
+  signer: string;
+  processed_at_ms: string;
+  cardano_tx_hash: string;
+  router_id: string;
+  destination_index: number;
+  client_state_path: string;
+  status: string;
+  error_message: string | null;
+  submitted_at_ms: string;
+  confirmed_at_ms: string | null;
+};
+
 function fromPgTransactionLogRow(r: PgTransactionLogRow): TransactionLogRow {
   return {
     id: Number(r.id),
     intentHash: r.intent_hash,
+    cardanoTxHash: r.cardano_tx_hash,
+    routerId: r.router_id,
+    destinationIndex: r.destination_index,
+    clientStatePath: r.client_state_path,
+    status: r.status as TransactionLogRow["status"],
+    errorMessage: r.error_message ?? undefined,
+    submittedAtMs: Number(r.submitted_at_ms),
+    confirmedAtMs: r.confirmed_at_ms ? Number(r.confirmed_at_ms) : undefined,
+  };
+}
+
+function fromPgTransactionViewRow(r: PgTransactionViewRow): TransactionViewRow {
+  return {
+    intentHash: r.intent_hash,
+    sourceChainId: r.chain_id,
+    sourceBlockNumber: BigInt(r.block_number),
+    sourceTxHash: r.tx_hash,
+    sourceLogIndex: r.log_index,
+    symbol: r.symbol,
+    price: r.price,
+    timestamp: r.timestamp,
+    signer: r.signer,
+    processedAtMs: Number(r.processed_at_ms),
     cardanoTxHash: r.cardano_tx_hash,
     routerId: r.router_id,
     destinationIndex: r.destination_index,

@@ -49,62 +49,61 @@ infrastructure:
     enabled: true
     scan_interval: 10s
     block_range: 500
+    confirmations: 6
     max_block_gap: 5000        # gap detection before backward sync. Deferred to M3.
     backward_sync: true        # backfill missed block ranges after reconnect. Deferred to M3.
 
   # --------------------------------------------------------------------------
-  # event_processor — dedup cache.
+  # event_processor — dedup cache + lane coalescing.
   # --------------------------------------------------------------------------
   event_processor:
-    batch_size: 16             # max events per tick in parallel mode. Deferred to M3.
-    validation_timeout: 30s    # enrichment timeout in parallel mode. Deferred to M3.
     dedup_cache_size: 4096
     dedup_cache_ttl: 1h
-    enable_parallel_mode: false  # concurrent event processing. Deferred to M3.
+    coalesce_window: 2s
+    max_intent_age: 15m
+    max_batch_size: 10
+    size_fallback_enabled: true
+    # ---- M3 placeholders — Spectra parity (parallel event enrichment).
+    # enable_parallel_mode: false
+    # parallel_worker_count: 4
+    # parallel_queue_size: 256
+    # parallel_timeout: 30s
 
   # --------------------------------------------------------------------------
-  # worker_pool — Cardano submission queue.
+  # worker_pool — submission queue knobs.
+  # See infrastructure.preview.yaml for the Cardano-vs-Spectra divergence
+  # note (lane model instead of worker pool). `max_workers` and
+  # `task_queue_size` are intentionally omitted.
   # --------------------------------------------------------------------------
   worker_pool:
-    # Keep max_workers ≤ 4 to avoid Blockfrost rate limits.
-    max_workers: 4
-    task_queue_size: 64        # worker pool channel depth in parallel mode. Deferred to M3.
-    task_timeout: 60s
+    # task_timeout: M3 — Spectra parity. Not read by this feeder.
+    # task_timeout: 60s
     retry_delay: 5s
     max_retries: 3
+    # inflight_timeout_ms: how long a submitted tx remains in the in-flight
+    #   table (blocking new submissions on the same receiver UTxO) before
+    #   the lock is considered stuck and released. Required — validator
+    #   rejects load if missing. Unit: milliseconds.
+    inflight_timeout_ms: 900000  # 15 min
 
   # --------------------------------------------------------------------------
-  # health_check — /readyz probe.
+  # health_check — /health/ready probe.
   # --------------------------------------------------------------------------
   health_check:
     enabled: true
-    check_interval: 30s        # health-checker goroutine cadence. Deferred to M3.
-    timeout: 10s               # single probe timeout. Deferred to M3.
-    max_processing_lag: 5m     # /readyz returns 503 if exceeded. Active now.
-    max_queue_size: 128        # unhealthy threshold for queue depth. Deferred to M3.
-
-  # --------------------------------------------------------------------------
-  # recovery — automatic circuit-breaker. Deferred to M3.
-  #
-  # When implemented: pauses after min_failures consecutive errors and
-  # retries up to max_attempts times. Currently the process exits and
-  # the process manager (Docker / systemd) handles restart.
-  # --------------------------------------------------------------------------
-  recovery:
-    enabled: true
-    min_failures: 3
-    max_attempts: 10
-    retry_interval: 30s
-    recovery_timeout: 30m
+    check_interval: 30s        # ticker cadence — informational in M2 until ticker probe lands (M3).
+    max_processing_lag: 5m     # /health/ready returns 503 if exceeded. Cardano-feeder extension.
 
   # --------------------------------------------------------------------------
   # api — HTTP server.
   # --------------------------------------------------------------------------
   api:
     enabled: true
-    # Overrideable via API_LISTEN_ADDR env var.
-    listen_addr: ":8080"
+    host: 0.0.0.0
+    port: 8080
     enable_cors: false
+    readiness:
+      max_last_confirmed_age: 15m
 
   # --------------------------------------------------------------------------
   # metrics — Prometheus.
@@ -112,7 +111,39 @@ infrastructure:
   metrics:
     # Overrideable via METRICS_ENABLED / METRICS_NAMESPACE env vars.
     enabled: true
-    namespace: dia_cardano_feeder
+    namespace: dia_bridge
+
+  # --------------------------------------------------------------------------
+  # cardano — destination-chain confirmation policy.
+  # --------------------------------------------------------------------------
+  cardano:
+    # confirmation_depth: Cardano blocks waited past inclusion before
+    #   the feeder emits `tx_confirmed`. 1 = practically final. Higher
+    #   values trade latency for rollback safety.
+    confirmation_depth: 1
+
+  # --------------------------------------------------------------------------
+  # cron_service — Spectra parity. Periodic re-submission for cron-enabled
+  # destinations whose on-chain pair has gone stale beyond `time_threshold`.
+  # See infrastructure.preview.yaml for the full notes.
+  # --------------------------------------------------------------------------
+  cron_service:
+    enabled: true
+    tick_interval: 30s
+
+  # --------------------------------------------------------------------------
+  # alerting — canonical thresholds for feeder warnings + Prometheus rules.
+  # See infrastructure.preview.yaml for the full unit / semantic notes.
+  # alerts.yml mirrors these values; both must stay in sync.
+  # --------------------------------------------------------------------------
+  alerting:
+    receiver_balance_low_lovelace: 2000000000          # 2 ADA — top-up needed
+    settle_overdue_lovelace: 10000000                  # 10 ADA accrued — run settle
+    payment_hook_withdraw_ready_lovelace: 50000000     # 50 ADA — DIA can withdraw
+    admin_wallet_low_lovelace: 5000000000              # 5 ADA — refill operator wallet
+    oracle_pair_stale_seconds: 3600                    # 1 h since last confirm
+    price_deviation_high_percent: 5                    # 5 % p95 → misreport suspect
+    price_age_high_seconds: 600                        # 10 min p95 → DIA source stale
 
   # --------------------------------------------------------------------------
   # dry_run — any of YAML/--dry-run/DRY_RUN=true activates it.

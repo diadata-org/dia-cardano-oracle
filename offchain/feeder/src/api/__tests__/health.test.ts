@@ -18,7 +18,7 @@ describe("readinessResult", () => {
   it("ok when registry polled recently", () => {
     const r = readinessResult({
       lastRegistryPollMs: now - 30_000,
-      lastSubmitMs: 0,
+      lastConfirmedMs: 0,
       maxStalenessMs: 300_000,
       now: clock,
     });
@@ -29,7 +29,7 @@ describe("readinessResult", () => {
   it("degraded when registry never polled", () => {
     const r = readinessResult({
       lastRegistryPollMs: 0,
-      lastSubmitMs: 0,
+      lastConfirmedMs: 0,
       maxStalenessMs: 300_000,
       now: clock,
     });
@@ -41,7 +41,7 @@ describe("readinessResult", () => {
   it("degraded when registry poll is stale", () => {
     const r = readinessResult({
       lastRegistryPollMs: now - 400_000,
-      lastSubmitMs: 0,
+      lastConfirmedMs: 0,
       maxStalenessMs: 300_000,
       now: clock,
     });
@@ -50,48 +50,48 @@ describe("readinessResult", () => {
     assert.match(r.checks.registry.detail ?? "", /stale/);
   });
 
-  it("submission check skipped when maxLastSubmitAgeMs = 0", () => {
+  it("confirmation check skipped when maxLastConfirmedAgeMs = 0", () => {
     const r = readinessResult({
       lastRegistryPollMs: now - 10_000,
-      lastSubmitMs: 0,
+      lastConfirmedMs: 0,
       maxStalenessMs: 300_000,
-      maxLastSubmitAgeMs: 0,
+      maxLastConfirmedAgeMs: 0,
       now: clock,
     });
-    assert.equal(r.checks.submission, undefined);
+    assert.equal(r.checks.confirmation, undefined);
   });
 
-  it("submission check passes when recent", () => {
+  it("confirmation check passes when last confirmed is recent", () => {
     const r = readinessResult({
       lastRegistryPollMs: now - 10_000,
-      lastSubmitMs: now - 5_000,
+      lastConfirmedMs: now - 5_000,
       maxStalenessMs: 300_000,
-      maxLastSubmitAgeMs: 60_000,
+      maxLastConfirmedAgeMs: 60_000,
       now: clock,
     });
-    assert.equal(r.checks.submission?.ok, true);
+    assert.equal(r.checks.confirmation?.ok, true);
   });
 
-  it("submission check fails when too old", () => {
+  it("confirmation check fails when last confirmed is older than max_last_confirmed_age", () => {
     const r = readinessResult({
       lastRegistryPollMs: now - 10_000,
-      lastSubmitMs: now - 120_000,
+      lastConfirmedMs: now - 120_000,
       maxStalenessMs: 300_000,
-      maxLastSubmitAgeMs: 60_000,
+      maxLastConfirmedAgeMs: 60_000,
       now: clock,
     });
-    assert.equal(r.checks.submission?.ok, false);
-    assert.match(r.checks.submission?.detail ?? "", /too old/);
+    assert.equal(r.checks.confirmation?.ok, false);
+    assert.match(r.checks.confirmation?.detail ?? "", /older than max_last_confirmed_age/);
   });
 
-  it("submission check passes when lastSubmitMs = 0 (no submissions yet)", () => {
+  it("confirmation check passes when lastConfirmedMs = 0 (no submissions yet)", () => {
     const r = readinessResult({
       lastRegistryPollMs: now - 10_000,
-      lastSubmitMs: 0,
+      lastConfirmedMs: 0,
       maxStalenessMs: 300_000,
-      maxLastSubmitAgeMs: 60_000,
+      maxLastConfirmedAgeMs: 60_000,
       now: clock,
     });
-    assert.equal(r.checks.submission?.ok, true);
+    assert.equal(r.checks.confirmation?.ok, true);
   });
 });

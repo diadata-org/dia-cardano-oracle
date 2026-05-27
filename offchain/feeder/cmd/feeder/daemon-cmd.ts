@@ -4,7 +4,7 @@
 //
 //   config load + validate
 //     ↓
-//   API server    (health / readyz / metrics / prices)
+//   API server    (health / metrics / prices / symbols / chains / txs)
 //     ↓
 //   router registry + price cache
 //     ↓
@@ -26,9 +26,11 @@
 //   DATABASE_DSN_MAINNET     Postgres DSN for Mainnet.
 //   API_LISTEN_ADDR          host:port — default ":8080".
 //   METRICS_ENABLED          "true" to enable prom-client metrics.
-//   METRICS_NAMESPACE        metric name prefix — default "dia_feeder".
+//   METRICS_NAMESPACE        metric name prefix — default "dia_bridge".
 
-import { rm, glob } from "node:fs/promises";
+import { access, rm, readdir } from "node:fs/promises";
+
+import { seedCheckpointIfNeeded } from "./checkpoint-seed.js";
 
 import { createPublicClient, http, type PublicClient } from "viem";
 
@@ -45,6 +47,11 @@ import {
   createPriceCache,
 } from "../../src/processor/index.js";
 import {
+  createLatestIntentCache,
+  startCronService,
+  type LatestIntentCache,
+} from "../../src/cron/index.js";
+import {
   composeAuthenticatedWsUrl,
   createHttpRegistryClient,
   createJsonCheckpoint,
@@ -59,6 +66,7 @@ import {
   type RegistryClient,
   type ResolvedSource,
   type ScannedBatch,
+  type ScannerMetricsSink,
 } from "../../src/source/index.js";
 import {
   createRouterRegistry,
@@ -76,11 +84,13 @@ import { reconcileAllDestinations } from "../../src/lib-bridge/reconcile.js";
 import { createCardanoWriteClient } from "../../src/submitter/cardano-write-client.js";
 import {
   createApiServer,
+  createChainRuntimeState,
   createMetrics,
   noopMetrics,
+  type FeederMetrics,
   type HealthState,
 } from "../../src/api/index.js";
-import { createDb, type DbConfig } from "../../src/persistence/index.js";
+import { createDb, type Db, type DbConfig } from "../../src/persistence/index.js";
 import { createFileLogger, type FileLogger } from "../../src/logger/file-logger.js";
 import { runPreflight } from "../../src/submitter/preflight.js";
 import { createDefaultRetryPolicy } from "../../src/submitter/retry-policy.js";
@@ -96,6 +106,8 @@ export type DaemonCmdOptions = {
   dryRun: boolean;
   cleanState: boolean;
   logLevel: string;
+  fromBlock?: string;
+  fromLatest: boolean;
   report: (line: string) => void;
   signal?: AbortSignal;
 };
@@ -113,6 +125,32 @@ function parseDurationMs(raw: string | undefined, fallback: number): number {
   if (trimmed.endsWith("m"))  return Math.round(num * 60_000);
   if (trimmed.endsWith("h"))  return Math.round(num * 3_600_000);
   return Math.round(num * 1_000); // bare number → seconds
+}
+
+type IntentRuntimeEntry = {
+  observedAtMs: number;
+  routerId: string;
+  destinationIndex: number;
+  clientStatePath: string;
+  clientId: string;
+  symbol: string;
+  submittedAtMs?: number;
+};
+
+function clientIdFromStatePath(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  const fileName = normalized.split("/").pop() ?? normalized;
+  return fileName.endsWith(".json") ? fileName.slice(0, -5) : fileName;
+}
+
+function parsePositiveInteger(raw: number | undefined): number | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!Number.isFinite(raw)) {
+    return undefined;
+  }
+  return Math.max(1, Math.floor(raw));
 }
 
 // ---------------------------------------------------------------------------
@@ -178,23 +216,44 @@ function createLeveledReport(
   };
 }
 
-async function cleanFeederState(network: string, report: (line: string) => void): Promise<void> {
-  const base = `state/${network.toLowerCase()}`;
+export async function cleanFeederState(
+  network: string,
+  report: (line: string) => void,
+  stateBase = "state",
+): Promise<void> {
+  const base = `${stateBase}/${network.toLowerCase()}`;
 
-  const targets: Array<{ path: string; isGlob?: boolean }> = [
-    { path: `${base}/logs` },
-    { path: `${base}/feeder-checkpoint.json` },
-    { path: `${base}/feeder.sqlite` },
-    { path: `${base}/feeder.sqlite-shm` },
-    { path: `${base}/feeder.sqlite-wal` },
+  const targets: string[] = [
+    `${base}/logs`,
+    `${base}/feeder-checkpoint.json`,
+    `${base}/feeder.sqlite`,
+    `${base}/feeder.sqlite-shm`,
+    `${base}/feeder.sqlite-wal`,
   ];
 
   // Pair state files: state/<network>/clients/*/pairs/*.json
-  for await (const pairFile of glob(`${base}/clients/*/pairs/*.json`)) {
-    targets.push({ path: pairFile });
+  const clientsDir = `${base}/clients`;
+  try {
+    const clientEntries = await readdir(clientsDir, { withFileTypes: true });
+    for (const entry of clientEntries) {
+      if (!entry.isDirectory()) continue;
+      const pairsDir = `${clientsDir}/${entry.name}/pairs`;
+      try {
+        const pairFiles = await readdir(pairsDir, { withFileTypes: true });
+        for (const pf of pairFiles) {
+          if (pf.isFile() && pf.name.endsWith(".json")) {
+            targets.push(`${pairsDir}/${pf.name}`);
+          }
+        }
+      } catch {
+        // no pairs dir for this client
+      }
+    }
+  } catch {
+    // no clients dir
   }
 
-  for (const { path } of targets) {
+  for (const path of targets) {
     try {
       await rm(path, { recursive: true, force: true });
       report(`clean: removed ${path}`);
@@ -202,6 +261,37 @@ async function cleanFeederState(network: string, report: (line: string) => void)
       report(`clean: could not remove ${path} — ${(err as Error).message}`);
     }
   }
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try { await access(p); return true; } catch { return false; }
+}
+
+export async function checkBootstrapArtifacts(
+  config: ModularConfig,
+  network: string,
+  report: (line: string) => void,
+  stateBase = "state",
+): Promise<boolean> {
+  const bootstrapPath = `${stateBase}/${network.toLowerCase()}/config-bootstrap.json`;
+  if (!await fileExists(bootstrapPath)) {
+    report(`daemon: missing bootstrap artifact: ${bootstrapPath}`);
+    report(`daemon: hint → npm run feeder:dev -- init bootstrap`);
+    return false;
+  }
+  for (const [routerId, router] of Object.entries(config.routers)) {
+    for (const dest of router.destinations) {
+      if (dest.cardano) {
+        const clientPath = dest.cardano.client_state_path;
+        if (!await fileExists(clientPath)) {
+          report(`daemon: router "${routerId}": missing client state: ${clientPath}`);
+          report(`daemon: hint → npm run feeder:dev -- init client`);
+          return false;
+        }
+      }
+    }
+  }
+  return true;
 }
 
 export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
@@ -239,6 +329,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     report("daemon: refusing to start — fix config errors above.");
     return 1;
   }
+
+  // ------------------------------------------------------------------
+  // 1b. Bootstrap artifact check — fast-fail with actionable hint.
+  // ------------------------------------------------------------------
+  if (!await checkBootstrapArtifacts(config, network, report)) return 1;
 
   // dry_run: YAML true || CLI --dry-run flag || DRY_RUN=true env var.
   const dryRun =
@@ -285,9 +380,16 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const metricsNamespace =
     config.infrastructure?.metrics?.namespace ??
     process.env.METRICS_NAMESPACE?.trim() ??
-    "dia_feeder";
+    "dia_bridge";
   const metrics = metricsEnabled
-    ? await createMetrics({ namespace: metricsNamespace, defaultLabels: { network } })
+    ? await createMetrics({
+        namespace: metricsNamespace,
+        defaultLabels: {
+          destination_chain: "cardano",
+          network,
+          source_chain_id: String(source.chainId),
+        },
+      })
     : noopMetrics;
 
   // ------------------------------------------------------------------
@@ -295,24 +397,34 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // ------------------------------------------------------------------
   const healthState: HealthState = {
     lastRegistryPollMs: 0,
-    lastSubmitMs: 0,
+    lastConfirmedMs: 0,
     maxStalenessMs: 5 * 60_000, // overwritten below after infra config is resolved
+    maxLastConfirmedAgeMs: 0,
   };
 
   // ------------------------------------------------------------------
   // 5. Price cache.
   // ------------------------------------------------------------------
   const priceCache = createPriceCache();
+  // Latest-intent cache feeds the cron service. Updated on every
+  // enriched intent (filtered or dispatched) so cron has the freshest
+  // payload to re-submit when the on-chain pair goes stale.
+  const latestIntents = createLatestIntentCache();
+  const chainRuntime = createChainRuntimeState();
+  const intentRuntime = new Map<string, IntentRuntimeEntry>();
 
   // ------------------------------------------------------------------
   // 6. HTTP API server — YAML wins over env, env is fallback.
   // ------------------------------------------------------------------
-  const { host: apiHost, port: apiPort } = resolveApiAddr(config.infrastructure?.api?.listen_addr);
+  const { host: apiHost, port: apiPort } = resolveApiAddr(config.infrastructure?.api);
   const apiServer = createApiServer({
     host: apiHost,
     port: apiPort,
+    config,
+    db,
     metrics,
     priceCache,
+    chainRuntime,
     healthState,
   });
   await apiServer.start();
@@ -326,17 +438,56 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const scanIntervalMs   = parseDurationMs(infra.block_scanner?.scan_interval,   10_000);
   const blockRange       = BigInt(infra.block_scanner?.block_range               ?? 500);
   const startBlock       = BigInt(infra.source?.start_block                      ?? 0);
-  const confirmations    = 6n; // not in Spectra schema — keep fixed
+  const confirmations    = BigInt(infra.block_scanner?.confirmations             ?? 6);
+  // Spectra-parity gap recovery (Etapa B.1). Switches the HTTP scanner
+  // into a fast catch-up mode (5000-block chunks, no scan_interval sleep
+  // between chunks) whenever `head - cursor > max_block_gap`. Defaults
+  // preserve current behaviour for installations that have not opted in.
+  const backwardSync     = infra.block_scanner?.backward_sync === true;
+  const maxBlockGap      = BigInt(infra.block_scanner?.max_block_gap             ?? 5000);
   const dedupCapacity    = infra.event_processor?.dedup_cache_size               ?? 4096;
   const dedupTtlMs       = parseDurationMs(infra.event_processor?.dedup_cache_ttl, 60 * 60_000);
   const reconnectMs      = parseDurationMs(infra.event_monitor?.reconnect_interval, 5_000);
   const maxReconnects    = infra.event_monitor?.max_reconnect_attempts           ?? 60;
   const maxStalenessMs   = parseDurationMs(infra.health_check?.max_processing_lag, 5 * 60_000);
-  const taskTimeoutMs    = parseDurationMs(infra.worker_pool?.task_timeout,         60_000);
-  const retryDelayMs     = parseDurationMs(infra.worker_pool?.retry_delay,           5_000);
-  const maxRetries       = infra.worker_pool?.max_retries                           ?? 3;
+  const maxLastConfirmedAgeMs = parseDurationMs(
+    config.infrastructure?.api?.readiness?.max_last_confirmed_age,
+    0,
+  );
+  const retryDelayMs = parseDurationMs(infra.worker_pool?.retry_delay, 0);
+  if (retryDelayMs === 0) {
+    throw new Error(
+      "daemon: infrastructure.worker_pool.retry_delay is required (no silent default).",
+    );
+  }
+  const maxRetries = infra.worker_pool?.max_retries;
+  if (maxRetries === undefined) {
+    throw new Error(
+      "daemon: infrastructure.worker_pool.max_retries is required (no silent default).",
+    );
+  }
+  const inflightTimeoutMs = infra.worker_pool?.inflight_timeout_ms;
+  if (inflightTimeoutMs === undefined) {
+    throw new Error(
+      "daemon: infrastructure.worker_pool.inflight_timeout_ms is required (no silent default).",
+    );
+  }
+  const cardanoConfirmationDepth = infra.cardano?.confirmation_depth ?? 1;
+
+  // Alerting thresholds — validated as required at config load. The
+  // values come from `infrastructure.<network>.yaml::alerting` and are
+  // the canonical source mirrored by `monitoring/alerts.yml`. See the
+  // README "Thresholds and alerts" section for the full table.
+  const alerting = infra.alerting;
+  if (!alerting) {
+    throw new Error(
+      "daemon: infrastructure.alerting block is required (see infrastructure.<network>.yaml).",
+    );
+  }
+  const receiverBalanceLowLovelace = BigInt(alerting.receiver_balance_low_lovelace!);
 
   healthState.maxStalenessMs = maxStalenessMs;
+  healthState.maxLastConfirmedAgeMs = maxLastConfirmedAgeMs;
 
   // ------------------------------------------------------------------
   // 8. Router registry.
@@ -353,7 +504,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
 
   const bridge: OracleIntentBridge = dryRun
     ? makeDryRunBridge(report)
-    : createRealOracleIntentBridge({ log: debugReport });
+    : createRealOracleIntentBridge({
+        log: debugReport,
+        confirmationDepth: cardanoConfirmationDepth,
+      });
 
   const retryPolicy = createDefaultRetryPolicy({ maxRetries, delayMs: retryDelayMs });
 
@@ -363,6 +517,24 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         bridge,
         log: debugReport,
         onStep: (intentHash, symbol, step, txHash) => {
+          const runtime = intentRuntime.get(intentHash);
+          if (step === "submitted" && txHash && runtime && runtime.submittedAtMs === undefined) {
+            runtime.submittedAtMs = Date.now();
+            metrics.transactionsSubmitted.inc({ symbol, client_id: runtime.clientId });
+            metrics.processingToSubmissionSeconds.observe(
+              { symbol, client_id: runtime.clientId },
+              (runtime.submittedAtMs - runtime.observedAtMs) / 1_000,
+            );
+            void db.insertTransactionLog({
+              intentHash,
+              cardanoTxHash: txHash,
+              routerId: runtime.routerId,
+              destinationIndex: runtime.destinationIndex,
+              clientStatePath: runtime.clientStatePath,
+              status: "submitted",
+              submittedAtMs: runtime.submittedAtMs,
+            });
+          }
           if (step !== "tx_start") {
             void fileLogger.logIntentStep({
               ts: new Date().toISOString(), level: "info",
@@ -387,28 +559,50 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
             total_ms: entry.total_ms,
             errorCode: entry.errorCode,
             errorMessage: entry.errorMessage,
+            batch: entry.batch,
           });
           await fileLogger.logTransaction(entry);
         },
       }),
-    taskTimeoutMs,
+    inflightTimeoutMs,
     retryPolicy,
   });
 
   const coalesceWindowMs = parseDurationMs(infra.event_processor?.coalesce_window, 2_000);
   const maxIntentAgeRaw  = infra.event_processor?.max_intent_age;
   const maxIntentAgeMs   = maxIntentAgeRaw ? parseDurationMs(maxIntentAgeRaw, 0) || undefined : undefined;
+  const maxBatchSize = parsePositiveInteger(infra.event_processor?.max_batch_size);
+  const sizeFallbackEnabled = infra.event_processor?.size_fallback_enabled === true;
 
   const coalescerManager = createCoalescerManager({
     queueManager,
     coalesceWindowMs,
     maxIntentAgeMs,
+    maxBatchSize,
+    sizeFallbackEnabled,
     onResult: async (result: SubmitResult, req: SubmitRequest) => {
+      const nowMs = Date.now();
+      const clientId = clientIdFromStatePath(req.destination.client_state_path);
+      const runtime = intentRuntime.get(result.intentHash);
       if (result.ok) {
-        healthState.lastSubmitMs = Date.now();
-        metrics.cardanoTxSubmitted.inc({ network });
+        healthState.lastConfirmedMs = nowMs;
         const { routerId, destinationIndex, enriched } = req;
         const { symbol, price, timestamp } = enriched.fullIntent;
+        const batchSize = result.batch?.size ?? 1;
+        const batchMember = result.batch?.members.find((member) => member.intentHash === result.intentHash);
+        metrics.transactionsConfirmed.inc({ symbol, client_id: clientId });
+        if (runtime?.submittedAtMs !== undefined) {
+          metrics.submissionToConfirmationSeconds.observe(
+            { symbol, client_id: clientId },
+            (nowMs - runtime.submittedAtMs) / 1_000,
+          );
+        }
+        if (runtime) {
+          metrics.endToEndLatencySeconds.observe(
+            { symbol, client_id: clientId },
+            (nowMs - runtime.observedAtMs) / 1_000,
+          );
+        }
         priceCache.set(
           { routerId, destinationIndex, symbol },
           {
@@ -417,34 +611,106 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
             timestamp,
             intentHash: result.intentHash,
             cardanoTxHash: result.cardanoTxHash,
-            updatedAtMs: Date.now(),
+            confirmedAtDepth: cardanoConfirmationDepth,
+            updatedAtMs: nowMs,
           },
         );
-        void db.insertTransactionLog({
-          intentHash: result.intentHash,
-          cardanoTxHash: result.cardanoTxHash,
-          routerId,
-          destinationIndex,
-          clientStatePath: req.destination.client_state_path,
+        metrics.cardanoOracleLastConfirmedTimestampSeconds.set(
+          { symbol, client_id: clientId },
+          Number(timestamp),
+        );
+        metrics.cardanoPairIsCreate.set(
+          { symbol, client_id: clientId },
+          (batchMember?.action ?? result.pairAction) === "mint" ? 1 : 0,
+        );
+
+        // Post-confirm balance gauges. The bridge captures these by
+        // re-querying chain state after the new UTxOs settle (see
+        // capturePostConfirmState in lib-bridge/index.ts). Each field is
+        // optional — emit only when defined so a chain provider hiccup
+        // does not surface as a misleading 0-value gauge.
+        const postState = result.postState;
+        if (postState?.receiverBalanceLovelace !== undefined) {
+          metrics.cardanoReceiverBalanceLovelace.set(
+            { client_id: clientId },
+            Number(postState.receiverBalanceLovelace),
+          );
+          if (postState.receiverBalanceLovelace < receiverBalanceLowLovelace) {
+            metrics.cardanoReceiverTopupWarnings.inc({ client_id: clientId });
+          }
+        }
+        if (postState?.receiverAccruedLovelace !== undefined) {
+          metrics.cardanoReceiverAccruedLovelace.set(
+            { client_id: clientId },
+            Number(postState.receiverAccruedLovelace),
+          );
+        }
+        if (postState?.paymentHookAccruedLovelace !== undefined) {
+          metrics.cardanoPaymentHookAccruedLovelace.set(
+            {},
+            Number(postState.paymentHookAccruedLovelace),
+          );
+        }
+        if (postState?.adminWalletLovelace !== undefined) {
+          metrics.cardanoAdminWalletLovelace.set(
+            {},
+            Number(postState.adminWalletLovelace),
+          );
+        }
+
+        void db.updateTransactionLog(result.intentHash, result.cardanoTxHash, {
           status: "confirmed",
-          submittedAtMs: Date.now(),
-          confirmedAtMs: Date.now(),
+          confirmedAtMs: nowMs,
         });
+        if (result.batch && result.batch.size > 1) {
+          await fileLogger.logIntentStep({
+            ts: new Date().toISOString(),
+            level: "info",
+            intentHash: result.intentHash,
+            symbol,
+            step: "batched",
+            message: `Intent confirmed inside a batch of ${result.batch.size} intents`,
+            meta: {
+              cardanoTxHash: result.cardanoTxHash,
+              batchSize: result.batch.size,
+              batchMembers: result.batch.members,
+              pairUnit: batchMember?.pairUnit ?? result.pairUnit,
+              pairAction: batchMember?.action ?? result.pairAction,
+            },
+          });
+        }
         await fileLogger.logIntentStep({
           ts: new Date().toISOString(),
           level: "info",
           intentHash: result.intentHash,
           symbol,
           step: "confirm",
-          message: `Cardano transaction confirmed`,
-          meta: { cardanoTxHash: result.cardanoTxHash },
+          message:
+            batchSize > 1
+              ? `Cardano batch transaction confirmed`
+              : `Cardano transaction confirmed`,
+          meta: {
+            cardanoTxHash: result.cardanoTxHash,
+            pairUnit: batchMember?.pairUnit ?? result.pairUnit,
+            pairAction: batchMember?.action ?? result.pairAction,
+            batchSize,
+          },
         });
+        intentRuntime.delete(result.intentHash);
       } else {
-        metrics.cardanoTxFailed.inc({ network });
         const symbol = req.enriched.fullIntent.symbol;
+        const batchSize = result.batch?.size ?? 1;
+        metrics.transactionsFailed.inc({
+          symbol,
+          client_id: clientId,
+          error_code: result.code,
+        });
+        if (result.code === "TxDroppedFromChain") {
+          metrics.transactionsReorg.inc({ symbol, client_id: clientId });
+        }
         report(
           `[error] daemon: TRANSACTION FAILED — code=${result.code} intentHash=${result.intentHash} ` +
-          `symbol=${symbol} error="${result.error.message}"`,
+          `symbol=${symbol} batchSize=${batchSize} error="${result.error.message}"`,
         );
         report(`[warn] daemon: REMEDIATION — ${result.remediation}`);
         void db.insertTransactionLog({
@@ -463,8 +729,15 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           symbol,
           step: "failed",
           message: `Cardano transaction failed: ${result.error.message}`,
-          meta: { code: result.code, remediation: result.remediation, error: result.error.message },
+          meta: {
+            code: result.code,
+            remediation: result.remediation,
+            error: result.error.message,
+            batchSize,
+            batchMembers: result.batch?.members,
+          },
         });
+        intentRuntime.delete(result.intentHash);
       }
     },
     onSupersede: async (superseded: SubmitRequest, by: SubmitRequest) => {
@@ -493,6 +766,33 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   });
 
   // ------------------------------------------------------------------
+  // 9.4. Cron service — Spectra parity. Re-submits the latest known
+  //      intent for any cron-enabled destination whose on-chain pair
+  //      has gone stale beyond its `time_threshold`. The service runs
+  //      alongside the scan pipeline; when disabled it is a no-op.
+  // ------------------------------------------------------------------
+  const cronEnabled = config.infrastructure?.cron_service?.enabled === true;
+  const cronTickIntervalMs = parseDurationMs(
+    config.infrastructure?.cron_service?.tick_interval,
+    30_000,
+  );
+  const cronHandle = startCronService({
+    enabled: cronEnabled,
+    tickIntervalMs: cronTickIntervalMs,
+    routers: config.routers,
+    latestIntents,
+    priceCache,
+    submit: (req) => queueManager.submit(req),
+    metrics,
+    log: report,
+    signal,
+  });
+  // Keep the handle reachable from the daemon-level shutdown path; not
+  // strictly required because the signal aborts the loop, but the
+  // reference prevents the linter from flagging an unused binding.
+  void cronHandle;
+
+  // ------------------------------------------------------------------
   // 9.5. Startup reconciliation — sync local pair-state files with the
   //      live on-chain pair UTxOs for every Cardano destination. Runs
   //      once before the scan pipeline starts. Failures are logged as
@@ -507,6 +807,17 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // ------------------------------------------------------------------
   const checkpointPath = defaultCheckpointPath(network);
   const checkpoint = createJsonCheckpoint({ filePath: checkpointPath });
+  await seedCheckpointIfNeeded({
+    checkpoint,
+    fromBlock: options.fromBlock,
+    fromLatest: options.fromLatest,
+    getLatestBlock: async () => {
+      const c = createPublicClient({ transport: http(source.rpcUrls[0]) });
+      return c.getBlockNumber();
+    },
+    report,
+  });
+
   const dedupCache = createDedupCache({
     capacity: dedupCapacity,
     ttlMs: dedupTtlMs,
@@ -520,24 +831,41 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   });
 
   const handleBatch = async (batch: ScannedBatch): Promise<void> => {
-    healthState.lastRegistryPollMs = Date.now();
-    metrics.eventsScanned.inc({ chain_id: String(source.chainId) });
+    const observedAtMs = Date.now();
+    healthState.lastRegistryPollMs = observedAtMs;
+    metrics.eventsDetected.inc({ scanner_type: transport }, batch.events.length);
+    chainRuntime.set({
+      chainId: source.chainId,
+      scannerType: transport,
+      headBlock: batch.toBlock,
+    });
+    metrics.scannerLastBlock.set(
+      { chain_id: String(source.chainId), scanner_type: transport },
+      Number(batch.toBlock),
+    );
 
     for (const event of batch.events) {
       await processOneEvent({
         event,
+        observedAtMs,
+        scannerType: transport,
         dedupCache,
         enricher,
         routerRegistry,
         priceCache,
+        latestIntents,
         coalescerManager,
         fileLogger,
+        db,
+        intentRuntime,
         network,
         dryRun,
         report,
         metrics,
       });
     }
+    await db.setLastProcessedBlock(source.chainId, source.registryContractId, batch.toBlock);
+    metrics.scannerBlockLag.set({ chain_id: String(source.chainId) }, 0);
   };
 
   report(
@@ -547,20 +875,43 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     `reconnectMs=${reconnectMs} maxReconnects=${maxReconnects}`,
   );
 
+  // Adapter that maps the daemon's FeederMetrics onto the scanner's
+  // minimal sink shape — keeps src/source/ independent of the metrics
+  // package and lets the scanner emit per-tick gauges + RPC error
+  // counters during the loop (not only on terminal failure).
+  const scannerMetrics: ScannerMetricsSink = {
+    setLastBlock: (labels, block) => metrics.scannerLastBlock.set(labels, block),
+    setBlockLag: (labels, lag) => metrics.scannerBlockLag.set(labels, lag),
+    incRpcError: (labels) => metrics.scannerRpcErrors.inc(labels),
+    incBackfillBlocks: (labels, blocks) => metrics.scannerBackfillBlocks.inc(labels, blocks),
+    incBackfillChunks: (labels) => metrics.scannerBackfillChunks.inc(labels),
+  };
+
   try {
     switch (transport) {
       case "http":
         await runHttpTransport({ source, checkpoint, handleBatch, signal, report,
-          startBlock, blockRange, scanIntervalMs, confirmations });
+          chainId: source.chainId, scannerMetrics,
+          startBlock, blockRange, scanIntervalMs, confirmations,
+          backwardSync, maxBlockGap });
         break;
       case "ws":
         await runWsTransport({ source, checkpoint, handleBatch, network, signal, report,
+          chainId: source.chainId, scannerMetrics,
           reconnectIntervalMs: reconnectMs, maxReconnects });
         break;
     }
     report("daemon: scan pipeline exited cleanly.");
     return 0;
   } catch (err) {
+    // Inner scanner already incremented the precise RPC error category;
+    // this outer increment captures terminal pipeline failures (any
+    // error that escapes the scanner unhandled — never duplicates a
+    // network/timeout/protocol bucket from the inner emit).
+    metrics.scannerRpcErrors.inc({
+      chain_id: String(source.chainId),
+      error_type: "pipeline_failure",
+    });
     report(`daemon: scan pipeline failed — ${(err as Error).message}`);
     return 1;
   } finally {
@@ -575,26 +926,31 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
 
 type ProcessOneEventInputs = {
   event: ExtractedEvent;
+  observedAtMs: number;
+  scannerType: "http" | "ws";
   dedupCache: ReturnType<typeof createDedupCache>;
   enricher: (event: ExtractedEvent) => Promise<EnrichedIntent>;
   routerRegistry: ReturnType<typeof createRouterRegistry>;
   priceCache: ReturnType<typeof createPriceCache>;
+  latestIntents: LatestIntentCache;
   coalescerManager: CoalescerManager;
   fileLogger: FileLogger;
+  db: Db;
+  intentRuntime: Map<string, IntentRuntimeEntry>;
   network: string;
   dryRun: boolean;
   report: (line: string) => void;
-  metrics: typeof noopMetrics;
+  metrics: FeederMetrics;
 };
 
 async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
   const {
-    event, dedupCache, enricher, routerRegistry,
-    priceCache, coalescerManager, fileLogger, dryRun, report, metrics,
+    event, observedAtMs, scannerType, dedupCache, enricher, routerRegistry,
+    priceCache, latestIntents, coalescerManager, fileLogger, db, intentRuntime, dryRun, report, metrics,
   } = inputs;
 
   if (!dedupCache.add(event.intentHash)) {
-    metrics.eventsDedupHit.inc({ chain_id: String(event.blockNumber) });
+    metrics.eventsDuplicate.inc();
     return;
   }
 
@@ -602,24 +958,79 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
   try {
     enriched = await enricher(event);
   } catch (err) {
+    metrics.eventsInvalid.inc({ reason: "enrichment" });
     report(`daemon: enrichment failed for ${event.intentHash}: ${(err as Error).message}`);
     return;
   }
+
+  metrics.intentsScanned.inc({ symbol: enriched.fullIntent.symbol, scanner_type: scannerType });
+  metrics.scanToProcessingSeconds.observe(
+    { symbol: enriched.fullIntent.symbol },
+    Math.max(0, Date.now() - observedAtMs) / 1_000,
+  );
+  metrics.priceAgeSeconds.observe(
+    { symbol: enriched.fullIntent.symbol },
+    Math.max(0, Date.now() / 1_000 - Number(enriched.fullIntent.timestamp)),
+  );
 
   const transformed = identityTransformer(enriched);
   const output = routeIntent(routerRegistry, priceCache, "IntentRegistered", transformed);
 
   for (const { routerId, reason } of output.conditionFiltered) {
-    metrics.intentsFiltered.inc({ router_id: routerId, reason: "condition" });
+    metrics.intentsFiltered.inc({
+      symbol: enriched.fullIntent.symbol,
+      router_id: routerId,
+      reason: "condition",
+    });
     report(`[debug] daemon: condition-filtered router=${routerId} reason="${reason}"`);
   }
-  for (const { routerId, destinationIndex } of output.policyFiltered) {
-    metrics.intentsFiltered.inc({ router_id: routerId, reason: "policy" });
+  for (const { routerId, destinationIndex, verdict } of output.policyFiltered) {
+    // Even though the router policy filtered this intent, the cron
+    // service may later resubmit it when the on-chain pair goes stale.
+    // Update the latest-intent cache so cron has the freshest payload.
+    latestIntents.set(
+      { routerId, destinationIndex, symbol: enriched.fullIntent.symbol },
+      { routerId, destinationIndex, symbol: enriched.fullIntent.symbol, enriched, intentHash: event.intentHash },
+    );
+    if (!verdict.allowed && verdict.reason === "price_deviation") {
+      metrics.priceDeviationPercent.observe(
+        { symbol: enriched.fullIntent.symbol },
+        verdict.deviationPct,
+      );
+    }
+    const reason = verdict.allowed ? "policy" : verdict.reason;
+    metrics.intentsFiltered.inc({
+      symbol: enriched.fullIntent.symbol,
+      router_id: routerId,
+      reason,
+    });
     report(`[debug] daemon: policy-filtered router=${routerId} dest=${destinationIndex}`);
   }
 
   for (const dispatch of output.dispatched) {
-    metrics.intentsRouted.inc({ router_id: dispatch.routerId });
+    metrics.intentsRouted.inc({
+      symbol: enriched.fullIntent.symbol,
+      router_id: dispatch.routerId,
+    });
+
+    // Keep the latest-intent cache in sync for the cron service. For
+    // dispatched intents the priceCache will eventually carry this
+    // intentHash post-confirm; cron compares the two and skips when
+    // they match (outcome="skipped_already_fresh").
+    latestIntents.set(
+      {
+        routerId: dispatch.routerId,
+        destinationIndex: dispatch.destinationIndex,
+        symbol: enriched.fullIntent.symbol,
+      },
+      {
+        routerId: dispatch.routerId,
+        destinationIndex: dispatch.destinationIndex,
+        symbol: enriched.fullIntent.symbol,
+        enriched,
+        intentHash: event.intentHash,
+      },
+    );
 
     const cardano = dispatch.destination.cardano;
     if (!cardano) {
@@ -675,7 +1086,11 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
         message: preflight.reason,
         meta: { code: preflight.code, remediation: preflight.remediation },
       });
-      metrics.intentsFiltered.inc({ router_id: dispatch.routerId, reason: preflight.code });
+      metrics.intentsFiltered.inc({
+        symbol: enriched.fullIntent.symbol,
+        router_id: dispatch.routerId,
+        reason: preflight.code,
+      });
       continue;
     }
 
@@ -706,6 +1121,30 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
       meta: { routerId: dispatch.routerId, destinationIndex: dispatch.destinationIndex, clientStatePath: cardano.client_state_path },
     });
 
+    await db.upsertProcessedEvent({
+      intentHash: event.intentHash,
+      chainId: Number(enriched.fullIntent.chainId),
+      blockNumber: event.blockNumber,
+      txHash: event.txHash,
+      logIndex: event.logIndex,
+      symbol: enriched.fullIntent.symbol,
+      price: enriched.fullIntent.price.toString(),
+      timestamp: enriched.fullIntent.timestamp.toString(),
+      signer: enriched.fullIntent.signer,
+      routerId: dispatch.routerId,
+      destinationIndex: dispatch.destinationIndex,
+      processedAtMs: Date.now(),
+    });
+
+    intentRuntime.set(event.intentHash, {
+      observedAtMs,
+      routerId: dispatch.routerId,
+      destinationIndex: dispatch.destinationIndex,
+      clientStatePath: cardano.client_state_path,
+      clientId: clientIdFromStatePath(cardano.client_state_path),
+      symbol: enriched.fullIntent.symbol,
+    });
+
     coalescerManager.accept(req);
   }
 }
@@ -721,11 +1160,19 @@ type TransportInputs = {
   signal?: AbortSignal;
   report: (line: string) => void;
   network?: CardanoNetwork;
+  /** Source chain id — used as the `chain_id` label on scanner metrics. */
+  chainId: number;
+  /** Adapter that maps `FeederMetrics` onto the scanner's minimal sink shape. */
+  scannerMetrics: ScannerMetricsSink;
   // HTTP
   startBlock?: bigint;
   blockRange?: bigint;
   scanIntervalMs?: number;
   confirmations?: bigint;
+  /** Spectra-parity gap recovery — see Etapa B.1. */
+  backwardSync?: boolean;
+  /** Block gap threshold above which backfill mode activates. */
+  maxBlockGap?: bigint;
   // WS
   reconnectIntervalMs?: number;
   maxReconnects?: number;
@@ -745,6 +1192,10 @@ async function runHttpTransport(inputs: TransportInputs): Promise<void> {
       onBatch: inputs.handleBatch,
       log: inputs.report,
       signal: inputs.signal,
+      metrics: inputs.scannerMetrics,
+      chainId: inputs.chainId,
+      backwardSync: inputs.backwardSync,
+      maxBlockGap: inputs.maxBlockGap,
     });
   } finally {
     await client.close();
@@ -768,6 +1219,8 @@ async function runWsTransport(inputs: TransportInputs & { network: CardanoNetwor
     maxReconnects: inputs.maxReconnects ?? 60,
     log: inputs.report,
     signal: inputs.signal,
+    metrics: inputs.scannerMetrics,
+    chainId: inputs.chainId,
   });
 }
 
@@ -787,6 +1240,21 @@ function makeDryRunBridge(report: (line: string) => void): OracleIntentBridge {
         receiverUnit: "dry-run-receiver-unit",
         pairUnit: "dry-run-pair-unit",
         isCreate: false,
+      };
+    },
+    async submitOracleUpdateBatch(params) {
+      report(
+        `daemon: [dry-run bridge] submitOracleUpdateBatch intents=${params.updates.length} ` +
+        `client=${params.clientStatePath}`,
+      );
+      return {
+        txHash: "dry-run-tx-hash",
+        receiverUnit: "dry-run-receiver-unit",
+        entries: params.updates.map((update) => ({
+          intentHash: update.intentHash,
+          pairUnit: `dry-run-pair-unit:${update.enriched.fullIntent.symbol}`,
+          isCreate: false,
+        })),
       };
     },
   };
@@ -817,13 +1285,17 @@ function resolveDbConfig(network: CardanoNetwork): DbConfig {
 }
 
 /**
- * Resolve the API listen address. Priority (highest first):
- *   1. `infrastructure.api.listen_addr` in the network YAML
- *   2. `API_LISTEN_ADDR` env var
- *   3. hard default ":8080"
+ * Resolve the API listen address.
  */
-function resolveApiAddr(yamlAddr?: string): { host: string; port: number } {
-  const raw = yamlAddr?.trim() ?? process.env.API_LISTEN_ADDR?.trim() ?? ":8080";
+function resolveApiAddr(apiConfig?: InfrastructureConfig["api"]): { host: string; port: number } {
+  if (apiConfig?.host || apiConfig?.port) {
+    return {
+      host: apiConfig.host?.trim() || "0.0.0.0",
+      port: apiConfig.port ?? 8080,
+    };
+  }
+
+  const raw = apiConfig?.listen_addr?.trim() ?? process.env.API_LISTEN_ADDR?.trim() ?? ":8080";
   const colonIdx = raw.lastIndexOf(":");
   const host = colonIdx > 0 ? raw.slice(0, colonIdx) : "0.0.0.0";
   const port = parseInt(raw.slice(colonIdx + 1), 10) || 8080;
