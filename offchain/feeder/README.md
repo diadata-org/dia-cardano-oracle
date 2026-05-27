@@ -73,7 +73,7 @@ dashboard PNGs into a self-contained dated directory. Useful for
 sharing a point-in-time deployment record with another team or
 attaching to a release note. The script does not stop or restart the
 feeder. See
-[`scripts/m2-evidence/README.md`](./scripts/m2-evidence/README.md) for
+[`scripts/README.md`](./scripts/README.md) for
 the full description (inputs, outputs, dependencies, dashboard rendering).
 
 ### Admin commands (CLI)
