@@ -55,6 +55,12 @@ export type CoalescerOptions = {
    * 0 or undefined = no limit.
    */
   maxIntentAgeMs?: number;
+  /** Maximum number of requests to send in one shared Cardano submission.
+   *  Values <= 0 are treated as "no limit". */
+  maxBatchSize?: number;
+  /** Retry an oversized batch by recursively splitting it into smaller
+   *  chunks until it succeeds or reaches size 1. */
+  sizeFallbackEnabled?: boolean;
   /**
    * Called once per submitted request, after the queue resolves (ok or error).
    * Receives both the result AND the originating SubmitRequest.
@@ -118,6 +124,8 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
     queueManager,
     coalesceWindowMs = 2_000,
     maxIntentAgeMs,
+    maxBatchSize,
+    sizeFallbackEnabled = false,
     onResult,
     onSupersede,
     onLaneEvent,
@@ -152,6 +160,66 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
     return false;
   }
 
+  function normalizeBatchSize(raw: number | undefined): number {
+    if (raw === undefined || raw <= 0) {
+      return Number.POSITIVE_INFINITY;
+    }
+    return Math.max(1, Math.floor(raw));
+  }
+
+  function chunkRequests(requests: SubmitRequest[], chunkSize: number): SubmitRequest[][] {
+    if (!Number.isFinite(chunkSize) || requests.length <= chunkSize) {
+      return [requests];
+    }
+
+    const chunks: SubmitRequest[][] = [];
+    for (let index = 0; index < requests.length; index += chunkSize) {
+      chunks.push(requests.slice(index, index + chunkSize));
+    }
+    return chunks;
+  }
+
+  function isBatchSizeFailure(results: SubmitResult[]): boolean {
+    return (
+      results.length > 0 &&
+      results.every((result) => !result.ok && result.code === "BatchSizeExceeded")
+    );
+  }
+
+  async function reportAgedOutRequests(requests: SubmitRequest[]): Promise<void> {
+    const error = new Error("Buffered intent exceeded max_intent_age before the lane flushed.");
+    for (const req of requests) {
+      await onResult?.(
+        {
+          ok: false,
+          intentHash: req.intentHash,
+          error,
+          code: "IntentAgedOut",
+          remediation:
+            "The intent sat in the lane buffer for too long and was skipped. " +
+            "The next fresh intent for this symbol will be processed automatically.",
+        },
+        req,
+      );
+    }
+  }
+
+  async function submitChunk(requests: SubmitRequest[]): Promise<SubmitResult[]> {
+    if (requests.length === 0) {
+      return [];
+    }
+
+    const results = await queueManager.submitBatch(requests);
+    if (!sizeFallbackEnabled || requests.length <= 1 || !isBatchSizeFailure(results)) {
+      return results;
+    }
+
+    const midpoint = Math.ceil(requests.length / 2);
+    const left = await submitChunk(requests.slice(0, midpoint));
+    const right = await submitChunk(requests.slice(midpoint));
+    return [...left, ...right];
+  }
+
   async function flush(lane: Lane, laneKey: string): Promise<void> {
     // Cancel any pending timer (defensive — should only be set in accumulating).
     if (lane.timer) {
@@ -180,13 +248,26 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
           return intentAgeSec * 1_000 < maxIntentAgeMs;
         })
       : entries;
+    const agedOut = eligible.length === entries.length
+      ? []
+      : entries.filter((req) => !eligible.includes(req));
 
-    // Submit each eligible entry serially. The queue enforces the Cardano
-    // UTxO ordering constraint (one tx at a time per lane); we wait for each
-    // result before sending the next so the coalescer can react correctly.
-    for (const req of eligible) {
-      const result = await queueManager.submit(req);
-      await onResult?.(result, req);
+    if (agedOut.length > 0) {
+      await reportAgedOutRequests(agedOut);
+    }
+
+    const batchLimit = normalizeBatchSize(maxBatchSize);
+    const batches = chunkRequests(eligible, batchLimit);
+
+    for (const batch of batches) {
+      const results = await submitChunk(batch);
+      for (const [index, result] of results.entries()) {
+        const req = batch[index];
+        if (!req) {
+          continue;
+        }
+        await onResult?.(result, req);
+      }
     }
 
     // Check whether intents accumulated while we were in-flight.

@@ -104,7 +104,7 @@ export function classifyError(err: unknown): ClassifiedError {
     };
   }
 
-  if (msg.includes("monoton") || msg.includes("nonce is not")) {
+  if (msg.includes("monoton") || msg.includes("nonce is not") || msg.includes("nonce must be greater")) {
     return {
       code: "NonMonotonicNonce",
       remediation:

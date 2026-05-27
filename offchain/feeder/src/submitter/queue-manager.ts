@@ -45,17 +45,22 @@ export type QueueManagerOptions = {
    */
   retryPolicy?: RetryPolicy;
   /**
-   * Maximum wall-clock ms for a single submit+confirm cycle before it
-   * is considered failed (inflight-table timeout). Maps to
-   * `worker_pool.task_timeout` in the YAML. Default: 60 000 ms.
+   * REQUIRED — how long an inflight-table entry remains valid before the
+   * lock is released and a new submission for the same receiver can be
+   * scheduled. Sourced from
+   * `infrastructure.<network>.yaml::worker_pool.inflight_timeout_ms`.
+   * No silent default — daemon-cmd validates the YAML value at startup.
    */
-  taskTimeoutMs?: number;
+  inflightTimeoutMs: number;
 };
 
 export type QueueManager = {
   /** Schedule a submit request on the appropriate queue. Returns a
    *  promise that resolves when the request has been processed. */
   submit(request: SubmitRequest): Promise<SubmitResult>;
+  /** Schedule one Cardano submission covering multiple requests for the same
+   *  destination lane. Returns per-request results in the same order. */
+  submitBatch(requests: SubmitRequest[]): Promise<SubmitResult[]>;
   /** All currently-active queue keys (for diagnostics). */
   queueKeys(): string[];
   /** Total pending items across all queues. */
@@ -82,8 +87,14 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
     onResult,
     inflightOptions,
     retryPolicy,
-    taskTimeoutMs = 60_000,
+    inflightTimeoutMs,
   } = options;
+  if (!Number.isFinite(inflightTimeoutMs) || inflightTimeoutMs <= 0) {
+    throw new Error(
+      `createQueueManager: inflightTimeoutMs must be a positive number, got ${inflightTimeoutMs}. ` +
+        "Source: infrastructure.<network>.yaml::worker_pool.inflight_timeout_ms",
+    );
+  }
 
   const queues = new Map<string, SubmissionQueue>();
   const sharedInflight = options.inflightTable ?? createInflightTable(inflightOptions);
@@ -97,7 +108,7 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
         client,
         inflight: sharedInflight,
         retryPolicy,
-        inflightTimeoutMs: taskTimeoutMs,
+        inflightTimeoutMs,
         onResult,
       });
       queues.set(key, queue);
@@ -110,6 +121,36 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
       const { client_state_path, protocol_state_path } = request.destination;
       const queue = getOrCreateQueue(client_state_path, protocol_state_path);
       return queue.enqueue(request);
+    },
+
+    async submitBatch(requests) {
+      if (requests.length === 0) {
+        return [];
+      }
+
+      const [{ destination: firstDestination }] = requests;
+      const firstKey = queueKey(
+        firstDestination.client_state_path,
+        firstDestination.protocol_state_path,
+      );
+
+      for (const request of requests) {
+        const requestKey = queueKey(
+          request.destination.client_state_path,
+          request.destination.protocol_state_path,
+        );
+        if (requestKey !== firstKey) {
+          throw new Error(
+            "QueueManager.submitBatch requires every request to target the same client/protocol lane.",
+          );
+        }
+      }
+
+      const queue = getOrCreateQueue(
+        firstDestination.client_state_path,
+        firstDestination.protocol_state_path,
+      );
+      return queue.enqueueBatch(requests);
     },
 
     queueKeys() {

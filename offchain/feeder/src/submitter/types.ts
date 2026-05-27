@@ -28,6 +28,18 @@ export type SubmitRequest = {
   destinationIndex: number;
 };
 
+export type BatchMemberInfo = {
+  intentHash: string;
+  symbol: string;
+  pairUnit?: string;
+  action?: "mint" | "update";
+};
+
+export type BatchSubmissionInfo = {
+  size: number;
+  members: BatchMemberInfo[];
+};
+
 // ---------------------------------------------------------------------------
 // Submit result
 // ---------------------------------------------------------------------------
@@ -41,6 +53,20 @@ export type SubmitResultOk = {
   receiverUnit: string;
   /** Pair NFT unit (`policyId + assetName`) updated by this tx. */
   pairUnit: string;
+  /** Whether the pair was minted for the first time or updated in place. */
+  pairAction?: "mint" | "update";
+  /** Present when this intent was confirmed as part of a multi-intent batch. */
+  batch?: BatchSubmissionInfo;
+  /** Snapshot of on-chain balances captured by the bridge immediately
+   *  after the tx confirmed. Each field is optional: an undefined field
+   *  means the chain query failed and the daemon must NOT emit the gauge
+   *  (avoids reporting 0 as if the balance were drained). */
+  postState?: {
+    receiverBalanceLovelace?: bigint;
+    receiverAccruedLovelace?: bigint;
+    paymentHookAccruedLovelace?: bigint;
+    adminWalletLovelace?: bigint;
+  };
 };
 
 export type SubmitResultErr = {
@@ -51,6 +77,8 @@ export type SubmitResultErr = {
   code: FeederErrorCode;
   /** Human-readable fix hint surfaced in terminal output. */
   remediation: string;
+  /** Present when the failed submission attempted a multi-intent batch. */
+  batch?: BatchSubmissionInfo;
 };
 
 export type SubmitResult = SubmitResultOk | SubmitResultErr;
@@ -93,6 +121,9 @@ export type CardanoWriteClient = {
   /** Submit one oracle update. Signs, submits, and awaits on-chain
    *  confirmation. Resolves with the Cardano tx hash. */
   submit(request: SubmitRequest): Promise<SubmitResult>;
+  /** Submit one Cardano tx covering multiple oracle updates for the same
+   *  destination lane. The returned results preserve request order. */
+  submitBatch(requests: SubmitRequest[]): Promise<SubmitResult[]>;
 
   /** A short identifier for this client in logs (e.g. "Preview/client-a"). */
   readonly label: string;

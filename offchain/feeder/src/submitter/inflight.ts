@@ -47,8 +47,6 @@ export type InflightTable = {
 // Factory
 // ---------------------------------------------------------------------------
 
-const DEFAULT_TIMEOUT_MS = 15 * 60_000; // 15 minutes
-
 export type InflightTableOptions = {
   /** Injectable clock for tests. */
   now?: () => number;
@@ -113,20 +111,30 @@ export function createInflightTable(options: InflightTableOptions = {}): Infligh
   };
 }
 
-/** Build an `InflightEntry` with the default timeout. */
+/**
+ * Build an `InflightEntry`. `timeoutMs` is REQUIRED — sourced from
+ * `infrastructure.<network>.yaml::worker_pool.inflight_timeout_ms`. No
+ * silent default to avoid the previous trap where a missing YAML key
+ * produced a hardcoded 15-min lock.
+ */
 export function makeInflightEntry(
   txHash: string,
   intentHash: string,
   receiverUnit: string,
-  options: { timeoutMs?: number; now?: () => number } = {},
+  options: { timeoutMs: number; now?: () => number },
 ): InflightEntry {
+  if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) {
+    throw new Error(
+      `makeInflightEntry: timeoutMs must be a positive number, got ${options.timeoutMs}. ` +
+        "Source: infrastructure.<network>.yaml::worker_pool.inflight_timeout_ms",
+    );
+  }
   const now = (options.now ?? Date.now)();
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return {
     txHash,
     intentHash,
     receiverUnit,
     createdAtMs: now,
-    timeoutAtMs: now + timeoutMs,
+    timeoutAtMs: now + options.timeoutMs,
   };
 }

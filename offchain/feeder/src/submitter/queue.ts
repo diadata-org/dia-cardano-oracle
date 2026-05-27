@@ -28,14 +28,16 @@ import type { RetryPolicy } from "./retry-policy.js";
 // ---------------------------------------------------------------------------
 
 export type QueueEntry = {
-  request: SubmitRequest;
-  resolve: (result: SubmitResult) => void;
+  requests: SubmitRequest[];
+  resolve: (result: SubmitResult[]) => void;
 };
 
 export type SubmissionQueue = {
   /** Enqueue a request. Resolves when the request has been processed
    *  (ok or error). */
   enqueue(request: SubmitRequest): Promise<SubmitResult>;
+  /** Enqueue a batch of requests for one shared Cardano submission. */
+  enqueueBatch(requests: SubmitRequest[]): Promise<SubmitResult[]>;
   /** Number of requests waiting to be processed. */
   readonly pending: number;
   /** Whether the queue is currently processing a request. */
@@ -50,8 +52,9 @@ export type QueueOptions = {
   /** Retry policy applied after each failed attempt. When absent the queue
    *  surfaces the first failure immediately without retrying. */
   retryPolicy?: RetryPolicy;
-  /** Timeout (ms) for in-flight entries created by this queue. */
-  inflightTimeoutMs?: number;
+  /** REQUIRED — timeout (ms) for in-flight entries created by this queue.
+   *  Sourced from `infrastructure.<network>.yaml::worker_pool.inflight_timeout_ms`. */
+  inflightTimeoutMs: number;
   now?: () => number;
 };
 
@@ -65,18 +68,26 @@ export function createSubmissionQueue(options: QueueOptions): SubmissionQueue {
   const pending: QueueEntry[] = [];
   let busy = false;
 
-  async function trySubmit(request: SubmitRequest): Promise<SubmitResult> {
+  function wrapErrorResults(requests: SubmitRequest[], err: unknown): SubmitResult[] {
+    const { code, remediation } = classifyError(err);
+    const error = err instanceof Error ? err : new Error(String(err));
+    return requests.map((request) => ({
+      ok: false,
+      intentHash: request.intentHash,
+      error,
+      code,
+      remediation,
+    }));
+  }
+
+  async function trySubmitBatch(requests: SubmitRequest[]): Promise<SubmitResult[]> {
     try {
-      return await client.submit(request);
+      if (requests.length === 1) {
+        return [await client.submit(requests[0]!)];
+      }
+      return await client.submitBatch(requests);
     } catch (err) {
-      const { code, remediation } = classifyError(err);
-      return {
-        ok: false,
-        intentHash: request.intentHash,
-        error: err instanceof Error ? err : new Error(String(err)),
-        code,
-        remediation,
-      };
+      return wrapErrorResults(requests, err);
     }
   }
 
@@ -85,40 +96,45 @@ export function createSubmissionQueue(options: QueueOptions): SubmissionQueue {
     busy = true;
 
     const entry = pending.shift()!;
-    const { request, resolve } = entry;
+    const { requests, resolve } = entry;
 
     // First attempt.
-    let result: SubmitResult = await trySubmit(request);
+    let results = await trySubmitBatch(requests);
 
     // Retry loop — only entered when a policy is configured and the first
     // attempt failed. Each retry uses the policy's decision for the current
     // attempt count (0 = first failure, 1 = after first retry, …).
-    if (!result.ok && retryPolicy) {
+    if (results.length > 0 && !results.every((result) => result.ok) && retryPolicy) {
       let attempt = 0;
       while (true) {
-        const decision = retryPolicy.decide(result as SubmitResultErr, attempt);
+        const firstError = results.find((result): result is SubmitResultErr => !result.ok);
+        if (!firstError) break;
+        const decision = retryPolicy.decide(firstError, attempt);
         if (!decision.shouldRetry) break;
         await sleep(decision.delayMs);
         attempt++;
-        result = await trySubmit(request);
-        if (result.ok) break;
+        results = await trySubmitBatch(requests);
+        if (results.every((result) => result.ok)) break;
       }
     }
 
     // Record in inflight table when the final result is a success.
-    if (result.ok) {
+    const firstSuccess = results.find((result) => result.ok);
+    if (firstSuccess) {
       inflight.add(
         makeInflightEntry(
-          result.cardanoTxHash,
-          result.intentHash,
-          result.receiverUnit,
+          firstSuccess.cardanoTxHash,
+          firstSuccess.intentHash,
+          firstSuccess.receiverUnit,
           { timeoutMs: inflightTimeoutMs, now },
         ),
       );
     }
 
-    onResult?.(result);
-    resolve(result);
+    for (const result of results) {
+      onResult?.(result);
+    }
+    resolve(results);
     busy = false;
 
     // Process next without growing the call stack.
@@ -128,7 +144,17 @@ export function createSubmissionQueue(options: QueueOptions): SubmissionQueue {
   return {
     enqueue(request) {
       return new Promise<SubmitResult>((resolve) => {
-        pending.push({ request, resolve });
+        pending.push({
+          requests: [request],
+          resolve: (results) => resolve(results[0]!),
+        });
+        void drain();
+      });
+    },
+
+    enqueueBatch(requests) {
+      return new Promise<SubmitResult[]>((resolve) => {
+        pending.push({ requests, resolve });
         void drain();
       });
     },

@@ -8,6 +8,7 @@
 
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import type { BatchSubmissionInfo } from "../submitter/types.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -46,6 +47,7 @@ export type TransactionEventEntry = {
   total_ms?: number;    // available on "tx_confirmed" / "tx_failed"
   errorCode?: string;
   errorMessage?: string;
+  batch?: BatchSubmissionInfo;
 };
 
 /**
@@ -58,9 +60,12 @@ export type TransactionLogEntry = {
   symbol: string;
   intentHash: string;
   isCreate: boolean;
+  pairUnit?: string;
+  pairAction?: "mint" | "update";
   status: "confirmed" | "failed";
   errorCode?: string;
   errorMessage?: string;
+  batch?: BatchSubmissionInfo;
   steps: {
     connecting_ms?: number;
     building_ms?: number;

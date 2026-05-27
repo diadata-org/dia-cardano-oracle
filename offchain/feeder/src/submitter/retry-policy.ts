@@ -20,9 +20,6 @@ import type { FeederErrorCode } from "../errors/codes.js";
 // Constants
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_MAX_RETRIES = 3;
-export const DEFAULT_RETRY_DELAY_MS = 5_000;
-
 /**
  * Codes that represent deterministic failures — the same error will
  * occur on every retry so retrying wastes time without benefit.
@@ -65,19 +62,34 @@ export type RetryPolicy = {
 /**
  * Build the default retry policy.
  *
+ * All numeric options are REQUIRED — sourced from
+ * `infrastructure.<network>.yaml::worker_pool.{max_retries, retry_delay}`.
+ * The daemon validates these values at startup and throws if missing.
+ *
  * @param options.maxRetries  - Maximum number of retries after the first
- *   attempt (default 3). A value of 0 means no retries.
- * @param options.delayMs     - Fixed wait between attempts in ms (default 5 s).
+ *   attempt. A value of 0 means no retries.
+ * @param options.delayMs     - Fixed wait between attempts in ms.
  * @param options.nonRetriableCodes - Override the non-retriable code set.
  *   Defaults to `NON_RETRIABLE_CODES` when omitted.
  */
 export function createDefaultRetryPolicy(options: {
-  maxRetries?: number;
-  delayMs?: number;
+  maxRetries: number;
+  delayMs: number;
   nonRetriableCodes?: ReadonlySet<FeederErrorCode>;
-} = {}): RetryPolicy {
-  const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
-  const delayMs = options.delayMs ?? DEFAULT_RETRY_DELAY_MS;
+}): RetryPolicy {
+  const { maxRetries, delayMs } = options;
+  if (!Number.isInteger(maxRetries) || maxRetries < 0) {
+    throw new Error(
+      `createDefaultRetryPolicy: maxRetries must be a non-negative integer, got ${maxRetries}. ` +
+        "Source: infrastructure.<network>.yaml::worker_pool.max_retries",
+    );
+  }
+  if (!Number.isFinite(delayMs) || delayMs <= 0) {
+    throw new Error(
+      `createDefaultRetryPolicy: delayMs must be a positive number, got ${delayMs}. ` +
+        "Source: infrastructure.<network>.yaml::worker_pool.retry_delay",
+    );
+  }
   const nonRetriable = options.nonRetriableCodes ?? NON_RETRIABLE_CODES;
 
   return {

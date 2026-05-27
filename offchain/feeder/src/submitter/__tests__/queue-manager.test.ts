@@ -51,7 +51,6 @@ function makeRequest(
       network: "Preview",
       client_state_path: clientStatePath,
       protocol_state_path: protocolStatePath,
-      tx_mode: "single",
     },
     routerId: "r1",
     destinationIndex: 0,
@@ -70,6 +69,15 @@ function makeOkClient(label: string): CardanoWriteClient {
         pairUnit: "pair-unit-test",
       };
     },
+    async submitBatch(requests) {
+      return requests.map((req, index) => ({
+        ok: true,
+        cardanoTxHash: `tx-batch-${index}`,
+        intentHash: req.intentHash,
+        receiverUnit: "receiver-unit-test",
+        pairUnit: `pair-unit-${index}`,
+      }));
+    },
   };
 }
 
@@ -81,6 +89,7 @@ describe("createQueueManager", () => {
   it("routes requests to correct client", async () => {
     const created: string[] = [];
     const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
       clientFactory: (csp, psp) => {
         created.push(`${csp}::${psp}`);
         return makeOkClient(`${csp}::${psp}`);
@@ -98,6 +107,7 @@ describe("createQueueManager", () => {
   it("reuses the same queue for identical (clientState, protocolState)", async () => {
     let factoryCalls = 0;
     const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
       clientFactory: (_csp, _psp) => {
         factoryCalls++;
         return makeOkClient("shared");
@@ -114,6 +124,7 @@ describe("createQueueManager", () => {
 
   it("queueKeys returns one key per distinct destination", async () => {
     const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
       clientFactory: (csp, psp) => makeOkClient(`${csp}::${psp}`),
     });
     await mgr.submit(makeRequest("c1.json", "p.json", "h1"));
@@ -125,6 +136,7 @@ describe("createQueueManager", () => {
 
   it("totalPending returns 0 after all settle", async () => {
     const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
       clientFactory: () => makeOkClient("fast"),
     });
     await Promise.all([
@@ -136,6 +148,7 @@ describe("createQueueManager", () => {
 
   it("propagates submit errors without crashing the manager", async () => {
     const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
       clientFactory: () => ({
         label: "err-client",
         async submit(req) {
@@ -147,6 +160,15 @@ describe("createQueueManager", () => {
             remediation: "",
           };
         },
+        async submitBatch(requests) {
+          return requests.map((req) => ({
+            ok: false,
+            intentHash: req.intentHash,
+            error: new Error("fail"),
+            code: "Unknown" as const,
+            remediation: "",
+          }));
+        },
       }),
     });
     const result = await mgr.submit(makeRequest("c.json", "p.json", "e1"));
@@ -154,5 +176,45 @@ describe("createQueueManager", () => {
     // Can still submit after a failure
     const result2 = await mgr.submit(makeRequest("c.json", "p.json", "e2"));
     assert.equal(result2.ok, false);
+  });
+
+  it("submitBatch uses one queue lane and preserves input order", async () => {
+    const seenBatches: string[][] = [];
+    const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
+      clientFactory: () => ({
+        label: "batch-client",
+        async submit(req) {
+          return {
+            ok: true,
+            cardanoTxHash: `single-${req.intentHash}`,
+            intentHash: req.intentHash,
+            receiverUnit: "receiver-unit-test",
+            pairUnit: "pair-unit-test",
+          };
+        },
+        async submitBatch(requests) {
+          seenBatches.push(requests.map((req) => req.intentHash));
+          return requests.map((req, index) => ({
+            ok: true,
+            cardanoTxHash: "batch-tx",
+            intentHash: req.intentHash,
+            receiverUnit: "receiver-unit-test",
+            pairUnit: `pair-unit-${index}`,
+          }));
+        },
+      }),
+    });
+
+    const results = await mgr.submitBatch([
+      makeRequest("c.json", "p.json", "b1"),
+      makeRequest("c.json", "p.json", "b2"),
+    ]);
+
+    assert.deepEqual(seenBatches, [["b1", "b2"]]);
+    assert.equal(results.length, 2);
+    assert.equal(results[0]?.intentHash, "b1");
+    assert.equal(results[1]?.intentHash, "b2");
+    assert.equal(mgr.queueKeys().length, 1);
   });
 });

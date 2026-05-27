@@ -48,7 +48,6 @@ function makeRequest(intentHash = "0xhash"): SubmitRequest {
       network: "Preview",
       client_state_path: "state/preview/clients/client-a.json",
       protocol_state_path: "state/preview/config-bootstrap.json",
-      tx_mode: "single",
     },
     routerId: "r1",
     destinationIndex: 0,
@@ -67,6 +66,15 @@ function makeOkClient(txHash = "cardano-tx-abc"): CardanoWriteClient {
         pairUnit: "pair-unit-test",
       };
     },
+    async submitBatch(requests) {
+      return requests.map((req, index) => ({
+        ok: true,
+        cardanoTxHash: `${txHash}-${index}`,
+        intentHash: req.intentHash,
+        receiverUnit: "receiver-unit-test",
+        pairUnit: `pair-unit-${index}`,
+      }));
+    },
   };
 }
 
@@ -82,6 +90,15 @@ function makeFailClient(message = "submit failed"): CardanoWriteClient {
         remediation: "",
       };
     },
+    async submitBatch(requests) {
+      return requests.map((req) => ({
+        ok: false,
+        intentHash: req.intentHash,
+        error: new Error(message),
+        code: "Unknown",
+        remediation: "",
+      }));
+    },
   };
 }
 
@@ -89,6 +106,9 @@ function makeThrowClient(): CardanoWriteClient {
   return {
     label: "throw-client",
     async submit(_req) {
+      throw new Error("unexpected throw");
+    },
+    async submitBatch(_requests) {
       throw new Error("unexpected throw");
     },
   };
@@ -103,6 +123,7 @@ describe("createSubmissionQueue", () => {
     const q = createSubmissionQueue({
       client: makeOkClient("tx-ok-1"),
       inflight: createInflightTable(),
+      inflightTimeoutMs: 60_000,
     });
     const result = await q.enqueue(makeRequest("h1"));
     assert.equal(result.ok, true);
@@ -114,6 +135,7 @@ describe("createSubmissionQueue", () => {
     const q = createSubmissionQueue({
       client: makeFailClient("rpc down"),
       inflight: createInflightTable(),
+      inflightTimeoutMs: 60_000,
     });
     const result = await q.enqueue(makeRequest("h2"));
     assert.equal(result.ok, false);
@@ -124,6 +146,7 @@ describe("createSubmissionQueue", () => {
     const q = createSubmissionQueue({
       client: makeThrowClient(),
       inflight: createInflightTable(),
+      inflightTimeoutMs: 60_000,
     });
     const result = await q.enqueue(makeRequest("h3"));
     assert.equal(result.ok, false);
@@ -138,8 +161,18 @@ describe("createSubmissionQueue", () => {
         order.push(req.intentHash);
         return { ok: true, cardanoTxHash: `tx-${req.intentHash}`, intentHash: req.intentHash, receiverUnit: "r", pairUnit: "p" };
       },
+      async submitBatch(requests) {
+        order.push(`batch:${requests.map((req) => req.intentHash).join(",")}`);
+        return requests.map((req) => ({
+          ok: true,
+          cardanoTxHash: `tx-${req.intentHash}`,
+          intentHash: req.intentHash,
+          receiverUnit: "r",
+          pairUnit: "p",
+        }));
+      },
     };
-    const q = createSubmissionQueue({ client, inflight: createInflightTable() });
+    const q = createSubmissionQueue({ client, inflight: createInflightTable(), inflightTimeoutMs: 60_000 });
     const [r1, r2, r3] = await Promise.all([
       q.enqueue(makeRequest("a")),
       q.enqueue(makeRequest("b")),
@@ -156,6 +189,7 @@ describe("createSubmissionQueue", () => {
     const q = createSubmissionQueue({
       client: makeOkClient(),
       inflight: createInflightTable(),
+      inflightTimeoutMs: 60_000,
       onResult: (r) => results.push(r),
     });
     await q.enqueue(makeRequest("x1"));
@@ -175,8 +209,18 @@ describe("createSubmissionQueue", () => {
         await blocker;
         return { ok: true, cardanoTxHash: "tx-slow", intentHash: req.intentHash, receiverUnit: "r", pairUnit: "p" };
       },
+      async submitBatch(requests) {
+        await blocker;
+        return requests.map((req) => ({
+          ok: true,
+          cardanoTxHash: "tx-slow",
+          intentHash: req.intentHash,
+          receiverUnit: "r",
+          pairUnit: "p",
+        }));
+      },
     };
-    const q = createSubmissionQueue({ client, inflight: createInflightTable() });
+    const q = createSubmissionQueue({ client, inflight: createInflightTable(), inflightTimeoutMs: 60_000 });
 
     const p1 = q.enqueue(makeRequest("s1"));
     q.enqueue(makeRequest("s2")); // not awaited — stays pending
@@ -189,5 +233,44 @@ describe("createSubmissionQueue", () => {
     await new Promise((r) => setImmediate(r));
     await new Promise((r) => setImmediate(r));
     assert.equal(q.pending, 0);
+  });
+
+  it("enqueueBatch preserves request order and returns one result per request", async () => {
+    const seen: string[][] = [];
+    const client: CardanoWriteClient = {
+      label: "batch",
+      async submit(req) {
+        return {
+          ok: true,
+          cardanoTxHash: `single-${req.intentHash}`,
+          intentHash: req.intentHash,
+          receiverUnit: "r",
+          pairUnit: "p",
+        };
+      },
+      async submitBatch(requests) {
+        seen.push(requests.map((req) => req.intentHash));
+        return requests.map((req, index) => ({
+          ok: true,
+          cardanoTxHash: "batch-tx",
+          intentHash: req.intentHash,
+          receiverUnit: "r",
+          pairUnit: `pair-${index}`,
+        }));
+      },
+    };
+
+    const q = createSubmissionQueue({ client, inflight: createInflightTable(), inflightTimeoutMs: 60_000 });
+    const results = await q.enqueueBatch([
+      makeRequest("b1"),
+      makeRequest("b2"),
+      makeRequest("b3"),
+    ]);
+
+    assert.deepEqual(seen, [["b1", "b2", "b3"]]);
+    assert.equal(results.length, 3);
+    assert.equal(results[0]?.intentHash, "b1");
+    assert.equal(results[1]?.intentHash, "b2");
+    assert.equal(results[2]?.intentHash, "b3");
   });
 });

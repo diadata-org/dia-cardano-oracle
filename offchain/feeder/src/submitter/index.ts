@@ -42,8 +42,6 @@ export {
 export {
   createDefaultRetryPolicy,
   NON_RETRIABLE_CODES,
-  DEFAULT_MAX_RETRIES,
-  DEFAULT_RETRY_DELAY_MS,
   type RetryPolicy,
   type RetryDecision,
 } from "./retry-policy.js";
