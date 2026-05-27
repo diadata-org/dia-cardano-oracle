@@ -136,9 +136,18 @@ export async function findSingleUtxoAtUnit(
 }
 
 /**
- * Wait until the unique UTxO carrying `unit` at `address` has been
- * **replaced** — i.e. exactly one UTxO is visible AND its outRef differs
- * from `previousOutRef`.
+ * Wait until the UTxO carrying `unit` at `address` has been **replaced**.
+ *
+ * When `txHash` is provided (preferred), the function looks for the specific
+ * UTxO produced by that tx (`utxo.txHash === txHash`). This is unambiguous
+ * even when the indexer temporarily shows both the old and the new UTxO, or
+ * when multiple UTxOs with the same unit co-exist due to a pre-existing state
+ * inconsistency. Pass `txHash` whenever the tx hash is known.
+ *
+ * Without `txHash`, the function falls back to the previous behaviour: waits
+ * for exactly one UTxO with a different outRef (`utxos.length === 1 &&
+ * replacement`). The `length === 1` guard prevents picking a stale UTxO from
+ * a pre-existing multi-UTxO state.
  *
  * This is the "wait 3" used after every stateful update where an NFT-bearing
  * script UTxO is spent and re-created (oracle update, settle, top-up,
@@ -173,13 +182,27 @@ export async function waitForUnitUtxoReplacement(args: {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       const utxos = await args.lucid.utxosAtWithUnit(args.address, args.unit);
+
+      // Preferred path: if we know the tx that produced the replacement, find
+      // its output directly. This is unambiguous even when the indexer
+      // temporarily shows both the old (not-yet-marked-spent) and the new
+      // UTxO, or when multiple UTxOs with the same unit co-exist due to
+      // earlier state inconsistencies. A UTxO whose txHash equals our
+      // submitted txHash is definitively our output.
+      if (args.txHash) {
+        const produced = utxos.find((u) => u.txHash === args.txHash);
+        if (produced) return produced;
+      }
+
+      // Fallback when txHash was not provided: accept any single UTxO whose
+      // outRef differs from previousOutRef. Requires exactly one UTxO so we
+      // don't pick a stale one from a pre-existing state inconsistency.
       const replacement = utxos.find(
         (utxo) =>
           !args.previousOutRef ||
           utxo.txHash !== args.previousOutRef.txHash ||
           utxo.outputIndex !== args.previousOutRef.outputIndex,
       );
-
       if (utxos.length === 1 && replacement) {
         return replacement;
       }

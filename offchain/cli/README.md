@@ -497,6 +497,27 @@ npm run cli -- pair:burn \
 
 A subsequent `update` for the same symbol will mint a fresh Pair NFT and rebuild pair state from a new signed intent. See architecture §5.13 for the on-chain validation.
 
+### 29c. Deduplicate Pair UTxOs (admin only)
+
+Scans the pair validator address for duplicate Pair NFT UTxOs — multiple UTxOs
+carrying the same pair unit (`pairPolicyId + assetName`). This can happen when
+the feeder submits a valid update tx but crashes before writing local state, and
+a subsequent restart incorrectly evaluates `isCreate = true`, minting a second
+Pair NFT for the same symbol.
+
+The command keeps the UTxO with the highest datum nonce (most recent update) and
+burns all others. Idempotent: exits cleanly when no duplicates are found. Requires
+a `config_admins` signer.
+
+```sh
+npm run cli -- pair:dedup \
+  --protocol-state ./state/<network>/config-bootstrap.json \
+  --client-state ./state/<network>/clients/client-a.json
+```
+
+The feeder logs a `WARN [duplicate-pairs]` entry with the exact command to run
+whenever it detects more than one Pair UTxO for the same symbol at startup.
+
 ### 30. Update min UTxO for Config (admin only)
 
 Updates `min_utxo_lovelace` on the Config UTxO through the general `AdminUpdate` flow (no dedicated `UpdateMinUtxo` redeemer; see architecture §5.3 + §5.12). Requires a Config signer.

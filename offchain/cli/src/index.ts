@@ -74,6 +74,7 @@ function printUsage(): void {
   npm run cli -- receiver:update-min-utxo --new-min-utxo-lovelace 3000000 --protocol-state ./state/<network>/config-bootstrap.json --state ./state/<network>/clients/client-a.json [--build-only]
   npm run cli -- pair:update-min-utxo --new-min-utxo-lovelace 3000000 --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json --state ./state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
   npm run cli -- pair:burn --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json --state ./state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
+  npm run cli -- pair:dedup --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
   npm run cli -- settle --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
   npm run cli -- payment-hook:withdraw --amount-lovelace 2000000 --state ./state/<network>/config-bootstrap.json [--build-only]
   npm run cli -- reclaim-reference-script --script <config|payment-hook> --state ./state/<network>/config-bootstrap.json [--build-only]
@@ -746,6 +747,22 @@ async function run(): Promise<void> {
       if (statePath && !buildOnly) {
         await writeJsonOutput(statePath, result);
       }
+      printJson(result);
+      return;
+    }
+
+    case "pair:dedup": {
+      // Admin-gated scan-and-burn that detects duplicate Pair NFT UTxOs on
+      // chain (same pair unit, multiple UTxOs at the pair validator address)
+      // and burns all but the most recent one. Idempotent: exits cleanly when
+      // no duplicates are found. See pair-dedup.ts for the full algorithm.
+      const { pairDedup } = await import("./transactions/pair-dedup.js");
+      getCliConfig();
+      const result = await pairDedup({
+        protocolStatePath: requireFlagValue("--protocol-state"),
+        clientStatePath: requireFlagValue("--client-state"),
+        buildOnly: hasBuildOnlyFlag(),
+      });
       printJson(result);
       return;
     }

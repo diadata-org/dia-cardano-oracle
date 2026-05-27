@@ -1,5 +1,5 @@
 import path from "node:path";
-import { stepId , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig } from "../core/config.js";
 
 import {
   mintingPolicyFromCompiledScript,
@@ -14,6 +14,7 @@ import {
   readClientState,
   readConfigState,
   readPairState,
+  type ClientStateArtifact,
   type PairStateArtifact,
 } from "../core/state.js";
 import { isAnyReferenceScriptMissing, loadReferenceScriptUtxos } from "../core/reference-scripts.js";
@@ -34,6 +35,123 @@ import {
   buildPairBurnRedeemer,
   buildPairMintBurnRedeemer,
 } from "../core/redeemers.js";
+
+import type { MintingPolicy, SpendingValidator, UTxO } from "@lucid-evolution/lucid";
+
+// ---------------------------------------------------------------------------
+// Shared burn primitive
+// ---------------------------------------------------------------------------
+
+/**
+ * Build, sign, submit, and confirm the burn tx for one specific Pair UTxO.
+ *
+ * Used by both `pairBurn` (single named pair) and `pairDedup` (mass cleanup
+ * of duplicate pair UTxOs found on-chain). Callers that already hold a
+ * reference to the exact UTxO pass it here to bypass `findSingleUtxoAtUnit`.
+ *
+ * @returns the submitted txHash, or `undefined` when `buildOnly` is true.
+ */
+export async function burnSpecificPairUtxo(args: {
+  lucid: Awaited<ReturnType<typeof makeConfiguredLucid>>;
+  wallet: { getUtxos(): Promise<UTxO[]> };
+  walletUtxos: UTxO[];
+  paymentKeyHash: string;
+  configUtxo: UTxO;
+  pairUtxo: UTxO;
+  pairUnit: string;
+  pairValidator: SpendingValidator;
+  pairMintPolicy: MintingPolicy;
+  client: ClientStateArtifact;
+  buildOnly: boolean;
+  label?: string;
+}): Promise<string | undefined> {
+  const { lucid, wallet, walletUtxos, paymentKeyHash, configUtxo, pairUtxo, pairUnit,
+    pairValidator, pairMintPolicy, client, buildOnly, label = "pair burn" } = args;
+
+  const { utxos: referenceScriptUtxos, missing: missingReferenceScripts } =
+    await loadReferenceScriptUtxos(
+      [
+        {
+          key: "pair",
+          label: "pair_state spend",
+          outRef: client.referenceScripts?.client?.pair
+            ? {
+                txHash: client.referenceScripts.client.pair.txHash,
+                outputIndex: client.referenceScripts.client.pair.outputIndex,
+              }
+            : null,
+        },
+        {
+          key: "pairMint",
+          label: "pair mint",
+          outRef: client.referenceScripts?.client?.pairMint
+            ? {
+                txHash: client.referenceScripts.client.pairMint.txHash,
+                outputIndex: client.referenceScripts.client.pairMint.outputIndex,
+              }
+            : null,
+        },
+      ] as const,
+      (msg) => console.error(`[${label}] ${msg}`),
+    );
+
+  let txBuilder = lucid
+    .newTx()
+    .readFrom([configUtxo])
+    .collectFrom([pairUtxo], buildPairBurnRedeemer())
+    .mintAssets({ [pairUnit]: -1n }, buildPairMintBurnRedeemer())
+    .addSignerKey(paymentKeyHash);
+
+  if (isAnyReferenceScriptMissing(missingReferenceScripts)) {
+    if (missingReferenceScripts.pair) {
+      txBuilder = txBuilder.attach.SpendingValidator(pairValidator);
+    }
+    if (missingReferenceScripts.pairMint) {
+      txBuilder = txBuilder.attach.MintingPolicy(pairMintPolicy);
+    }
+  }
+  txBuilder = txBuilder.readFrom(referenceScriptUtxos);
+
+  const txSignBuilder = await txBuilder.complete();
+  reportTxSignBuilderMetrics(txSignBuilder, (msg) => console.error(`[${label}] ${msg}`));
+  logEffectiveOutputs(txSignBuilder, (msg) => console.error(`[${label}] ${msg}`));
+
+  if (buildOnly) {
+    console.error(`[${label}] Build-only: unsigned hash = ${txSignBuilder.toHash()}`);
+    return undefined;
+  }
+
+  const signedTx = await txSignBuilder.sign.withWallet().complete();
+  const submittedTxHash = await signedTx.submit();
+  console.error(`[${label}] Submitted: ${submittedTxHash}`);
+
+  const confirmed = await awaitTxConfirmation({
+    lucid,
+    txHash: submittedTxHash,
+    reportProgress: (msg) => console.error(`[${label}] ${msg}`),
+    label,
+  });
+
+  if (!confirmed) {
+    throw new Error(`Transaction ${submittedTxHash} was submitted but confirmation was not observed.`);
+  }
+
+  await waitForWalletSettlement({
+    wallet,
+    previousUtxos: walletUtxos,
+    spentUtxos: [pairUtxo],
+    label,
+    requireChangeWhenNoSpentUtxos: false,
+  });
+
+  await waitForOutRefGone({ lucid, outRef: pairUtxo, label: "pair" });
+
+  return submittedTxHash;
+}
+
+// ---------------------------------------------------------------------------
+// High-level command
+// ---------------------------------------------------------------------------
 
 /**
  * Burns the Pair NFT of an existing pair and recovers the locked min-ADA
@@ -119,92 +237,20 @@ export async function pairBurn(args: {
 
   reportProgress(`Burning Pair NFT ${pairUnit} and recovering ${currentPairUtxo.assets.lovelace} lovelace.`);
 
-  const { utxos: referenceScriptUtxos, missing: missingReferenceScripts } =
-    await loadReferenceScriptUtxos(
-      [
-        {
-          key: "pair",
-          label: "pair_state spend",
-          outRef: client.referenceScripts?.client?.pair
-            ? {
-                txHash: client.referenceScripts.client.pair.txHash,
-                outputIndex: client.referenceScripts.client.pair.outputIndex,
-              }
-            : null,
-        },
-        {
-          key: "pairMint",
-          label: "pair mint",
-          outRef: client.referenceScripts?.client?.pairMint
-            ? {
-                txHash: client.referenceScripts.client.pairMint.txHash,
-                outputIndex: client.referenceScripts.client.pairMint.outputIndex,
-              }
-            : null,
-        },
-      ] as const,
-      reportProgress,
-    );
-
-  let txBuilder = lucid
-    .newTx()
-    .readFrom([configUtxo])
-    .collectFrom([currentPairUtxo], buildPairBurnRedeemer())
-    .mintAssets({ [pairUnit]: -1n }, buildPairMintBurnRedeemer())
-    .addSignerKey(walletDefaults.paymentKeyHash);
-
-  if (isAnyReferenceScriptMissing(missingReferenceScripts)) {
-    if (missingReferenceScripts.pair) {
-      reportProgress("Reference script for pair_state is missing; attaching inline.");
-      txBuilder = txBuilder.attach.SpendingValidator(pairValidator);
-    }
-    if (missingReferenceScripts.pairMint) {
-      reportProgress("Reference script for pairMint is missing; attaching inline.");
-      txBuilder = txBuilder.attach.MintingPolicy(pairMintPolicy);
-    }
-  }
-  txBuilder = txBuilder.readFrom(referenceScriptUtxos);
-
-  const txSignBuilder = await txBuilder.complete();
-  reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
-  logEffectiveOutputs(txSignBuilder, reportProgress);
-  const unsignedHash = txSignBuilder.toHash();
-
-  let submittedTxHash: string | null = null;
-  let confirmed = false;
-
-  if (!args.buildOnly) {
-    reportProgress(`Unsigned transaction ready: ${unsignedHash}`);
-    const signedTx = await txSignBuilder.sign.withWallet().complete();
-    submittedTxHash = await signedTx.submit();
-    reportProgress(`Submitted transaction hash: ${submittedTxHash}`);
-    confirmed = await awaitTxConfirmation({
-      lucid,
-      txHash: submittedTxHash,
-      reportProgress,
-      label: "pair burn transaction",
-    });
-
-    if (!confirmed) {
-      throw new Error(
-        `Transaction ${submittedTxHash} was submitted but confirmation was not observed.`,
-      );
-    }
-
-    await waitForWalletSettlement({
-      wallet,
-      previousUtxos: walletUtxos,
-      spentUtxos: [currentPairUtxo],
-      label: "pair burn",
-      requireChangeWhenNoSpentUtxos: false,
-    });
-
-    await waitForOutRefGone({
-      lucid,
-      outRef: currentPairUtxo,
-      label: "pair",
-    });
-  }
+  const submittedTxHash = await burnSpecificPairUtxo({
+    lucid,
+    wallet,
+    walletUtxos,
+    paymentKeyHash: walletDefaults.paymentKeyHash,
+    configUtxo,
+    pairUtxo: currentPairUtxo,
+    pairUnit,
+    pairValidator,
+    pairMintPolicy,
+    client,
+    buildOnly: args.buildOnly,
+    label: "pair:burn",
+  });
 
   // The on-chain Pair UTxO is destroyed. We keep `pairState` in the
   // artifact for audit (last-known price/timestamp/nonce) and clear
@@ -217,8 +263,8 @@ export async function pairBurn(args: {
     datum: { pairCbor: "" },
     transactions: appendTransactionRecord(pair.transactions, {
       step: stepId("pair:burn"),
-      submittedTxHash,
-      confirmed,
+      submittedTxHash: submittedTxHash ?? null,
+      confirmed: submittedTxHash != null,
     }),
   };
 
