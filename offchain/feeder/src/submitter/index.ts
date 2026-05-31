@@ -45,3 +45,5 @@ export {
   type RetryPolicy,
   type RetryDecision,
 } from "./retry-policy.js";
+
+export { laneKey } from "./lane-key.js";

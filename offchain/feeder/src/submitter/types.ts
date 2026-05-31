@@ -55,6 +55,8 @@ export type SubmitResultOk = {
   pairUnit: string;
   /** Whether the pair was minted for the first time or updated in place. */
   pairAction?: "mint" | "update";
+  /** Tx fee deducted from the signer wallet, as a lovelace string. */
+  feePaidLovelace?: string;
   /** Present when this intent was confirmed as part of a multi-intent batch. */
   batch?: BatchSubmissionInfo;
   /** Snapshot of on-chain balances captured by the bridge immediately

@@ -33,10 +33,18 @@
 // Spectra equivalent:
 //   there is no direct equivalent — Spectra's EVM destinations do not require
 //   serial-UTxO coordination, so per-lane accumulation is Cardano-specific.
+//
+// Thread safety:
+//   All methods on LaneCoalescer are synchronous. The JS event loop is
+//   single-threaded: accept(), flushLane(), and onBatchComplete() never
+//   interleave mid-execution, so no mutex or lock is needed for the lane
+//   Map or the state machine. Timer callbacks (setTimeout) fire between
+//   turns — still on the same thread — so the invariant holds.
 
 import type { EnrichedIntent } from "../source/types.js";
 import type { QueueManager } from "./queue-manager.js";
 import type { SubmitRequest, SubmitResult } from "./types.js";
+import { laneKey } from "./lane-key.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -133,12 +141,6 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
   const clock = options.now ?? Date.now;
 
   const lanes = new Map<string, Lane>();
-
-  // Lane key matches the queue manager's lane key so the coalescer and the
-  // queue are always aligned on the same (clientState, protocolState) pair.
-  function laneKey(req: SubmitRequest): string {
-    return `${req.destination.client_state_path}::${req.destination.protocol_state_path}`;
-  }
 
   function getOrCreateLane(key: string): Lane {
     let lane = lanes.get(key);
@@ -329,7 +331,7 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
 
   return {
     accept(req: SubmitRequest): void {
-      const key = laneKey(req);
+      const key = laneKey(req.destination);
       const lane = getOrCreateLane(key);
       const symbol = req.enriched.fullIntent.symbol;
 
@@ -355,6 +357,9 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
       });
 
       if (lane.state === "idle") {
+        // Node.js single-threaded event loop guarantees that the === check
+        // and the setTimeout below are non-interruptible by another microtask
+        // on this tick. No mutex needed.
         lane.state = "accumulating";
         lane.timer = setTimeout(() => { void flush(lane, key); }, coalesceWindowMs);
       }

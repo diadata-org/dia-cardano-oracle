@@ -5,21 +5,22 @@
 // the correct queue based on its destination configuration, creating
 // new queues on demand.
 //
-// Spectra equivalent:
-//   `pkg/submitter/queue_manager.go` — routes EVM txs to the
-//   per-(wallet, chainID) queue. Here the key is
-//   (clientStatePath, protocolStatePath) which uniquely identifies
-//   a (receiver, client config) pair on Cardano.
+// The queue key is (clientStatePath, protocolStatePath), which uniquely
+// identifies a (receiver, client config) pair on Cardano.
 //
 // Why per-queue and not one global queue?
 //   Different Cardano destinations share no UTxO state. We can safely
 //   submit to client-A and client-B in parallel; only submissions
-//   within the same client must be serial.
+//   within the same client must be serial. This "lane" model replaces
+//   a concurrent worker-pool: on Cardano, the EUTxO model forces serial
+//   execution within a lane while allowing cross-lane parallelism.
 
 import type { CardanoWriteClient, SubmitRequest, SubmitResult } from "./types.js";
 import { createInflightTable, type InflightTable, type InflightTableOptions } from "./inflight.js";
 import { createSubmissionQueue, type SubmissionQueue } from "./queue.js";
 import type { RetryPolicy } from "./retry-policy.js";
+import { laneKey } from "./lane-key.js";
+import type { CardanoDestinationConfig } from "../config/types.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,16 +72,6 @@ export type QueueManager = {
 // Factory
 // ---------------------------------------------------------------------------
 
-/**
- * The queue key identifies the Cardano "lane" — the UTxO pair that a
- * submission touches. It is the concatenation of the client-state path
- * and the protocol-state path from the destination config, since those
- * two files uniquely identify a (receiver, protocol) deployment.
- */
-function queueKey(clientStatePath: string, protocolStatePath: string): string {
-  return `${clientStatePath}::${protocolStatePath}`;
-}
-
 export function createQueueManager(options: QueueManagerOptions): QueueManager {
   const {
     clientFactory,
@@ -99,11 +90,11 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
   const queues = new Map<string, SubmissionQueue>();
   const sharedInflight = options.inflightTable ?? createInflightTable(inflightOptions);
 
-  function getOrCreateQueue(clientStatePath: string, protocolStatePath: string): SubmissionQueue {
-    const key = queueKey(clientStatePath, protocolStatePath);
+  function getOrCreateQueue(dest: CardanoDestinationConfig): SubmissionQueue {
+    const key = laneKey(dest);
     let queue = queues.get(key);
     if (!queue) {
-      const client = clientFactory(clientStatePath, protocolStatePath);
+      const client = clientFactory(dest.client_state_path, dest.protocol_state_path);
       queue = createSubmissionQueue({
         client,
         inflight: sharedInflight,
@@ -118,8 +109,7 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
 
   return {
     async submit(request) {
-      const { client_state_path, protocol_state_path } = request.destination;
-      const queue = getOrCreateQueue(client_state_path, protocol_state_path);
+      const queue = getOrCreateQueue(request.destination);
       return queue.enqueue(request);
     },
 
@@ -129,16 +119,10 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
       }
 
       const [{ destination: firstDestination }] = requests;
-      const firstKey = queueKey(
-        firstDestination.client_state_path,
-        firstDestination.protocol_state_path,
-      );
+      const firstKey = laneKey(firstDestination);
 
       for (const request of requests) {
-        const requestKey = queueKey(
-          request.destination.client_state_path,
-          request.destination.protocol_state_path,
-        );
+        const requestKey = laneKey(request.destination);
         if (requestKey !== firstKey) {
           throw new Error(
             "QueueManager.submitBatch requires every request to target the same client/protocol lane.",
@@ -146,10 +130,7 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
         }
       }
 
-      const queue = getOrCreateQueue(
-        firstDestination.client_state_path,
-        firstDestination.protocol_state_path,
-      );
+      const queue = getOrCreateQueue(firstDestination);
       return queue.enqueueBatch(requests);
     },
 

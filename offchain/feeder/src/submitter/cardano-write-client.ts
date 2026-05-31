@@ -142,6 +142,7 @@ export function createCardanoWriteClient(
         receiverUnit: result.receiverUnit,
         pairUnit: result.pairUnit,
         pairAction: result.isCreate ? "mint" : "update",
+        feePaidLovelace: result.feePaidLovelace,
         postState: result.postState,
       };
     } catch (err) {

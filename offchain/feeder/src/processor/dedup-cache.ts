@@ -20,6 +20,9 @@
 //   - `add(hash)` returns `true` when this is the first time we see
 //     the hash (caller should process it), `false` when it is a
 //     duplicate (caller should skip).
+//   - An optional `composite` argument adds a secondary key
+//     `symbol:signer:timestamp` for replay protection when different
+//     intents share the same (symbol, signer, timestamp) triple.
 //   - Entries expire after `ttlMs` or when the cache exceeds
 //     `capacity`, whichever happens first.
 //   - The eviction policy is LRU by insertion order; a Map's iterator
@@ -45,9 +48,16 @@ export type DedupCacheStats = {
 /** Public surface — `add` is the only operation the pipeline calls
  *  during the hot path. Stats are exposed for `/metrics`. */
 export type DedupCache = {
-  /** `true` when the hash is new and was inserted; `false` when it was
-   *  already present (a duplicate). */
-  add(intentHash: string): boolean;
+  /**
+   * `true` when neither `intentHash` nor the composite key (when provided)
+   * was previously seen, and the entry was inserted.
+   * `false` when either key was already present (a duplicate).
+   *
+   * @param intentHash  Primary dedup key — fast-path short-circuit.
+   * @param composite   Optional secondary key `(symbol, signer, timestamp)`
+   *                    for replay protection across different intent hashes.
+   */
+  add(intentHash: string, composite?: { symbol: string; signer: string; timestamp: bigint }): boolean;
   /** Inspect without mutating. */
   has(intentHash: string): boolean;
   size(): number;
@@ -61,6 +71,10 @@ export type DedupCache = {
  * The implementation uses `Map<string, number>` where the value is the
  * insertion timestamp; the Map's insertion-order iteration gives us
  * O(1) LRU eviction.
+ *
+ * When `composite` keys are provided to `add`, a second entry with key
+ * `symbol:signer:timestamp_string` is stored alongside the intentHash entry,
+ * pointing to the same insertion time.
  */
 export function createDedupCache(options: DedupCacheOptions): DedupCache {
   if (options.capacity <= 0) {
@@ -76,17 +90,45 @@ export function createDedupCache(options: DedupCacheOptions): DedupCache {
   const capacity = options.capacity;
   const counters = { hits: 0, misses: 0, evictions: 0 };
 
+  function compositeKey(symbol: string, signer: string, timestamp: bigint): string {
+    return `${symbol}:${signer}:${timestamp.toString()}`;
+  }
+
   return {
-    add(intentHash) {
+    add(intentHash, composite) {
       sweepExpired();
+
+      // Primary key check.
       if (entries.has(intentHash)) {
         counters.hits += 1;
         return false;
       }
+
+      // Secondary composite key check — guards against replay with a
+      // different intentHash but identical (symbol, signer, timestamp).
+      if (composite !== undefined) {
+        const ck = compositeKey(composite.symbol, composite.signer, composite.timestamp);
+        if (entries.has(ck)) {
+          counters.hits += 1;
+          return false;
+        }
+      }
+
+      // Insert both keys at the same timestamp so they age together.
+      const insertedAt = now();
       if (entries.size >= capacity) {
         evictOldest();
       }
-      entries.set(intentHash, now());
+      entries.set(intentHash, insertedAt);
+
+      if (composite !== undefined) {
+        if (entries.size >= capacity) {
+          evictOldest();
+        }
+        const ck = compositeKey(composite.symbol, composite.signer, composite.timestamp);
+        entries.set(ck, insertedAt);
+      }
+
       counters.misses += 1;
       return true;
     },

@@ -20,6 +20,7 @@ function makeEnriched(symbol: string): EnrichedIntent {
       blockNumber: 1n,
       txHash: `0x${"dd".repeat(32)}` as `0x${string}`,
       logIndex: 0,
+      blockTimestamp: 0n,
     },
     fullIntent: {
       intentType: "OracleUpdate",
@@ -227,6 +228,64 @@ describe("createCardanoWriteClient", () => {
     assert.equal(transactions.length, 1);
     assert.equal(transactions[0]?.status, "failed");
     assert.equal(transactions[0]?.batch?.size, 2);
+  });
+
+  it("populates feePaidLovelace on success when bridge returns it", async () => {
+    const bridge: OracleIntentBridge = {
+      async submitOracleUpdate(params) {
+        emitStandardSteps(params.onStep, "tx-fee");
+        return {
+          txHash: "tx-fee",
+          receiverUnit: "receiver-unit",
+          pairUnit: "pair-unit-btc",
+          isCreate: false,
+          feePaidLovelace: "178361",
+        };
+      },
+      async submitOracleUpdateBatch() {
+        throw new Error("unexpected batch call");
+      },
+    };
+
+    const client = createCardanoWriteClient(
+      "state/preview/clients/client-a.json",
+      "state/preview/config-bootstrap.json",
+      { bridge },
+    );
+
+    const result = await client.submit(makeRequest("intent-fee", "BTC/USD"));
+
+    assert.equal(result.ok, true);
+    assert.equal("feePaidLovelace" in result && result.feePaidLovelace, "178361");
+  });
+
+  it("leaves feePaidLovelace undefined when bridge omits it", async () => {
+    const bridge: OracleIntentBridge = {
+      async submitOracleUpdate(params) {
+        emitStandardSteps(params.onStep, "tx-nofee");
+        return {
+          txHash: "tx-nofee",
+          receiverUnit: "receiver-unit",
+          pairUnit: "pair-unit-btc",
+          isCreate: false,
+          // feePaidLovelace intentionally absent
+        };
+      },
+      async submitOracleUpdateBatch() {
+        throw new Error("unexpected batch call");
+      },
+    };
+
+    const client = createCardanoWriteClient(
+      "state/preview/clients/client-a.json",
+      "state/preview/config-bootstrap.json",
+      { bridge },
+    );
+
+    const result = await client.submit(makeRequest("intent-nofee", "BTC/USD"));
+
+    assert.equal(result.ok, true);
+    assert.equal("feePaidLovelace" in result ? result.feePaidLovelace : "MISSING", undefined);
   });
 
   it("uses the single path when submitBatch receives exactly one request", async () => {

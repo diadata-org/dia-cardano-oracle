@@ -96,3 +96,44 @@ describe("createDedupCache", () => {
     assert.equal(cache.size(), 50);
   });
 });
+
+describe("createDedupCache — composite key", () => {
+  it("blocks a different intentHash that shares (symbol, signer, timestamp)", () => {
+    const cache = createDedupCache({ capacity: 100, ttlMs: 0 });
+    const composite = { symbol: "BTC/USD", signer: "0xabc", timestamp: 1_000_000n };
+
+    // First intent with composite → admitted.
+    assert.equal(cache.add("0xhash1", composite), true);
+
+    // Second intent with a different hash but same composite → replay, blocked.
+    assert.equal(cache.add("0xhash2", composite), false);
+  });
+
+  it("admits the same composite key after a different symbol", () => {
+    const cache = createDedupCache({ capacity: 100, ttlMs: 0 });
+    const compositeA = { symbol: "BTC/USD", signer: "0xabc", timestamp: 1_000_000n };
+    const compositeB = { symbol: "ETH/USD", signer: "0xabc", timestamp: 1_000_000n };
+
+    assert.equal(cache.add("0xhash1", compositeA), true);
+    // Different symbol → different composite key → should be admitted.
+    assert.equal(cache.add("0xhash2", compositeB), true);
+  });
+
+  it("primary intentHash hit takes precedence over composite check", () => {
+    const cache = createDedupCache({ capacity: 100, ttlMs: 0 });
+    const composite = { symbol: "BTC/USD", signer: "0xabc", timestamp: 1_000_000n };
+
+    cache.add("0xhash1", composite);
+    // Same intentHash → immediate hit; composite not evaluated.
+    assert.equal(cache.add("0xhash1", composite), false);
+    const { hits } = cache.stats();
+    assert.equal(hits, 1);
+  });
+
+  it("add without composite still works as before", () => {
+    const cache = createDedupCache({ capacity: 100, ttlMs: 0 });
+    assert.equal(cache.add("0xhashA"), true);
+    assert.equal(cache.add("0xhashA"), false);
+    assert.equal(cache.add("0xhashB"), true);
+  });
+});
