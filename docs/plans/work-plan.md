@@ -10,7 +10,9 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 - [Milestone 1 Preview Evidence](../milestones/evidence/m1-preview-20260516-090057/milestone-1-preview-evidence.md) — M1 Preview verification log.
 - [Milestone 1 Mainnet Evidence](../milestones/evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) — M1 Mainnet verification log (latest run).
 - [Milestone 2 Feeder Strategy](./milestone-2-feeder-strategy.md) — conceptual reference: feeder split, DIA stack glossary, canonical endpoints (chain ids and registries confirmed by DIA), open questions still pending DIA confirmation.
-- [Milestone 2 Plan](./milestone-2-plan.md) — operational task breakdown for M2 (phases 0–5, acceptance criteria, evidence layout).
+- [Milestone 2 Final Plan](./milestone-2-final-plan.md) — operational task breakdown for M2 (phases R0-R9, acceptance criteria, evidence layout).
+- [M3 Deferred Features](./m3-deferred-features.md) — typed-but-not-wired Spectra-parity items and the Cardano-only extensions, with explicit "deferred / excluded / wired" classification.
+- [Mainnet Rollout](./mainnet-rollout.md) — Mainnet rollout procedure + rollback plan.
 - [Audit report](../audit/) — `audit-report-20260515.md`.
 
 ## Scope
@@ -80,22 +82,28 @@ criteria in [`final-cardano-milestones.md`](../milestones/final-cardano-mileston
 The full operational task breakdown for this workstream — phases,
 acceptance criteria, evidence layout, and dependencies on DIA
 confirmations (signer set, WebSocket creds, repo location, wallet custody,
-update cadence) — lives in [`milestone-2-plan.md`](./milestone-2-plan.md).
+update cadence) — lives in [`milestone-2-final-plan.md`](./milestone-2-final-plan.md).
 The conceptual reference (why and how, glossary, canonical endpoints)
 lives in [`milestone-2-feeder-strategy.md`](./milestone-2-feeder-strategy.md).
 
 High-level deliverables tracked here:
 
-- [ ] Feeder service under `offchain/feeder/` (pending repo-location
-  confirmation from DIA): registry scanner, router, submitter, inflight
-  tracker, ops surface.
-- [ ] CLI tx builders refactored into a reusable library so the feeder
-  imports them in-process (Phase 2 of the M2 plan).
-- [ ] Cardano `Config` re-pointed to the canonical DIA domain on Preview
-  and Mainnet before the first live feed (Phase 1 of the M2 plan).
-- [ ] M2 evidence packs (Preview and Mainnet) under
-  `docs/milestones/evidence/` with verified Cardano tx hashes covering
-  the 10 Catalyst-listed pairs.
+- [x] Feeder service under `offchain/feeder/`: registry scanner (HTTP + WS),
+  router, coalescer, queue manager, worker pools (event + update),
+  inflight tracker, ops surface (API, metrics, health, alert evaluator).
+- [x] CLI tx builders refactored into a reusable library imported in-process
+  by the feeder via `OracleIntentBridge`.
+- [x] DB-as-source-of-truth persistence (6-table SQLite/Postgres schema);
+  crash-safe checkpoint; no JSON state files at runtime.
+- [x] Spectra-parity API (14 endpoints) and metrics (6-phase latency histograms,
+  Prometheus aliases, Cardano extensions).
+- [x] Cron service for time-threshold re-submissions.
+- [x] Alert evaluator (`OraclePairStale`, `PriceDeviationHigh`) writing to `alert_log`.
+- [x] Security hardening: rate limiter, path-length caps, log injection sanitizer,
+  `synchronous = FULL`, path traversal check, WS exponential backoff.
+- [x] Mainnet rollout guide and rollback plan (`docs/plans/mainnet-rollout.md`).
+- [ ] M2 evidence packs (Preview 48-72 h window, all 10 pairs, Grafana screenshots,
+  error-counts TSV, alert firing demonstration) — pending live run.
 
 ## Workstream D — Indexer
 
@@ -109,10 +117,14 @@ Tasks:
 
 Tasks:
 
-- [ ] Monitoring for feed freshness, signer-set drift, and Receiver balance depletion.
-- [ ] Alerting for stale data, misreported prices, and failed update transactions.
-- [ ] Dashboards covering the 10 Catalyst-referenced price feeds.
-- [ ] QA validation report and anomaly-detection evidence.
+- [x] Monitoring for feed freshness (6-phase latency histograms), Receiver balance warnings,
+  and failed-transaction rate via Prometheus metrics (`dia_bridge_*`).
+- [x] In-process alert evaluator writing `OraclePairStale` and `PriceDeviationHigh`
+  events to `alert_log`; Prometheus alert rules in `monitoring/alerts.yml`.
+- [x] Grafana dashboards: `feeder-overview.json`, `feeder-latency.json`,
+  `feeder-cardano.json` (provisioned at `monitoring/grafana/`).
+- [ ] QA validation report and anomaly-detection evidence (requires 48-72 h live run).
+- [ ] Dashboard screenshots capturing real data from the live evidence window.
 
 ## Workstream F — Deployment, operations and developer documentation
 

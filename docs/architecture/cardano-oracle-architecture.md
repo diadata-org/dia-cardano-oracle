@@ -1225,3 +1225,139 @@ at compile time.
 | `reference_holder` | `config_policy_id: PolicyId`, `config_asset_name: AssetName` (`validators/reference_holder.ak:2-3`) | Admin-gated spend: requires the Config NFT as a reference input and a Config signer key in the transaction. This allows DIA to reclaim locked ADA when upgrading contracts. All consumers cite UTxOs at this address as `reference_input`s; no on-chain check enforces which UTxOs are cited. |
 
 ---
+
+## 9. Off-chain feeder architecture
+
+### 9.1 Persistence model — DB as source of truth
+
+The feeder uses a 6-table relational schema (SQLite by default, optional Postgres) as
+its single source of truth. No JSON checkpoint files are written at runtime. All
+observable state — chain progress, event dedup, Cardano submissions, price cache,
+performance metrics, alerts — is in the database.
+
+| Table | Purpose |
+|---|---|
+| `chain_state` | One row per `(chainId, contractId)`. Tracks `last_processed_block` (checkpoint) and `last_scan_block` (head). |
+| `processed_events` | One row per decoded `IntentRegistered` log. Dedup check + audit trail. Status: `processed \| filtered \| duplicate \| error`. |
+| `transaction_log` | One row per Cardano submission attempt. Full lifecycle: `pending → submitted → confirmed \| failed`. Stores `fee_paid_lovelace`, `confirmed_at_depth`, error codes. |
+| `contract_symbol_updates` | Latest confirmed price per `(chainId, contract, symbol)`. Updated by the queue manager on confirmation. |
+| `performance_metrics` | Time-series metric samples for the 6-phase latency histogram. Queried by `/api/v1/performance`. |
+| `alert_log` | Fired / resolved alert events written by the alert evaluator. Queried by `/api/v1/alerts`. |
+
+The checkpoint value (`chain_state.last_processed_block`) always wins over the YAML
+`start_block` once the feeder has seen at least one block. Crash recovery on startup
+marks any `pending` or `submitted` transactions as `failed` so the state machine
+restarts clean.
+
+### 9.2 Worker-pool layering
+
+Three concurrent processing layers, each with a distinct responsibility:
+
+```text
+DIA Lasernet EVM chain
+        │
+        ▼
+  ┌─────────────┐   HTTP + WS scanners run concurrently.
+  │  Scanner    │   Dedup cache (LRU) absorbs overlap.
+  │  (HTTP+WS)  │   Emits ScannedBatch events.
+  └─────┬───────┘
+        │ ScannedBatch
+        ▼
+  ┌─────────────┐   EventWorkerPool (optional — enable_parallel_mode=true).
+  │  Event      │   Parallel enrichment (registry getIntent view call) and
+  │  Worker     │   routing. Sequential when disabled (one goroutine-style
+  │  Pool       │   handleBatch loop).
+  └─────┬───────┘
+        │ SubmitRequest per dispatched destination
+        ▼
+  ┌─────────────┐   UpdateWorkerPoolManager — one pool per router_id.
+  │  Update     │   Buffers batches of SubmitRequests; workers drain them
+  │  Worker     │   into the lane coalescer. Controlled by worker_pool.*
+  │  Pool Mgr   │   config keys.
+  └─────┬───────┘
+        │ SubmitRequest
+        ▼
+  ┌─────────────┐   CoalescerManager — one LaneCoalescer per router.
+  │  Lane       │   Per-symbol supersession: only the newest intent for each
+  │  Coalescer  │   symbol reaches the queue. Three-state machine (idle /
+  │             │   accumulating / in-flight) enforces coalesce_window.
+  └─────┬───────┘
+        │ flush batch → QueueManager
+        ▼
+  ┌─────────────┐   QueueManager — one serial queue per Cardano destination
+  │  Queue      │   (per lane key = routerId + destinationIndex). Serializes
+  │  Manager    │   submissions so UTxO contention is avoided.
+  └─────┬───────┘
+        │ OracleIntentBridge.submitUpdate(...)
+        ▼
+  Cardano Preview / Mainnet
+```
+
+**Lane safety invariant:** all three serialization stages (coalescer, queue, JS single
+thread) together guarantee that no two Cardano transactions contend for the same Receiver
+UTxO. The JS event loop is single-threaded, so the LaneCoalescer state machine is
+race-free without a mutex.
+
+### 9.3 Cron service
+
+When `cron_service.enabled = true` in `infrastructure.<network>.yaml`, the cron service
+runs a periodic tick loop. On each tick it reads the on-chain confirmed price timestamp
+for every cron-enabled destination (from `contract_symbol_updates`) and compares it
+against the `time_threshold` configured on that router destination. If the on-chain
+timestamp is older than `time_threshold`, the cron service re-submits the latest known
+intent (held in the `LatestIntentCache`) through the same submission path as live events.
+
+The cron service skips re-submission when the latest intent hash already matches the
+on-chain confirmed hash (`outcome = "skipped_already_fresh"`), ensuring idempotency.
+
+### 9.4 Alert evaluator and `alert_log`
+
+The alert evaluator is an in-process periodic loop started alongside the feeder daemon.
+It reads `contract_symbol_updates` to find pairs whose `last_confirmed_at_ms` is older
+than `alerting.oracle_pair_stale_seconds` and writes an `OraclePairStale` event to
+`alert_log`. It also monitors for `PriceDeviationHigh` and `ReceiverBalanceLow`
+conditions using the thresholds from `alerting.*` in the YAML.
+
+Fired alerts are visible at `/api/v1/alerts` (active = unresolved) and
+`/api/v1/alerts?active=false` (all). Prometheus alert rules in
+`monitoring/alerts.yml` mirror the same thresholds and fire independently based
+on Prometheus metric data.
+
+### 9.5 API endpoint → table map
+
+| Endpoint | Primary table(s) |
+|---|---|
+| `GET /api/v1/prices` | `contract_symbol_updates` (via price cache) |
+| `GET /api/v1/prices/:symbol` | `contract_symbol_updates` (via price cache) |
+| `GET /api/v1/symbols` | `contract_symbol_updates` |
+| `GET /api/v1/symbols/:symbol/updates` | `transaction_log` |
+| `GET /api/v1/transactions` | `transaction_log` |
+| `GET /api/v1/transactions/:txHash` | `transaction_log` |
+| `GET /api/v1/chains` | `chain_state` |
+| `GET /api/v1/chains/:id/status` | `chain_state` |
+| `GET /api/v1/events` | `processed_events` |
+| `GET /api/v1/events/:hash` | `processed_events` |
+| `GET /api/v1/alerts` | `alert_log` |
+| `GET /api/v1/alerts/:id` | `alert_log` |
+| `POST /api/v1/alerts/:id/ack` | `alert_log` |
+| `GET /api/v1/performance` | `performance_metrics` |
+| `GET /api/v1/status` | in-memory health state |
+| `GET /api/v1/pools` | in-memory worker pool stats |
+
+### 9.6 Spectra parity
+
+The feeder naming follows the
+[Spectra interoperability bridge](https://github.com/diadata-org/Spectra-interoperability)
+(`services/bridge/`) as the canonical reference for all metric names, API paths,
+config keys, and DB column names. Deviations from Spectra are Cardano-specific
+extensions (e.g. `cardano.*` config block, `fee_paid_lovelace`, Cardano network
+selectors). The full disposition register is maintained in
+[`docs/plans/milestone-2-final-plan.md` — Spectra Parity Disposition Register](../plans/milestone-2-final-plan.md).
+
+Typed Spectra keys that are surfaced in the YAML but **not wired** to runtime
+behaviour yet are inventoried in
+[`docs/plans/m3-deferred-features.md`](../plans/m3-deferred-features.md). Every
+row there must correspond either to a future M3 wiring task or to a permanent
+"excluded" classification (multi-chain / EVM-destination Spectra subsystems).
+
+---
