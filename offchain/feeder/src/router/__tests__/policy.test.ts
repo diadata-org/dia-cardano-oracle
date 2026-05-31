@@ -168,19 +168,137 @@ describe("createPolicyGate — price_deviation", () => {
   });
 });
 
-describe("createPolicyGate — both thresholds", () => {
-  it("time_threshold blocks before price_deviation is evaluated", () => {
+describe("createPolicyGate — both thresholds (OR-gate)", () => {
+  it("passes when only time passes (price fails)", () => {
     let now = 100_000;
     const cache = createPriceCache({ now: () => now });
     cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
-    now = 110_000; // only 10 s, threshold 60 s
+    now = 200_000; // 100s elapsed >= 60s threshold → time passes
     const gate = createPolicyGate(cache, {
       timeThresholdMs: 60_000,
-      priceDeviationPct: 0.1,
+      priceDeviationPct: 5.0, // 0.1% change — would NOT meet 5% deviation
       now: () => now,
     });
-    const result = gate(BASE_KEY, 2_000n); // 100% change — would pass deviation
+    const result = gate(BASE_KEY, 1_001n); // 0.1% change
+    assert.deepEqual(result, { allowed: true });
+  });
+
+  it("passes when only price passes (time fails)", () => {
+    let now = 100_000;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    now = 110_000; // only 10s elapsed, threshold 60s → time fails
+    const gate = createPolicyGate(cache, {
+      timeThresholdMs: 60_000,
+      priceDeviationPct: 0.1, // 100% change — far exceeds 0.1% threshold → price passes
+      now: () => now,
+    });
+    const result = gate(BASE_KEY, 2_000n); // 100% change
+    assert.deepEqual(result, { allowed: true });
+  });
+
+  it("suppresses when BOTH fail — returns time_threshold verdict", () => {
+    let now = 100_000;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    now = 110_000; // 10s elapsed < 60s threshold → time fails
+    const gate = createPolicyGate(cache, {
+      timeThresholdMs: 60_000,
+      priceDeviationPct: 5.0, // 0.1% change < 5% threshold → price also fails
+      now: () => now,
+    });
+    const result = gate(BASE_KEY, 1_001n); // 0.1% change
     assert.equal(result.allowed, false);
     assert.equal("reason" in result && result.reason, "time_threshold");
+    assert.ok("filterReason" in result && typeof result.filterReason === "string");
+  });
+
+  it("passes when both pass", () => {
+    let now = 100_000;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    now = 200_000; // 100s >= 60s → time passes
+    const gate = createPolicyGate(cache, {
+      timeThresholdMs: 60_000,
+      priceDeviationPct: 0.1, // 100% >> 0.1% → price passes
+      now: () => now,
+    });
+    assert.deepEqual(gate(BASE_KEY, 2_000n), { allowed: true });
+  });
+});
+
+describe("createPolicyGate — filterReason on suppressed verdicts", () => {
+  it("includes filterReason string on time_threshold verdict", () => {
+    let now = 100_000;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 100n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    now = 120_000;
+    const gate = createPolicyGate(cache, { timeThresholdMs: 60_000, now: () => now });
+    const result = gate(BASE_KEY, 200n);
+    assert.equal(result.allowed, false);
+    assert.ok("filterReason" in result && result.filterReason.includes("time_threshold"));
+  });
+
+  it("includes filterReason string on price_deviation verdict", () => {
+    const now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    const gate = createPolicyGate(cache, { priceDeviationPct: 1.0, now: () => now });
+    const result = gate(BASE_KEY, 1_005n);
+    assert.equal(result.allowed, false);
+    assert.ok("filterReason" in result && result.filterReason.includes("price_deviation"));
+  });
+});
+
+describe("createPolicyGate — timestamp monotonicity", () => {
+  it("suppresses with timestamp_regression when new < last", () => {
+    const now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 1_000n, intentHash: "0xaaa", updatedAtMs: now });
+    const gate = createPolicyGate(cache, {});
+    const result = gate(BASE_KEY, 1_100n, 500n); // newTimestamp 500 < last 1000
+    assert.equal(result.allowed, false);
+    assert.equal("reason" in result && result.reason, "timestamp_regression");
+    assert.ok("filterReason" in result && result.filterReason.includes("timestamp_regression"));
+  });
+
+  it("suppresses with timestamp_duplicate when new === last", () => {
+    const now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 1_000n, intentHash: "0xaaa", updatedAtMs: now });
+    const gate = createPolicyGate(cache, {});
+    const result = gate(BASE_KEY, 1_100n, 1_000n); // same timestamp
+    assert.equal(result.allowed, false);
+    assert.equal("reason" in result && result.reason, "timestamp_duplicate");
+    assert.ok("filterReason" in result && result.filterReason.includes("timestamp_duplicate"));
+  });
+
+  it("allows when newTimestamp > lastTimestamp", () => {
+    const now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 1_000n, intentHash: "0xaaa", updatedAtMs: now });
+    const gate = createPolicyGate(cache, {});
+    assert.deepEqual(gate(BASE_KEY, 1_100n, 1_001n), { allowed: true });
+  });
+
+  it("skips timestamp check when newTimestamp is not provided", () => {
+    const now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 1_000n, intentHash: "0xaaa", updatedAtMs: now });
+    const gate = createPolicyGate(cache, {});
+    // No timestamp passed — should still allow (no thresholds).
+    assert.deepEqual(gate(BASE_KEY, 1_100n), { allowed: true });
+  });
+
+  it("timestamp check runs before OR-gate thresholds", () => {
+    let now = 100_000;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 1_000n, intentHash: "0xaaa", updatedAtMs: now });
+    now = 200_000; // would pass time threshold
+    const gate = createPolicyGate(cache, { timeThresholdMs: 60_000, now: () => now });
+    // Regression timestamp should still suppress even if time would pass.
+    const result = gate(BASE_KEY, 2_000n, 500n);
+    assert.equal(result.allowed, false);
+    assert.equal("reason" in result && result.reason, "timestamp_regression");
   });
 });

@@ -12,8 +12,6 @@
 // env reads on this path are the WS credential (a secret) and the
 // dedup-cache tuning knobs (operational).
 
-import path from "node:path";
-
 import { seedCheckpointIfNeeded } from "./checkpoint-seed.js";
 import {
   loadModularConfig,
@@ -29,8 +27,6 @@ import {
 import {
   composeAuthenticatedWsUrl,
   createHttpRegistryClient,
-  createJsonCheckpoint,
-  defaultCheckpointPath,
   resolveSourceFromConfig,
   runHttpScanner,
   runWsScanner,
@@ -42,6 +38,8 @@ import {
   type ResolvedSource,
   type ScannedBatch,
 } from "../../src/source/index.js";
+import { createDb, type DbConfig } from "../../src/persistence/index.js";
+import { createDbCheckpoint } from "../../src/source/checkpoint-db.js";
 import { createPublicClient, http, type PublicClient } from "viem";
 
 /** What the scan command supports. */
@@ -55,9 +53,6 @@ export type ScanCmdOptions = {
   report: (line: string) => void;
   /** Modular config directory. */
   configPath: string;
-  /** Where the scanner persists `last_processed_block`. Defaults to
-   *  `state/<network>/feeder-checkpoint.json`. */
-  checkpointPath?: string;
   /** Polling cadence + chunk size. */
   scanIntervalMs?: number;
   blockRange?: bigint;
@@ -83,6 +78,29 @@ const DEFAULTS = {
   reconnectIntervalMs: 5_000,
   maxReconnects: 60,
 } as const;
+
+// ---------------------------------------------------------------------------
+// DB config helper (mirrors daemon-cmd.ts resolveDbConfig)
+// ---------------------------------------------------------------------------
+
+function resolveDbConfig(network: CardanoNetwork): DbConfig {
+  const driver = (process.env.DATABASE_DRIVER?.trim() ?? "sqlite") as "sqlite" | "postgres";
+  const suffix = network === "Mainnet" ? "MAINNET" : "TESTNET";
+
+  if (driver === "postgres") {
+    const dsn = process.env[`DATABASE_DSN_${suffix}`]?.trim();
+    if (!dsn) {
+      throw new Error(
+        `DATABASE_DSN_${suffix} is required when DATABASE_DRIVER=postgres.`,
+      );
+    }
+    return { driver: "postgres", dsn };
+  }
+
+  const defaultPath = `state/${network.toLowerCase()}/feeder.sqlite`;
+  const filePath = process.env[`DATABASE_PATH_${suffix}`]?.trim() ?? defaultPath;
+  return { driver: "sqlite", path: filePath };
+}
 
 /**
  * Run the scan pipeline until aborted. Returns the process exit code
@@ -120,55 +138,67 @@ export async function runScan(options: ScanCmdOptions): Promise<number> {
     report(`scan: observation mode — no submitter is wired into this command path.`);
   }
 
-  const checkpointPath = options.checkpointPath ?? defaultCheckpointPath(network);
-  const checkpoint = createJsonCheckpoint({ filePath: checkpointPath });
-  await seedCheckpointIfNeeded({
-    checkpoint,
-    fromBlock: options.fromBlock,
-    fromLatest: options.fromLatest,
-    getLatestBlock: async () => {
-      const c = createPublicClient({ transport: http(source.rpcUrls[0]) });
-      return c.getBlockNumber();
-    },
-    report,
-  });
-
-  const dedupCache = createDedupCache({
-    capacity: options.dedupCapacity ?? config.infrastructure?.event_processor?.dedup_cache_size ?? DEFAULTS.dedupCapacity,
-    ttlMs: options.dedupTtlMs ?? parseDurationMs(config.infrastructure?.event_processor?.dedup_cache_ttl, DEFAULTS.dedupTtlMs),
-  });
-
-  const enricherClient = createPublicClient({ transport: http(source.rpcUrls[0]) });
-  const enricher = createRegistryEnricher({
-    client: enricherClient as PublicClient,
-    registryAddress: source.registryAddress,
-    enrichmentAbi: source.enrichmentAbi,
-  });
-
-  const handleBatch = async (batch: ScannedBatch): Promise<void> => {
-    for (const event of batch.events) {
-      await processOneEvent({ event, dedupCache, enricher, report });
-    }
-  };
-
-  report(`scan: checkpoint=${path.resolve(checkpointPath)}`);
-  report(
-    `scan: transport=${transport}, chain_id=${source.chainId}, registry=${source.registryAddress}, contract_id=${source.registryContractId}`,
-  );
-
+  // Open DB and create a DB-backed checkpoint (chain_state.last_scan_block).
+  const dbConfig = resolveDbConfig(network);
+  const db = await createDb(dbConfig);
   try {
-    switch (transport) {
-      case "http":
-        await runHttpTransport({ ...options, config, source, checkpoint, handleBatch, signal });
-        break;
-      case "ws":
-        await runWsTransport({ ...options, config, source, checkpoint, handleBatch, signal });
-        break;
+    await db.migrate();
+    const checkpoint = createDbCheckpoint({
+      db,
+      chainId: source.chainId,
+      contractId: source.registryContractId,
+    });
+
+    await seedCheckpointIfNeeded({
+      checkpoint,
+      fromBlock: options.fromBlock,
+      fromLatest: options.fromLatest,
+      getLatestBlock: async () => {
+        const c = createPublicClient({ transport: http(source.rpcUrls[0]) });
+        return c.getBlockNumber();
+      },
+      report,
+    });
+
+    const dedupCache = createDedupCache({
+      capacity: options.dedupCapacity ?? config.infrastructure?.event_processor?.dedup_cache_size ?? DEFAULTS.dedupCapacity,
+      ttlMs: options.dedupTtlMs ?? parseDurationMs(config.infrastructure?.event_processor?.dedup_cache_ttl, DEFAULTS.dedupTtlMs),
+    });
+
+    const enricherClient = createPublicClient({ transport: http(source.rpcUrls[0]) });
+    const enricher = createRegistryEnricher({
+      client: enricherClient as PublicClient,
+      registryAddress: source.registryAddress,
+      enrichmentAbi: source.enrichmentAbi,
+    });
+
+    const handleBatch = async (batch: ScannedBatch): Promise<void> => {
+      for (const event of batch.events) {
+        await processOneEvent({ event, dedupCache, enricher, report });
+      }
+    };
+
+    report(`scan: checkpoint=db driver=${dbConfig.driver} chain_id=${source.chainId} contract_id=${source.registryContractId}`);
+    report(
+      `scan: transport=${transport}, chain_id=${source.chainId}, registry=${source.registryAddress}, contract_id=${source.registryContractId}`,
+    );
+
+    try {
+      switch (transport) {
+        case "http":
+          await runHttpTransport({ ...options, config, source, checkpoint, handleBatch, signal });
+          break;
+        case "ws":
+          await runWsTransport({ ...options, config, source, checkpoint, handleBatch, signal });
+          break;
+      }
+      return 0;
+    } catch (error) {
+      report(`scan: aborted with error — ${(error as Error).message}`);
+      return 1;
     }
-    return 0;
-  } catch (error) {
-    report(`scan: aborted with error — ${(error as Error).message}`);
-    return 1;
+  } finally {
+    await db.close();
   }
 }
 
@@ -307,3 +337,4 @@ function renderAndCountErrors(
   }
   return errorCount;
 }
+

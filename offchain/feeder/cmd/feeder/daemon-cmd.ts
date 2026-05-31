@@ -24,7 +24,7 @@
 //   DATABASE_PATH_MAINNET    SQLite file path for Mainnet network.
 //   DATABASE_DSN_TESTNET     Postgres DSN for Preview.
 //   DATABASE_DSN_MAINNET     Postgres DSN for Mainnet.
-//   API_LISTEN_ADDR          host:port — default ":8080".
+//   API_LISTEN_ADDR          host:port — default "127.0.0.1:8080" (loopback).
 //   METRICS_ENABLED          "true" to enable prom-client metrics.
 //   METRICS_NAMESPACE        metric name prefix — default "dia_bridge".
 
@@ -44,7 +44,9 @@ import {
 import { createRegistryEnricher, identityTransformer } from "../../src/pipeline/index.js";
 import {
   createDedupCache,
+  createEventWorkerPool,
   createPriceCache,
+  type EventWorkerPool,
 } from "../../src/processor/index.js";
 import {
   createLatestIntentCache,
@@ -53,9 +55,8 @@ import {
 } from "../../src/cron/index.js";
 import {
   composeAuthenticatedWsUrl,
+  createDbCheckpoint,
   createHttpRegistryClient,
-  createJsonCheckpoint,
-  defaultCheckpointPath,
   resolveSourceFromConfig,
   runHttpScanner,
   runWsScanner,
@@ -78,6 +79,10 @@ import {
   type CoalescerManager,
 } from "../../src/submitter/index.js";
 import type { SubmitRequest, SubmitResult } from "../../src/submitter/types.js";
+import {
+  createUpdateWorkerPoolManager,
+  type UpdateWorkerPoolManager,
+} from "../../src/worker/index.js";
 import type { OracleIntentBridge } from "../../src/lib-bridge/index.js";
 import { createRealOracleIntentBridge } from "../../src/lib-bridge/index.js";
 import { reconcileAllDestinations } from "../../src/lib-bridge/reconcile.js";
@@ -91,9 +96,11 @@ import {
   type HealthState,
 } from "../../src/api/index.js";
 import { createDb, type Db, type DbConfig } from "../../src/persistence/index.js";
+import { startAlertEvaluator } from "../../src/alerting/evaluator.js";
 import { createFileLogger, type FileLogger } from "../../src/logger/file-logger.js";
 import { runPreflight } from "../../src/submitter/preflight.js";
 import { createDefaultRetryPolicy } from "../../src/submitter/retry-policy.js";
+import { sanitizeLogLine } from "../../src/utils/sanitize.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -164,7 +171,6 @@ function parsePositiveInteger(raw: number | undefined): number | undefined {
  *
  * Deleted:
  *   state/<network>/logs/                    (all log streams)
- *   state/<network>/feeder-checkpoint.json   (block scanner position)
  *   state/<network>/feeder.sqlite*           (SQLite DB + WAL files)
  *   state/<network>/clients/*\/pairs/*.json  (feeder-written pair state)
  */
@@ -197,13 +203,18 @@ function createLeveledReport(
 ): (line: string) => void {
   const min = LEVEL_ORDER[minLevel] ?? LEVEL_ORDER.info;
   return (line: string) => {
+    // Every line passes through sanitizeLogLine before reaching the base
+    // writer so newline/tab/CR injection from interpolated event data
+    // (intentHash, error messages, symbols, paths) cannot fabricate fake
+    // log lines downstream. Single chokepoint for all call sites.
+    const safe = sanitizeLogLine(line);
     let msgLevel: LogLevelStr = "info";
-    let stripped = line;
+    let stripped = safe;
     for (const lv of Object.keys(LEVEL_ORDER) as LogLevelStr[]) {
       const tag = `[${lv}] `;
-      if (line.startsWith(tag)) {
+      if (safe.startsWith(tag)) {
         msgLevel = lv;
-        stripped = line.slice(tag.length);
+        stripped = safe.slice(tag.length);
         break;
       }
     }
@@ -225,7 +236,6 @@ export async function cleanFeederState(
 
   const targets: string[] = [
     `${base}/logs`,
-    `${base}/feeder-checkpoint.json`,
     `${base}/feeder.sqlite`,
     `${base}/feeder.sqlite-shm`,
     `${base}/feeder.sqlite-wal`,
@@ -355,7 +365,48 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const dbConfig = resolveDbConfig(network);
   const db = await createDb(dbConfig);
   await db.migrate();
+  // Ensure chain_state row exists for this network before checkpoint reads it.
+  await db.initialiseChainState({
+    chainId: source.chainId,
+    chainName: network,
+    contractId: source.registryContractId,
+  });
   report(`daemon: database driver=${dbConfig.driver} ready`);
+
+  // ------------------------------------------------------------------
+  // 2a. Crash recovery — mark any pending/submitted rows from a
+  //     previous run as failed. Pending rows never reached the chain;
+  //     submitted rows may have been in-flight when the process died.
+  //     Both are marked failed so the event-driven flow can re-process
+  //     them when fresh intents arrive.
+  // ------------------------------------------------------------------
+  const [crashPending, crashSubmitted] = await Promise.all([
+    db.listTransactions({ status: "pending" }),
+    db.listTransactions({ status: "submitted" }),
+  ]);
+  for (const row of crashPending) {
+    report(`daemon: crash recovery: marking pending tx ${row.intentHash} as failed`);
+    await db.updateTransactionLog(row.intentHash, {
+      status: "failed",
+      errorCode: "CrashRecovery",
+      errorMessage: "daemon restarted with pending transaction",
+      failedAtMs: Date.now(),
+    });
+  }
+  for (const row of crashSubmitted) {
+    report(`daemon: crash recovery: marking submitted tx ${row.intentHash} as failed`);
+    await db.updateTransactionLog(row.intentHash, {
+      status: "failed",
+      errorCode: "CrashRecovery",
+      errorMessage: "daemon restarted with submitted transaction awaiting confirmation",
+      failedAtMs: Date.now(),
+    });
+  }
+  if (crashPending.length + crashSubmitted.length > 0) {
+    report(
+      `daemon: crash recovery complete — marked failed: pending=${crashPending.length} submitted=${crashSubmitted.length}`,
+    );
+  }
 
   // ------------------------------------------------------------------
   // 2b. File logger — structured JSON logs per intent/transaction.
@@ -417,6 +468,9 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // 6. HTTP API server — YAML wins over env, env is fallback.
   // ------------------------------------------------------------------
   const { host: apiHost, port: apiPort } = resolveApiAddr(config.infrastructure?.api);
+  // The update pool manager is created later (depends on coalescerManager).
+  // We use a deferred ref so the API server can read pool stats at request time.
+  let updatePoolManagerRef: UpdateWorkerPoolManager | undefined;
   const apiServer = createApiServer({
     host: apiHost,
     port: apiPort,
@@ -426,6 +480,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     priceCache,
     chainRuntime,
     healthState,
+    getPoolStats: () => updatePoolManagerRef?.listAllStats() ?? [],
   });
   await apiServer.start();
   report(`daemon: API server listening on ${apiHost}:${apiPort}`);
@@ -439,10 +494,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const blockRange       = BigInt(infra.block_scanner?.block_range               ?? 500);
   const startBlock       = BigInt(infra.source?.start_block                      ?? 0);
   const confirmations    = BigInt(infra.block_scanner?.confirmations             ?? 6);
-  // Spectra-parity gap recovery (Etapa B.1). Switches the HTTP scanner
-  // into a fast catch-up mode (5000-block chunks, no scan_interval sleep
-  // between chunks) whenever `head - cursor > max_block_gap`. Defaults
-  // preserve current behaviour for installations that have not opted in.
+  // Gap recovery: when backward_sync=true, the HTTP scanner re-syncs from
+  // last_processed_block using large chunks (backfill_chunk_blocks) and skips
+  // scan_interval between chunks until caught up. Defaults preserve current
+  // behaviour for installations that have not opted in.
   const backwardSync     = infra.block_scanner?.backward_sync === true;
   const maxBlockGap      = BigInt(infra.block_scanner?.max_block_gap             ?? 5000);
   const dedupCapacity    = infra.event_processor?.dedup_cache_size               ?? 4096;
@@ -486,8 +541,13 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }
   const receiverBalanceLowLovelace = BigInt(alerting.receiver_balance_low_lovelace!);
 
+  const maxQueueSize = infra.health_check?.max_queue_size;
+
   healthState.maxStalenessMs = maxStalenessMs;
   healthState.maxLastConfirmedAgeMs = maxLastConfirmedAgeMs;
+  if (maxQueueSize !== undefined) {
+    healthState.maxQueueSize = maxQueueSize;
+  }
 
   // ------------------------------------------------------------------
   // 8. Router registry.
@@ -530,9 +590,14 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
               cardanoTxHash: txHash,
               routerId: runtime.routerId,
               destinationIndex: runtime.destinationIndex,
-              clientStatePath: runtime.clientStatePath,
+              destinationChainName: "",
+              destinationContractAddress: "",
+              symbol: runtime.symbol,
+              price: "",
+              timestamp: 0,
               status: "submitted",
               submittedAtMs: runtime.submittedAtMs,
+              createdAtMs: runtime.submittedAtMs,
             });
           }
           if (step !== "tx_start") {
@@ -573,6 +638,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const maxIntentAgeMs   = maxIntentAgeRaw ? parseDurationMs(maxIntentAgeRaw, 0) || undefined : undefined;
   const maxBatchSize = parsePositiveInteger(infra.event_processor?.max_batch_size);
   const sizeFallbackEnabled = infra.event_processor?.size_fallback_enabled === true;
+  const parallelMode        = infra.event_processor?.enable_parallel_mode === true;
+  const parallelWorkerCount = parsePositiveInteger(infra.event_processor?.parallel_worker_count) ?? 4;
+  const parallelQueueSize   = parsePositiveInteger(infra.event_processor?.parallel_queue_size) ?? 256;
+  const parallelTimeoutMs   = parseDurationMs(infra.event_processor?.parallel_timeout, 30_000);
 
   const coalescerManager = createCoalescerManager({
     queueManager,
@@ -658,7 +727,8 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           );
         }
 
-        void db.updateTransactionLog(result.intentHash, result.cardanoTxHash, {
+        void db.updateTransactionLog(result.intentHash, {
+          cardanoTxHash: result.cardanoTxHash,
           status: "confirmed",
           confirmedAtMs: nowMs,
         });
@@ -709,18 +779,23 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           metrics.transactionsReorg.inc({ symbol, client_id: clientId });
         }
         report(
-          `[error] daemon: TRANSACTION FAILED — code=${result.code} intentHash=${result.intentHash} ` +
-          `symbol=${symbol} batchSize=${batchSize} error="${result.error.message}"`,
+          `[error] daemon: TRANSACTION FAILED — code=${result.code} intentHash=${sanitizeLogLine(result.intentHash)} ` +
+          `symbol=${sanitizeLogLine(symbol)} batchSize=${batchSize} error="${sanitizeLogLine(result.error.message)}"`,
         );
-        report(`[warn] daemon: REMEDIATION — ${result.remediation}`);
+        report(`[warn] daemon: REMEDIATION — ${sanitizeLogLine(result.remediation)}`);
         void db.insertTransactionLog({
           intentHash: result.intentHash,
           cardanoTxHash: "",
           routerId: req.routerId,
           destinationIndex: req.destinationIndex,
-          clientStatePath: req.destination.client_state_path,
+          destinationChainName: "",
+          destinationContractAddress: "",
+          symbol: req.enriched.fullIntent.symbol,
+          price: req.enriched.fullIntent.price.toString(),
+          timestamp: Number(req.enriched.fullIntent.timestamp),
           status: "failed",
-          submittedAtMs: Date.now(),
+          failedAtMs: Date.now(),
+          createdAtMs: Date.now(),
         });
         await fileLogger.logIntentStep({
           ts: new Date().toISOString(),
@@ -766,6 +841,29 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   });
 
   // ------------------------------------------------------------------
+  // 9.3b. Update worker pool manager — per-router task concurrency.
+  //       Mirrors Spectra's Bridge.getOrCreateOraclePool(routerID).
+  //       Tasks are update requests routed through the coalescer;
+  //       all Cardano submission remains serial via the lane queue.
+  // ------------------------------------------------------------------
+  const updateWorkerMaxWorkers   = parsePositiveInteger(infra.worker_pool?.max_workers) ?? 4;
+  const updateWorkerQueueSize    = parsePositiveInteger(infra.worker_pool?.task_queue_size) ?? 128;
+  const updateWorkerTimeoutMs    = parseDurationMs(infra.worker_pool?.task_timeout, 60_000);
+
+  const updatePoolManager: UpdateWorkerPoolManager = createUpdateWorkerPoolManager({
+    maxWorkers: updateWorkerMaxWorkers,
+    taskQueueSize: updateWorkerQueueSize,
+    taskTimeoutMs: updateWorkerTimeoutMs,
+    onTask: async (_routerId, task) => {
+      for (const req of task.requests) {
+        coalescerManager.accept(req);
+      }
+    },
+    log: report,
+  });
+  updatePoolManagerRef = updatePoolManager;
+
+  // ------------------------------------------------------------------
   // 9.4. Cron service — Spectra parity. Re-submits the latest known
   //      intent for any cron-enabled destination whose on-chain pair
   //      has gone stale beyond its `time_threshold`. The service runs
@@ -793,6 +891,50 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   void cronHandle;
 
   // ------------------------------------------------------------------
+  // 9.4b. Alert evaluator — in-process Prometheus-style rules engine.
+  //       Writes to alert_log on fire/resolve transitions.
+  // ------------------------------------------------------------------
+  const alertEvalIntervalMs = parseDurationMs(
+    (infra.alerting as { evaluation_interval?: string } | undefined)?.evaluation_interval,
+    30_000,
+  );
+  const pairStalenessThresholdMs =
+    (alerting.oracle_pair_stale_seconds ?? 3600) * 1_000;
+  const alertEvaluatorHandle = startAlertEvaluator({
+    db,
+    priceCache,
+    evaluationIntervalMs: alertEvalIntervalMs,
+    pairStalenessThresholdMs,
+    log: report,
+    signal,
+  });
+  void alertEvaluatorHandle;
+
+  // Refresh healthState.workerQueueDepth from the queue manager so the
+  // /health/ready max_queue_size check works in BOTH sequential and
+  // parallel modes. In parallel mode the EventWorkerPool also writes
+  // this field on every onStats tick; both writers are safe because
+  // the readiness handler only reads (single-threaded JS).
+  const healthCheckIntervalMs = parseDurationMs(
+    infra.health_check?.check_interval,
+    5_000,
+  );
+  let queueDepthTimer: ReturnType<typeof setInterval> | null = setInterval(
+    () => {
+      healthState.workerQueueDepth = queueManager.totalPending();
+    },
+    healthCheckIntervalMs,
+  );
+  // Seed an initial sample so readiness has a value before the first tick.
+  healthState.workerQueueDepth = queueManager.totalPending();
+  signal?.addEventListener("abort", () => {
+    if (queueDepthTimer) {
+      clearInterval(queueDepthTimer);
+      queueDepthTimer = null;
+    }
+  }, { once: true });
+
+  // ------------------------------------------------------------------
   // 9.5. Startup reconciliation — sync local pair-state files with the
   //      live on-chain pair UTxOs for every Cardano destination. Runs
   //      once before the scan pipeline starts. Failures are logged as
@@ -805,8 +947,13 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // ------------------------------------------------------------------
   // 10. Source pipeline.
   // ------------------------------------------------------------------
-  const checkpointPath = defaultCheckpointPath(network);
-  const checkpoint = createJsonCheckpoint({ filePath: checkpointPath });
+  // DB checkpoint: scanner position lives in chain_state.last_scan_block.
+  // No JSON file; chain_state row was created by initialiseChainState above.
+  const checkpoint = createDbCheckpoint({
+    db,
+    chainId: source.chainId,
+    contractId: source.registryContractId,
+  });
   await seedCheckpointIfNeeded({
     checkpoint,
     fromBlock: options.fromBlock,
@@ -830,6 +977,60 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     enrichmentAbi: source.enrichmentAbi,
   });
 
+  // Block-timestamp resolver shared by HTTP and WS scanners. Populates
+  // ExtractedEvent.blockTimestamp from the block header, which is what
+  // makes intent_to_registration_seconds and registration_to_scan_seconds
+  // emit non-zero values. Uses the HTTP RPC even when the active scanner
+  // is WS — block-header lookups are cheap and avoid a second WS client.
+  const blockTimestampResolver = async (blockNumber: bigint): Promise<bigint> => {
+    const block = await enricherClient.getBlock({ blockNumber, includeTransactions: false });
+    return block.timestamp;
+  };
+
+  // Event worker pool — created only when enable_parallel_mode=true.
+  // Workers process events concurrently but all Cardano submissions
+  // still go through the serial coalescer+queue path (lane safety).
+  let eventWorkerPool: EventWorkerPool | null = null;
+  if (parallelMode) {
+    eventWorkerPool = createEventWorkerPool({
+      workerCount: parallelWorkerCount,
+      queueSize: parallelQueueSize,
+      processingTimeoutMs: parallelTimeoutMs,
+      onEvent: async (event) => {
+        await processOneEvent({
+          event,
+          observedAtMs: Date.now(),
+          scannerType: transport,
+          dedupCache,
+          enricher,
+          routerRegistry,
+          priceCache,
+          latestIntents,
+          coalescerManager,
+          updatePoolManager,
+          fileLogger,
+          db,
+          intentRuntime,
+          network,
+          dryRun,
+          report,
+          metrics,
+        });
+      },
+      onStats: (stats) => {
+        metrics.activeWorkers.set({ pool_type: "event" }, stats.activeWorkers);
+        metrics.workerQueueSize.set({ pool_type: "event" }, stats.queueLength);
+        healthState.workerQueueDepth = stats.queueLength;
+      },
+      log: report,
+    });
+    eventWorkerPool.start();
+    metrics.workerPoolSize.set({ pool_type: "event" }, parallelWorkerCount);
+    report(
+      `daemon: event worker pool started workers=${parallelWorkerCount} queue=${parallelQueueSize} timeoutMs=${parallelTimeoutMs}`,
+    );
+  }
+
   const handleBatch = async (batch: ScannedBatch): Promise<void> => {
     const observedAtMs = Date.now();
     healthState.lastRegistryPollMs = observedAtMs;
@@ -844,32 +1045,48 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       Number(batch.toBlock),
     );
 
-    for (const event of batch.events) {
-      await processOneEvent({
-        event,
-        observedAtMs,
-        scannerType: transport,
-        dedupCache,
-        enricher,
-        routerRegistry,
-        priceCache,
-        latestIntents,
-        coalescerManager,
-        fileLogger,
-        db,
-        intentRuntime,
-        network,
-        dryRun,
-        report,
-        metrics,
-      });
+    if (parallelMode && eventWorkerPool) {
+      // Parallel mode: submit each event to the pool. Dropped events are
+      // explicitly accounted for so the block can still be checkpointed.
+      for (const event of batch.events) {
+        const accepted = eventWorkerPool.submit(event);
+        if (!accepted) {
+          metrics.workerTasksDropped.inc({ pool_type: "event" });
+          report(
+            `[warn] daemon: event worker queue full — dropped intentHash=${event.intentHash} block=${event.blockNumber}`,
+          );
+        }
+      }
+    } else {
+      // Sequential mode (default): process events in order.
+      for (const event of batch.events) {
+        await processOneEvent({
+          event,
+          observedAtMs,
+          scannerType: transport,
+          dedupCache,
+          enricher,
+          routerRegistry,
+          priceCache,
+          latestIntents,
+          coalescerManager,
+          updatePoolManager,
+          fileLogger,
+          db,
+          intentRuntime,
+          network,
+          dryRun,
+          report,
+          metrics,
+        });
+      }
     }
     await db.setLastProcessedBlock(source.chainId, source.registryContractId, batch.toBlock);
     metrics.scannerBlockLag.set({ chain_id: String(source.chainId) }, 0);
   };
 
   report(
-    `daemon: starting scan pipeline transport=${transport} chain_id=${source.chainId} ` +
+    `daemon: starting scan pipeline transport=http+ws chain_id=${source.chainId} ` +
     `registry=${source.registryAddress} dry_run=${dryRun} ` +
     `blockRange=${blockRange} scanIntervalMs=${scanIntervalMs} dedupCapacity=${dedupCapacity} ` +
     `reconnectMs=${reconnectMs} maxReconnects=${maxReconnects}`,
@@ -885,22 +1102,42 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     incRpcError: (labels) => metrics.scannerRpcErrors.inc(labels),
     incBackfillBlocks: (labels, blocks) => metrics.scannerBackfillBlocks.inc(labels, blocks),
     incBackfillChunks: (labels) => metrics.scannerBackfillChunks.inc(labels),
+    // TODO: wire to a Prometheus gauge once the metric is defined
+    setTransportUp: () => {},
   };
 
   try {
-    switch (transport) {
-      case "http":
-        await runHttpTransport({ source, checkpoint, handleBatch, signal, report,
+    // Both HTTP and WS run concurrently — HTTP is the reliable baseline,
+    // WS is the real-time fast path. The dedup cache absorbs events that
+    // arrive on both transports simultaneously.
+    const transportPromises: Promise<void>[] = [
+      runHttpTransport({ source, checkpoint, handleBatch, signal, report,
+        chainId: source.chainId, scannerMetrics,
+        startBlock, blockRange, scanIntervalMs, confirmations,
+        backwardSync, maxBlockGap,
+        getBlockTimestamp: blockTimestampResolver }),
+    ];
+
+    // WS is optional — skip silently when no ws_url is configured.
+    const wsUrl = source.wsUrl ?? config.infrastructure?.source?.ws_url;
+    if (wsUrl) {
+      transportPromises.push(
+        runWsTransport({ source, checkpoint, handleBatch, network, signal, report,
           chainId: source.chainId, scannerMetrics,
-          startBlock, blockRange, scanIntervalMs, confirmations,
-          backwardSync, maxBlockGap });
-        break;
-      case "ws":
-        await runWsTransport({ source, checkpoint, handleBatch, network, signal, report,
-          chainId: source.chainId, scannerMetrics,
-          reconnectIntervalMs: reconnectMs, maxReconnects });
-        break;
+          reconnectIntervalMs: reconnectMs, maxReconnects,
+          getBlockTimestamp: blockTimestampResolver }).catch((err) => {
+          // WS failure logs but does not kill the HTTP baseline.
+          scannerMetrics.setTransportUp({ chain_id: String(source.chainId), transport: "ws" }, 0);
+          report(`daemon: WS transport failed — ${(err as Error).message} — continuing on HTTP`);
+        }),
+      );
+      scannerMetrics.setTransportUp({ chain_id: String(source.chainId), transport: "ws" }, 1);
+    } else {
+      report(`daemon: no ws_url configured — running HTTP transport only`);
     }
+
+    scannerMetrics.setTransportUp({ chain_id: String(source.chainId), transport: "http" }, 1);
+    await Promise.all(transportPromises);
     report("daemon: scan pipeline exited cleanly.");
     return 0;
   } catch (err) {
@@ -915,6 +1152,14 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     report(`daemon: scan pipeline failed — ${(err as Error).message}`);
     return 1;
   } finally {
+    if (queueDepthTimer) {
+      clearInterval(queueDepthTimer);
+      queueDepthTimer = null;
+    }
+    await updatePoolManager.stopAll();
+    if (eventWorkerPool) {
+      await eventWorkerPool.stop();
+    }
     await apiServer.stop();
     await db.close();
   }
@@ -934,6 +1179,7 @@ type ProcessOneEventInputs = {
   priceCache: ReturnType<typeof createPriceCache>;
   latestIntents: LatestIntentCache;
   coalescerManager: CoalescerManager;
+  updatePoolManager: UpdateWorkerPoolManager;
   fileLogger: FileLogger;
   db: Db;
   intentRuntime: Map<string, IntentRuntimeEntry>;
@@ -946,7 +1192,7 @@ type ProcessOneEventInputs = {
 async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
   const {
     event, observedAtMs, scannerType, dedupCache, enricher, routerRegistry,
-    priceCache, latestIntents, coalescerManager, fileLogger, db, intentRuntime, dryRun, report, metrics,
+    priceCache, latestIntents, coalescerManager, updatePoolManager, fileLogger, db, intentRuntime, dryRun, report, metrics,
   } = inputs;
 
   if (!dedupCache.add(event.intentHash)) {
@@ -959,11 +1205,24 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     enriched = await enricher(event);
   } catch (err) {
     metrics.eventsInvalid.inc({ reason: "enrichment" });
-    report(`daemon: enrichment failed for ${event.intentHash}: ${(err as Error).message}`);
+    report(`daemon: enrichment failed for ${sanitizeLogLine(event.intentHash)}: ${sanitizeLogLine((err as Error).message)}`);
     return;
   }
 
   metrics.intentsScanned.inc({ symbol: enriched.fullIntent.symbol, scanner_type: scannerType });
+  // 6-phase latency — phases 1 and 2 require a non-zero blockTimestamp.
+  if (event.blockTimestamp > 0n) {
+    const blockTs = Number(event.blockTimestamp);
+    const intentTs = Number(enriched.fullIntent.timestamp);
+    metrics.intentToRegistrationSeconds.observe(
+      { symbol: enriched.fullIntent.symbol },
+      Math.max(0, blockTs - intentTs),
+    );
+    metrics.registrationToScanSeconds.observe(
+      { symbol: enriched.fullIntent.symbol },
+      Math.max(0, observedAtMs / 1_000 - blockTs),
+    );
+  }
   metrics.scanToProcessingSeconds.observe(
     { symbol: enriched.fullIntent.symbol },
     Math.max(0, Date.now() - observedAtMs) / 1_000,
@@ -1123,16 +1382,12 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
 
     await db.upsertProcessedEvent({
       intentHash: event.intentHash,
-      chainId: Number(enriched.fullIntent.chainId),
-      blockNumber: event.blockNumber,
       txHash: event.txHash,
       logIndex: event.logIndex,
-      symbol: enriched.fullIntent.symbol,
-      price: enriched.fullIntent.price.toString(),
-      timestamp: enriched.fullIntent.timestamp.toString(),
-      signer: enriched.fullIntent.signer,
+      blockNumber: event.blockNumber,
       routerId: dispatch.routerId,
       destinationIndex: dispatch.destinationIndex,
+      status: "processed",
       processedAtMs: Date.now(),
     });
 
@@ -1145,7 +1400,21 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
       symbol: enriched.fullIntent.symbol,
     });
 
-    coalescerManager.accept(req);
+    // Route through the update worker pool (Spectra parity: getOrCreateOraclePool).
+    // The pool's onTask callback calls coalescerManager.accept(). If the queue is
+    // full, the task is dropped and accounted via metrics; the lane remains safe
+    // because only the coalescer+queue touch the Cardano write client.
+    const updatePool = updatePoolManager.getOrCreatePool(dispatch.routerId);
+    const submitted = updatePool.submit({ routerId: dispatch.routerId, requests: [req] });
+    if (!submitted) {
+      metrics.workerTasksDropped.inc({ pool_type: "update" });
+      report(
+        `[warn] daemon: update pool queue full router=${dispatch.routerId} — dropped intentHash=${event.intentHash}`,
+      );
+    } else {
+      // Start the pool lazily on first submission.
+      updatePool.start();
+    }
   }
 }
 
@@ -1169,13 +1438,17 @@ type TransportInputs = {
   blockRange?: bigint;
   scanIntervalMs?: number;
   confirmations?: bigint;
-  /** Spectra-parity gap recovery — see Etapa B.1. */
+  /** When true, enables fast catch-up from last_processed_block using backfill chunks. */
   backwardSync?: boolean;
   /** Block gap threshold above which backfill mode activates. */
   maxBlockGap?: bigint;
   // WS
   reconnectIntervalMs?: number;
   maxReconnects?: number;
+  /** Block-timestamp resolver shared by both transports. Required for the
+   *  intent_to_registration / registration_to_scan latency phases to emit
+   *  non-zero values. */
+  getBlockTimestamp: (blockNumber: bigint) => Promise<bigint>;
 };
 
 async function runHttpTransport(inputs: TransportInputs): Promise<void> {
@@ -1196,6 +1469,7 @@ async function runHttpTransport(inputs: TransportInputs): Promise<void> {
       chainId: inputs.chainId,
       backwardSync: inputs.backwardSync,
       maxBlockGap: inputs.maxBlockGap,
+      getBlockTimestamp: inputs.getBlockTimestamp,
     });
   } finally {
     await client.close();
@@ -1221,6 +1495,7 @@ async function runWsTransport(inputs: TransportInputs & { network: CardanoNetwor
     signal: inputs.signal,
     metrics: inputs.scannerMetrics,
     chainId: inputs.chainId,
+    getBlockTimestamp: inputs.getBlockTimestamp,
   });
 }
 
@@ -1290,14 +1565,14 @@ function resolveDbConfig(network: CardanoNetwork): DbConfig {
 function resolveApiAddr(apiConfig?: InfrastructureConfig["api"]): { host: string; port: number } {
   if (apiConfig?.host || apiConfig?.port) {
     return {
-      host: apiConfig.host?.trim() || "0.0.0.0",
+      host: apiConfig.host?.trim() || "127.0.0.1",
       port: apiConfig.port ?? 8080,
     };
   }
 
   const raw = apiConfig?.listen_addr?.trim() ?? process.env.API_LISTEN_ADDR?.trim() ?? ":8080";
   const colonIdx = raw.lastIndexOf(":");
-  const host = colonIdx > 0 ? raw.slice(0, colonIdx) : "0.0.0.0";
+  const host = colonIdx > 0 ? raw.slice(0, colonIdx) : "127.0.0.1";
   const port = parseInt(raw.slice(colonIdx + 1), 10) || 8080;
   return { host, port };
 }

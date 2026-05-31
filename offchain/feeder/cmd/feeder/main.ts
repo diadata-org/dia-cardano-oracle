@@ -1,14 +1,16 @@
 // DIA Cardano Oracle Feeder — entry point.
 //
-// Daemon shape mirrors
-// `diadata-org/Spectra-interoperability/services/bridge/cmd/bridge/main.go`:
-//
 //   - `--config <dir>` selects the modular config directory.
 //   - `--log-level <debug|info|warn|error>` controls logger verbosity.
 //   - `--validate-only` loads + validates the config and exits.
-//   - `--scan [--transport http|ws] [--dry-run]` runs the source
-//     pipeline (scanner + dedup + enricher) without submitting txs;
-//     used for QA, replays, and early bring-up.
+//   - `--scan` runs the source pipeline (scanner + dedup + enricher) only;
+//     the router, coalescer, and write-client are not started. Useful for
+//     verifying DIA registry connectivity before going live.
+//   - `--dry-run` runs the full pipeline (scanner → router → coalescer →
+//     write-client) with a no-op write-client — no Cardano txs are built or
+//     submitted. Independent of `--scan`: can be used together or alone.
+//   - `--from-block <N>` / `--from-latest` seed the block-scanner checkpoint
+//     before startup. Use after `--clean` to avoid replaying expired intents.
 //   - `init bootstrap` copies config-bootstrap.json from a CLI state dir.
 //   - `init client`    copies a client JSON and generates a router YAML
 //     interactively.

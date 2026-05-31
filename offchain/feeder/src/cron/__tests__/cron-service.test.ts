@@ -227,7 +227,8 @@ describe("runOneTick", () => {
     assert.equal(cronCalls.length, 0);
   });
 
-  it("skips destinations without an extractable single-symbol filter", async () => {
+  it("emits one tick per symbol for multi-symbol in-list routers", async () => {
+    const now = 1_700_000_000_000;
     const router: RouterConfig = {
       id: "router-multi",
       name: "Multi",
@@ -235,7 +236,6 @@ describe("runOneTick", () => {
       enabled: true,
       triggers: {
         events: ["IntentRegistered"],
-        // Multi-symbol "in" filter — cron can't pick one symbol to resubmit.
         conditions: [{ field: "event.symbol", operator: "in", value: ["BTC/USD", "ETH/USD"] }],
       },
       processing: { datasource: "enrichment" } as RouterConfig["processing"],
@@ -244,13 +244,195 @@ describe("runOneTick", () => {
       ],
     };
 
+    const priceCache = createPriceCache({ now: () => now - 60_000 });
+    priceCache.set(
+      { routerId: "router-multi", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, intentHash: "0xold-btc", cardanoTxHash: "tx", updatedAtMs: now - 60_000 },
+    );
+    priceCache.set(
+      { routerId: "router-multi", destinationIndex: 0, symbol: "ETH/USD" },
+      { symbol: "ETH/USD", price: 200n, timestamp: 1n, intentHash: "0xold-eth", cardanoTxHash: "tx", updatedAtMs: now - 60_000 },
+    );
+
+    const latestIntents = createLatestIntentCache({ now: () => now });
+    latestIntents.set(
+      { routerId: "router-multi", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-multi", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew-btc" },
+    );
+    latestIntents.set(
+      { routerId: "router-multi", destinationIndex: 0, symbol: "ETH/USD" },
+      { routerId: "router-multi", destinationIndex: 0, symbol: "ETH/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew-eth" },
+    );
+
     const { options, submits, cronCalls } = makeOptions({
       routers: { "router-multi": router },
+      priceCache,
+      latestIntents,
+      now: () => now,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 2, "one submit per symbol");
+    const intentHashes = submits.map((s) => s.intentHash).sort();
+    assert.deepEqual(intentHashes, ["0xnew-btc", "0xnew-eth"]);
+    assert.equal(cronCalls.filter((c) => c.outcome === "submitted").length, 2);
+  });
+
+  it("emits one tick per symbol for enrichment.fullIntent.Symbol in-list routers", async () => {
+    const now = 1_700_000_000_000;
+    const router: RouterConfig = {
+      id: "router-enriched",
+      name: "Enriched",
+      type: "event",
+      enabled: true,
+      triggers: {
+        events: ["IntentRegistered"],
+        conditions: [
+          { field: "${enrichment.fullIntent.Symbol}", operator: "in", value: ["BTC/USD", "ETH/USD"] },
+        ],
+      },
+      processing: { datasource: "enrichment" } as RouterConfig["processing"],
+      destinations: [
+        { cardano: FAKE_CARDANO, cron: true, time_threshold: "30s" } as unknown as RouterConfig["destinations"][number],
+      ],
+    };
+
+    const priceCache = createPriceCache({ now: () => now - 60_000 });
+    priceCache.set(
+      { routerId: "router-enriched", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, intentHash: "0xold-btc", cardanoTxHash: "tx", updatedAtMs: now - 60_000 },
+    );
+    priceCache.set(
+      { routerId: "router-enriched", destinationIndex: 0, symbol: "ETH/USD" },
+      { symbol: "ETH/USD", price: 200n, timestamp: 1n, intentHash: "0xold-eth", cardanoTxHash: "tx", updatedAtMs: now - 60_000 },
+    );
+
+    const latestIntents = createLatestIntentCache({ now: () => now });
+    latestIntents.set(
+      { routerId: "router-enriched", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-enriched", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew-btc" },
+    );
+    latestIntents.set(
+      { routerId: "router-enriched", destinationIndex: 0, symbol: "ETH/USD" },
+      { routerId: "router-enriched", destinationIndex: 0, symbol: "ETH/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew-eth" },
+    );
+
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-enriched": router },
+      priceCache,
+      latestIntents,
+      now: () => now,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 2, "one submit per symbol from enrichment.fullIntent.Symbol");
+    const symbols = submits.map((s) => s.enriched.fullIntent.symbol).sort();
+    // NOTE: FAKE_ENRICHED has symbol "BTC/USD" but we distinguish by intentHash
+    const intentHashes = submits.map((s) => s.intentHash).sort();
+    assert.deepEqual(intentHashes, ["0xnew-btc", "0xnew-eth"]);
+    assert.equal(cronCalls.filter((c) => c.outcome === "submitted").length, 2);
+    void symbols; // suppress unused-variable lint
+  });
+
+  it("skips routers with no extractable symbol", async () => {
+    const router: RouterConfig = {
+      id: "router-no-symbol",
+      name: "NoSym",
+      type: "event",
+      enabled: true,
+      triggers: {
+        events: ["IntentRegistered"],
+        // No symbol condition at all
+        conditions: [],
+      },
+      processing: { datasource: "enrichment" } as RouterConfig["processing"],
+      destinations: [
+        { cardano: FAKE_CARDANO, cron: true, time_threshold: "30s" } as unknown as RouterConfig["destinations"][number],
+      ],
+    };
+
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-no-symbol": router },
     });
 
     await runOneTick(options);
 
     assert.equal(submits.length, 0);
     assert.equal(cronCalls.length, 0);
+  });
+
+  it("catches and logs submit errors (fire-and-forget)", async () => {
+    const router = makeRouter("BTC/USD", true, "30s");
+    const now = 1_700_000_000_000;
+    const priceCache = createPriceCache({ now: () => now - 60_000 });
+    priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, intentHash: "0xold", cardanoTxHash: "tx", updatedAtMs: now - 60_000 },
+    );
+    const latestIntents = createLatestIntentCache({ now: () => now });
+    latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew" },
+    );
+
+    const logLines: string[] = [];
+    let resolveSubmit!: () => void;
+    const submitPromise = new Promise<void>((resolve) => { resolveSubmit = resolve; });
+
+    const { options } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      now: () => now,
+      log: (line) => logLines.push(line),
+      submit: async (_req) => {
+        await submitPromise;
+        throw new Error("submission-network-error");
+      },
+    });
+
+    // runOneTick completes synchronously (fire-and-forget)
+    await runOneTick(options);
+
+    // Resolve the submit to trigger the rejection handler
+    resolveSubmit();
+    // Wait a microtask tick for the .catch handler to run
+    await new Promise((r) => setTimeout(r, 0));
+
+    const errorLog = logLines.find((l) => l.includes("submit failed"));
+    assert.ok(errorLog, "error should be logged by the catch handler");
+    assert.ok(errorLog!.includes("submission-network-error"), "error message forwarded");
+  });
+
+  it("includes customer label in cron metric when router.customer is set", async () => {
+    const now = 1_700_000_000_000;
+    const router: RouterConfig = {
+      id: "router-a",
+      name: "Router A",
+      type: "event",
+      enabled: true,
+      customer: "acme-corp",
+      triggers: {
+        events: ["IntentRegistered"],
+        conditions: [{ field: "event.symbol", operator: "in", value: ["BTC/USD"] }],
+      },
+      processing: { datasource: "enrichment" } as RouterConfig["processing"],
+      destinations: [
+        { cardano: FAKE_CARDANO, cron: true, time_threshold: "30s" } as unknown as RouterConfig["destinations"][number],
+      ],
+    };
+
+    const { options, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      now: () => now,
+    });
+
+    await runOneTick(options);
+
+    // skipped_uninitialised but the labels should include customer
+    assert.equal(cronCalls.length, 1);
+    assert.equal(cronCalls[0]!.customer, "acme-corp");
   });
 });

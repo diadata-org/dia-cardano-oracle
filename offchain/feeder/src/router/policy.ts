@@ -9,7 +9,7 @@
 //   `time_threshold` / `price_deviation` guards inside
 //   `processIntentEvent`.
 //
-// Semantics (identical to Spectra):
+// Semantics (OR-gate — identical to Spectra):
 //
 //   time_threshold   — suppress the update if the last confirmed
 //                      Cardano tx for this (route, dest, symbol) was
@@ -21,9 +21,16 @@
 //                      price, i.e. skip if
 //                        |new - old| / old * 100  <  deviation%.
 //
-// Both thresholds are AND-gated: the update is suppressed if EITHER
-// threshold blocks it. If neither threshold is configured the update
-// always passes.
+// OR-gate logic (matches Spectra generic_router.go:361-414):
+//   - if neither threshold is configured: always pass
+//   - if only time configured: pass iff timePasses
+//   - if only price configured: pass iff pricePasses
+//   - if both configured: pass iff timePasses OR pricePasses
+//   - if no prior cache entry exists: always pass
+//
+// Timestamp monotonicity:
+//   - newTimestamp < lastTimestamp: warn + suppress (timestamp_regression)
+//   - newTimestamp === lastTimestamp: suppress (timestamp_duplicate)
 //
 // String parsing:
 //   time_threshold   accepts "1m", "30s", "2h", "1h30m", etc.
@@ -48,8 +55,10 @@ export type PolicyGateOptions = {
 
 export type PolicyVerdict =
   | { allowed: true }
-  | { allowed: false; reason: "time_threshold"; lastUpdatedAtMs: number; thresholdMs: number }
-  | { allowed: false; reason: "price_deviation"; oldPrice: bigint; newPrice: bigint; deviationPct: number; thresholdPct: number };
+  | { allowed: false; reason: "time_threshold"; lastUpdatedAtMs: number; thresholdMs: number; filterReason: string }
+  | { allowed: false; reason: "price_deviation"; oldPrice: bigint; newPrice: bigint; deviationPct: number; thresholdPct: number; filterReason: string }
+  | { allowed: false; reason: "timestamp_regression"; lastTimestamp: bigint; newTimestamp: bigint; filterReason: string }
+  | { allowed: false; reason: "timestamp_duplicate"; timestamp: bigint; filterReason: string };
 
 // ---------------------------------------------------------------------------
 // String parsers — Spectra YAML format.
@@ -118,48 +127,113 @@ export function parseDeviationPct(raw: string | undefined): number | undefined {
  * Build a reusable policy gate for one destination within one router.
  * The gate consults the price cache to retrieve the last state and
  * returns a typed verdict so the caller can log what happened.
+ *
+ * The returned function accepts `(key, newPrice, newTimestamp)`.
+ * Timestamp monotonicity is checked before the OR-gate thresholds.
  */
 export function createPolicyGate(
   priceCache: PriceCache,
   options: PolicyGateOptions,
-): (key: PriceCacheKey, newPrice: bigint) => PolicyVerdict {
+): (key: PriceCacheKey, newPrice: bigint, newTimestamp?: bigint) => PolicyVerdict {
   const { timeThresholdMs, priceDeviationPct } = options;
   const clock = options.now ?? Date.now;
 
-  return (key, newPrice) => {
+  return (key, newPrice, newTimestamp) => {
     const last = priceCache.get(key);
 
-    // --- time_threshold ---
-    if (timeThresholdMs !== undefined && last !== undefined) {
-      const elapsedMs = clock() - last.updatedAtMs;
-      if (elapsedMs < timeThresholdMs) {
+    // --- Timestamp monotonicity (checked before OR-gate) ---
+    if (newTimestamp !== undefined && last !== undefined) {
+      if (newTimestamp < last.timestamp) {
         return {
           allowed: false,
-          reason: "time_threshold",
-          lastUpdatedAtMs: last.updatedAtMs,
-          thresholdMs: timeThresholdMs,
+          reason: "timestamp_regression",
+          lastTimestamp: last.timestamp,
+          newTimestamp,
+          filterReason: `timestamp_regression: new=${newTimestamp} < last=${last.timestamp}`,
+        };
+      }
+      if (newTimestamp === last.timestamp) {
+        return {
+          allowed: false,
+          reason: "timestamp_duplicate",
+          timestamp: newTimestamp,
+          filterReason: `timestamp_duplicate: timestamp=${newTimestamp} already recorded`,
         };
       }
     }
 
-    // --- price_deviation ---
-    if (priceDeviationPct !== undefined && last !== undefined && last.price !== 0n) {
+    // If no prior entry, always pass.
+    if (last === undefined) {
+      return { allowed: true };
+    }
+
+    // If no thresholds configured, always pass.
+    if (timeThresholdMs === undefined && priceDeviationPct === undefined) {
+      return { allowed: true };
+    }
+
+    // --- OR-gate: evaluate each configured threshold ---
+    let timePasses: boolean | undefined;
+    let timeVerdictOnFail: Extract<PolicyVerdict, { reason: "time_threshold" }> | undefined;
+
+    if (timeThresholdMs !== undefined) {
+      const elapsedMs = clock() - last.updatedAtMs;
+      timePasses = elapsedMs >= timeThresholdMs;
+      if (!timePasses) {
+        timeVerdictOnFail = {
+          allowed: false,
+          reason: "time_threshold",
+          lastUpdatedAtMs: last.updatedAtMs,
+          thresholdMs: timeThresholdMs,
+          filterReason: `time_threshold: ${Math.round(elapsedMs / 1000)}s elapsed < ${Math.round(timeThresholdMs / 1000)}s`,
+        };
+      }
+    }
+
+    let pricePasses: boolean | undefined;
+    let priceVerdictOnFail: Extract<PolicyVerdict, { reason: "price_deviation" }> | undefined;
+
+    if (priceDeviationPct !== undefined && last.price !== 0n) {
       const diff = newPrice > last.price ? newPrice - last.price : last.price - newPrice;
       // deviation% = diff / old * 100.  All bigint arithmetic; multiply by
       // 10^6 before dividing to keep fractional precision.
       const deviationMilliPct = Number((diff * 100_000_000n) / last.price) / 1_000_000;
-      if (deviationMilliPct < priceDeviationPct) {
-        return {
+      pricePasses = deviationMilliPct >= priceDeviationPct;
+      if (!pricePasses) {
+        priceVerdictOnFail = {
           allowed: false,
           reason: "price_deviation",
           oldPrice: last.price,
           newPrice,
           deviationPct: deviationMilliPct,
           thresholdPct: priceDeviationPct,
+          filterReason: `price_deviation: ${deviationMilliPct.toFixed(4)}% < ${priceDeviationPct}%`,
         };
       }
+    } else if (priceDeviationPct !== undefined && last.price === 0n) {
+      // Division-by-zero guard: old price is zero, treat as passing.
+      pricePasses = true;
     }
 
-    return { allowed: true };
+    // Apply OR-gate logic.
+    if (timeThresholdMs !== undefined && priceDeviationPct !== undefined) {
+      // Both configured: pass if either passes.
+      if (timePasses || pricePasses) {
+        return { allowed: true };
+      }
+      // Both fail: return time_threshold verdict (higher operator visibility).
+      return timeVerdictOnFail!;
+    }
+
+    if (timeThresholdMs !== undefined) {
+      // Only time configured.
+      if (timePasses) return { allowed: true };
+      return timeVerdictOnFail!;
+    }
+
+    // Only price configured.
+    if (pricePasses) return { allowed: true };
+    // priceVerdictOnFail may be undefined when last.price === 0n (treated as pass above).
+    return priceVerdictOnFail ?? { allowed: true };
   };
 }

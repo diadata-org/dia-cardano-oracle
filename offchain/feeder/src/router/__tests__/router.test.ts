@@ -25,6 +25,7 @@ function makeEnriched(symbol: string, price = 100_000n): EnrichedIntent {
       blockNumber: 1n,
       txHash: `0x${"dd".repeat(32)}` as `0x${string}`,
       logIndex: 0,
+      blockTimestamp: 0n,
     },
     fullIntent: {
       intentType: "OracleUpdate",

@@ -88,10 +88,6 @@ describe("cleanFeederState", () => {
     assert.equal(await exists(join(tmpDir, "preview", "logs")), false);
   });
 
-  it("removes feeder-checkpoint.json", async () => {
-    assert.equal(await exists(join(tmpDir, "preview", "feeder-checkpoint.json")), false);
-  });
-
   it("removes feeder.sqlite and WAL files", async () => {
     assert.equal(await exists(join(tmpDir, "preview", "feeder.sqlite")), false);
     assert.equal(await exists(join(tmpDir, "preview", "feeder.sqlite-shm")), false);

@@ -7,10 +7,16 @@
 //   --config <dir>       (default: ./config)
 //   --log-level <level>  (default: info)
 //   --validate-only      mutually exclusive with --scan
-//   --scan               mutually exclusive with --validate-only
-//   --transport <kind>   one of: http | ws (default: http, applies to --scan)
-//   --dry-run            also reachable via DRY_RUN=true (see .env.example)
+//   --scan               run scanner + enricher only; no router/write-client
+//   --transport <kind>   one of: http | ws (default: http)
+//   --dry-run            full pipeline with no-op write-client; also DRY_RUN=true
 //   --clean              delete feeder-generated state before starting
+//   --from-block <N>     seed the block-scanner checkpoint to block N before
+//                        starting; scanner processes from block N onwards.
+//                        Mutually exclusive with --from-latest.
+//   --from-latest        query the current chain tip and seed the checkpoint
+//                        to that block; only intents arriving after startup
+//                        are processed. Mutually exclusive with --from-block.
 //   --force              skip overwrite confirmation prompts (init only)
 //   --from <path>        source path for init sub-commands
 //   --help, -h

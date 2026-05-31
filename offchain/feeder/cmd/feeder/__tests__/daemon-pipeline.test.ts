@@ -15,7 +15,7 @@ import { createRouterRegistry, routeIntent } from "../../../src/router/index.js"
 import { createQueueManager } from "../../../src/submitter/index.js";
 import type { SubmitRequest, SubmitResult } from "../../../src/submitter/types.js";
 import type { CardanoWriteClient } from "../../../src/submitter/types.js";
-import type { Db, TransactionLogRow } from "../../../src/persistence/index.js";
+import type { Db, TransactionLogInsert, TransactionLogRow } from "../../../src/persistence/index.js";
 import type { EnrichedIntent, ExtractedEvent } from "../../../src/source/types.js";
 import type { RouterConfig } from "../../../src/config/types.js";
 
@@ -33,6 +33,7 @@ function makeEvent(overrides: Partial<ExtractedEvent> = {}): ExtractedEvent {
     blockNumber: 1n,
     txHash: "0xtx1",
     logIndex: 0,
+    blockTimestamp: 1_700_000_000n,
     ...overrides,
   };
 }
@@ -80,30 +81,101 @@ function makeRouter(overrides: Partial<RouterConfig> = {}): RouterConfig {
   };
 }
 
-function makeInMemoryDb(): Db & { logs: TransactionLogRow[] } {
-  const logs: TransactionLogRow[] = [];
+function makeInMemoryDb(): Db & { logs: TransactionLogInsert[] } {
+  const logs: TransactionLogInsert[] = [];
   return {
     logs,
     async migrate() {},
     async upsertProcessedEvent() {},
     async hasProcessedEvent() { return false; },
+    async getProcessedEvent() { return null; },
+    async listProcessedEvents() { return []; },
     async getLastProcessedBlock() { return null; },
+    async initialiseChainState() {},
     async setLastProcessedBlock() {},
+    async setLastScanBlock() {},
+    async setChainHealth() {},
+    async getChainState() { return null; },
     async insertTransactionLog(row) { logs.push({ ...row }); },
-    async updateTransactionLog(intentHash, cardanoTxHash, update) {
+    async updateTransactionLog(intentHash, patch) {
       const row = logs.find((r) => r.intentHash === intentHash);
       if (row) {
-        row.cardanoTxHash = cardanoTxHash;
-        row.status = update.status ?? row.status;
-        if (update.confirmedAtMs !== undefined) row.confirmedAtMs = update.confirmedAtMs;
+        if (patch.status !== undefined) row.status = patch.status;
+        if (patch.cardanoTxHash !== undefined) row.cardanoTxHash = patch.cardanoTxHash;
+        if (patch.confirmedAtMs !== undefined) row.confirmedAtMs = patch.confirmedAtMs;
+        if ((patch as Record<string, unknown>).errorCode !== undefined) (row as Record<string, unknown>).errorCode = (patch as Record<string, unknown>).errorCode;
+        if ((patch as Record<string, unknown>).errorMessage !== undefined) (row as Record<string, unknown>).errorMessage = (patch as Record<string, unknown>).errorMessage;
+        if ((patch as Record<string, unknown>).failedAtMs !== undefined) (row as Record<string, unknown>).failedAtMs = (patch as Record<string, unknown>).failedAtMs;
       }
     },
     async getTransactionLog(intentHash) {
-      return logs.filter((r) => r.intentHash === intentHash);
+      return logs
+        .filter((r) => r.intentHash === intentHash)
+        .map((r, i): TransactionLogRow => ({
+          id: i + 1,
+          intentHash: r.intentHash,
+          cardanoTxHash: r.cardanoTxHash ?? "",
+          routerId: r.routerId,
+          destinationIndex: r.destinationIndex,
+          destinationChainName: r.destinationChainName,
+          destinationContractAddress: r.destinationContractAddress,
+          symbol: r.symbol,
+          price: r.price,
+          timestamp: r.timestamp,
+          status: r.status,
+          errorCode: r.errorCode,
+          errorMessage: r.errorMessage,
+          retryCount: r.retryCount ?? 0,
+          maxRetries: r.maxRetries ?? 0,
+          feePaidLovelace: r.feePaidLovelace,
+          confirmedAtDepth: r.confirmedAtDepth,
+          submittedAtMs: r.submittedAtMs,
+          confirmedAtMs: r.confirmedAtMs,
+          failedAtMs: r.failedAtMs,
+          createdAtMs: r.createdAtMs,
+        }));
+    },
+    async listTransactions(query?: { status?: string }) {
+      const filtered = query?.status
+        ? logs.filter((r) => r.status === query.status)
+        : logs;
+      return filtered.map((r, i): TransactionLogRow => ({
+        id: i + 1,
+        intentHash: r.intentHash,
+        cardanoTxHash: r.cardanoTxHash ?? "",
+        routerId: r.routerId,
+        destinationIndex: r.destinationIndex,
+        destinationChainName: r.destinationChainName,
+        destinationContractAddress: r.destinationContractAddress,
+        symbol: r.symbol,
+        price: r.price,
+        timestamp: r.timestamp,
+        status: r.status,
+        errorCode: r.errorCode,
+        errorMessage: r.errorMessage,
+        retryCount: r.retryCount ?? 0,
+        maxRetries: r.maxRetries ?? 0,
+        feePaidLovelace: r.feePaidLovelace,
+        confirmedAtDepth: r.confirmedAtDepth,
+        submittedAtMs: r.submittedAtMs,
+        confirmedAtMs: r.confirmedAtMs,
+        failedAtMs: r.failedAtMs,
+        createdAtMs: r.createdAtMs,
+      }));
     },
     async listSymbolUpdates() { return []; },
     async getTransactionsByHash() { return []; },
     async listChainStates() { return []; },
+    async upsertContractSymbolUpdate() {},
+    async getContractSymbolUpdate() { return null; },
+    async listContractSymbolUpdates() { return []; },
+    async recordPerformanceMetric() {},
+    async queryPerformanceMetrics() { return []; },
+    async recordAlert() { return 0; },
+    async resolveAlert() {},
+    async acknowledgeAlert() {},
+    async listAlerts() { return []; },
+    async pruneOldRows() { return { processedEvents: 0, transactionLog: 0, alertLog: 0, performanceMetrics: 0 }; },
     async close() {},
   };
 }
@@ -170,9 +242,14 @@ async function processOneEvent(inputs: ProcessInputs): Promise<void> {
       cardanoTxHash: "",
       routerId: dispatch.routerId,
       destinationIndex: dispatch.destinationIndex,
-      clientStatePath: cardano.client_state_path,
+      destinationChainName: "",
+      destinationContractAddress: "",
+      symbol: enriched.fullIntent.symbol,
+      price: enriched.fullIntent.price.toString(),
+      timestamp: Number(enriched.fullIntent.timestamp),
       status: "submitted",
       submittedAtMs: Date.now(),
+      createdAtMs: Date.now(),
     });
 
     void queueManager.submit(req);
@@ -182,6 +259,122 @@ async function processOneEvent(inputs: ProcessInputs): Promise<void> {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Crash recovery helper — mirrors the logic in daemon-cmd.ts runDaemon().
+// ---------------------------------------------------------------------------
+
+async function runCrashRecovery(db: Db): Promise<{ pending: number; submitted: number }> {
+  const [crashPending, crashSubmitted] = await Promise.all([
+    db.listTransactions({ status: "pending" }),
+    db.listTransactions({ status: "submitted" }),
+  ]);
+  for (const row of crashPending) {
+    await db.updateTransactionLog(row.intentHash, {
+      status: "failed",
+      errorCode: "CrashRecovery",
+      errorMessage: "daemon restarted with pending transaction",
+      failedAtMs: Date.now(),
+    });
+  }
+  for (const row of crashSubmitted) {
+    await db.updateTransactionLog(row.intentHash, {
+      status: "failed",
+      errorCode: "CrashRecovery",
+      errorMessage: "daemon restarted with submitted transaction awaiting confirmation",
+      failedAtMs: Date.now(),
+    });
+  }
+  return { pending: crashPending.length, submitted: crashSubmitted.length };
+}
+
+describe("daemon pipeline — crash recovery", () => {
+  it("marks pending rows as failed on startup", async () => {
+    const db = makeInMemoryDb();
+
+    // Pre-populate a pending row (simulates a row left by a previous crash).
+    await db.insertTransactionLog({
+      intentHash: "0xpending001",
+      cardanoTxHash: "",
+      routerId: "router-btc",
+      destinationIndex: 0,
+      destinationChainName: "",
+      destinationContractAddress: "",
+      symbol: "BTC/USD",
+      price: "100000",
+      timestamp: 1_700_000_000,
+      status: "pending",
+      createdAtMs: Date.now(),
+    });
+
+    const counts = await runCrashRecovery(db);
+
+    assert.equal(counts.pending, 1);
+    assert.equal(counts.submitted, 0);
+
+    const rows = await db.getTransactionLog("0xpending001");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.status, "failed");
+    assert.equal(rows[0]!.errorCode, "CrashRecovery");
+  });
+
+  it("marks submitted rows as failed on startup", async () => {
+    const db = makeInMemoryDb();
+
+    await db.insertTransactionLog({
+      intentHash: "0xsubmitted001",
+      cardanoTxHash: "cardano-tx-abc",
+      routerId: "router-btc",
+      destinationIndex: 0,
+      destinationChainName: "",
+      destinationContractAddress: "",
+      symbol: "ETH/USD",
+      price: "200000",
+      timestamp: 1_700_000_001,
+      status: "submitted",
+      submittedAtMs: Date.now(),
+      createdAtMs: Date.now(),
+    });
+
+    const counts = await runCrashRecovery(db);
+
+    assert.equal(counts.pending, 0);
+    assert.equal(counts.submitted, 1);
+
+    const rows = await db.getTransactionLog("0xsubmitted001");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.status, "failed");
+    assert.equal(rows[0]!.errorCode, "CrashRecovery");
+  });
+
+  it("leaves confirmed rows untouched during crash recovery", async () => {
+    const db = makeInMemoryDb();
+
+    await db.insertTransactionLog({
+      intentHash: "0xconfirmed001",
+      cardanoTxHash: "cardano-tx-confirmed",
+      routerId: "router-btc",
+      destinationIndex: 0,
+      destinationChainName: "",
+      destinationContractAddress: "",
+      symbol: "BTC/USD",
+      price: "100000",
+      timestamp: 1_700_000_000,
+      status: "confirmed",
+      confirmedAtMs: Date.now(),
+      createdAtMs: Date.now(),
+    });
+
+    const counts = await runCrashRecovery(db);
+
+    assert.equal(counts.pending, 0);
+    assert.equal(counts.submitted, 0);
+
+    const rows = await db.getTransactionLog("0xconfirmed001");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.status, "confirmed");
+  });
+});
 
 describe("daemon pipeline — dedup", () => {
   it("processes the first event and skips the duplicate", async () => {
@@ -352,7 +545,7 @@ describe("daemon pipeline — DB and onResult wiring", () => {
     const rows = await db.getTransactionLog(event.intentHash);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].routerId, "router-btc");
-    assert.equal(rows[0].clientStatePath, "/state/client-state.json");
+    assert.equal(rows[0].symbol, "BTC/USD");
     assert.equal(rows[0].status, "submitted");
   });
 

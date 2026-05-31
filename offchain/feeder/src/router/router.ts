@@ -1,8 +1,5 @@
 // Router — evaluate trigger conditions and dispatch matched intents.
 //
-// Spectra equivalent:
-//   `pkg/router/generic_router.go` (`GenericRouter.processIntentEvent`).
-//
 // Flow:
 //   1. Look up enabled routers that subscribe to the event name.
 //   2. For each router evaluate ALL trigger conditions (AND logic).
@@ -15,10 +12,10 @@
 // The router does NOT submit anything. It only decides what to submit.
 // The caller is responsible for submitting the dispatched intents.
 //
-// Condition operators match Spectra's Go implementation:
+// Condition operators supported:
 //   in, not_in, eq, neq, gt, lt, gte, lte, contains.
 //
-// The `field` string follows DIA/Spectra template syntax:
+// The `field` string follows DIA template syntax:
 //   "${enrichment.fullIntent.Symbol}" -> enriched.fullIntent.symbol
 //   "${enrichment.fullIntent.Price}"  -> enriched.fullIntent.price
 //   "${event.signer}"                 -> enriched.event.signer
@@ -35,6 +32,8 @@ import type { RouterRegistry } from "./registry.js";
 
 export type DispatchResult = {
   routerId: string;
+  /** Customer label from `router.customer`. Undefined when not set in YAML. */
+  customer?: string;
   destinationIndex: number;
   destination: RouterDestination;
   verdict: PolicyVerdict;
@@ -91,10 +90,10 @@ export function routeIntent(
         priceDeviationPct: parseDeviationPct(destination.price_deviation),
         now: clockNow,
       });
-      const verdict = gate(cacheKey, enriched.fullIntent.price);
+      const verdict = gate(cacheKey, enriched.fullIntent.price, enriched.fullIntent.timestamp);
 
       if (verdict.allowed) {
-        dispatched.push({ routerId: router.id, destinationIndex: i, destination, verdict });
+        dispatched.push({ routerId: router.id, customer: router.customer, destinationIndex: i, destination, verdict });
       } else {
         policyFiltered.push({ routerId: router.id, destinationIndex: i, verdict });
       }

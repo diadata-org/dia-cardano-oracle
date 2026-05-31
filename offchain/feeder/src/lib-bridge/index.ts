@@ -83,6 +83,9 @@ export type OracleUpdateResult = {
   pairUnit: string;
   /** True if this tx minted the pair NFT (first update for this symbol). */
   isCreate: boolean;
+  /** Tx fee paid from the signer wallet, as a lovelace string.
+   *  Absent when the fee could not be extracted from the tx body. */
+  feePaidLovelace?: string;
   /** On-chain balance snapshot for the four operational wallets. See
    *  `PostConfirmChainState` for the per-field semantics. */
   postState?: PostConfirmChainState;
@@ -504,6 +507,24 @@ export function createRealOracleIntentBridge(
 
       // Hash is deterministic from the tx body — available before signing.
       const txHash = txSignBuilder.toHash();
+
+      // Extract the tx fee from the built transaction body. Lucid Evolution
+      // exposes this via txSignBuilder.toTransaction().body().fee().
+      // Wrapped in a try/catch: a future Lucid API change must not break
+      // the happy path.
+      // TODO: validate the exact accessor path against the installed
+      //       @lucid-evolution/lucid version once the production image is built.
+      let feePaidLovelace: string | undefined;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fee = (txSignBuilder as any).toTransaction?.().body?.().fee?.();
+        if (fee !== undefined && fee !== null) {
+          feePaidLovelace = BigInt(fee).toString();
+        }
+      } catch {
+        // Fee extraction is best-effort; leave undefined if the accessor is unavailable.
+      }
+
       onStep?.("signing", { txHash });
       const signedTx = await txSignBuilder.sign.withWallet().complete();
       onStep?.("submitting", { txHash });
@@ -608,6 +629,7 @@ export function createRealOracleIntentBridge(
         receiverUnit: state.receiver.receiverUnit as string,
         pairUnit,
         isCreate,
+        feePaidLovelace,
         postState,
       };
     },
