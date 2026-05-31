@@ -113,39 +113,33 @@ make cli CMD="pair:dedup --symbol BTC/USD"
 docker compose -f feeder/docker-compose.yml --project-directory feeder --profile cli run --rm --entrypoint sh cli -c "ls -R /app/state"
 ```
 
-### One-shot full bootstrap
+### Operator setup sequence
+
+Run once for a fresh deployment (all commands from `offchain/`):
 
 ```sh
-cd offchain
-make build
-
-# Create wallet, initialise protocol, publish reference scripts,
-# bootstrap the protocol on-chain, then register one client.
-make bootstrap
-```
-
-`make bootstrap` expands to the canonical sequence:
-
-```sh
-make cli CMD="wallet:create"
-make cli CMD="protocol:init"
-make cli CMD="config:parameterize"
-make cli CMD="config:reference-scripts"
-make cli CMD="config:bootstrap"
-make cli CMD="client:init"
-make cli CMD="receiver:bootstrap"
-make cli CMD="receiver:parameterize"
-make cli CMD="reference-scripts:publish-client"
+make build          # Step 0 — build the unified image (once per code change)
+make wallet         # Step 1 — create the operator wallet (wallet:create)
+make protocol-init  # Step 2 — on-chain protocol setup:
+                    #   protocol:init → config:parameterize →
+                    #   config:reference-scripts → config:bootstrap
+make client-init    # Step 3 — register one client:
+                    #   client:init → receiver:bootstrap →
+                    #   receiver:parameterize → reference-scripts:publish-client
+make router-init    # Step 4 — generate router YAML interactively (feeder init client)
+make up             # Step 5 — start the feeder daemon
 ```
 
 ### Volume layout
 
 | Host / named volume | Container path | Used by | Contents |
 | --- | --- | --- | --- |
-| `./config/` | `/config` (ro) | feeder, cli | Modular YAML config |
+| `./config/` | `/config` (ro) | feeder | Modular YAML config (read-only) |
+| `./config/` | `/app/config` (rw) | cli | Modular YAML config (writable — CLI writes router YAML during `router-init`) |
 | `.env` | env_file | feeder, cli | Secrets + selectors |
-| `./state/` | `/app/state` | feeder, cli | Bootstrap JSON, pair state, logs, checkpoint, SQLite DB |
+| `./state/` | `/app/state` | feeder, cli | Bootstrap JSON, pair state, logs, SQLite DB |
 | `postgres-data` | (postgres svc) | postgres | Postgres data dir |
+| `prometheus-data` | `/prometheus` | prometheus | Prometheus TSDB (metric retention) |
 | `grafana-data` | `/var/lib/grafana` | grafana | Dashboard and alert state |
 
 ## Prerequisites — one-time setup
@@ -276,14 +270,18 @@ are never touched.
 | Deleted | Reason |
 |---|---|
 | `state/<network>/logs/` | All log streams (feeder.log, transactions.jsonl, lane.jsonl, intents/) |
-| `state/<network>/feeder-checkpoint.json` | Block scanner position — resumes from block 0 |
-| `state/<network>/feeder.sqlite*` | Full DB reset (processed_events, chain_state, transaction_log) |
+| `state/<network>/feeder-checkpoint.json` | Stale file from an older run — deleted if present; scanner position is now stored in the DB (`chain_state` table) |
+| `state/<network>/feeder.sqlite*` | Full DB reset — clears processed_events, chain_state (scanner position), transaction_log |
 | `state/<network>/clients/*/pairs/*.json` | Feeder-written pair state — reconstructed from chain on next update |
 
 | Never deleted | Why |
 |---|---|
 | `state/<network>/config-bootstrap.json` | CLI state file (`config:bootstrap`) |
 | `state/<network>/clients/*.json` | CLI state file (`receiver:bootstrap`) |
+
+The block-scanner position is stored in `chain_state.last_scan_block` in the SQLite/Postgres DB.
+`--clean` resets it by removing the DB entirely. `feeder cleanup --max-age` prunes old rows from
+`processed_events` and `transaction_log` but never removes the DB file itself.
 
 ## Log streams
 
@@ -325,8 +323,33 @@ Variables that live in YAML (not in `.env`):
 The scanner's starting block is controlled by three mechanisms, in priority order:
 
 1. **`--from-latest` / `--from-block N`** — seed the checkpoint at startup. Use these after `--clean` to avoid replaying weeks of already-expired intents.
-2. **Persisted checkpoint** — `state/<network>/feeder-checkpoint.json` stores `last_processed_block`; the scanner resumes from checkpoint+1 on restart.
-3. **YAML `source.start_block`** — the fallback when no checkpoint exists (e.g. first run after `--clean` without `--from-*`).
+2. **Persisted checkpoint** — `chain_state.last_scan_block` in the DB stores the last processed block; the scanner resumes from that block+1 on restart.
+3. **YAML `source.start_block`** — the fallback when no DB row exists yet (e.g. first run after `--clean` without `--from-*`).
+
+## Database
+
+The feeder uses SQLite (default) or Postgres as its single source of truth for
+all persistent state. Every table survives restarts; in-memory caches are
+seeded from the DB on startup.
+
+The DB path is set by `database.path` in `infrastructure.<network>.yaml` or
+overridden by the `DATABASE_PATH_<NETWORK>` env var. For Postgres set
+`database.driver: postgres` and supply `DATABASE_DSN_<NETWORK>`.
+
+### Schema — 6 tables
+
+| Table | Purpose |
+|---|---|
+| `processed_events` | Dedup and pipeline audit for source-chain events. Prevents reprocessing the same `intentHash` after a reconnect or restart. |
+| `chain_state` | Scanner position (`last_scan_block`) and health flags. Replaces the old `feeder-checkpoint.json` file. Updated after every confirmed scan range. |
+| `transaction_log` | Full pending → submitted → confirmed → failed lifecycle for every Cardano tx, including `txHash`, error codes, and latency breakdowns. |
+| `contract_symbol_updates` | Last confirmed price per `(routerId, destinationIndex, symbol)`. Seeded into the in-memory `priceCache` at boot so the cron service and router policy gate work correctly after a restart. |
+| `performance_metrics` | Persistent counters (event totals, confirmed tx counts, latencies) that survive restarts. Used by the evidence-pack scripts to produce aggregate statistics. |
+| `alert_log` | Alert firing history written by the in-process alert evaluator (`src/alerting/evaluator.ts`). Includes `acknowledged` and `resolved` state. Queryable via `GET /api/v1/alerts`. |
+
+`feeder cleanup --max-age <duration>` prunes old rows from `processed_events`
+and `transaction_log` (keeps recent rows). It never deletes the DB file or
+removes `chain_state` / `contract_symbol_updates` rows.
 
 ## Config layout
 
@@ -365,6 +388,39 @@ The lane coalescer reads these keys from `infrastructure.<network>.yaml::event_p
 | `max_intent_age` | Drop buffered intents older than this when the lane flushes |
 | `max_batch_size` | Hard cap on symbols included in one Cardano batch update tx |
 | `size_fallback_enabled` | When `true`, split an oversized batch into smaller retries automatically |
+| `enable_parallel_mode` | (reserved) Enable parallel enrichment pipeline — not yet active |
+
+### `block_scanner` knobs
+
+| Key | Meaning |
+|---|---|
+| `scan_interval` | Idle wait between polling ticks when caught up to HEAD |
+| `block_range` | Max blocks per `eth_getLogs` request (default 500) |
+| `confirmations` | Source blocks kept behind the tip before a range is treated as final |
+| `max_block_gap` | Block distance that triggers backward-sync mode |
+| `backward_sync` | When `true`, switch to 5000-block chunks and skip `scan_interval` until caught up |
+
+### `worker_pool` knobs
+
+| Key | Meaning |
+|---|---|
+| `retry_delay` | Wait between consecutive submission retries |
+| `max_retries` | Give up after this many consecutive failures for one intent |
+| `inflight_timeout_ms` | Max ms a submitted tx holds the lane lock before it is considered stuck |
+
+### `cron_service` knobs
+
+| Key | Meaning |
+|---|---|
+| `enabled` | Master switch for the periodic resubmission loop |
+| `tick_interval` | How often the cron service inspects every cron-enabled destination |
+
+### `api` knobs
+
+| Key | Meaning |
+|---|---|
+| `enable_cors` | Set `true` only when the API is consumed directly from a browser |
+| `debug_enabled` | Expose extra diagnostic endpoints (not for production) |
 
 ## HTTP API
 
@@ -383,6 +439,7 @@ The daemon exposes a lightweight HTTP API (default `0.0.0.0:8080`):
 | `GET /api/v1/transactions/:txHash` | Enriched view of one Cardano tx and its member intents |
 | `GET /api/v1/chains` | Source-chain status from YAML + runtime state |
 | `GET /api/v1/chains/:id/status` | One chain status entry |
+| `GET /api/v1/alerts` | Active and recent alerts from the `alert_log` DB table |
 
 ### What "confirmed" means
 
@@ -431,6 +488,28 @@ chain after a rollback."
 
 ## Thresholds and alerts
 
+### Built-in alert evaluator
+
+The feeder runs an in-process alert evaluator loop (`src/alerting/evaluator.ts`)
+that writes firing and resolved events to the `alert_log` DB table. Alerts are
+readable at `GET /api/v1/alerts`.
+
+Current rules:
+
+| Rule | Fires when | Config key |
+|---|---|---|
+| `OraclePairStale` | A price-cache entry has not been refreshed within `pairStalenessThresholdMs` | `alerting.oracle_pair_stale_seconds` |
+| `PriceDeviationHigh` | p95 of observed price deviation exceeds the threshold | `alerting.price_deviation_high_percent` |
+| `ScannerLag` | The scanner has not processed a new block within the lag window | `alerting.max_processing_lag` |
+| `WorkerQueueSaturated` | The submission queue depth exceeds the saturation threshold | (evaluator internal) |
+| `TransactionFailureRateHigh` | The ratio of failed to total submissions exceeds the threshold | (evaluator internal) |
+
+The evaluator runs on the same `evaluationIntervalMs` cadence as `cron_service.tick_interval`
+(default 30 s). Prometheus alert rules in `monitoring/alerts.yml` cover additional
+conditions that are threshold-evaluated externally via `PromQL`.
+
+### Prometheus alert thresholds
+
 Operational thresholds live in two places with explicit responsibilities:
 
 - `infrastructure.<network>.yaml::alerting.<key>` — **canonical source**.
@@ -476,6 +555,70 @@ chain state right after `tx_confirmed` so the gauges reflect actual UTxO
 contents. A transient provider failure leaves an individual gauge
 unchanged (no misleading 0).
 
+## Architecture
+
+```text
+DIA Lasernet (EVM)
+       │
+       ▼
+  Block scanner / WS monitor
+  (HTTP polling or WebSocket)
+       │ raw eth_getLogs / subscription events
+       ▼
+  Event extractor + dedup cache
+  (processed_events DB table — prevents replay)
+       │ unique IntentRegistered events
+       ▼
+  Enricher (getIntent RPC → fullIntent)
+       │ EnrichedIntent
+       ▼
+  Router (trigger conditions → policy gate)
+  (time_threshold OR price_deviation — OR-gate)
+       │ dispatched (routerId, destIndex) pairs
+       ▼
+  Lane coalescer (per-client buffer)
+  (contract_symbol_updates DB — last confirmed price)
+       │ flush batch
+       ▼
+  Queue manager (one serial lane per receiver UTxO)
+  ├─ Lane A: client-a (serial, EUTxO-safe)
+  └─ Lane B: client-b (serial, independent of A)
+       │
+       ▼
+  Cardano write client (lib-bridge)
+  (load state → build tx → sign → submit → await confirm)
+       │ OracleUpdateResult (txHash, postState)
+       ▼
+  Result handler
+  ├─ DB: transaction_log (confirmed / failed row)
+  ├─ DB: contract_symbol_updates (new confirmed price)
+  ├─ priceCache (hot-path in-memory update)
+  └─ Prometheus gauges (wallets, latency, errors)
+
+Side loops (independent goroutines):
+  Cron service ─── ticks every tick_interval
+                   re-submits stale cron-enabled pairs
+                   via the same queue manager
+  Alert evaluator ─ evaluates OraclePairStale rule (etc.)
+                    writes alert_log table
+                    queryable at GET /api/v1/alerts
+  HTTP API server ─ /health, /metrics, /api/v1/*
+```
+
+### DB as source of truth
+
+All state that must survive a restart lives in the 6-table DB schema (see
+`src/persistence/db.ts`). The in-memory `priceCache` is the hot path for
+routing decisions but is re-seeded from `contract_symbol_updates` at boot.
+No JSON checkpoint file is written.
+
+### Concurrent transports, single handler
+
+When `--transport ws` is active, both the HTTP fallback poller and the
+WebSocket subscription feed the same event handler. The dedup cache
+(`processed_events`) ensures that an intent arriving on both channels is
+processed exactly once.
+
 ## Spectra parity and Cardano divergences
 
 This feeder is intentionally close to
@@ -492,12 +635,12 @@ Spectra itself). The table below is the canonical reference:
 | --- | --- | --- | --- |
 | Worker pool (`worker_pool.max_workers`, `task_queue_size`) | Per-router pool with N concurrent submission workers. | **Not implemented**. We use a per-client "lane" model: one serial queue per `(client_state_path, protocol_state_path)`. Cross-lane parallelism comes from multiple clients (different Receivers), not multiple workers within a lane. | Cardano's EUTxO model serialises spends of the same Receiver UTxO. Parallel workers on one lane would conflict. The keys are intentionally absent from our YAMLs. |
 | In-flight lock timeout (`worker_pool.inflight_timeout_ms`) | Not present. | **Required**. Cardano-specific because the lane lock is held while a tx is in-flight. Default 15 min. | Reflects the wall-clock ceiling on Cardano submit+confirm. |
-| Parallel event processor (`event_processor.enable_parallel_mode`, `parallel_*`) | Active — parallel enrichment + gas-est pipeline. | Declared as M3 placeholders, not read. | Sequential processing meets M2 throughput; this is a genuine future optimisation. |
+| Parallel event processor (`event_processor.enable_parallel_mode`, `parallel_*`) | Active — parallel enrichment + gas-est pipeline. | **Active** — wired in parallel mode when `enable_parallel_mode: true`. Sequential (default) when the key is absent or false. | Sequential mode is sufficient for current throughput; parallel mode is available for high-volume deployments. |
 | Block scanner gap recovery (`block_scanner.backward_sync`, `max_block_gap`, `head_tracker_interval`, `gap_detection_interval`) | Active — backfill in 5000-block chunks when the gap exceeds `max_block_gap`. | **Active**: when `backward_sync: true`, the scanner switches to 5000-block chunks (vs `block_range` default 500) and skips `scan_interval` between chunks until caught up. Emits `dia_bridge_scanner_backfill_*` counters. | Chain-agnostic; reuses Spectra's design. |
-| Cron service (`cron_service.*` + per-destination `cron: true`) | Active — per-router cron timer re-pushes the latest cached intent when `time_threshold` elapsed. | **Active**: ticks every `cron_service.tick_interval`, re-submits via the same queue as the event-driven flow. Outcome partitioned in `dia_bridge_cron_resubmissions_total{outcome}`. | Required for M2 "uptime and accuracy" guarantees when the deviation filter drops every event. |
+| Cron service (`cron_service.*` + per-destination `cron: true`) | Active — per-router cron timer re-pushes the latest cached intent when `time_threshold` elapsed. | **Active**: ticks every `cron_service.tick_interval`, re-submits via the same queue as the event-driven flow. Outcome partitioned in `dia_bridge_cron_resubmissions_total{outcome}`. | Ensures uptime and accuracy guarantees when the deviation filter suppresses every incoming event during low-volatility windows. |
 | `health_check.max_processing_lag` | Declared but never read in Spectra. | **Active** — drives the `registry` check in `/health/ready`. | Cardano-feeder extension. |
 | `health_check.timeout`, `max_queue_size`, `recovery.*`, `event_processor.batch_size`, `validation_timeout` | Declared but never read in Spectra. | **Removed** from our types + YAMLs (cruft in both repos). | Reduces operator confusion. |
-| `replica.*` | Active — HA failover monitor. | Declared as M3 placeholder. | Operational HA, not required for M2 functional correctness. |
+| `replica.*` | Active — HA failover monitor. | **Typed, not yet wired** — fields parse cleanly from YAML; failover logic is reserved for a future implementation. | Operational HA requires multi-instance coordination not yet implemented. |
 | `cardano.confirmation_depth` | N/A. | **Active** — feeder waits `(depth - 1) × 20 s` past inclusion and re-verifies the tx is still on chain. Reflected in `/api/v1/prices` `confirmedAtDepth`. | Cardano-specific (Ouroboros Praos finality model). |
 | `alerting.*` block | N/A. | **Active** — canonical thresholds for both feeder warnings and Prometheus alert rules. | Centralises operational thresholds; documented above. |
 

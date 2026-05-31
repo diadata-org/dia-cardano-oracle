@@ -37,9 +37,11 @@ offchain/cli/
 │   ├── wallet/             # Cardano wallet creation
 │   └── emulator/           # in-process emulator flow + benchmark
 ├── scripts/
-│   ├── run-all-cli.sh      # full end-to-end runbook (Preview or Mainnet)
-│   ├── fee-benchmark.sh    # batch-size capacity benchmark
-│   └── ...                 # contracts/node test runners used by the runbook
+│   ├── run-all-cli.sh          # full end-to-end runbook (Preview or Mainnet)
+│   ├── fee-benchmark.sh        # batch-size capacity benchmark
+│   ├── emulator-benchmark.ts   # in-process emulator throughput benchmark
+│   ├── run-contracts-tests.sh  # Aiken contract test runner
+│   └── run-node-tests.sh       # Node.js integration test runner
 ├── .env                    # CARDANO_NETWORK, Blockfrost, wallet seeds
 └── state/<network>/        # all runtime artifacts (see below)
     ├── config-bootstrap.json                       # protocol artifact (Config + PaymentHook + global ref-scripts)
@@ -306,8 +308,8 @@ This is the client funding step. The Receiver was bootstrapped with `balanceLove
 ```sh
 npm run cli -- receiver:top-up \
   --amount-lovelace 100000000 \
-  --protocol-state ./state/preview_run_20260516-090057/config-bootstrap.json \
-  --state ./state/preview_run_20260516-090057/clients/client-a.json
+  --protocol-state ./state/<network>/config-bootstrap.json \
+  --state ./state/<network>/clients/client-a.json
 ```
 
 ## Oracle Intent Flow

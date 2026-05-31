@@ -100,7 +100,7 @@ services:
     entrypoint: ["dia-cli"]
     command: ["help"]
     volumes:
-      - ./config:/config:ro
+      - ./config:/app/config
       - ./state:/app/state
     env_file: [.env]
     stdin_open: true
