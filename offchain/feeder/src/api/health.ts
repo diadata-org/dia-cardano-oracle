@@ -21,6 +21,15 @@ export type HealthState = {
    *  Sourced from `infrastructure.<network>.yaml::api.readiness.max_last_confirmed_age`.
    *  If `0`, this check is skipped. */
   maxLastConfirmedAgeMs?: number;
+  /** Current worker queue depth. When > maxQueueSize, readiness fails with
+   *  component "worker_queue". */
+  workerQueueDepth?: number;
+  /** Maximum worker queue depth before readiness fails. When absent the
+   *  queue-depth check is skipped. */
+  maxQueueSize?: number;
+  /** Whether the scanner is reporting healthy. When false, readiness fails
+   *  with component "scanner". */
+  scannerIsHealthy?: boolean;
   /** Injectable clock for tests. Defaults to Date.now. */
   now?: () => number;
 };
@@ -67,6 +76,25 @@ export function readinessResult(state: HealthState): HealthResult {
       detail: confirmedOk
         ? `last confirmed tx ${Math.round((now - state.lastConfirmedMs) / 1000)}s ago`
         : `last confirmed tx ${Math.round((now - state.lastConfirmedMs) / 1000)}s ago (older than max_last_confirmed_age)`,
+    };
+  }
+
+  // Worker queue depth check.
+  if (state.maxQueueSize !== undefined && state.workerQueueDepth !== undefined) {
+    const queueOk = state.workerQueueDepth <= state.maxQueueSize;
+    checks.worker_queue = {
+      ok: queueOk,
+      detail: queueOk
+        ? `depth ${state.workerQueueDepth}/${state.maxQueueSize}`
+        : `depth ${state.workerQueueDepth} exceeds max ${state.maxQueueSize}`,
+    };
+  }
+
+  // Scanner health check.
+  if (state.scannerIsHealthy !== undefined) {
+    checks.scanner = {
+      ok: state.scannerIsHealthy,
+      detail: state.scannerIsHealthy ? "scanner healthy" : "scanner unhealthy",
     };
   }
 

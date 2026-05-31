@@ -65,11 +65,25 @@ infrastructure:
     #   treated as final and checkpointed.
     confirmations: 6
     # max_block_gap: max block distance the scanner tolerates before
-    #   triggering a backward sync to fill the gap. Deferred to M3.
+    #   triggering a backward sync to fill the gap.
     max_block_gap: 5000
     # backward_sync: when true, the scanner detects and backfills missed
-    #   block ranges after a reconnect. Deferred to M3.
+    #   block ranges after a reconnect.
     backward_sync: true
+    # backfill_chunk_blocks: blocks per chunk during backfill scans
+    #   (overrides BACKFILL_CHUNK_BLOCKS=5000 when present).
+    backfill_chunk_blocks: 5000
+    # head_tracker_interval: Spectra parity — cadence of a dedicated head-tracker
+    #   loop separate from the main scan_interval. NOT WIRED in this feeder:
+    #   the HTTP scanner refreshes head implicitly each scan tick and the WS
+    #   scanner runs head-tracking inline. Reserved for the M3 dedicated
+    #   head-tracker goroutine. See [[M3 deferred features]].
+    # head_tracker_interval: 5s
+    # gap_detection_interval: Spectra parity — cadence of a dedicated
+    #   gap-detection loop. NOT WIRED: gap recovery in this feeder triggers
+    #   inline when `head - cursor > max_block_gap` is observed during the
+    #   normal scan tick. Reserved for the M3 dedicated gap-detection loop.
+    # gap_detection_interval: 30s
 
   # --------------------------------------------------------------------------
   # event_processor — dedup cache + lane coalescing.
@@ -93,13 +107,22 @@ infrastructure:
     # size_fallback_enabled: if a batch still exceeds protocol limits, split
     #   it into smaller chunks and retry automatically.
     size_fallback_enabled: true
-    # ---- M3 placeholders — declared so YAMLs reserve the keys, not read by code yet.
-    # Spectra parity: parallel enrichment + gas estimation pipeline.
-    # Enable in M3 when high-throughput sources require it.
-    # enable_parallel_mode: false
-    # parallel_worker_count: 4
-    # parallel_queue_size: 256
-    # parallel_timeout: 30s
+    # enable_parallel_mode: when true, an EventWorkerPool processes events
+    #   concurrently (enrichment + routing). Cardano submissions still go
+    #   through the serial coalescer+queue per lane so EUTxO contention is
+    #   avoided. False keeps the sequential default — sufficient for
+    #   current Preview/Mainnet throughput. WIRED and tested when enabled.
+    enable_parallel_mode: false
+    # parallel_worker_count: max concurrent enrichment workers when
+    #   enable_parallel_mode=true. ACTIVE only with parallel mode on.
+    parallel_worker_count: 4
+    # parallel_queue_size: in-memory queue depth for pending events.
+    #   Events submitted past this depth are dropped (visible in metric
+    #   `worker_tasks_dropped_total{pool_type="event"}`).
+    parallel_queue_size: 256
+    # parallel_timeout: per-event wall-clock budget. Workers cancel and
+    #   count a failure past this point. Accepts "Xs", "Xms", "Xm".
+    parallel_timeout: 30s
 
   # --------------------------------------------------------------------------
   # worker_pool — submission queue knobs.
@@ -113,9 +136,22 @@ infrastructure:
   # not apply here and are intentionally absent.
   # --------------------------------------------------------------------------
   worker_pool:
-    # task_timeout: M3 — Spectra parity (worker-pool task ceiling). Not
-    #   read by this feeder. Our equivalent is `inflight_timeout_ms` below.
-    # task_timeout: 60s
+    # max_workers: Spectra parity — max concurrent submission workers per
+    #   router pool. WIRED via UpdateWorkerPoolManager: each router gets a
+    #   pool with this many workers; the workers drain into the shared
+    #   coalescer+queue (which serialises submissions per Cardano lane), so
+    #   max_workers raises ingest throughput from the daemon's event loop
+    #   but never breaks lane safety. Default 4.
+    max_workers: 4
+    # task_queue_size: depth of each router's pending-task queue. Tasks
+    #   submitted past this depth increment `worker_tasks_dropped_total
+    #   {pool_type="update"}` and are rejected from `submit()`.
+    task_queue_size: 128
+    # task_timeout: per-task wall-clock budget inside the update pool. The
+    #   worker cancels and reports a failure past this point. Distinct from
+    #   `inflight_timeout_ms` (which guards the lane lock once the tx is on
+    #   the wire). Accepts "Xs", "Xms", "Xm".
+    task_timeout: 60s
     # retry_delay: wait before retrying a failed submission.
     retry_delay: 5s
     # max_retries: give up after this many consecutive submission failures
@@ -133,25 +169,45 @@ infrastructure:
   # --------------------------------------------------------------------------
   health_check:
     enabled: true
-    # check_interval: cadence of the periodic health probe loop. Spectra
-    #   uses a background ticker; in our feeder this is informational
-    #   until the ticker-based probe lands (M3). /health/ready is also
-    #   evaluated inline on each request.
+    # check_interval: cadence of the periodic health probe loop.
+    #   /health/ready is also evaluated inline on each request.
+    #   Also drives the queueManager.totalPending() → healthState.workerQueueDepth
+    #   refresher used by the max_queue_size check below.
     check_interval: 30s
     # max_processing_lag: if no IntentRegistered event has been processed
     #   within this window, /health/ready returns 503.
-    #   Cardano-feeder extension (Spectra declares but never reads this).
+    #   Cardano-feeder extension.
     max_processing_lag: 5m
+    # max_queue_size: Spectra parity — when set, /health/ready returns 503
+    #   when the submission queue depth exceeds this. WIRED in both sequential
+    #   and parallel modes (the daemon polls queueManager.totalPending() on
+    #   the check_interval cadence). Omit to disable. Recommended for
+    #   production: set ~10× max_workers to surface backpressure early.
+    max_queue_size: 40
 
   # --------------------------------------------------------------------------
   # api — HTTP API server.
   # --------------------------------------------------------------------------
   api:
     enabled: true
-    host: 0.0.0.0
+    # host: bind address. SECURITY: 127.0.0.1 is the default so the API is
+    #   only reachable from inside the Docker network / host. Set 0.0.0.0
+    #   only if the container itself is reachable behind a firewall or
+    #   reverse proxy. Docker compose publishes the port; flipping host to
+    #   0.0.0.0 inside the container is rarely needed.
+    host: 127.0.0.1
     port: 8080
+    # listen_addr: Spectra alias — composite "<host>:<port>" form. The
+    #   feeder accepts either `host`+`port` (above) or `listen_addr` for
+    #   compatibility with Spectra-shaped configs. When both are present,
+    #   `host`+`port` win. NOT WIRED beyond loader-time alias resolution.
+    # listen_addr: "127.0.0.1:8080"
     # enable_cors: set true only when the API is consumed from a browser.
     enable_cors: false
+    # debug_enabled: when true, GET /debug returns a minimal acknowledgement.
+    #   When false or absent /debug returns 404. Never exposes env vars,
+    #   paths, or secrets. Leave false in production.
+    debug_enabled: false
     readiness:
       max_last_confirmed_age: 15m
 
@@ -178,13 +234,13 @@ infrastructure:
     confirmation_depth: 1
 
   # --------------------------------------------------------------------------
-  # cron_service — Spectra parity (`internal/cron/cron_service.go`).
+  # cron_service — periodic resubmission loop for staleness guarantees.
   #
-  # When enabled, the feeder runs a periodic resubmission loop that
-  # guarantees each cron-enabled destination is updated at least every
-  # `time_threshold` regardless of whether DIA events arrived. Without
-  # this, a pair can stay stale if the router's price-deviation filter
-  # drops every event (e.g. the price barely moves for hours).
+  # When enabled, the feeder ticks every `tick_interval` and re-submits
+  # the latest known intent for any cron-enabled destination whose last
+  # on-chain confirm is older than the destination's `time_threshold`.
+  # Without this, a pair can stay stale if the router's price-deviation
+  # filter drops every event (e.g. the price barely moves for hours).
   #
   # Per-destination opt-in: set `cron: true` and `time_threshold: ...`
   # on the destination in `routers/<router>.yaml`.
@@ -228,6 +284,21 @@ infrastructure:
     # p95 of incoming price-data age (seconds at processing time) →
     # PriceAgeHigh (DIA source publishing stale prices).
     price_age_high_seconds: 600                        # 10 min
+
+  # --------------------------------------------------------------------------
+  # replica — Spectra parity, HA failover monitor.
+  #
+  # NOT WIRED in this feeder: types parse cleanly so a Spectra-shaped YAML
+  # loads, but no failover logic is active. Multi-instance coordination
+  # is reserved for a future milestone — see [[M3 deferred features]].
+  # In single-instance deployments leave `enabled: false`.
+  # --------------------------------------------------------------------------
+  replica:
+    enabled: false
+    # role: "primary" or "secondary". Only meaningful when enabled=true.
+    # role: primary
+    # monitor_chain_id: which chain the secondary watches for primary heartbeats.
+    # monitor_chain_id: 10050
 
   # --------------------------------------------------------------------------
   # dry_run — skip actual Cardano submissions for the whole process.

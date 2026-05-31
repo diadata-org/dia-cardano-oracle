@@ -113,21 +113,27 @@ export type BlockScannerConfig = {
   backward_sync?: boolean;
   head_tracker_interval?: string;
   gap_detection_interval?: string;
+  /** Number of blocks per chunk during backfill scans. Controls how many
+   *  blocks are requested in a single RPC call when catching up from a
+   *  historic start block. Maps to `block_scanner.backfill_chunk_blocks`
+   *  in `infrastructure.<network>.yaml`. */
+  backfill_chunk_blocks?: number;
 };
 
 export type EventProcessorConfig = {
   dedup_cache_size?: number;
   dedup_cache_ttl?: string;
-  /** M3 — parallel event processing (parallel enrichment + gas-est in
-   *  Spectra). Declared so YAMLs can reserve the keys; not read by code
-   *  in M2. Reactivate together with `parallel_worker_count`,
-   *  `parallel_queue_size`, `parallel_timeout`. */
+  /** Parallel event processing (parallel enrichment + gas-estimation in
+   *  Spectra). Declared so Spectra-shaped YAMLs load cleanly; not yet
+   *  active in this feeder. TODO: activate together with
+   *  `parallel_worker_count`, `parallel_queue_size`, `parallel_timeout`
+   *  for high-throughput scenarios. */
   enable_parallel_mode?: boolean;
-  /** M3 — see `enable_parallel_mode`. */
+  /** NOTE: parallel enrichment worker count — see `enable_parallel_mode`. */
   parallel_worker_count?: number;
-  /** M3 — see `enable_parallel_mode`. */
+  /** NOTE: parallel enrichment queue depth — see `enable_parallel_mode`. */
   parallel_queue_size?: number;
-  /** M3 — see `enable_parallel_mode`. */
+  /** NOTE: per-task timeout for parallel enrichment — see `enable_parallel_mode`. */
   parallel_timeout?: string;
   /** Accumulation window on the idle→accumulating lane edge.
    *  Accepts duration strings ("2s", "500ms"). Default: "2s". */
@@ -144,6 +150,13 @@ export type EventProcessorConfig = {
 };
 
 export type WorkerPoolConfig = {
+  /** Spectra field — maximum parallel workers in the pool. Not used by the
+   * Cardano feeder (per-receiver serialisation comes from the lane model,
+   * not worker count); typed here so Spectra-shaped YAMLs load cleanly. */
+  max_workers?: number;
+  /** Spectra field — task queue depth. Not used by the Cardano feeder;
+   * typed here so Spectra-shaped YAMLs load cleanly. */
+  task_queue_size?: number;
   task_timeout?: string;
   retry_delay?: string;
   max_retries?: number;
@@ -158,14 +171,15 @@ export type WorkerPoolConfig = {
 
 export type HealthCheckConfig = {
   enabled: boolean;
-  /** Cadence of the periodic health probe loop. Used by Spectra's
-   *  background ticker; in our feeder it is informational until the
-   *  ticker-based probe lands (M3). */
+  /** Cadence of the periodic health probe loop. */
   check_interval?: string;
-  /** Cardano-feeder extension (not in Spectra). If no IntentRegistered
-   *  event has been processed within this window, `/health/ready`
-   *  returns 503. */
+  /** Cardano-feeder extension. If no IntentRegistered event has been
+   *  processed within this window, `/health/ready` returns 503. */
   max_processing_lag?: string;
+  /** Worker queue depth above which `/health/ready` returns 503.
+   *  Maps to Spectra `health_check.maxqueuesize`. Omit to disable
+   *  the check. */
+  max_queue_size?: number;
 };
 
 export type APIConfig = {
@@ -174,6 +188,10 @@ export type APIConfig = {
   host?: string;
   port?: number;
   enable_cors?: boolean;
+  /** When true, GET /debug returns a minimal debug acknowledgement.
+   *  When false or absent, /debug returns 404. Never expose env vars,
+   *  paths, or secrets in the debug response. Default: false. */
+  debug_enabled?: boolean;
   readiness?: {
     max_last_confirmed_age?: string;
   };

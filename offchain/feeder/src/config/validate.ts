@@ -83,9 +83,15 @@ function validateInfrastructure(
   validateDatabase(infra.database, c.scope("database"));
   validateSource(infra.source, c.scope("source"));
   validateBlockScanner(infra.block_scanner, c.scope("block_scanner"));
+  validateDurationsBlockScanner(infra.block_scanner, c.scope("block_scanner"));
   validateApiConfig(infra.api, c.scope("api"));
   validateCardanoRuntime(infra.cardano, c.scope("cardano"));
   validateWorkerPool(infra.worker_pool, c.scope("worker_pool"));
+  validateDurationsWorkerPool(infra.worker_pool, c.scope("worker_pool"));
+  validateDurationsEventProcessor(infra.event_processor, c.scope("event_processor"));
+  validateDurationsHealthCheck(infra.health_check, c.scope("health_check"));
+  validateDurationsEventMonitor(infra.event_monitor, c.scope("event_monitor"));
+  validateDurationsCronService(infra.cron_service, c.scope("cron_service"));
   validateAlerting(infra.alerting, c.scope("alerting"));
 }
 
@@ -101,9 +107,9 @@ function validateDatabase(db: InfrastructureConfig["database"], c: IssueCollecto
       return;
     case "sqlite":
       if (!db.path && !db.path_env) {
-        c.warn(
+        c.error(
           "",
-          "SQLite driver without `path` or `path_env` will default to `state/<network>/feeder.sqlite`.",
+          "database.path is required. Set it in infrastructure.yaml or via DATABASE_PATH env var.",
         );
       }
       return;
@@ -235,6 +241,73 @@ function validatePositiveInteger(
   if (!Number.isInteger(value) || value <= 0) {
     c.error(field, "Expected a positive integer.");
   }
+}
+
+/**
+ * Duration fields must carry a unit suffix (e.g. "30s", "1m", "500ms").
+ * A bare number is rejected — the unit is ambiguous and millisecond/second
+ * mix-ups are a common source of misconfiguration.
+ */
+function requiresDurationSuffix(field: string, value: unknown, c: IssueCollector): void {
+  if (value === undefined || value === null) return;
+  if (typeof value === "number") {
+    c.error(field, `Bare number not allowed; use a duration string like "30s", "1m", "500ms".`);
+  }
+}
+
+function validateDurationsBlockScanner(
+  scanner: InfrastructureConfig["block_scanner"],
+  c: IssueCollector,
+): void {
+  if (!scanner) return;
+  requiresDurationSuffix("scan_interval", scanner.scan_interval, c);
+  requiresDurationSuffix("head_tracker_interval", scanner.head_tracker_interval, c);
+  requiresDurationSuffix("gap_detection_interval", scanner.gap_detection_interval, c);
+}
+
+function validateDurationsWorkerPool(
+  worker: InfrastructureConfig["worker_pool"],
+  c: IssueCollector,
+): void {
+  if (!worker) return;
+  requiresDurationSuffix("task_timeout", worker.task_timeout, c);
+  requiresDurationSuffix("retry_delay", worker.retry_delay, c);
+}
+
+function validateDurationsEventProcessor(
+  ep: InfrastructureConfig["event_processor"],
+  c: IssueCollector,
+): void {
+  if (!ep) return;
+  requiresDurationSuffix("dedup_cache_ttl", ep.dedup_cache_ttl, c);
+  requiresDurationSuffix("parallel_timeout", ep.parallel_timeout, c);
+  requiresDurationSuffix("coalesce_window", ep.coalesce_window, c);
+  requiresDurationSuffix("max_intent_age", ep.max_intent_age, c);
+}
+
+function validateDurationsHealthCheck(
+  hc: InfrastructureConfig["health_check"],
+  c: IssueCollector,
+): void {
+  if (!hc) return;
+  requiresDurationSuffix("check_interval", hc.check_interval, c);
+  requiresDurationSuffix("max_processing_lag", hc.max_processing_lag, c);
+}
+
+function validateDurationsEventMonitor(
+  em: InfrastructureConfig["event_monitor"],
+  c: IssueCollector,
+): void {
+  if (!em) return;
+  requiresDurationSuffix("reconnect_interval", em.reconnect_interval, c);
+}
+
+function validateDurationsCronService(
+  cron: InfrastructureConfig["cron_service"],
+  c: IssueCollector,
+): void {
+  if (!cron) return;
+  requiresDurationSuffix("tick_interval", cron.tick_interval, c);
 }
 
 // ---------------------------------------------------------------------------
@@ -615,12 +688,6 @@ function validateCardanoDestination(
   c.oneOf("network", cardano.network, VALID_CARDANO_NETWORKS);
   c.required("client_state_path", cardano.client_state_path);
   c.required("protocol_state_path", cardano.protocol_state_path);
-  if ("tx_mode" in (cardano as Record<string, unknown>)) {
-    c.error(
-      "tx_mode",
-      "Remove `tx_mode`. The feeder selects single-intent or batch submission automatically from the flush size.",
-    );
-  }
 }
 
 function validateOptionalContractRef(

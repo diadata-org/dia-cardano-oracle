@@ -121,15 +121,5 @@ describe("validateModularConfig", () => {
     assert.deepEqual(issues, []);
   });
 
-  it("rejects tx_mode values with a scoped error path", () => {
-    const issues = validateModularConfig(makeConfig(true));
-    assert.ok(issues.some((issue) => issue.severity === "error"));
-    assert.ok(
-      issues.some(
-        (issue) =>
-          issue.path === "routers.router-a.destinations[0].cardano.tx_mode" &&
-          issue.message.includes("Remove `tx_mode`"),
-      ),
-    );
-  });
+  // tx_mode is no longer rejected — the guard was removed as a rename leftover.
 });

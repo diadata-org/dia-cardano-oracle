@@ -1,31 +1,37 @@
-import type { Db, TransactionViewRow } from "../persistence/index.js";
+import type { Db, TransactionLogRow, TransactionViewRow } from "../persistence/index.js";
 
 export type TransactionUpdateEntry = {
   intentHash: string;
-  symbol: string;
-  price: string;
-  timestamp: string;
-  signer: string;
-  sourceChainId: number;
-  sourceBlockNumber: string;
-  sourceTxHash: string;
-  sourceLogIndex: number;
-  processedAtMs: number;
   routerId: string;
   destinationIndex: number;
-  clientStatePath: string;
-  status: "submitted" | "confirmed" | "failed";
+  destinationChainName: string;
+  destinationContractAddress: string;
+  symbol: string;
+  price: string;
+  timestamp: number;
+  status: "pending" | "submitted" | "confirmed" | "failed";
   errorMessage?: string;
+  retryCount: number;
+  createdAtMs: number;
 };
 
 export type TransactionResponse = {
   txHash: string;
-  status: "submitted" | "confirmed" | "failed";
-  submittedAtMs: number;
+  status: "pending" | "submitted" | "confirmed" | "failed";
+  submittedAtMs?: number;
   confirmedAtMs?: number;
   updateCount: number;
   updates: TransactionUpdateEntry[];
 };
+
+export type TransactionsResponse = {
+  count: number;
+  transactions: TransactionLogRow[];
+};
+
+export function buildTransactionsResponse(rows: TransactionLogRow[]): TransactionsResponse {
+  return { count: rows.length, transactions: rows };
+}
 
 export async function buildTransactionResponse(
   db: Db,
@@ -55,19 +61,16 @@ export async function buildTransactionResponse(
 function toTransactionUpdateEntry(row: TransactionViewRow): TransactionUpdateEntry {
   return {
     intentHash: row.intentHash,
+    routerId: row.routerId,
+    destinationIndex: row.destinationIndex,
+    destinationChainName: row.destinationChainName,
+    destinationContractAddress: row.destinationContractAddress,
     symbol: row.symbol,
     price: row.price,
     timestamp: row.timestamp,
-    signer: row.signer,
-    sourceChainId: row.sourceChainId,
-    sourceBlockNumber: row.sourceBlockNumber.toString(),
-    sourceTxHash: row.sourceTxHash,
-    sourceLogIndex: row.sourceLogIndex,
-    processedAtMs: row.processedAtMs,
-    routerId: row.routerId,
-    destinationIndex: row.destinationIndex,
-    clientStatePath: row.clientStatePath,
     status: row.status,
     errorMessage: row.errorMessage,
+    retryCount: row.retryCount,
+    createdAtMs: row.createdAtMs,
   };
 }

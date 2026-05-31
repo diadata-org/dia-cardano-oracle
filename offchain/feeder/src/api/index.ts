@@ -18,13 +18,18 @@ export {
   type ChainsResponse,
   type ChainStatusEntry,
 } from "./chains.js";
-export { buildTransactionResponse, type TransactionResponse, type TransactionUpdateEntry } from "./transactions.js";
+export { buildTransactionResponse, buildTransactionsResponse, type TransactionResponse, type TransactionUpdateEntry, type TransactionsResponse } from "./transactions.js";
 export {
   createMetrics,
   noopMetrics,
+  wrapWithPersistence,
   type FeederMetrics,
   type FeedCounter,
   type FeedGauge,
   type FeedHistogram,
   type MetricsOptions,
 } from "./metrics.js";
+export { buildStatusResponse, buildComponentsResponse, type StatusResponse, type ComponentStatus } from "./status.js";
+export { buildEventsResponse, buildEventNamesResponse, buildEventByHashResponse, type EventEntry, type EventsResponse } from "./events.js";
+export { buildAlertsResponse, buildAlertResponse, type AlertEntry, type AlertsResponse } from "./alerts.js";
+export { buildPerformanceResponse, type PerformanceEntry, type PerformanceResponse } from "./performance.js";

@@ -15,9 +15,53 @@
 // rebuilding, so we accept a per-network infrastructure file
 // (`infrastructure.preview.yaml`, `infrastructure.mainnet.yaml`) and the
 // caller picks one at load time.
+//
+// Key normalisation: Spectra config YAMLs appear in the wild with both
+// snake_case (`scan_interval`) and compact no-separator spellings
+// (`scaninterval`). `normalizeConfigKey` maps compact forms to the
+// canonical snake_case used throughout our TypeScript types.
 
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+
+// ---------------------------------------------------------------------------
+// Compact-key normalisation
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps Spectra compact (no-separator) key spellings to their canonical
+ * snake_case equivalents. Both spellings are accepted in YAML files;
+ * compact spellings are normalised during load so the rest of the
+ * codebase only ever sees snake_case.
+ */
+const COMPACT_KEY_MAP: Record<string, string> = {
+  enablecors: "enable_cors",
+  scaninterval: "scan_interval",
+  blockrange: "block_range",
+  maxblockgap: "max_block_gap",
+  backwardsync: "backward_sync",
+  headtrackerinterval: "head_tracker_interval",
+  gapdetectioninterval: "gap_detection_interval",
+  backfillchunkblocks: "backfill_chunk_blocks",
+  dedupcachesize: "dedup_cache_size",
+  dedupcachettl: "dedup_cache_ttl",
+  retrydelay: "retry_delay",
+  maxretries: "max_retries",
+  checkinterval: "check_interval",
+  maxprocessinglag: "max_processing_lag",
+  maxqueuesize: "max_queue_size",
+  enableparallelmode: "enable_parallel_mode",
+};
+
+/**
+ * Normalise a single YAML key. If the lowercase form appears in
+ * `COMPACT_KEY_MAP`, the canonical snake_case spelling is returned.
+ * All other keys pass through unchanged (including already-snake_case
+ * keys such as `scan_interval`).
+ */
+export function normalizeConfigKey(key: string): string {
+  return COMPACT_KEY_MAP[key.toLowerCase()] ?? key;
+}
 
 import { parseAllAbis } from "./abi-parser.js";
 import type {
@@ -142,31 +186,39 @@ async function loadRouterDirectory(dir: string): Promise<Record<string, RouterCo
 }
 
 /**
- * Spectra accepts router YAMLs in three shapes, all of which appear in
- * the wild (see `services/bridge/config/event_definitions.go` and the
- * sample configs in the Spectra docker compose tree):
+ * Three Spectra-compatible router YAML shapes are accepted — all three
+ * appear in the wild in Spectra operator deployments (see
+ * `services/bridge/config/event_definitions.go` and the Spectra docker
+ * compose sample configs). This is intentional Spectra parity, not a
+ * compatibility shim.
  *
- * 1. Top-level `router:` — single router per file:
+ * Shape 1 — top-level `router:`, single router per file:
  *
- *        router:
- *          id: ...
+ *     router:
+ *       id: ...
  *
- * 2. Top-level `routers:` — flat or nested map of routers per file:
+ * Shape 2 — top-level `routers:` map (flat or doubly-nested):
  *
- *        routers:
- *          my_router:
- *            id: my_router
- *            ...
+ *     routers:
+ *       my_router:
+ *         id: my_router
+ *         ...
  *
- *        # or, legacy nested shape:
- *        routers:
- *          my_router:
- *            router:
- *              id: my_router
- *              ...
+ *     # or the doubly-nested form that Spectra also emits:
+ *     routers:
+ *       my_router:
+ *         router:
+ *           id: my_router
+ *           ...
  *
- * 3. Wrapped under a top-level `config:` key, with `routers:` nested
- *    inside (matches the original Spectra single-file config).
+ * Shape 3 — `config.routers:` (matches the original Spectra single-file
+ * config layout):
+ *
+ *     config:
+ *       routers:
+ *         my_router:
+ *           id: my_router
+ *           ...
  */
 type RouterFileShape = {
   router?: RouterConfig;
@@ -217,7 +269,7 @@ function collectRoutersFromFile(file: RouterFileShape, sourceFile: string): Rout
   return collected;
 }
 
-/** Unwrap the legacy nested form `{ router: {...} }`, returning the
+/** Unwrap the doubly-nested form `{ router: {...} }`, returning the
  *  inner `RouterConfig`. Direct (`RouterConfig`) entries pass through. */
 function unwrapRouterEntry(entry: RouterEntry): RouterConfig {
   if (entry && typeof entry === "object" && "router" in entry && entry.router) {

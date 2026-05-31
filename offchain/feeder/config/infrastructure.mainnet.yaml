@@ -50,8 +50,14 @@ infrastructure:
     scan_interval: 10s
     block_range: 500
     confirmations: 6
-    max_block_gap: 5000        # gap detection before backward sync. Deferred to M3.
-    backward_sync: true        # backfill missed block ranges after reconnect. Deferred to M3.
+    max_block_gap: 5000          # gap detection threshold before backward sync triggers.
+    backward_sync: true          # backfill missed block ranges after reconnect.
+    backfill_chunk_blocks: 5000  # blocks per chunk during backfill scans.
+    # head_tracker_interval / gap_detection_interval — Spectra parity keys,
+    # NOT WIRED in this feeder (head + gap recovery run inline in the main
+    # scan loop). Reserved for M3. See [[M3 deferred features]].
+    # head_tracker_interval: 5s
+    # gap_detection_interval: 30s
 
   # --------------------------------------------------------------------------
   # event_processor — dedup cache + lane coalescing.
@@ -63,11 +69,14 @@ infrastructure:
     max_intent_age: 15m
     max_batch_size: 10
     size_fallback_enabled: true
-    # ---- M3 placeholders — Spectra parity (parallel event enrichment).
-    # enable_parallel_mode: false
-    # parallel_worker_count: 4
-    # parallel_queue_size: 256
-    # parallel_timeout: 30s
+    # Parallel enrichment pipeline — WIRED. Off by default; flip to true
+    # only for sustained high-event-rate sources. Sequential mode handles
+    # current Mainnet throughput. See infrastructure.preview.yaml for the
+    # full notes.
+    enable_parallel_mode: false
+    parallel_worker_count: 4
+    parallel_queue_size: 256
+    parallel_timeout: 30s
 
   # --------------------------------------------------------------------------
   # worker_pool — submission queue knobs.
@@ -76,8 +85,11 @@ infrastructure:
   # `task_queue_size` are intentionally omitted.
   # --------------------------------------------------------------------------
   worker_pool:
-    # task_timeout: M3 — Spectra parity. Not read by this feeder.
-    # task_timeout: 60s
+    # max_workers + task_queue_size — WIRED via UpdateWorkerPoolManager.
+    # See infrastructure.preview.yaml for the lane-safety note.
+    max_workers: 4
+    task_queue_size: 128
+    task_timeout: 60s
     retry_delay: 5s
     max_retries: 3
     # inflight_timeout_ms: how long a submitted tx remains in the in-flight
@@ -91,17 +103,23 @@ infrastructure:
   # --------------------------------------------------------------------------
   health_check:
     enabled: true
-    check_interval: 30s        # ticker cadence — informational in M2 until ticker probe lands (M3).
+    check_interval: 30s        # ticker cadence for the periodic health probe loop.
     max_processing_lag: 5m     # /health/ready returns 503 if exceeded. Cardano-feeder extension.
+    max_queue_size: 40         # /health/ready returns 503 when queueManager.totalPending() exceeds this.
 
   # --------------------------------------------------------------------------
   # api — HTTP server.
   # --------------------------------------------------------------------------
   api:
     enabled: true
-    host: 0.0.0.0
+    # SECURITY: bind on loopback by default; only the container internals
+    # / Docker network reach the port. See infrastructure.preview.yaml.
+    host: 127.0.0.1
     port: 8080
+    # listen_addr: Spectra alias accepted by the loader; prefer host+port.
+    # listen_addr: "127.0.0.1:8080"
     enable_cors: false
+    debug_enabled: false
     readiness:
       max_last_confirmed_age: 15m
 
@@ -123,8 +141,8 @@ infrastructure:
     confirmation_depth: 1
 
   # --------------------------------------------------------------------------
-  # cron_service — Spectra parity. Periodic re-submission for cron-enabled
-  # destinations whose on-chain pair has gone stale beyond `time_threshold`.
+  # cron_service — periodic re-submission for cron-enabled destinations
+  # whose on-chain pair has gone stale beyond `time_threshold`.
   # See infrastructure.preview.yaml for the full notes.
   # --------------------------------------------------------------------------
   cron_service:
@@ -144,6 +162,14 @@ infrastructure:
     oracle_pair_stale_seconds: 3600                    # 1 h since last confirm
     price_deviation_high_percent: 5                    # 5 % p95 → misreport suspect
     price_age_high_seconds: 600                        # 10 min p95 → DIA source stale
+
+  # --------------------------------------------------------------------------
+  # replica — Spectra parity HA failover. NOT WIRED (see M3 deferred features).
+  # --------------------------------------------------------------------------
+  replica:
+    enabled: false
+    # role: primary
+    # monitor_chain_id: 1050
 
   # --------------------------------------------------------------------------
   # dry_run — any of YAML/--dry-run/DRY_RUN=true activates it.

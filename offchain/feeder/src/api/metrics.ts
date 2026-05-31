@@ -28,9 +28,20 @@ export type FeederMetrics = {
   transactionsConfirmed: FeedCounter;
   transactionsFailed: FeedCounter;
   transactionsReorg: FeedCounter;
+  /** Spectra phase 1: seconds from oracle intent creation (price timestamp) to
+   *  on-chain registration (block timestamp). Requires `blockTimestamp` in
+   *  `ExtractedEvent`. Zero-valued when blockTimestamp is unavailable. */
+  intentToRegistrationSeconds: FeedHistogram;
+  /** Spectra phase 2: seconds from on-chain registration (block timestamp) to
+   *  scanner delivery. Measures transport + polling latency. */
+  registrationToScanSeconds: FeedHistogram;
+  /** Spectra phase 3: seconds from scanner delivery to per-intent processing start. */
   scanToProcessingSeconds: FeedHistogram;
+  /** Spectra phase 4: seconds from per-intent processing start to Cardano submission. */
   processingToSubmissionSeconds: FeedHistogram;
+  /** Spectra phase 5: seconds from Cardano submission to confirmation. */
   submissionToConfirmationSeconds: FeedHistogram;
+  /** Spectra phase 6: feeder-side end-to-end latency (processing start → confirmation). */
   endToEndLatencySeconds: FeedHistogram;
   priceDeviationPercent: FeedHistogram;
   priceAgeSeconds: FeedHistogram;
@@ -71,6 +82,40 @@ export type FeederMetrics = {
   cronResubmissions: FeedCounter;
   httpRequests: FeedCounter;
   httpRequestDurationSeconds: FeedHistogram;
+  /** Current number of active (executing) workers, partitioned by pool type. */
+  activeWorkers: FeedGauge;              // dia_bridge_active_workers{pool_type}
+  /** Configured concurrency limit per pool type. */
+  workerPoolSize: FeedGauge;             // dia_bridge_worker_pool_size{pool_type}
+  /** Tasks/events currently waiting in the pool queue, partitioned by pool type. */
+  workerQueueSize: FeedGauge;            // dia_bridge_worker_queue_size{pool_type}
+  /** Total tasks/events successfully processed across all pools. */
+  workerTasksCompleted: FeedCounter;     // dia_bridge_worker_tasks_completed_total
+  /** Total tasks/events that failed or timed out across all pools. */
+  workerTasksFailed: FeedCounter;        // dia_bridge_worker_tasks_failed_total
+  /** Total tasks/events dropped because the pool queue was full, partitioned by pool type. */
+  workerTasksDropped: FeedCounter;       // dia_bridge_worker_tasks_dropped_total{pool_type}
+  /** Total task-level retries attempted across all worker pools. */
+  workerTaskRetries: FeedCounter;        // dia_bridge_worker_task_retries_total
+  /** Spectra bridge_intents_scanned_total lifecycle alias. */
+  bridgeIntentsScanned: FeedCounter;
+  /** Spectra bridge_intents_processed_total lifecycle alias. */
+  bridgeIntentsProcessed: FeedCounter;
+  /** Spectra bridge_intents_submitted_total lifecycle alias. */
+  bridgeIntentsSubmitted: FeedCounter;
+  /** Spectra bridge_intents_confirmed_total lifecycle alias. */
+  bridgeIntentsConfirmed: FeedCounter;
+  /** Spectra bridge_intents_failed_total lifecycle alias. */
+  bridgeIntentsFailed: FeedCounter;
+  /** Cardano equivalent of EVM gas cost — lovelace paid per Cardano oracle tx. */
+  bridgeTransactionFeeLovelace: FeedHistogram;
+  /** bridge_db_operations_total — DB operation count by table and operation. */
+  bridgeDbOperations: FeedCounter;
+  /** bridge_db_operation_duration_seconds — latency histogram for DB ops. */
+  bridgeDbOperationDuration: FeedHistogram;
+  /** bridge_component_health{component} — 1 = healthy, 0 = unhealthy. */
+  bridgeComponentHealth: FeedGauge;
+  /** bridge_recovery_attempts_total — number of recovery attempts after transient errors. */
+  bridgeRecoveryAttempts: FeedCounter;
   getMetricsText(): Promise<string>;
 };
 
@@ -97,6 +142,8 @@ export const noopMetrics: FeederMetrics = {
   transactionsConfirmed: noopCounter,
   transactionsFailed: noopCounter,
   transactionsReorg: noopCounter,
+  intentToRegistrationSeconds: noopHistogram,
+  registrationToScanSeconds: noopHistogram,
   scanToProcessingSeconds: noopHistogram,
   processingToSubmissionSeconds: noopHistogram,
   submissionToConfirmationSeconds: noopHistogram,
@@ -118,6 +165,23 @@ export const noopMetrics: FeederMetrics = {
   cronResubmissions: noopCounter,
   httpRequests: noopCounter,
   httpRequestDurationSeconds: noopHistogram,
+  activeWorkers: noopGauge,
+  workerPoolSize: noopGauge,
+  workerQueueSize: noopGauge,
+  workerTasksCompleted: noopCounter,
+  workerTasksFailed: noopCounter,
+  workerTasksDropped: noopCounter,
+  workerTaskRetries: noopCounter,
+  bridgeIntentsScanned: noopCounter,
+  bridgeIntentsProcessed: noopCounter,
+  bridgeIntentsSubmitted: noopCounter,
+  bridgeIntentsConfirmed: noopCounter,
+  bridgeIntentsFailed: noopCounter,
+  bridgeTransactionFeeLovelace: noopHistogram,
+  bridgeDbOperations: noopCounter,
+  bridgeDbOperationDuration: noopHistogram,
+  bridgeComponentHealth: noopGauge,
+  bridgeRecoveryAttempts: noopCounter,
   getMetricsText: async () => "",
 };
 
@@ -235,9 +299,21 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "Cardano transactions dropped by a rollback after submission",
       ["symbol", "client_id"],
     ),
+    intentToRegistrationSeconds: histogram(
+      "intent_to_registration_seconds",
+      "Seconds from oracle intent creation (price timestamp) to on-chain registration (block timestamp) — Spectra latency phase 1",
+      ["symbol"],
+      LATENCY_BUCKETS,
+    ),
+    registrationToScanSeconds: histogram(
+      "registration_to_scan_seconds",
+      "Seconds from on-chain registration (block timestamp) to scanner delivery — Spectra latency phase 2",
+      ["symbol"],
+      LATENCY_BUCKETS,
+    ),
     scanToProcessingSeconds: histogram(
       "scan_to_processing_seconds",
-      "Seconds from scanner delivery to per-intent processing start",
+      "Seconds from scanner delivery to per-intent processing start — Spectra latency phase 3",
       ["symbol"],
       LATENCY_BUCKETS,
     ),
@@ -347,6 +423,90 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       ["method", "endpoint"],
       HTTP_LATENCY_BUCKETS,
     ),
+    activeWorkers: gauge(
+      "active_workers",
+      "Number of workers currently executing a task, partitioned by pool type",
+      ["pool_type"],
+    ),
+    workerPoolSize: gauge(
+      "worker_pool_size",
+      "Configured concurrency limit for the worker pool, partitioned by pool type",
+      ["pool_type"],
+    ),
+    workerQueueSize: gauge(
+      "worker_queue_size",
+      "Tasks currently waiting in the pool queue, partitioned by pool type",
+      ["pool_type"],
+    ),
+    workerTasksCompleted: counter(
+      "worker_tasks_completed_total",
+      "Total tasks successfully completed across all worker pools",
+    ),
+    workerTasksFailed: counter(
+      "worker_tasks_failed_total",
+      "Total tasks that failed or timed out across all worker pools",
+    ),
+    workerTasksDropped: counter(
+      "worker_tasks_dropped_total",
+      "Total tasks dropped because the pool queue was full, partitioned by pool type",
+      ["pool_type"],
+    ),
+    workerTaskRetries: counter(
+      "worker_task_retries_total",
+      "Total task-level retries attempted across all worker pools",
+    ),
+    bridgeIntentsScanned: counter(
+      "intents_scanned_lifecycle_total",
+      "Intents scanned — Spectra bridge_intents_scanned_total lifecycle alias",
+      ["symbol", "scanner_type"],
+    ),
+    bridgeIntentsProcessed: counter(
+      "intents_processed_lifecycle_total",
+      "Intents processed — Spectra bridge_intents_processed_total lifecycle alias",
+      ["symbol"],
+    ),
+    bridgeIntentsSubmitted: counter(
+      "intents_submitted_lifecycle_total",
+      "Intents submitted to Cardano — Spectra bridge_intents_submitted_total lifecycle alias",
+      ["symbol", "client_id"],
+    ),
+    bridgeIntentsConfirmed: counter(
+      "intents_confirmed_lifecycle_total",
+      "Intents confirmed on Cardano — Spectra bridge_intents_confirmed_total lifecycle alias",
+      ["symbol", "client_id"],
+    ),
+    bridgeIntentsFailed: counter(
+      "intents_failed_lifecycle_total",
+      "Intents failed — Spectra bridge_intents_failed_total lifecycle alias",
+      ["symbol", "client_id", "reason"],
+    ),
+    bridgeTransactionFeeLovelace: histogram(
+      "transaction_fee_lovelace",
+      "Lovelace paid per Cardano oracle update transaction (Cardano equivalent of EVM gas cost)",
+      ["symbol", "client_id"],
+      [10_000, 50_000, 100_000, 200_000, 500_000, 1_000_000, 2_000_000],
+    ),
+    bridgeDbOperations: counter(
+      "db_operations_total",
+      "Database operations by table and operation type",
+      ["table", "operation"],
+    ),
+    bridgeDbOperationDuration: histogram(
+      "db_operation_duration_seconds",
+      "Database operation latency",
+      ["table", "operation"],
+      [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1],
+    ),
+    bridgeComponentHealth: gauge(
+      "component_health",
+      "Component health status: 1 = healthy, 0 = unhealthy",
+      ["component"],
+    ),
+    bridgeRecoveryAttempts: counter(
+      "recovery_attempts_total",
+      "Number of recovery attempts after transient errors",
+      ["component", "reason"],
+    ),
     getMetricsText: () => registry.metrics(),
   };
 }
@@ -384,3 +544,42 @@ type PromClientLike = {
   };
   collectDefaultMetrics(opts: { register: unknown }): void;
 };
+
+// ---------------------------------------------------------------------------
+// R3.7 — Persistent metrics wrapper
+// ---------------------------------------------------------------------------
+
+/**
+ * Wrap specific counters so their `inc()` calls ALSO write to the
+ * `performance_metrics` table. Counters wrapped are those whose values
+ * survive a restart and are useful for historical trend queries:
+ * transactionsSubmitted, transactionsConfirmed, transactionsFailed,
+ * intentsFiltered, cronResubmissions.
+ *
+ * Wrapping is transparent — callers use the same FeederMetrics interface.
+ * Persistence failures are silently swallowed so a slow DB never blocks metrics.
+ */
+export function wrapWithPersistence(
+  db: import("../persistence/db.js").Db,
+  metrics: FeederMetrics,
+): FeederMetrics {
+  function persistentCounter(original: FeedCounter, name: string): FeedCounter {
+    return {
+      inc(labels, value) {
+        original.inc(labels, value);
+        db.recordPerformanceMetric({ name, value: value ?? 1, labels }).catch(() => {
+          // Persistence failures are non-fatal — Prometheus metrics still work.
+        });
+      },
+    };
+  }
+
+  return {
+    ...metrics,
+    transactionsSubmitted: persistentCounter(metrics.transactionsSubmitted, "transactions_submitted_total"),
+    transactionsConfirmed: persistentCounter(metrics.transactionsConfirmed, "transactions_confirmed_total"),
+    transactionsFailed: persistentCounter(metrics.transactionsFailed, "transactions_failed_total"),
+    intentsFiltered: persistentCounter(metrics.intentsFiltered, "intents_filtered_total"),
+    cronResubmissions: persistentCounter(metrics.cronResubmissions, "cron_resubmissions_total"),
+  };
+}
