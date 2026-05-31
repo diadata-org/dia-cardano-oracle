@@ -33,8 +33,30 @@ export async function processLogBatch(args: {
   toBlock: bigint;
   checkpoint: Checkpoint;
   onBatch: ScanHandler;
+  /** Optional block-timestamp resolver. When absent, `blockTimestamp` is
+   *  set to 0n. Callers that support block lookups pass this to enable
+   *  end-to-end latency metrics. */
+  getBlockTimestamp?: (blockNumber: bigint) => Promise<bigint>;
 }): Promise<void> {
-  const events = decodeIntentRegisteredLogs(args.logs, args.eventAbi);
+  const rawEvents = decodeIntentRegisteredLogs(args.logs, args.eventAbi);
+
+  // Attach block timestamps when the resolver is available. The lookup is
+  // batched per distinct block number to avoid quadratic RPC pressure when a
+  // single block carries multiple IntentRegistered logs.
+  let events = rawEvents;
+  if (args.getBlockTimestamp && rawEvents.length > 0) {
+    const resolver = args.getBlockTimestamp;
+    const distinct = [...new Set(rawEvents.map((ev) => ev.blockNumber))];
+    const entries = await Promise.all(
+      distinct.map(async (block) => [block, await resolver(block)] as const),
+    );
+    const tsCache = new Map<bigint, bigint>(entries);
+    events = rawEvents.map((ev) => ({
+      ...ev,
+      blockTimestamp: tsCache.get(ev.blockNumber) ?? 0n,
+    }));
+  }
+
   await args.onBatch({ fromBlock: args.fromBlock, toBlock: args.toBlock, events });
   await args.checkpoint.save(args.toBlock);
 }

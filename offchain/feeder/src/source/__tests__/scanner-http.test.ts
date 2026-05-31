@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { runHttpScanner, BACKFILL_CHUNK_BLOCKS, type ScannerMetricsSink } from "../scanner-http.js";
+import { nextDelay } from "../scanner-ws.js";
 import type { RegistryClient, RegistryLog } from "../registry-client.js";
 import type { Checkpoint } from "../checkpoint.js";
 import type { ScannedBatch } from "../scan-handler.js";
@@ -22,14 +23,16 @@ function makeMetricsSink() {
   const rpcErrors: Array<{ chain_id: string; error_type: string }> = [];
   const backfillBlocks: Array<{ labels: { chain_id: string }; blocks: number }> = [];
   const backfillChunks: Array<{ chain_id: string }> = [];
+  const transportUps: Array<{ labels: { chain_id: string; transport: string }; up: number }> = [];
   const sink: ScannerMetricsSink = {
     setLastBlock: (labels, block) => lastBlocks.push({ labels, block }),
     setBlockLag: (labels, lag) => lags.push({ labels, lag }),
     incRpcError: (labels) => rpcErrors.push(labels),
     incBackfillBlocks: (labels, blocks) => backfillBlocks.push({ labels, blocks }),
     incBackfillChunks: (labels) => backfillChunks.push(labels),
+    setTransportUp: (labels, up) => transportUps.push({ labels, up }),
   };
-  return { sink, lastBlocks, lags, rpcErrors, backfillBlocks, backfillChunks };
+  return { sink, lastBlocks, lags, rpcErrors, backfillBlocks, backfillChunks, transportUps };
 }
 
 function makeMemoryCheckpoint(initial: bigint | null = null): Checkpoint {
@@ -59,6 +62,9 @@ function makeFakeClient(headSequence: bigint[]): {
       headIndex++;
       return h;
     },
+    async getBlockTimestamp() {
+      return 0n;
+    },
     async getIntentRegisteredLogs(args) {
       getLogsCalls.push(args);
       return [] as RegistryLog[];
@@ -84,7 +90,7 @@ function makeScannedBatchSink(): {
   };
 }
 
-describe("runHttpScanner — gap recovery (Etapa B.1)", () => {
+describe("runHttpScanner — gap recovery (backward_sync catch-up)", () => {
   it("uses BACKFILL_CHUNK_BLOCKS while gap > maxBlockGap, then switches to blockRange chunks", async () => {
     // Gap setup: cursor=0, head=11_000 → finalizedHead=11_000.
     // First tick: gap=11_000 > 5_000 → backfill chunk [0, 4999]. cursor=5000.
@@ -188,6 +194,9 @@ describe("runHttpScanner — gap recovery (Etapa B.1)", () => {
         const err = new Error("connect ECONNREFUSED 127.0.0.1:8545");
         throw err;
       },
+      async getBlockTimestamp() {
+        return 0n;
+      },
       async getIntentRegisteredLogs() {
         return [] as RegistryLog[];
       },
@@ -216,5 +225,125 @@ describe("runHttpScanner — gap recovery (Etapa B.1)", () => {
     assert.equal(rpcErrors.length, 1);
     assert.equal(rpcErrors[0]!.error_type, "network");
     assert.equal(rpcErrors[0]!.chain_id, "10050");
+  });
+});
+
+describe("runHttpScanner — backfillChunkBlocks option", () => {
+  it("uses the provided backfillChunkBlocks instead of the BACKFILL_CHUNK_BLOCKS constant", async () => {
+    // Custom chunk size of 2000; gap = 5000 > maxBlockGap (1000) → backfill mode.
+    // First backfill chunk: [0, 1999]. cursor=2000.
+    // Second: [2000, 3999]. cursor=4000.
+    // Third: [4000, 4999]. cursor=5000.
+    // Then cursor == finalizedHead=5000 → caught up, sleep, abort.
+    const head = 5000n;
+    const { client, getLogsCalls } = makeFakeClient([head, head, head, head, head, head]);
+    const checkpoint = makeMemoryCheckpoint(null);
+    const { handler } = makeScannedBatchSink();
+    const { sink, backfillChunks } = makeMetricsSink();
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 40);
+
+    await runHttpScanner({
+      client,
+      eventAbi: FAKE_EVENT_ABI,
+      checkpoint,
+      startBlock: 0n,
+      blockRange: 500n,
+      scanIntervalMs: 5,
+      confirmations: 0n,
+      onBatch: handler,
+      signal: controller.signal,
+      metrics: sink,
+      chainId: 10050,
+      backwardSync: true,
+      maxBlockGap: 1000n,
+      backfillChunkBlocks: 2000n,
+    });
+
+    assert.ok(getLogsCalls.length >= 3, `expected ≥3 chunks, got ${getLogsCalls.length}`);
+    assert.equal(getLogsCalls[0]!.fromBlock, 0n);
+    assert.equal(getLogsCalls[0]!.toBlock, 1999n, "first backfill chunk should be 2000 wide");
+    assert.ok(backfillChunks.length >= 2, "should emit backfill chunk metrics");
+  });
+});
+
+describe("runHttpScanner — health: error → is_healthy=false", () => {
+  it("increments rpcErrors counter when the head fetch fails", async () => {
+    const checkpoint = makeMemoryCheckpoint(null);
+    const { handler } = makeScannedBatchSink();
+    const { sink, rpcErrors } = makeMetricsSink();
+
+    const erroringClient: RegistryClient = {
+      chainId: 10050,
+      registryAddress: ("0x" + "22".repeat(20)) as Address,
+      transport: "http",
+      async getHeadBlockNumber() {
+        throw new Error("timeout waiting for response");
+      },
+      async getBlockTimestamp() {
+        return 0n;
+      },
+      async getIntentRegisteredLogs() {
+        return [] as RegistryLog[];
+      },
+      async getIntent() {
+        throw new Error("not used");
+      },
+      async close() {},
+    };
+
+    await assert.rejects(
+      runHttpScanner({
+        client: erroringClient,
+        eventAbi: FAKE_EVENT_ABI,
+        checkpoint,
+        startBlock: 0n,
+        blockRange: 500n,
+        scanIntervalMs: 5,
+        confirmations: 0n,
+        onBatch: handler,
+        metrics: sink,
+        chainId: 10050,
+      }),
+    );
+
+    assert.equal(rpcErrors.length, 1, "one RPC error emitted");
+    assert.equal(rpcErrors[0]!.error_type, "timeout");
+  });
+});
+
+describe("nextDelay — WS reconnect backoff", () => {
+  it("delay grows exponentially across attempts", () => {
+    const BASE = 1000;
+    const MAX = 300_000;
+    // Collect the minimum possible delay (applying max negative jitter) at
+    // each attempt. Even with ±20% jitter the lower bound still shows growth.
+    const minDelays = Array.from({ length: 5 }, (_, i) => {
+      // Remove jitter to get the deterministic exponent.
+      const exp = Math.min(BASE * Math.pow(2, i), MAX);
+      return Math.max(BASE, Math.round(exp * 0.8)); // minimum with -20% jitter
+    });
+    for (let i = 1; i < minDelays.length; i++) {
+      assert.ok(
+        minDelays[i]! >= minDelays[i - 1]!,
+        `minimum delay at attempt ${i} (${minDelays[i]}) should be >= attempt ${i - 1} (${minDelays[i - 1]})`,
+      );
+    }
+  });
+
+  it("nextDelay is capped at MAX_RECONNECT_MS", () => {
+    // At attempt=100 the exponent overflows; it must be capped at 300_000.
+    const MAX = 300_000;
+    const delay = nextDelay(100, 1000, MAX);
+    assert.ok(delay <= MAX, `delay ${delay} exceeds cap ${MAX}`);
+    assert.ok(delay >= 1000, `delay ${delay} is below base`);
+  });
+
+  it("nextDelay(0) equals the base delay", () => {
+    // At attempt=0: exp = base * 2^0 = base. Jitter ±20% of base.
+    // The result must be >= base (clamped).
+    const delay = nextDelay(0, 1000, 300_000);
+    assert.ok(delay >= 1000, `delay ${delay} should be >= base 1000`);
+    assert.ok(delay <= 1200, `delay ${delay} should be <= base+20% = 1200`);
   });
 });

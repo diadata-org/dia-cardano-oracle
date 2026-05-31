@@ -1,9 +1,21 @@
 export {
   createDb,
+  POSTGRES_SCHEMA,
+  SQLITE_SCHEMA,
+  type AlertLogRow,
+  type AlertQuery,
+  type ChainStateRow,
+  type ContractSymbolUpdateRow,
   type Db,
   type DbConfig,
+  type PerformanceMetricRow,
+  type PerformanceMetricsQuery,
   type ProcessedEventRow,
-  type ChainStateRow,
+  type ProcessedEventsQuery,
+  type TransactionLogInsert,
+  type TransactionLogPatch,
   type TransactionLogRow,
+  type TransactionQuery,
+  // Backward-compat alias kept for existing callers.
   type TransactionViewRow,
 } from "./db.js";

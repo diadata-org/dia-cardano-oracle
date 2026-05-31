@@ -11,11 +11,12 @@
 //
 // Resilience model:
 //   - If the WS connection drops, viem's `unwatch` returns; we
-//     reconnect after `reconnectIntervalMs` up to `maxReconnects`
-//     attempts.
-//   - Beyond `maxReconnects`, the scanner aborts. The caller (a
-//     supervisor at the cmd/feeder level) is responsible for switching
-//     to the HTTP fallback.
+//     reconnect using exponential backoff with ±20% jitter, capped at
+//     5 minutes.
+//   - The delay resets to the base value on a successful log delivery.
+//   - Reconnect attempts are logged as warnings; the scanner never
+//     terminates on its own — the HTTP baseline keeps running in
+//     parallel and covers any gap.
 //   - Once a log is delivered to `onBatch`, the checkpoint is advanced
 //     to that log's block. A subsequent HTTP scan starting from the
 //     checkpoint will pick up anything missed during a reconnect.
@@ -42,6 +43,27 @@ import type { RegistryLog } from "./registry-client.js";
 import { processLogBatch, type ScanHandler } from "./scan-handler.js";
 import type { ScannerMetricsSink } from "./scanner-http.js";
 
+// Reconnect backoff parameters (sourced from WsScannerOptions defaults).
+const BASE_RECONNECT_MS = 1_000;
+const MAX_RECONNECT_MS = 300_000;
+
+/**
+ * Compute the next reconnect delay with exponential backoff and ±20% jitter.
+ *
+ * @param attempt  Zero-based attempt index (0 = first reconnect).
+ * @param base     Base delay in ms (default: `BASE_RECONNECT_MS`).
+ * @param max      Cap in ms (default: `MAX_RECONNECT_MS`).
+ */
+export function nextDelay(
+  attempt: number,
+  base: number = BASE_RECONNECT_MS,
+  max: number = MAX_RECONNECT_MS,
+): number {
+  const exp = Math.min(base * Math.pow(2, attempt), max);
+  const jitter = exp * 0.2 * (Math.random() * 2 - 1); // ±20%
+  return Math.max(base, Math.min(max, Math.round(exp + jitter)));
+}
+
 export type WsScannerOptions = {
   /** Full WS URL including the path-style credential. Compose with
    *  `composeAuthenticatedWsUrl` in `registry-client.ts`. */
@@ -52,7 +74,12 @@ export type WsScannerOptions = {
   eventAbi: AbiEvent;
   checkpoint: Checkpoint;
   onBatch: ScanHandler;
+  /** Initial reconnect delay in ms. Grows exponentially on repeated failures.
+   *  Defaults to `BASE_RECONNECT_MS` (1 s). */
   reconnectIntervalMs: number;
+  /** Kept for interface compatibility; no longer used as a hard budget.
+   *  When reconnects exceed this count, a warning is logged but scanning
+   *  continues. */
   maxReconnects: number;
   log?: (line: string) => void;
   signal?: AbortSignal;
@@ -60,12 +87,19 @@ export type WsScannerOptions = {
   metrics?: ScannerMetricsSink;
   /** Numeric source chain id used as the `chain_id` label. */
   chainId?: number;
+  /** Optional block-timestamp resolver. When absent, `blockTimestamp`
+   *  on delivered events defaults to 0n and the intent_to_registration /
+   *  registration_to_scan latency phases stay at 0. Callers that want
+   *  those metrics live should pass the registry client's
+   *  `getBlockTimestamp`. */
+  getBlockTimestamp?: (blockNumber: bigint) => Promise<bigint>;
 };
 
 /**
- * Run the WS scanner until the abort signal fires or the reconnect
- * budget is exhausted. Returns gracefully on abort; throws when the
- * reconnect budget is exceeded so the caller can fall back to HTTP.
+ * Run the WS scanner until the abort signal fires.
+ * On connection failure, reconnects with exponential backoff (±20% jitter),
+ * capped at 5 minutes. Never terminates on its own — the HTTP baseline covers
+ * any gap while the WS scanner is reconnecting.
  */
 export async function runWsScanner(options: WsScannerOptions): Promise<void> {
   const log = options.log ?? (() => {});
@@ -75,8 +109,12 @@ export async function runWsScanner(options: WsScannerOptions): Promise<void> {
   let attempt = 0;
   while (!signal?.aborted) {
     const client = createPublicClient({ transport: webSocket(options.wsUrl) });
-    log(`scanner-ws: connecting (attempt ${attempt + 1}/${options.maxReconnects + 1})`);
+    log(
+      `scanner-ws: connecting (attempt ${attempt + 1})`,
+    );
+    metrics?.setTransportUp({ chain_id: chainIdLabel, transport: "ws" }, 1);
 
+    let receivedLog = false;
     try {
       await watchUntilDisconnect({
         client,
@@ -88,24 +126,41 @@ export async function runWsScanner(options: WsScannerOptions): Promise<void> {
         signal,
         metrics,
         chainIdLabel,
+        getBlockTimestamp: options.getBlockTimestamp,
+        onLogReceived: () => {
+          receivedLog = true;
+        },
       });
       // Graceful disconnect (abort signal). Stop the loop.
       log("scanner-ws: aborted");
+      metrics?.setTransportUp({ chain_id: chainIdLabel, transport: "ws" }, 0);
       return;
     } catch (error) {
       log(`scanner-ws: connection lost (${(error as Error).message})`);
       metrics?.incRpcError({ chain_id: chainIdLabel, error_type: "websocket" });
+      metrics?.setTransportUp({ chain_id: chainIdLabel, transport: "ws" }, 0);
     } finally {
       closeClientSocket(client);
     }
 
-    attempt += 1;
+    // Reset backoff counter when we successfully received at least one log
+    // before losing the connection — the link was healthy for a while.
+    if (receivedLog) {
+      attempt = 0;
+    } else {
+      attempt += 1;
+    }
+
     if (attempt > options.maxReconnects) {
-      throw new Error(
-        `scanner-ws: exhausted reconnect budget (${options.maxReconnects} attempts).`,
+      log(
+        `scanner-ws: WARNING — exceeded soft reconnect budget (${options.maxReconnects}). ` +
+          `Continuing with backoff (HTTP baseline is active).`,
       );
     }
-    await waitOrAbort(options.reconnectIntervalMs, signal);
+
+    const delay = nextDelay(attempt, options.reconnectIntervalMs, MAX_RECONNECT_MS);
+    log(`scanner-ws: reconnecting in ${delay}ms (attempt ${attempt})`);
+    await waitOrAbort(delay, signal);
   }
 }
 
@@ -128,6 +183,8 @@ type WatchInputs = {
   signal?: AbortSignal;
   metrics?: ScannerMetricsSink;
   chainIdLabel: string;
+  getBlockTimestamp?: (blockNumber: bigint) => Promise<bigint>;
+  onLogReceived: () => void;
 };
 
 /**
@@ -141,7 +198,19 @@ type WatchInputs = {
  */
 function watchUntilDisconnect(inputs: WatchInputs): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const { client, registryAddress, eventAbi, checkpoint, onBatch, log, signal, metrics, chainIdLabel } = inputs;
+    const {
+      client,
+      registryAddress,
+      eventAbi,
+      checkpoint,
+      onBatch,
+      log,
+      signal,
+      metrics,
+      chainIdLabel,
+      getBlockTimestamp,
+      onLogReceived,
+    } = inputs;
 
     let stopped = false;
     const stop = (cause: "abort" | { error: Error }): void => {
@@ -149,9 +218,7 @@ function watchUntilDisconnect(inputs: WatchInputs): Promise<void> {
       stopped = true;
       try {
         unwatch();
-      } catch {
-        // ignore; cleanup is best-effort
-      }
+      } catch (_err) { /* swallow intentionally — socket already closing */ }
       if (cause === "abort") resolve();
       else reject(cause.error);
     };
@@ -178,6 +245,7 @@ function watchUntilDisconnect(inputs: WatchInputs): Promise<void> {
     async function handleIncomingLogs(logs: Log[]): Promise<void> {
       const decoded = logs.map(toRegistryLog);
       if (decoded.length === 0) return;
+      onLogReceived();
       const blockNumbers = decoded
         .map((l) => l.blockNumber)
         .filter((b): b is bigint => b !== undefined);
@@ -190,6 +258,7 @@ function watchUntilDisconnect(inputs: WatchInputs): Promise<void> {
         toBlock: maxBlock,
         checkpoint,
         onBatch,
+        getBlockTimestamp,
       });
       // Update head-tracking gauge whenever the WS stream delivers a log.
       metrics?.setLastBlock({ chain_id: chainIdLabel, scanner_type: "ws" }, Number(maxBlock));

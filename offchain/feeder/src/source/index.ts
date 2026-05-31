@@ -33,6 +33,11 @@ export {
 } from "./checkpoint.js";
 
 export {
+  createDbCheckpoint,
+  type DbCheckpointOptions,
+} from "./checkpoint-db.js";
+
+export {
   runHttpScanner,
   type HttpScannerOptions,
   type ScannerMetricsSink,

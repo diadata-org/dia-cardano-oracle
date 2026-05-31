@@ -41,6 +41,10 @@ export type ExtractedEvent = {
   blockNumber: bigint;
   txHash: Hex;
   logIndex: number;
+  /** Unix timestamp (seconds) of the block that contained this event.
+   *  Used by 6-phase latency metrics. Populated by the scanner;
+   *  defaults to 0n when the transport does not support block lookups. */
+  blockTimestamp: bigint;
 };
 
 /**

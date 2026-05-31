@@ -48,6 +48,11 @@ export type RegistryClient = {
   /** Current HEAD block height on the source chain. */
   getHeadBlockNumber(): Promise<bigint>;
 
+  /** Resolve the UNIX-seconds timestamp of `blockNumber`. Used by the
+   *  scanner to populate `ExtractedEvent.blockTimestamp`, which feeds the
+   *  intent_to_registration and registration_to_scan latency phases. */
+  getBlockTimestamp(blockNumber: bigint): Promise<bigint>;
+
   /** Raw viem `Log[]` for the configured event between `fromBlock`
    *  and `toBlock` (inclusive). Decoding is the extractor's job. */
   getIntentRegisteredLogs(args: { fromBlock: bigint; toBlock: bigint }): Promise<RegistryLog[]>;
@@ -160,8 +165,9 @@ export function resolveSourceFromConfig(
  * Create a registry client that talks to the source chain over HTTP.
  *
  * Iterates `source.rpc_urls` in order: if a request fails, retries
- * against the next URL. Wraps all three `RegistryClient` methods with
- * this failover so any transient node outage is invisible to callers.
+ * against the next URL. Wraps every `RegistryClient` request method
+ * with this failover so any transient node outage is invisible to
+ * callers.
  */
 export function createHttpRegistryClient(source: ResolvedSource): RegistryClient {
   const urls = source.rpcUrls;
@@ -193,9 +199,10 @@ export function createHttpRegistryClient(source: ResolvedSource): RegistryClient
     chainId: source.chainId,
     registryAddress: source.registryAddress,
     transport: "http" as const,
-    getHeadBlockNumber:       ()     => withFailover((a) => a.getHeadBlockNumber()),
-    getIntentRegisteredLogs:  (args) => withFailover((a) => a.getIntentRegisteredLogs(args)),
-    getIntent:                (hash) => withFailover((a) => a.getIntent(hash)),
+    getHeadBlockNumber:       ()         => withFailover((a) => a.getHeadBlockNumber()),
+    getBlockTimestamp:        (blockNum) => withFailover((a) => a.getBlockTimestamp(blockNum)),
+    getIntentRegisteredLogs:  (args)     => withFailover((a) => a.getIntentRegisteredLogs(args)),
+    getIntent:                (hash)     => withFailover((a) => a.getIntent(hash)),
     close: async () => {},
   };
 }
@@ -270,6 +277,11 @@ function adaptViemClient(inputs: AdapterInputs): RegistryClient {
 
     async getHeadBlockNumber(): Promise<bigint> {
       return client.getBlockNumber();
+    },
+
+    async getBlockTimestamp(blockNumber: bigint): Promise<bigint> {
+      const block = await client.getBlock({ blockNumber, includeTransactions: false });
+      return block.timestamp;
     },
 
     async getIntentRegisteredLogs({ fromBlock, toBlock }): Promise<RegistryLog[]> {

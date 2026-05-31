@@ -48,6 +48,7 @@ export function decodeIntentRegisteredLog(log: RegistryLog, abi: AbiEvent): Extr
     blockNumber: log.blockNumber,
     txHash: log.transactionHash,
     logIndex: log.logIndex,
+    blockTimestamp: 0n,
   };
 }
 
