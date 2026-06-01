@@ -29,9 +29,10 @@
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type Transport = "http" | "ws";
 export type InitSubCommand = "bootstrap" | "client";
+export type CheckpointSubCommand = "set" | "get";
 
 /** Mutually exclusive top-level "mode" the binary runs in. */
-export type FeederMode = "daemon" | "validate" | "scan" | "init";
+export type FeederMode = "daemon" | "validate" | "scan" | "init" | "checkpoint";
 
 export type ParsedArgs = {
   configPath: string;
@@ -41,13 +42,18 @@ export type ParsedArgs = {
   dryRun: boolean;
   cleanState: boolean;
   showHelp: boolean;
-  // Checkpoint seeding (mutually exclusive)
+  // Checkpoint seeding (mutually exclusive) — used by both the daemon
+  // (as a one-shot seed before the scanner starts) and the `checkpoint`
+  // sub-command (as the only way to mutate state).
   fromBlock?: string;   // "N" → scan starts from block N
   fromLatest: boolean;  // scan starts from current chain tip
+  clear: boolean;       // checkpoint set --clear: reset to 0
   // init-specific
   initSubCommand?: InitSubCommand;
   initFrom?: string;
   force: boolean;
+  // checkpoint-specific
+  checkpointSubCommand?: CheckpointSubCommand;
 };
 
 const VALID_LOG_LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error"];
@@ -62,6 +68,7 @@ const DEFAULTS: ParsedArgs = {
   cleanState: false,
   showHelp: false,
   fromLatest: false,
+  clear: false,
   force: false,
 };
 
@@ -75,6 +82,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
   // before the flag loop so the loop can use its standard switch/case.
   if (argv[0] === "init") {
     return parseInitArgs(argv);
+  }
+  // `checkpoint get` / `checkpoint set --from-latest|--from-block N|--clear`
+  if (argv[0] === "checkpoint") {
+    return parseCheckpointArgs(argv);
   }
 
   const parsed: ParsedArgs = { ...DEFAULTS };
@@ -122,6 +133,61 @@ export function parseArgs(argv: string[]): ParsedArgs {
         break;
       default:
         throw new Error(`Unknown argument: ${arg}`);
+    }
+  }
+
+  return parsed;
+}
+
+function parseCheckpointArgs(argv: string[]): ParsedArgs {
+  const sub = argv[1] as CheckpointSubCommand | undefined;
+  if (sub !== "set" && sub !== "get") {
+    throw new Error(
+      `'checkpoint' requires a sub-command: set or get\n` +
+      `  feeder checkpoint get\n` +
+      `  feeder checkpoint set --from-latest\n` +
+      `  feeder checkpoint set --from-block <N>\n` +
+      `  feeder checkpoint set --clear`,
+    );
+  }
+
+  const parsed: ParsedArgs = {
+    ...DEFAULTS,
+    mode: "checkpoint",
+    checkpointSubCommand: sub,
+  };
+  applyEnvOverrides(parsed);
+
+  for (let i = 2; i < argv.length; i += 1) {
+    const arg = argv[i];
+    switch (arg) {
+      case "--help":
+      case "-h":
+        parsed.showHelp = true;
+        break;
+      case "--config":
+        parsed.configPath = requireValue(argv, ++i, "--config");
+        break;
+      case "--from-block":
+        if (parsed.fromLatest || parsed.clear) {
+          throw new Error("--from-block is mutually exclusive with --from-latest and --clear");
+        }
+        parsed.fromBlock = parseBlockNumber(requireValue(argv, ++i, "--from-block"));
+        break;
+      case "--from-latest":
+        if (parsed.fromBlock !== undefined || parsed.clear) {
+          throw new Error("--from-latest is mutually exclusive with --from-block and --clear");
+        }
+        parsed.fromLatest = true;
+        break;
+      case "--clear":
+        if (parsed.fromBlock !== undefined || parsed.fromLatest) {
+          throw new Error("--clear is mutually exclusive with --from-block and --from-latest");
+        }
+        parsed.clear = true;
+        break;
+      default:
+        throw new Error(`Unknown argument for 'checkpoint ${sub}': ${arg}`);
     }
   }
 

@@ -27,6 +27,7 @@ import { runScan } from "./scan-cmd.js";
 import { runValidateOnly } from "./validate-cmd.js";
 import { runDaemon } from "./daemon-cmd.js";
 import { runInit } from "./init-cmd.js";
+import { runCheckpoint } from "./checkpoint-cmd.js";
 
 const HELP_TEXT = `dia-cardano-oracle-feeder
 
@@ -40,6 +41,8 @@ Usage:
   feeder --config <dir> --scan [--transport http|ws] [--dry-run]
   feeder init bootstrap [--from <cli-state-dir-or-file>] [--force]
   feeder init client    [--from <client.json>]           [--force]
+  feeder checkpoint get
+  feeder checkpoint set --from-latest | --from-block <N> | --clear
   feeder --help
 
 Flags:
@@ -86,6 +89,20 @@ Init sub-commands (one-time setup):
                         a CLI state dir or the JSON file directly. For
                         'client': the client JSON file.
   --force               Skip the overwrite confirmation prompt (init only).
+
+Checkpoint sub-commands (mutate chain_state.last_scan_block in the DB):
+  checkpoint get        Print the current persisted checkpoint and which
+                        block the daemon will start scanning from.
+  checkpoint set        Mutate the checkpoint. Requires exactly one of:
+                          --from-latest   query chain tip, scan only new
+                          --from-block N  scan from block N onwards
+                          --clear         reset to 0 (replays from YAML
+                                          start_block on next daemon run)
+
+                        Safe to run while the daemon is stopped. The
+                        daemon only reads the checkpoint at startup, so
+                        running these while it is live has no effect on
+                        the active scanner.
 
 The active network (Preview <-> DIA Testnet, Mainnet <-> DIA Mainnet)
 is selected by CARDANO_NETWORK in .env, matching the CLI behavior.
@@ -180,6 +197,17 @@ async function dispatch(args: ParsedArgs): Promise<number> {
         network,
         from: args.initFrom,
         force: args.force,
+        report,
+      });
+
+    case "checkpoint":
+      return runCheckpoint({
+        network,
+        configPath: args.configPath,
+        subCommand: args.checkpointSubCommand!,
+        fromBlock: args.fromBlock,
+        fromLatest: args.fromLatest,
+        clear: args.clear,
         report,
       });
   }

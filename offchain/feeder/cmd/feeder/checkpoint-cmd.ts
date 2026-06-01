@@ -86,10 +86,18 @@ export async function runCheckpoint(options: CheckpointCmdOptions): Promise<numb
   }
 
   // Open DB and create the checkpoint backed by chain_state.last_scan_block.
+  // Mirror daemon-cmd.ts:367-373 so the chain_state row exists before we try
+  // to read/write it — the underlying setLastScanBlock is UPDATE-only and
+  // would silently no-op on a missing row otherwise.
   const dbConfig = resolveDbConfig(network);
   const db = await createDb(dbConfig);
   try {
     await db.migrate();
+    await db.initialiseChainState({
+      chainId,
+      chainName: network,
+      contractId,
+    });
     const checkpoint = createDbCheckpoint({ db, chainId, contractId });
 
     // ------------------------------------------------------------------

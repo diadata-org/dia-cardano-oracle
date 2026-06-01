@@ -476,19 +476,31 @@ async function createSqliteDb(filePath: string): Promise<Db> {
     },
 
     async setLastProcessedBlock(chainId, contractId, block) {
-      db.prepare(`
+      const result = db.prepare(`
         UPDATE chain_state
         SET last_processed_block = ?, updated_at_ms = ?
         WHERE chain_id = ? AND contract_id = ?
       `).run(String(block), Date.now(), chainId, contractId);
+      if (result.changes === 0) {
+        throw new Error(
+          `setLastProcessedBlock: no chain_state row for chain_id=${chainId} contract_id=${contractId}. ` +
+          `Call initialiseChainState first.`,
+        );
+      }
     },
 
     async setLastScanBlock(chainId, contractId, block) {
-      db.prepare(`
+      const result = db.prepare(`
         UPDATE chain_state
         SET last_scan_block = ?, updated_at_ms = ?
         WHERE chain_id = ? AND contract_id = ?
       `).run(String(block), Date.now(), chainId, contractId);
+      if (result.changes === 0) {
+        throw new Error(
+          `setLastScanBlock: no chain_state row for chain_id=${chainId} contract_id=${contractId}. ` +
+          `Call initialiseChainState first.`,
+        );
+      }
     },
 
     async setChainHealth(chainId, contractId, { isHealthy, errorMsg }) {
@@ -845,21 +857,33 @@ async function createPostgresDb(dsn: string): Promise<Db> {
     },
 
     async setLastProcessedBlock(chainId, contractId, block) {
-      await pool.query(
+      const result = await pool.query(
         `UPDATE chain_state
          SET last_processed_block = $1, updated_at_ms = $2
          WHERE chain_id = $3 AND contract_id = $4`,
         [String(block), Date.now(), chainId, contractId],
       );
+      if (result.rowCount === 0) {
+        throw new Error(
+          `setLastProcessedBlock: no chain_state row for chain_id=${chainId} contract_id=${contractId}. ` +
+          `Call initialiseChainState first.`,
+        );
+      }
     },
 
     async setLastScanBlock(chainId, contractId, block) {
-      await pool.query(
+      const result = await pool.query(
         `UPDATE chain_state
          SET last_scan_block = $1, updated_at_ms = $2
          WHERE chain_id = $3 AND contract_id = $4`,
         [String(block), Date.now(), chainId, contractId],
       );
+      if (result.rowCount === 0) {
+        throw new Error(
+          `setLastScanBlock: no chain_state row for chain_id=${chainId} contract_id=${contractId}. ` +
+          `Call initialiseChainState first.`,
+        );
+      }
     },
 
     async setChainHealth(chainId, contractId, { isHealthy, errorMsg }) {
