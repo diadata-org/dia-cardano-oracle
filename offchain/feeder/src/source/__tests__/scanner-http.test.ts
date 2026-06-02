@@ -90,6 +90,79 @@ function makeScannedBatchSink(): {
   };
 }
 
+describe("runHttpScanner — reorg recovery (R10.B.2)", () => {
+  it("rewinds the cursor to re-scan when HEAD drops below the high-water mark", async () => {
+    // Deterministic, load-insensitive: the head function returns 1000 until
+    // the cursor has advanced past the start (proving forward progress), then
+    // returns 950 (the reorg) on every subsequent call. The abort is driven
+    // by OBSERVED progress (a getLogs call starting below the start cursor =
+    // the rewind happened), never by a wall-clock timer, so parallel-suite
+    // CPU contention cannot change the outcome. confirmations=10.
+    const controller = new AbortController();
+    const getLogsCalls: Array<{ fromBlock: bigint; toBlock: bigint }> = [];
+    const rpcErrors: Array<{ chain_id: string; error_type: string }> = [];
+    let sawForwardProgress = false;
+    let rewindObserved = false;
+
+    const client: RegistryClient = {
+      chainId: 10050,
+      registryAddress: ("0x" + "11".repeat(20)) as Address,
+      transport: "http",
+      async getHeadBlockNumber() {
+        // Reorg as soon as we've made forward progress past the start cursor.
+        return sawForwardProgress ? 950n : 1000n;
+      },
+      async getBlockTimestamp() { return 0n; },
+      async getIntentRegisteredLogs(args) {
+        getLogsCalls.push(args);
+        if (args.fromBlock >= 980n) sawForwardProgress = true;
+        // A scan starting below the start cursor is the rewind — we're done.
+        if (args.fromBlock < 980n) {
+          rewindObserved = true;
+          controller.abort();
+        }
+        return [];
+      },
+      async getIntent() { throw new Error("not used"); },
+      async close() {},
+    };
+
+    const checkpoint = makeMemoryCheckpoint(null);
+    const { handler } = makeScannedBatchSink();
+    // Safety net so a regression can't hang the suite.
+    const safety = setTimeout(() => controller.abort(), 5_000);
+
+    await runHttpScanner({
+      client,
+      eventAbi: FAKE_EVENT_ABI,
+      checkpoint,
+      startBlock: 980n,
+      blockRange: 500n,
+      scanIntervalMs: 1,
+      confirmations: 10n,
+      onBatch: handler,
+      signal: controller.signal,
+      chainId: 10050,
+      metrics: {
+        setLastBlock() {}, setBlockLag() {}, setTransportUp() {},
+        incBackfillBlocks() {}, incBackfillChunks() {},
+        incRpcError(labels) { rpcErrors.push(labels); },
+      },
+    });
+    clearTimeout(safety);
+
+    assert.ok(rewindObserved, "expected the cursor to rewind below the start cursor after the reorg");
+    assert.ok(
+      getLogsCalls.some((c) => c.fromBlock < 980n),
+      `expected a re-scan from below the start cursor; ranges=${getLogsCalls.map((c) => c.fromBlock).join(",")}`,
+    );
+    assert.ok(
+      rpcErrors.some((e) => e.error_type === "reorg"),
+      "expected a reorg rpc-error metric",
+    );
+  });
+});
+
 describe("runHttpScanner — gap recovery (backward_sync catch-up)", () => {
   it("uses BACKFILL_CHUNK_BLOCKS while gap > maxBlockGap, then switches to blockRange chunks", async () => {
     // Gap setup: cursor=0, head=11_000 → finalizedHead=11_000.

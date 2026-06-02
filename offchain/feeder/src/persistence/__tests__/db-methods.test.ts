@@ -448,6 +448,14 @@ describe("Db.alert_log", () => {
     assert.equal((await db.listAlerts({})).length, 2);
     assert.equal((await db.listAlerts({ limit: 1 })).length, 1);
   });
+
+  it("getAlertById returns the row by id, or null for an unknown id", async () => {
+    const id = await db.recordAlert({ name: "X", severity: "warning", message: "m", labels: { symbol: "BTC/USD" } });
+    const row = await db.getAlertById(id);
+    assert.equal(row?.id, id);
+    assert.equal(row?.alertName, "X");
+    assert.equal(await db.getAlertById(999_999), null);
+  });
 });
 
 // ===========================================================================

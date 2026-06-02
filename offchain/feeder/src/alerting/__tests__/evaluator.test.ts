@@ -218,4 +218,51 @@ describe("startAlertEvaluator", () => {
     // Should only fire once despite multiple cycles.
     assert.equal(fireCount, 1, "Alert should only be fired once while condition persists");
   });
+
+  it("clears tracking (no infinite retry) when resolveAlert reports the row is already gone (R10.B.10)", async () => {
+    // Scenario: alert fired, then the row is removed externally (manual
+    // resolve / cleanup). When the condition clears, resolveAlert throws
+    // "no alert_log row". The evaluator must clear its tracking so it does
+    // NOT retry resolve forever — and so the rule can fire again later.
+    let fireCount = 0;
+    let resolveAttempts = 0;
+    const db = makeDb({
+      recordAlert: async () => { fireCount++; return fireCount; },
+      resolveAlert: async () => {
+        resolveAttempts++;
+        throw new Error("resolveAlert: no alert_log row with id=1.");
+      },
+    });
+
+    let fakeNow = 1_000;
+    const cache = createPriceCache({ now: () => fakeNow });
+    const key = { routerId: "r1", destinationIndex: 0, symbol: "ADA/USD" };
+    const entry = (ts: number) => ({
+      symbol: "ADA/USD", price: 1n, timestamp: 1_700_000_000n,
+      intentHash: "0x999", updatedAtMs: ts,
+    });
+
+    // Stale → fires.
+    cache.set(key, entry(1_000));
+    fakeNow = 1_000 + 400_000;
+
+    const controller = new AbortController();
+    const handle = startAlertEvaluator({
+      db, priceCache: cache, evaluationIntervalMs: 5,
+      pairStalenessThresholdMs: 300_000, signal: controller.signal,
+    });
+
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(fireCount, 1, "alert fired once");
+
+    // Clear the condition → evaluator tries resolve, which throws "no row".
+    cache.set(key, entry(fakeNow));
+    await new Promise((r) => setTimeout(r, 30));
+    controller.abort();
+    await handle.done;
+
+    // Tracking was cleared after the first failed resolve, so resolve is not
+    // retried every tick (it would be dozens over 30ms at 5ms intervals).
+    assert.ok(resolveAttempts <= 2, `resolve should not retry indefinitely; attempts=${resolveAttempts}`);
+  });
 });

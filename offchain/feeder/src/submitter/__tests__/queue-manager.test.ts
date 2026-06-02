@@ -218,4 +218,42 @@ describe("createQueueManager", () => {
     assert.equal(results[1]?.intentHash, "b2");
     assert.equal(mgr.queueKeys().length, 1);
   });
+
+  it("submitBatch throws when requests target different lanes (R10.C.17)", async () => {
+    const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
+      clientFactory: () => ({
+        label: "c",
+        async submit(req) {
+          return { ok: true, cardanoTxHash: "t", intentHash: req.intentHash, receiverUnit: "r", pairUnit: "p" };
+        },
+        async submitBatch(reqs) {
+          return reqs.map((req) => ({ ok: true, cardanoTxHash: "t", intentHash: req.intentHash, receiverUnit: "r", pairUnit: "p" }));
+        },
+      }),
+    });
+
+    await assert.rejects(
+      () => mgr.submitBatch([
+        makeRequest("client-a.json", "p.json", "x1"),
+        makeRequest("client-b.json", "p.json", "x2"), // different lane
+      ]),
+      /same client\/protocol lane/,
+    );
+  });
+
+  it("submitBatch with an empty array returns [] without creating a queue", async () => {
+    const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
+      clientFactory: () => ({
+        label: "c",
+        async submit(req) {
+          return { ok: true, cardanoTxHash: "t", intentHash: req.intentHash, receiverUnit: "r", pairUnit: "p" };
+        },
+        async submitBatch() { return []; },
+      }),
+    });
+    assert.deepEqual(await mgr.submitBatch([]), []);
+    assert.equal(mgr.queueKeys().length, 0);
+  });
 });
