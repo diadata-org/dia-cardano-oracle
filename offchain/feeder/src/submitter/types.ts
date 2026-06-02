@@ -14,6 +14,20 @@ import type { FeederErrorCode } from "../errors/codes.js";
 // Submit request
 // ---------------------------------------------------------------------------
 
+/**
+ * Per-router Cardano signing key, resolved at daemon startup from the
+ * router's `private_key_env` (or the inline `private_key` fallback).
+ *
+ * `kind` distinguishes a BIP-39 mnemonic seed phrase from a raw private
+ * key so the bridge selects the matching Lucid wallet loader:
+ *   - resolved from an env var whose name contains `PRIVATE_KEY` → privateKey
+ *   - resolved from any other env var name (e.g. `…_WALLET_SEED_…`) → seed
+ *   - the inline `private_key` YAML field → always privateKey
+ */
+export type RouterSigner =
+  | { kind: "seed"; value: string }
+  | { kind: "privateKey"; value: string };
+
 /** One unit of work that the queue processes. */
 export type SubmitRequest = {
   /** Canonical event identifier for correlation in logs + price cache. */
@@ -26,6 +40,11 @@ export type SubmitRequest = {
    *  Used as the price-cache key prefix. */
   routerId: string;
   destinationIndex: number;
+  /** Cardano signer for this router. When absent the bridge falls back to
+   *  the global CARDANO_WALLET_SEED_<NETWORK> / CARDANO_PRIVATE_KEY_<NETWORK>
+   *  env vars — correct for single-wallet deployments. Multi-client
+   *  deployments set a distinct signer per router via `private_key_env`. */
+  signer?: RouterSigner;
 };
 
 export type BatchMemberInfo = {

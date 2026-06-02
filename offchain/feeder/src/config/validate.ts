@@ -576,7 +576,59 @@ function validateRouter(
 
   validateTriggers(router.triggers, c.scope("triggers"), config);
   validatePrivateKey(router, c);
+  validateProcessing(router.processing, c.scope("processing"));
   validateDestinations(router.destinations, c.scope("destinations"), config);
+}
+
+/**
+ * Validate a router's `processing` block.
+ *
+ * `transformations` and `datasource: "processed"` are Spectra-EVM
+ * payload-reshaping concepts: in Spectra they reshape the destination
+ * method's call params. They CANNOT apply to a Cardano destination,
+ * whose payload is the DIA-signed oracle intent — the on-chain
+ * coordinator verifies the EIP-712 signature over the intent's exact
+ * fields (price, timestamp, nonce, …). Rewriting any of them would
+ * invalidate the signature and the update would be rejected on-chain.
+ *
+ * Rather than silently ignoring these keys (the prior behaviour, which
+ * read as "supported" to an operator porting a Spectra YAML), we reject
+ * them loudly with a pointer to the reason. `datasource: "event" |
+ * "enrichment"` is accepted ("enrichment" is the IntentRegistered
+ * default). `validationenabled: false` is rejected because the feeder
+ * unconditionally recovers and authorises the EIP-712 signer — intent
+ * validation cannot be turned off without accepting unsigned prices.
+ */
+function validateProcessing(
+  processing: RouterConfig["processing"] | undefined,
+  c: IssueCollector,
+): void {
+  if (!processing) return;
+
+  if (processing.transformations && processing.transformations.length > 0) {
+    c.error(
+      "transformations",
+      "`transformations` is not supported for Cardano destinations: the payload is the " +
+        "DIA-signed intent and rewriting its fields would invalidate the on-chain EIP-712 " +
+        "signature check. Remove the transformations block. (See docs/plans/m3-deferred-features.md §B.)",
+    );
+  }
+
+  if (processing.datasource === "processed") {
+    c.error(
+      "datasource",
+      "`datasource: processed` is not supported for Cardano destinations (it depends on the " +
+        "EVM-only transformations stage). Use `enrichment` (default) or `event`.",
+    );
+  }
+
+  if (processing.validationenabled === false) {
+    c.error(
+      "validationenabled",
+      "`validationenabled: false` is not allowed: the feeder always recovers and authorises the " +
+        "EIP-712 signer of every intent. Disabling validation would accept unsigned prices.",
+    );
+  }
 }
 
 function validateTriggers(

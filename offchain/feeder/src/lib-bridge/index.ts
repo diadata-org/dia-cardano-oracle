@@ -16,6 +16,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import type { EnrichedIntent } from "../source/types.js";
+import type { RouterSigner } from "../submitter/types.js";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -41,6 +42,10 @@ export type OracleIntentSubmitParams = {
    *   waiting_utxo, writing_state
    */
   onStep?: (step: string, meta?: { txHash?: string }) => void;
+  /** Per-router signer override. When provided, the bridge uses this key
+   *  instead of the global CARDANO_WALLET_SEED_<NETWORK> /
+   *  CARDANO_PRIVATE_KEY_<NETWORK> env vars. */
+  signer?: RouterSigner;
 };
 
 export type OracleIntentBatchSubmitParams = {
@@ -54,6 +59,9 @@ export type OracleIntentBatchSubmitParams = {
     intentHash: string;
     onStep?: (step: string, meta?: { txHash?: string }) => void;
   }>;
+  /** Per-router signer override. All intents in a batch share one lane
+   *  (one client/protocol state) and therefore one signer. */
+  signer?: RouterSigner;
 };
 
 /**
@@ -194,9 +202,28 @@ export function createRealOracleIntentBridge(
     return `${cliSrcRoot}/${rel}`;
   }
 
+  /**
+   * Apply a per-router signer override on top of the env-derived CLI config.
+   * Returns a new config object (never mutates the input) with exactly one
+   * of cardanoWalletSeed / cardanoPrivateKey set from the router signer, so
+   * `selectConfiguredWalletWithConfig` loads the right wallet. When `signer`
+   * is undefined the env-derived config passes through unchanged (single
+   * global wallet — the common single-client case).
+   */
+  function applySigner<T extends { cardanoWalletSeed?: string; cardanoPrivateKey?: string }>(
+    cliConfig: T,
+    signer: RouterSigner | undefined,
+  ): T {
+    if (!signer) return cliConfig;
+    if (signer.kind === "seed") {
+      return { ...cliConfig, cardanoWalletSeed: signer.value, cardanoPrivateKey: undefined };
+    }
+    return { ...cliConfig, cardanoPrivateKey: signer.value, cardanoWalletSeed: undefined };
+  }
+
   const bridge: OracleIntentBridge = {
     async submitOracleUpdate(params: OracleIntentSubmitParams): Promise<OracleUpdateResult> {
-      const { clientStatePath, protocolStatePath, enriched, intentHash, onStep } = params;
+      const { clientStatePath, protocolStatePath, enriched, intentHash, onStep, signer } = params;
       const { fullIntent } = enriched;
 
       log(`submitOracleUpdate: intentHash=${intentHash} symbol=${fullIntent.symbol}`);
@@ -335,7 +362,7 @@ export function createRealOracleIntentBridge(
       // ------------------------------------------------------------------
       onStep?.("connecting");
       log(`connecting to Cardano…`);
-      const cliConfig = getCliConfig();
+      const cliConfig = applySigner(getCliConfig(), signer);
       const lucid = await makeConfiguredLucidWithConfig(cliConfig);
       const walletSource = await selectConfiguredWalletWithConfig(lucid, cliConfig);
       const wallet = lucid.wallet();
@@ -637,7 +664,7 @@ export function createRealOracleIntentBridge(
     async submitOracleUpdateBatch(
       params: OracleIntentBatchSubmitParams,
     ): Promise<OracleBatchUpdateResult> {
-      const { clientStatePath, protocolStatePath, updates } = params;
+      const { clientStatePath, protocolStatePath, updates, signer } = params;
 
       if (updates.length === 0) {
         throw new Error("Bridge: batch submission requires at least one intent.");
@@ -760,7 +787,7 @@ export function createRealOracleIntentBridge(
       assertOracleUpdateBootstrapRefsResolved(protocol.bootstrapRefs);
 
       emitBatchStep(updates, "connecting");
-      const cliConfig = getCliConfig();
+      const cliConfig = applySigner(getCliConfig(), signer);
       const lucid = await makeConfiguredLucidWithConfig(cliConfig);
       const walletSource = await selectConfiguredWalletWithConfig(lucid, cliConfig);
       const wallet = lucid.wallet();

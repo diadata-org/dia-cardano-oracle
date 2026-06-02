@@ -39,6 +39,7 @@ import {
   validateModularConfig,
   type ModularConfig,
   type InfrastructureConfig,
+  type RouterConfig,
   type ValidationIssue,
 } from "../../src/config/index.js";
 import { createRegistryEnricher, identityTransformer } from "../../src/pipeline/index.js";
@@ -78,7 +79,7 @@ import {
   createCoalescerManager,
   type CoalescerManager,
 } from "../../src/submitter/index.js";
-import type { SubmitRequest, SubmitResult } from "../../src/submitter/types.js";
+import type { SubmitRequest, SubmitResult, RouterSigner } from "../../src/submitter/types.js";
 import {
   createUpdateWorkerPoolManager,
   type UpdateWorkerPoolManager,
@@ -148,6 +149,47 @@ function clientIdFromStatePath(path: string): string {
   const normalized = path.replace(/\\/g, "/");
   const fileName = normalized.split("/").pop() ?? normalized;
   return fileName.endsWith(".json") ? fileName.slice(0, -5) : fileName;
+}
+
+/**
+ * Resolve a per-router Cardano signer for every enabled router, keyed by
+ * router id. Each router declares either `private_key_env` (the name of an
+ * env var holding the seed/key — the recommended form) or an inline
+ * `private_key` (discouraged). The resolved value's kind is inferred from
+ * the env var name: a name containing `PRIVATE_KEY` yields a raw private
+ * key, any other name (e.g. `…_WALLET_SEED_…`) yields a mnemonic seed.
+ *
+ * Fails loud: a router whose `private_key_env` names an env var that is
+ * absent or empty throws at startup, rather than silently falling back to
+ * a different (possibly wrong) signer. Routers with neither field — which
+ * the config validator already rejects — are skipped, leaving the bridge
+ * to use its global env default defensively.
+ */
+function resolveRouterSigners(
+  routers: RouterConfig[],
+  report: (line: string) => void,
+): Map<string, RouterSigner> {
+  const signers = new Map<string, RouterSigner>();
+  for (const router of routers) {
+    if (router.private_key_env) {
+      const value = process.env[router.private_key_env]?.trim();
+      if (!value) {
+        throw new Error(
+          `Router "${router.id}": private_key_env "${router.private_key_env}" is not set ` +
+          `(or empty) in the environment. Set it before starting the daemon.`,
+        );
+      }
+      const kind: RouterSigner["kind"] = router.private_key_env.includes("PRIVATE_KEY")
+        ? "privateKey"
+        : "seed";
+      signers.set(router.id, { kind, value });
+      report(`daemon: router "${router.id}" signer resolved from ${router.private_key_env} (kind=${kind})`);
+    } else if (router.private_key) {
+      signers.set(router.id, { kind: "privateKey", value: router.private_key });
+      report(`daemon: router "${router.id}" signer resolved from inline private_key (kind=privateKey)`);
+    }
+  }
+  return signers;
 }
 
 function parsePositiveInteger(raw: number | undefined): number | undefined {
@@ -554,6 +596,14 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // ------------------------------------------------------------------
   const routerRegistry = createRouterRegistry(config.routers);
   report(`daemon: router registry loaded (${routerRegistry.all.length} router(s))`);
+
+  // Resolve each router's Cardano signer from its `private_key_env` (or the
+  // inline `private_key` fallback) ONCE at startup. Multi-client deployments
+  // give each router its own signing key; single-client deployments point
+  // every router at the same CARDANO_WALLET_SEED_<NETWORK> env var, which
+  // resolves to one shared signer. A named-but-absent env var is a hard
+  // startup error (fail loud) rather than a silent fallback to the wrong key.
+  const routerSigners = resolveRouterSigners(routerRegistry.all, report);
 
   // ------------------------------------------------------------------
   // 9. Oracle intent bridge + queue manager.
@@ -1037,6 +1087,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           dedupCache,
           enricher,
           routerRegistry,
+          routerSigners,
           priceCache,
           latestIntents,
           coalescerManager,
@@ -1100,6 +1151,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           dedupCache,
           enricher,
           routerRegistry,
+          routerSigners,
           priceCache,
           latestIntents,
           coalescerManager,
@@ -1209,6 +1261,10 @@ type ProcessOneEventInputs = {
   dedupCache: ReturnType<typeof createDedupCache>;
   enricher: (event: ExtractedEvent) => Promise<EnrichedIntent>;
   routerRegistry: ReturnType<typeof createRouterRegistry>;
+  /** Per-router Cardano signer, keyed by router id. Resolved once at
+   *  startup; attached to each SubmitRequest so the bridge signs with the
+   *  router's own key. */
+  routerSigners: Map<string, RouterSigner>;
   priceCache: ReturnType<typeof createPriceCache>;
   latestIntents: LatestIntentCache;
   coalescerManager: CoalescerManager;
@@ -1224,7 +1280,7 @@ type ProcessOneEventInputs = {
 
 async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
   const {
-    event, observedAtMs, scannerType, dedupCache, enricher, routerRegistry,
+    event, observedAtMs, scannerType, dedupCache, enricher, routerRegistry, routerSigners,
     priceCache, latestIntents, coalescerManager, updatePoolManager, fileLogger, db, intentRuntime, dryRun, report, metrics,
   } = inputs;
 
@@ -1400,6 +1456,7 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
       destination: cardano,
       routerId: dispatch.routerId,
       destinationIndex: dispatch.destinationIndex,
+      signer: routerSigners.get(dispatch.routerId),
     };
 
     // 3. hand off to coalescer (supersession + accumulation window)
