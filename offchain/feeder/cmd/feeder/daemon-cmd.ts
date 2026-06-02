@@ -611,6 +611,13 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // startup error (fail loud) rather than a silent fallback to the wrong key.
   const routerSigners = resolveRouterSigners(routerRegistry.all, report);
 
+  // routerId → customer label (free-form business label from router.customer).
+  // Used to tag the Spectra bridge_intents_* lifecycle aliases so Grafana can
+  // split per-customer. Falls back to "unknown" when a router omits it.
+  const routerCustomers = new Map<string, string>(
+    routerRegistry.all.map((r) => [r.id, r.customer ?? "unknown"]),
+  );
+
   // ------------------------------------------------------------------
   // 9. Oracle intent bridge + queue manager.
   // ------------------------------------------------------------------
@@ -637,6 +644,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           if (step === "submitted" && txHash && runtime && runtime.submittedAtMs === undefined) {
             runtime.submittedAtMs = Date.now();
             metrics.transactionsSubmitted.inc({ symbol, client_id: runtime.clientId });
+            metrics.bridgeIntentsSubmitted.inc({
+              symbol, client_id: runtime.clientId,
+              customer: routerCustomers.get(runtime.routerId) ?? "unknown",
+            });
             metrics.processingToSubmissionSeconds.observe(
               { symbol, client_id: runtime.clientId },
               (runtime.submittedAtMs - runtime.observedAtMs) / 1_000,
@@ -728,6 +739,14 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         const batchSize = result.batch?.size ?? 1;
         const batchMember = result.batch?.members.find((member) => member.intentHash === result.intentHash);
         metrics.transactionsConfirmed.inc({ symbol, client_id: clientId });
+        const customer = routerCustomers.get(routerId) ?? "unknown";
+        metrics.bridgeIntentsConfirmed.inc({ symbol, client_id: clientId, customer });
+        if (result.feePaidLovelace !== undefined) {
+          metrics.bridgeTransactionFeeLovelace.observe(
+            { symbol, client_id: clientId, customer },
+            Number(result.feePaidLovelace),
+          );
+        }
         if (runtime?.submittedAtMs !== undefined) {
           metrics.submissionToConfirmationSeconds.observe(
             { symbol, client_id: clientId },
@@ -853,6 +872,12 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           symbol,
           client_id: clientId,
           error_code: result.code,
+        });
+        metrics.bridgeIntentsFailed.inc({
+          symbol,
+          client_id: clientId,
+          customer: routerCustomers.get(req.routerId) ?? "unknown",
+          reason: result.code,
         });
         if (result.code === "TxDroppedFromChain") {
           metrics.transactionsReorg.inc({ symbol, client_id: clientId });
@@ -1305,6 +1330,7 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
   }
 
   metrics.intentsScanned.inc({ symbol: enriched.fullIntent.symbol, scanner_type: scannerType });
+  metrics.bridgeIntentsScanned.inc({ symbol: enriched.fullIntent.symbol, scanner_type: scannerType });
   // 6-phase latency — phases 1 and 2 require a non-zero blockTimestamp.
   if (event.blockTimestamp > 0n) {
     const blockTs = Number(event.blockTimestamp);
@@ -1365,6 +1391,10 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     metrics.intentsRouted.inc({
       symbol: enriched.fullIntent.symbol,
       router_id: dispatch.routerId,
+    });
+    metrics.bridgeIntentsProcessed.inc({
+      symbol: enriched.fullIntent.symbol,
+      customer: dispatch.customer ?? "unknown",
     });
 
     // Keep the latest-intent cache in sync for the cron service. For

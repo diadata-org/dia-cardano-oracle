@@ -79,11 +79,11 @@ describe("createMetrics", () => {
     metrics.workerTaskRetries.inc();
     // Spectra lifecycle aliases
     metrics.bridgeIntentsScanned.inc({ symbol: "BTC/USD", scanner_type: "http" });
-    metrics.bridgeIntentsProcessed.inc({ symbol: "BTC/USD" });
-    metrics.bridgeIntentsSubmitted.inc({ symbol: "BTC/USD", client_id: "c1" });
-    metrics.bridgeIntentsConfirmed.inc({ symbol: "BTC/USD", client_id: "c1" });
-    metrics.bridgeIntentsFailed.inc({ symbol: "BTC/USD", client_id: "c1", reason: "timeout" });
-    metrics.bridgeTransactionFeeLovelace.observe({ symbol: "BTC/USD", client_id: "c1" }, 200000);
+    metrics.bridgeIntentsProcessed.inc({ symbol: "BTC/USD", customer: "acme" });
+    metrics.bridgeIntentsSubmitted.inc({ symbol: "BTC/USD", client_id: "c1", customer: "acme" });
+    metrics.bridgeIntentsConfirmed.inc({ symbol: "BTC/USD", client_id: "c1", customer: "acme" });
+    metrics.bridgeIntentsFailed.inc({ symbol: "BTC/USD", client_id: "c1", customer: "acme", reason: "timeout" });
+    metrics.bridgeTransactionFeeLovelace.observe({ symbol: "BTC/USD", client_id: "c1", customer: "acme" }, 200000);
     metrics.bridgeDbOperations.inc({ table: "transaction_log", operation: "insert" });
     metrics.bridgeDbOperationDuration.observe({ table: "transaction_log", operation: "insert" }, 0.005);
     metrics.bridgeComponentHealth.set({ component: "scanner" }, 1);

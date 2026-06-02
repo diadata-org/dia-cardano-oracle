@@ -463,27 +463,27 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     bridgeIntentsProcessed: counter(
       "intents_processed_lifecycle_total",
       "Intents processed — Spectra bridge_intents_processed_total lifecycle alias",
-      ["symbol"],
+      ["symbol", "customer"],
     ),
     bridgeIntentsSubmitted: counter(
       "intents_submitted_lifecycle_total",
       "Intents submitted to Cardano — Spectra bridge_intents_submitted_total lifecycle alias",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer"],
     ),
     bridgeIntentsConfirmed: counter(
       "intents_confirmed_lifecycle_total",
       "Intents confirmed on Cardano — Spectra bridge_intents_confirmed_total lifecycle alias",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer"],
     ),
     bridgeIntentsFailed: counter(
       "intents_failed_lifecycle_total",
       "Intents failed — Spectra bridge_intents_failed_total lifecycle alias",
-      ["symbol", "client_id", "reason"],
+      ["symbol", "client_id", "customer", "reason"],
     ),
     bridgeTransactionFeeLovelace: histogram(
       "transaction_fee_lovelace",
       "Lovelace paid per Cardano oracle update transaction (Cardano equivalent of EVM gas cost)",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer"],
       [10_000, 50_000, 100_000, 200_000, 500_000, 1_000_000, 2_000_000],
     ),
     bridgeDbOperations: counter(
