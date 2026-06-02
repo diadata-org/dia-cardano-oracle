@@ -175,6 +175,7 @@ function makeInMemoryDb(): Db & { logs: TransactionLogInsert[] } {
     async resolveAlert() {},
     async acknowledgeAlert() {},
     async listAlerts() { return []; },
+    async getAlertById() { return null; },
     async pruneOldRows() { return { processedEvents: 0, transactionLog: 0, alertLog: 0, performanceMetrics: 0 }; },
     async close() {},
   };

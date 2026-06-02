@@ -557,18 +557,36 @@ type PromClientLike = {
  * intentsFiltered, cronResubmissions.
  *
  * Wrapping is transparent — callers use the same FeederMetrics interface.
- * Persistence failures are silently swallowed so a slow DB never blocks metrics.
+ * Persistence failures are non-fatal (Prometheus metrics still work) but are
+ * now surfaced via a throttled log line so operators can see when the
+ * DB-backed `/performance` endpoint is returning stale data, instead of the
+ * failures vanishing into an empty catch.
  */
 export function wrapWithPersistence(
   db: import("../persistence/db.js").Db,
   metrics: FeederMetrics,
+  log?: (line: string) => void,
 ): FeederMetrics {
+  // Throttle the persistence-failure warning to at most once per minute so a
+  // sustained DB outage does not flood the log on every counter increment.
+  let lastWarnMs = 0;
+  const WARN_THROTTLE_MS = 60_000;
+  function warnPersistFailure(name: string, err: unknown): void {
+    if (!log) return;
+    const now = Date.now();
+    if (now - lastWarnMs < WARN_THROTTLE_MS) return;
+    lastWarnMs = now;
+    log(`[warn] metrics: performance_metrics persistence failing (latest: ${name} — ${String(err)}); /performance may be stale`);
+  }
+
   function persistentCounter(original: FeedCounter, name: string): FeedCounter {
     return {
       inc(labels, value) {
         original.inc(labels, value);
-        db.recordPerformanceMetric({ name, value: value ?? 1, labels }).catch(() => {
-          // Persistence failures are non-fatal — Prometheus metrics still work.
+        db.recordPerformanceMetric({ name, value: value ?? 1, labels }).catch((err: unknown) => {
+          // Persistence failures are non-fatal — Prometheus metrics still
+          // work — but are surfaced (throttled) rather than swallowed.
+          warnPersistFailure(name, err);
         });
       },
     };

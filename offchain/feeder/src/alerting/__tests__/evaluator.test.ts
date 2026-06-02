@@ -57,6 +57,7 @@ function makeDb(overrides: {
     },
     async acknowledgeAlert() {},
     async listAlerts() { return alerts; },
+    async getAlertById(id) { return alerts.find((a) => a.id === id) ?? null; },
     async pruneOldRows() { return { processedEvents: 0, transactionLog: 0, alertLog: 0, performanceMetrics: 0 }; },
     async getLastProcessedBlock() { return null; },
   };

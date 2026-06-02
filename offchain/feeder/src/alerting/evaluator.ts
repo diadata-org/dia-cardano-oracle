@@ -88,7 +88,19 @@ export function startAlertEvaluator(options: AlertEvaluatorOptions): AlertEvalua
             activeAlertIds.delete(ruleKey);
             log(`[alert-evaluator] resolved OraclePairStale id=${existingId} symbol=${entry.symbol}`);
           } catch (err) {
-            log(`[alert-evaluator] failed to resolve alert: ${String(err)}`);
+            // `resolveAlert` throws when the row no longer exists (it was
+            // manually resolved, acknowledged-and-pruned, or cleaned up by
+            // `cleanup`). That is the desired end-state — the alert is no
+            // longer active — so clear our in-memory tracking to avoid an
+            // infinite resolve-retry loop. For any OTHER error (transient
+            // DB failure) we keep the tracking so the next tick retries.
+            const message = String(err);
+            if (message.includes("no alert_log row")) {
+              activeAlertIds.delete(ruleKey);
+              log(`[alert-evaluator] alert id=${existingId} already gone from DB; cleared tracking (symbol=${entry.symbol})`);
+            } else {
+              log(`[alert-evaluator] failed to resolve alert id=${existingId}; will retry next tick: ${message}`);
+            }
           }
         }
       }

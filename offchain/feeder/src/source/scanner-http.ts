@@ -128,6 +128,12 @@ export async function runHttpScanner(options: HttpScannerOptions): Promise<void>
   let cursor = await resolveStartCursor(checkpoint, startBlock);
   log(`scanner-http: starting at block ${cursor} (transport=${client.transport})`);
 
+  // Highest head seen so far, for reorg detection. When the chain head drops
+  // by more than `confirmations` below this watermark, a reorg reorganised
+  // blocks at/under our cursor; we rewind the cursor so the reorged range is
+  // re-scanned instead of permanently skipped. `0n` means "no head seen yet".
+  let highWaterHead = 0n;
+
   // Separate head-tracker loop — keeps block-lag gauges fresh at its own
   // cadence without coupling to the main scan tick.
   if (options.headTrackerIntervalMs !== undefined) {
@@ -166,6 +172,25 @@ export async function runHttpScanner(options: HttpScannerOptions): Promise<void>
       throw error;
     }
     const finalizedHead = head > confirmations ? head - confirmations : 0n;
+
+    // Reorg detection. If HEAD has dropped more than `confirmations` below the
+    // highest head we have seen, the chain reorganised below our cursor: the
+    // blocks we already scanned in [finalizedHead+1 .. cursor-1] may no longer
+    // be canonical. Rewind the cursor to re-scan from the new finalized head
+    // (minus one chunk for margin) so no canonical log is permanently skipped.
+    // Dedup on intentHash absorbs any logs that survived the reorg unchanged.
+    if (highWaterHead > 0n && head + confirmations < highWaterHead && cursor > finalizedHead) {
+      const rewindTarget = finalizedHead > blockRange ? finalizedHead - blockRange : 0n;
+      if (rewindTarget < cursor) {
+        log(
+          `scanner-http: REORG detected — head ${head} dropped below high-water ${highWaterHead} ` +
+          `(confirmations=${confirmations}); rewinding cursor ${cursor} → ${rewindTarget} to re-scan.`,
+        );
+        metrics?.incRpcError({ chain_id: chainIdLabel, error_type: "reorg" });
+        cursor = rewindTarget;
+      }
+    }
+    if (head > highWaterHead) highWaterHead = head;
 
     // Expose chain head and how far the checkpoint trails it. Used by
     // the OraclePairStale / scanner block-lag panels in Grafana.

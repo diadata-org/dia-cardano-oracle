@@ -47,6 +47,16 @@ describe("parseDurationMs", () => {
   it("throws on unrecognised format", () => {
     assert.throws(() => parseDurationMs("1x"), /Invalid duration/);
   });
+
+  it("returns 0 for the '0s' disabled-gate sentinel", () => {
+    // 0 is intentional: time gate always passes / cron has no cadence.
+    assert.equal(parseDurationMs("0s"), 0);
+    assert.equal(parseDurationMs("0ms"), 0);
+  });
+
+  it("throws on a negative duration (the regex rejects the leading '-')", () => {
+    assert.throws(() => parseDurationMs("-5s"), /Invalid duration/);
+  });
 });
 
 // ---------------------------------------------------------------------------

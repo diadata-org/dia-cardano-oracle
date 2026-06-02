@@ -69,6 +69,13 @@ export type PolicyVerdict =
  * Supports: "30s", "1m", "2h", "1h30m", "1h30m10s", "500ms".
  * Returns `undefined` for an empty or absent string.
  * Throws for an unrecognised format.
+ *
+ * `"0s"` is a VALID value that returns 0 — it is the intentional "disabled
+ * gate" sentinel: a `time_threshold` of 0 means the time gate always passes
+ * (submit on every event, subject to the price gate), and the cron service
+ * reads 0 as "this destination has no cron cadence". Negative durations are
+ * rejected by the token regex (`\d+` does not match a leading `-`), so a
+ * malformed `"-5s"` throws rather than silently disabling the gate.
  */
 export function parseDurationMs(raw: string | undefined): number | undefined {
   if (!raw) return undefined;

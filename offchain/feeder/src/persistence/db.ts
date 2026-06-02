@@ -232,6 +232,9 @@ export type Db = {
   resolveAlert(id: number, resolvedAtMs: number): Promise<void>;
   acknowledgeAlert(id: number): Promise<void>;
   listAlerts(query: AlertQuery): Promise<AlertLogRow[]>;
+  /** Single alert by id, or null. SQL-indexed lookup — does not depend on
+   *  the alert being within any recent-N listing window. */
+  getAlertById(id: number): Promise<AlertLogRow | null>;
 
   // cleanup
   pruneOldRows(maxAgeMs: number): Promise<{ processedEvents: number; transactionLog: number; alertLog: number; performanceMetrics: number }>;
@@ -822,6 +825,13 @@ async function createSqliteDb(filePath: string): Promise<Db> {
       return rows.map(fromSqliteAlertLogRow);
     },
 
+    async getAlertById(id) {
+      const r = db.prepare(
+        "SELECT * FROM alert_log WHERE id = ?",
+      ).get(id) as SqliteAlertLogRow | undefined;
+      return r ? fromSqliteAlertLogRow(r) : null;
+    },
+
     async pruneOldRows(maxAgeMs) {
       const cutoff = Date.now() - maxAgeMs;
       const pe = db.prepare(
@@ -1249,6 +1259,12 @@ async function createPostgresDb(dsn: string): Promise<Db> {
         [...params, limit, offset],
       );
       return (r.rows as PgAlertLogRow[]).map(fromPgAlertLogRow);
+    },
+
+    async getAlertById(id) {
+      const r = await pool.query("SELECT * FROM alert_log WHERE id = $1", [id]);
+      const first = r.rows[0] as PgAlertLogRow | undefined;
+      return first ? fromPgAlertLogRow(first) : null;
     },
 
     async pruneOldRows(maxAgeMs) {

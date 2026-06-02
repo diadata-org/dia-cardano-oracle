@@ -87,13 +87,27 @@ type RateLimitBucket = { count: number; resetAt: number };
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 60;
 
+// Sweep expired buckets every N calls. Without eviction the bucket Map grows
+// one entry per unique remote address forever; behind a proxy forwarding many
+// distinct source IPs this is an unbounded memory leak. A lazy sweep (no
+// timer to clean up on shutdown) keeps it bounded to the active-IP set.
+const RATE_LIMIT_SWEEP_EVERY = 1_000;
+
 export function createRateLimiter() {
   const buckets = new Map<string, RateLimitBucket>();
+  let callsSinceSweep = 0;
 
   return function isAllowed(remoteAddress: string): boolean {
     const now = Date.now();
-    let bucket = buckets.get(remoteAddress);
 
+    if (++callsSinceSweep >= RATE_LIMIT_SWEEP_EVERY) {
+      callsSinceSweep = 0;
+      for (const [addr, b] of buckets) {
+        if (now > b.resetAt) buckets.delete(addr);
+      }
+    }
+
+    let bucket = buckets.get(remoteAddress);
     if (!bucket || now > bucket.resetAt) {
       bucket = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
       buckets.set(remoteAddress, bucket);
@@ -344,9 +358,10 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
             sendJson(400, { error: "Invalid alert id" });
             return;
           }
-          // listAlerts does not accept an id filter; fetch recent alerts and find by id.
-          const all = await db.listAlerts({ limit: 1000 });
-          const row = all.find((r) => r.id === alertId) ?? null;
+          // SQL-indexed lookup by id — does not depend on the alert being
+          // within any recent-N listing window (the old listAlerts({limit:1000})
+          // + in-memory find returned 404 for alerts older than 1000 rows).
+          const row = await db.getAlertById(alertId);
           const body = buildAlertResponse(row);
           if (!body) {
             sendJson(404, { error: `Unknown alert "${alertId}"` });
@@ -366,7 +381,17 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
             sendJson(400, { error: "Invalid alert id" });
             return;
           }
-          await db.acknowledgeAlert(ackId);
+          // acknowledgeAlert throws when the id does not exist; translate
+          // that to a 404 instead of letting the outer handler return 500.
+          try {
+            await db.acknowledgeAlert(ackId);
+          } catch (err) {
+            if (String(err).includes("no alert_log row")) {
+              sendJson(404, { error: `Unknown alert "${ackId}"` });
+              return;
+            }
+            throw err;
+          }
           sendJson(200, { acknowledged: true, id: ackId });
           return;
         }

@@ -206,12 +206,3 @@ export function requireEvent(parsed: ParsedAbis, eventName: string): ParsedEvent
   }
   return def;
 }
-
-/** Get the full parsed ABI for a contract by id, throwing if absent. */
-export function requireContractAbi(parsed: ParsedAbis, contractId: string): Abi {
-  const abi = parsed.contracts[contractId];
-  if (!abi) {
-    throw new Error(`Unknown contract "${contractId}" — not declared in contracts.yaml.`);
-  }
-  return abi;
-}

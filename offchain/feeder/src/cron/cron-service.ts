@@ -80,6 +80,22 @@ export function startCronService(options: CronServiceOptions): CronServiceHandle
       `routers=${Object.keys(options.routers).length}).`,
   );
 
+  // One-time startup audit: warn about cron-enabled destinations that have
+  // no symbol filter. The per-tick loop silently skips them (cron needs a
+  // (routerId, destIdx, symbol) tuple), so without this warning an operator
+  // who set `cron: true` would get no staleness protection and no signal.
+  for (const router of Object.values(options.routers)) {
+    if (!router.enabled) continue;
+    const hasCronDest = router.destinations.some((d) => d.cardano && d.cron);
+    if (hasCronDest && extractRouterSymbols(router).length === 0) {
+      options.log(
+        `[warn] cron-service: router "${router.id}" has cron-enabled destination(s) but no ` +
+          `symbol filter in triggers.conditions — cron resubmissions are SKIPPED for it. ` +
+          `Add an event.symbol eq/in condition to enable cron staleness protection.`,
+      );
+    }
+  }
+
   const done = (async () => {
     while (!options.signal?.aborted) {
       try {

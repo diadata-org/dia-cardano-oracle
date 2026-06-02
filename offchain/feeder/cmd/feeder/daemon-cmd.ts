@@ -93,6 +93,7 @@ import {
   createChainRuntimeState,
   createMetrics,
   noopMetrics,
+  wrapWithPersistence,
   type FeederMetrics,
   type HealthState,
 } from "../../src/api/index.js";
@@ -474,7 +475,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     config.infrastructure?.metrics?.namespace ??
     process.env.METRICS_NAMESPACE?.trim() ??
     "dia_bridge";
-  const metrics = metricsEnabled
+  const baseMetrics = metricsEnabled
     ? await createMetrics({
         namespace: metricsNamespace,
         defaultLabels: {
@@ -484,6 +485,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         },
       })
     : noopMetrics;
+  // Wrap the live counters so transaction/intent lifecycle increments ALSO
+  // persist to performance_metrics, backing the /api/v1/performance endpoint.
+  // Persistence failures are throttled-logged (R10.B.9), never fatal. Skipped
+  // for noopMetrics (metrics disabled) — nothing to persist.
+  const metrics = metricsEnabled ? wrapWithPersistence(db, baseMetrics, report) : baseMetrics;
 
   // ------------------------------------------------------------------
   // 4. Health state (mutated by the pipeline as it runs).

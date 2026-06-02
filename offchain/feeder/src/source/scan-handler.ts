@@ -37,18 +37,40 @@ export async function processLogBatch(args: {
    *  set to 0n. Callers that support block lookups pass this to enable
    *  end-to-end latency metrics. */
   getBlockTimestamp?: (blockNumber: bigint) => Promise<bigint>;
+  /** Optional diagnostic sink for non-fatal degradations (e.g. a failed
+   *  block-timestamp lookup that fell back to 0n). */
+  log?: (line: string) => void;
 }): Promise<void> {
   const rawEvents = decodeIntentRegisteredLogs(args.logs, args.eventAbi);
 
   // Attach block timestamps when the resolver is available. The lookup is
   // batched per distinct block number to avoid quadratic RPC pressure when a
   // single block carries multiple IntentRegistered logs.
+  //
+  // A resolver failure for one block degrades gracefully to blockTimestamp=0n
+  // for that block — the two latency phases that depend on it
+  // (intent_to_registration, registration_to_scan) stay at 0 for those
+  // events, but the batch is NOT lost. The previous Promise.all rejected the
+  // whole batch on any single failure, so the checkpoint never advanced and
+  // the next scan retried the same range — a permanent stall if the RPC
+  // consistently failed the lookup. Delivering the events (price submission
+  // is what matters) is strictly more important than the latency metric.
   let events = rawEvents;
   if (args.getBlockTimestamp && rawEvents.length > 0) {
     const resolver = args.getBlockTimestamp;
     const distinct = [...new Set(rawEvents.map((ev) => ev.blockNumber))];
     const entries = await Promise.all(
-      distinct.map(async (block) => [block, await resolver(block)] as const),
+      distinct.map(async (block): Promise<readonly [bigint, bigint]> => {
+        try {
+          return [block, await resolver(block)] as const;
+        } catch (err) {
+          args.log?.(
+            `scan-handler: block-timestamp lookup failed for block ${block} ` +
+            `(latency phases 1-2 will be 0 for its events): ${(err as Error).message}`,
+          );
+          return [block, 0n] as const;
+        }
+      }),
     );
     const tsCache = new Map<bigint, bigint>(entries);
     events = rawEvents.map((ev) => ({

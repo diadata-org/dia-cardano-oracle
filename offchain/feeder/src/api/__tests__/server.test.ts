@@ -137,6 +137,7 @@ function makeDb(overrides: {
     async resolveAlert() {},
     async acknowledgeAlert(id) { ackId = id; },
     async listAlerts() { return overrides.alerts ?? []; },
+    async getAlertById(id) { return (overrides.alerts ?? []).find((a) => a.id === id) ?? null; },
     async pruneOldRows() { return { processedEvents: 0, transactionLog: 0, alertLog: 0, performanceMetrics: 0 }; },
     async close() {},
     // Expose ackId for inspection.

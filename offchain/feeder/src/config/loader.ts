@@ -63,6 +63,30 @@ export function normalizeConfigKey(key: string): string {
   return COMPACT_KEY_MAP[key.toLowerCase()] ?? key;
 }
 
+/**
+ * Recursively rewrite object keys through `normalizeConfigKey` so a
+ * Spectra-shaped infrastructure YAML using compact spellings
+ * (`scaninterval`, `enablecors`, …) loads as the canonical snake_case the
+ * TypeScript types and validator expect. Applied ONLY to the
+ * infrastructure object: every compact key in `COMPACT_KEY_MAP` is an
+ * infrastructure-section field, and limiting the rewrite there avoids
+ * touching router/event/contract value maps whose keys are domain data.
+ * Arrays are walked element-wise; non-objects pass through untouched.
+ */
+function normalizeConfigKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeConfigKeysDeep);
+  }
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[normalizeConfigKey(k)] = normalizeConfigKeysDeep(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 import { parseAllAbis } from "./abi-parser.js";
 import type {
   ChainConfig,
@@ -137,10 +161,12 @@ function unwrapInfrastructure(
   file: InfrastructureFileShape | null,
 ): InfrastructureConfig | null {
   if (!file) return null;
-  if ("infrastructure" in file && file.infrastructure) {
-    return file.infrastructure;
-  }
-  return file as InfrastructureConfig;
+  const raw = "infrastructure" in file && file.infrastructure
+    ? file.infrastructure
+    : (file as InfrastructureConfig);
+  // Normalise compact Spectra key spellings to snake_case before the rest
+  // of the codebase (types + validator) sees the object.
+  return normalizeConfigKeysDeep(raw) as InfrastructureConfig;
 }
 
 // ---------------------------------------------------------------------------

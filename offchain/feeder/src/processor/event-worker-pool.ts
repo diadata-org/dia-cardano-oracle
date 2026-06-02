@@ -34,8 +34,11 @@ export type EventWorkerPoolOptions = {
    */
   processingTimeoutMs: number;
   /** Called once per event by the worker. Must not throw — errors are caught
-   *  and counted as failures. */
-  onEvent: (event: ExtractedEvent) => Promise<void>;
+   *  and counted as failures. Receives an AbortSignal that fires when the
+   *  per-event `processingTimeoutMs` elapses; long-running handlers SHOULD
+   *  check `signal.aborted` (or pass it to abortable I/O) to stop work
+   *  promptly instead of running on in the background after a timeout. */
+  onEvent: (event: ExtractedEvent, signal: AbortSignal) => Promise<void>;
   /** Optional callback invoked whenever the internal stats change.
    *  Useful for wiring into the metrics layer. */
   onStats?: (stats: EventWorkerStats) => void;
@@ -184,15 +187,21 @@ export function createEventWorkerPool(options: EventWorkerPoolOptions): EventWor
       notifyStats();
 
       const startMs = Date.now();
+      // AbortController fires when the timeout wins the race, signalling
+      // onEvent to stop. clearTimeout in finally prevents the timer (and its
+      // rejection) from outliving a fast onEvent — without it every processed
+      // event leaked a pending timer until processingTimeoutMs elapsed.
+      const controller = new AbortController();
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
       try {
         await Promise.race([
-          onEvent(event),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`Event processing timeout after ${processingTimeoutMs} ms`)),
-              processingTimeoutMs,
-            ),
-          ),
+          onEvent(event, controller.signal),
+          new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              controller.abort();
+              reject(new Error(`Event processing timeout after ${processingTimeoutMs} ms`));
+            }, processingTimeoutMs);
+          }),
         ]);
         processed++;
       } catch (err) {
@@ -202,6 +211,7 @@ export function createEventWorkerPool(options: EventWorkerPoolOptions): EventWor
           `[event-worker-pool] event processing failed${hash ? ` hash=${hash}` : ""}: ${String(err)}`,
         );
       } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
         activeWorkers--;
         rollingAvg.push(Date.now() - startMs);
         notifyStats();
