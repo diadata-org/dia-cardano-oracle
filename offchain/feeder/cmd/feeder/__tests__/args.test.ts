@@ -344,3 +344,72 @@ describe("parseArgs — checkpoint flags combined with other flags", () => {
     assert.equal(r.fromLatest, true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// reset / prune sub-commands
+// ---------------------------------------------------------------------------
+
+describe("parseArgs — reset sub-command", () => {
+  it("parses bare 'reset' into reset mode", () => {
+    const r = parseArgs(["reset"]);
+    assert.equal(r.mode, "reset");
+  });
+
+  it("throws on unknown flags after reset", () => {
+    assert.throws(() => parseArgs(["reset", "--from-latest"]), /Unknown argument for 'reset'/);
+  });
+});
+
+describe("parseArgs — prune sub-command", () => {
+  it("parses bare 'prune' into prune mode", () => {
+    const r = parseArgs(["prune"]);
+    assert.equal(r.mode, "prune");
+    assert.equal(r.maxAge, undefined);
+  });
+
+  it("parses --max-age", () => {
+    const r = parseArgs(["prune", "--max-age", "30m"]);
+    assert.equal(r.mode, "prune");
+    assert.equal(r.maxAge, "30m");
+  });
+
+  it("parses --dry-run", () => {
+    const r = parseArgs(["prune", "--dry-run"]);
+    assert.equal(r.mode, "prune");
+    assert.equal(r.dryRun, true);
+  });
+
+  it("throws on unknown flags after prune", () => {
+    assert.throws(() => parseArgs(["prune", "--bogus"]), /Unknown argument for 'prune'/);
+  });
+});
+
+describe("parseArgs — sub-commands preceded by global flags (Docker invocation)", () => {
+  it("detects reset after --config <dir>", () => {
+    const r = parseArgs(["--config", "/config", "reset"]);
+    assert.equal(r.mode, "reset");
+    assert.equal(r.configPath, "/config");
+  });
+
+  it("detects prune after --config <dir> and keeps prune flags", () => {
+    const r = parseArgs(["--config", "/config", "prune", "--max-age", "30m"]);
+    assert.equal(r.mode, "prune");
+    assert.equal(r.configPath, "/config");
+    assert.equal(r.maxAge, "30m");
+  });
+
+  it("detects init bootstrap after --config <dir>", () => {
+    const r = parseArgs(["--config", "/config", "init", "bootstrap"]);
+    assert.equal(r.mode, "init");
+    assert.equal(r.initSubCommand, "bootstrap");
+    assert.equal(r.configPath, "/config");
+  });
+
+  it("detects checkpoint after --config <dir> and --log-level", () => {
+    const r = parseArgs(["--config", "/config", "--log-level", "debug", "checkpoint", "set", "--from-latest"]);
+    assert.equal(r.mode, "checkpoint");
+    assert.equal(r.configPath, "/config");
+    assert.equal(r.logLevel, "debug");
+    assert.equal(r.fromLatest, true);
+  });
+});

@@ -208,9 +208,9 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     await writeFile(routerTarget, yaml, "utf8");
     report(`init client: wrote ${routerTarget}`);
 
-    out(`\n  All done. Run the feeder:`);
-    out(`    npm run feeder:dev`);
-    out(`    npm run feeder:dev -- --transport ws`);
+    out(`\n  All done. Start the feeder:`);
+    out(`    Docker:  make up            (from offchain/)`);
+    out(`    Local:   npm run feeder:dev (from offchain/feeder/)`);
     out(``);
     return 0;
   } finally {

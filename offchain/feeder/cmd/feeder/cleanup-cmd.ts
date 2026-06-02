@@ -1,4 +1,6 @@
-// Cleanup command — removes stale feeder-generated state files.
+// Prune command — removes STALE (old) feeder-generated state, keeping the
+// DB file itself. This is a partial, age-based prune; for a full wipe use
+// the `reset` sub-command (or the `--clean` daemon flag).
 //
 // Removes files older than --max-age (default: 1h) from:
 //
@@ -13,7 +15,7 @@
 //   config-bootstrap.json, clients/<name>.json
 //
 // Usage:
-//   feeder cleanup [--max-age <duration>] [--dry-run]
+//   feeder prune [--max-age <duration>] [--dry-run]
 //
 //   --max-age   e.g. 1h, 30m, 2h30m (default: 1h)
 //   --dry-run   print what would be deleted without deleting
@@ -28,7 +30,7 @@ import { createDb, type DbConfig } from "../../src/persistence/index.js";
 // Types
 // ---------------------------------------------------------------------------
 
-export type CleanupCmdOptions = {
+export type PruneCmdOptions = {
   network: string;
   maxAgeMs: number;
   dryRun: boolean;
@@ -113,7 +115,7 @@ async function rotateLineLog(
   if (removed === 0) return false;
 
   report(
-    `cleanup: ${dryRun ? "[dry-run] would rotate" : "rotating"} ${path.basename(filePath)} — removing ${removed} old line(s), keeping ${kept.length}`,
+    `prune: ${dryRun ? "[dry-run] would rotate" : "rotating"} ${path.basename(filePath)} — removing ${removed} old line(s), keeping ${kept.length}`,
   );
   if (!dryRun) {
     const content = kept.length > 0 ? kept.join("\n") + "\n" : "";
@@ -136,7 +138,7 @@ async function deleteIfOld(
   if (mtime >= cutoffMs) return false;
 
   report(
-    `cleanup: ${dryRun ? "[dry-run] would delete" : "deleting"} ${path.basename(filePath)}`,
+    `prune: ${dryRun ? "[dry-run] would delete" : "deleting"} ${path.basename(filePath)}`,
   );
   if (!dryRun) await unlink(filePath);
   return true;
@@ -146,7 +148,7 @@ async function deleteIfOld(
 // Main runner
 // ---------------------------------------------------------------------------
 
-export async function runCleanup(options: CleanupCmdOptions): Promise<number> {
+export async function runPrune(options: PruneCmdOptions): Promise<number> {
   const { network, maxAgeMs, dryRun, report } = options;
 
   const stateBase  = `state/${network.toLowerCase()}`;
@@ -164,7 +166,7 @@ export async function runCleanup(options: CleanupCmdOptions): Promise<number> {
   };
 
   report(
-    `cleanup: network=${network} max-age=${maxAgeMs / 1_000}s cutoff=${new Date(cutoffMs).toISOString()} dry-run=${dryRun}`,
+    `prune: network=${network} max-age=${maxAgeMs / 1_000}s cutoff=${new Date(cutoffMs).toISOString()} dry-run=${dryRun}`,
   );
 
   // ------------------------------------------------------------------
@@ -185,7 +187,7 @@ export async function runCleanup(options: CleanupCmdOptions): Promise<number> {
       try {
         const mtime = await mtimeMs(filePath);
         if (mtime < cutoffMs) {
-          report(`cleanup: ${dryRun ? "[dry-run] would delete" : "deleting"} intents/${name}`);
+          report(`prune: ${dryRun ? "[dry-run] would delete" : "deleting"} intents/${name}`);
           if (!dryRun) await unlink(filePath);
           summary.intentFilesDeleted++;
         } else {
@@ -229,7 +231,7 @@ export async function runCleanup(options: CleanupCmdOptions): Promise<number> {
   };
 
   if (dryRun) {
-    report(`cleanup: [dry-run] would prune DB rows older than ${new Date(cutoffMs).toISOString()} from processed_events and transaction_log (confirmed/failed only)`);
+    report(`prune: [dry-run] would prune DB rows older than ${new Date(cutoffMs).toISOString()} from processed_events and transaction_log (confirmed/failed only)`);
   } else {
     try {
       const db = await createDb(dbConfig);
@@ -237,7 +239,7 @@ export async function runCleanup(options: CleanupCmdOptions): Promise<number> {
         const pruned = await db.pruneOldRows(cutoffMs);
         summary.dbRowsPruned = pruned;
         report(
-          `cleanup: pruned DB rows — processed_events=${pruned.processedEvents} transaction_log=${pruned.transactionLog}`,
+          `prune: pruned DB rows — processed_events=${pruned.processedEvents} transaction_log=${pruned.transactionLog}`,
         );
       } finally {
         await db.close();
@@ -265,7 +267,7 @@ export async function runCleanup(options: CleanupCmdOptions): Promise<number> {
     : dryRun ? "db_rows_pruned=dry-run" : "db_rows_pruned=skipped";
 
   report(
-    `cleanup: done — intent_files_deleted=${summary.intentFilesDeleted} ` +
+    `prune: done — intent_files_deleted=${summary.intentFilesDeleted} ` +
     `intent_files_skipped=${summary.intentFilesSkipped} ` +
     `log_files_rotated=${summary.logFilesRotated} ` +
     `${dbSummary} ` +
@@ -274,7 +276,7 @@ export async function runCleanup(options: CleanupCmdOptions): Promise<number> {
 
   if (summary.errors.length > 0) {
     for (const e of summary.errors) {
-      report(`cleanup: [error] ${e}`);
+      report(`prune: [error] ${e}`);
     }
     return 1;
   }

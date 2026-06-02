@@ -25,10 +25,10 @@ import "dotenv/config";
 import { parseArgs, type FeederMode, type ParsedArgs } from "./args.js";
 import { runScan } from "./scan-cmd.js";
 import { runValidateOnly } from "./validate-cmd.js";
-import { runDaemon } from "./daemon-cmd.js";
+import { runDaemon, cleanFeederState } from "./daemon-cmd.js";
 import { runInit } from "./init-cmd.js";
 import { runCheckpoint } from "./checkpoint-cmd.js";
-import { runCleanup, parseDuration } from "./cleanup-cmd.js";
+import { runPrune, parseDuration } from "./cleanup-cmd.js";
 
 const HELP_TEXT = `dia-cardano-oracle-feeder
 
@@ -44,7 +44,8 @@ Usage:
   feeder init client    [--from <client.json>]           [--force]
   feeder checkpoint get
   feeder checkpoint set --from-latest | --from-block <N> | --clear
-  feeder cleanup [--max-age <duration>] [--dry-run]
+  feeder reset
+  feeder prune [--max-age <duration>] [--dry-run]
   feeder --help
 
 Flags:
@@ -106,12 +107,24 @@ Checkpoint sub-commands (mutate chain_state.last_scan_block in the DB):
                         running these while it is live has no effect on
                         the active scanner.
 
-Cleanup sub-command (prune stale feeder-generated state):
-  cleanup               Delete old per-intent log files, rotate line logs,
+Reset sub-command (full wipe, then exit — does NOT start the daemon):
+  reset                 Delete ALL feeder-generated state and exit:
+                          logs/, feeder.sqlite*, clients/*/pairs/*.json
+                        CLI bootstrap state files are never touched:
+                          config-bootstrap.json, clients/*.json
+                        Same deletion as the --clean flag, but exits
+                        instead of starting the daemon — use this for
+                        one-off resets (e.g. in Docker via 'make reset').
+                        After reset, re-seed the scanner with
+                        'checkpoint set --from-latest' before starting.
+
+Prune sub-command (partial, age-based — keeps the DB file):
+  prune                 Delete old per-intent log files, rotate line logs,
                         and prune confirmed/failed transaction_log +
                         processed_events rows older than the cutoff. CLI
                         bootstrap state (config-bootstrap.json, client JSON)
-                        is never touched.
+                        is never touched. Unlike reset, the DB file and
+                        recent rows survive.
   --max-age <duration>  Age cutoff: 1h | 30m | 2h30m | 90s. Default: 1h.
   --dry-run             Print what would be deleted without deleting.
 
@@ -222,8 +235,8 @@ async function dispatch(args: ParsedArgs): Promise<number> {
         report,
       });
 
-    case "cleanup":
-      return runCleanup({
+    case "prune":
+      return runPrune({
         network,
         // Default cutoff: 1h. parseDuration throws on malformed input,
         // surfacing a clear error rather than silently using the default.
@@ -231,6 +244,12 @@ async function dispatch(args: ParsedArgs): Promise<number> {
         dryRun: args.dryRun,
         report,
       });
+
+    case "reset":
+      report(`reset: deleting all feeder-generated state for network=${network}`);
+      await cleanFeederState(network, report);
+      report(`reset: complete — re-seed with 'checkpoint set --from-latest' before starting`);
+      return 0;
   }
 }
 

@@ -40,6 +40,11 @@ make logs           # tail daemon logs
 
 Open `http://localhost:8080/health/live` to verify the daemon is running.
 
+> **The image bakes the compiled feeder + CLI.** Any time the source under
+> `offchain/feeder/` or `offchain/cli/` changes (including after a `git pull`),
+> re-run `make build` before `make up` / `make reset-restart` / any `make`
+> sub-command, otherwise the container keeps running the old binary.
+
 ### Daemon + monitoring
 
 ```sh
@@ -113,138 +118,186 @@ make cli CMD="pair:dedup --symbol BTC/USD"
 docker compose -f feeder/docker-compose.yml --project-directory feeder --profile cli run --rm --entrypoint sh cli -c "ls -R /app/state"
 ```
 
-### Operator setup sequence
+> **Always start/restart containers with `make`, never with `docker compose`
+> directly.** The Makefile exports your host `UID`/`GID` so the container
+> runs as your user and can write the bind-mounted `feeder/state/` tree.
+> A bare `docker compose up` defaults to `1000:1000`, which may not match
+> your user and leaves the SQLite DB read-only to the daemon
+> (`attempt to write a readonly database`).
 
-Run once for a fresh deployment (all commands from `offchain/`):
+### Operator setup — pick your scenario
+
+All commands run from `offchain/`. Pick the one that matches your machine.
+
+**Scenario A — fresh machine, never ran the CLI.**
+First do the full on-chain setup by following the CLI runbook:
+[**Wallet Setup → Protocol Deployment → Client Deployment**](../cli/README.md#wallet-setup)
+in `offchain/cli/README.md`. That produces the CLI state under
+`offchain/cli/state/<network>/`. Then continue with Scenario B.
+
+**Scenario B — CLI state already exists, feeder never started.**
+Import the CLI state into the feeder and start:
 
 ```sh
-make build          # Step 0 — build the unified image (once per code change)
-make wallet         # Step 1 — create the operator wallet (wallet:create)
-make protocol-init  # Step 2 — on-chain protocol setup:
-                    #   protocol:init → config:parameterize →
-                    #   config:reference-scripts → config:bootstrap
-make client-init    # Step 3 — register one client:
-                    #   client:init → receiver:bootstrap →
-                    #   receiver:parameterize → reference-scripts:publish-client
-make router-init    # Step 4 — generate router YAML interactively (feeder init client)
-make up             # Step 5 — start the feeder daemon
+make build             # only if the image isn't built yet
+make init-bootstrap    # import config-bootstrap.json into feeder/state/
+make init-client       # import client JSON + generate router YAML (interactive)
+make checkpoint-latest # seed scanner to current chain tip (only new intents)
+make up-monitoring     # start feeder + Prometheus + Grafana
 ```
+
+**Scenario C — everything set up, just want clean logs + DB.**
+The CLI state and router YAML already exist; you only want a fresh runtime:
+
+```sh
+make reset-restart   # stop → wipe DB+logs+pairs → reseed checkpoint → start
+make logs            # follow the daemon
+```
+
+`make reset-restart` keeps the CLI bootstrap files
+(`config-bootstrap.json`, `clients/*.json`) and the router YAML config —
+it only deletes feeder-generated runtime state.
+
+Open `http://localhost:8080/health/live` to verify the daemon is running.
+
+### Day-2 operations (Docker)
+
+These targets run the **feeder** binary as one-off containers (not `dia-cli`):
+
+| Target | What it does |
+| --- | --- |
+| `make init-bootstrap` | Import `config-bootstrap.json` from CLI state (`feeder init bootstrap`) |
+| `make init-client` | Import client JSON + generate router YAML interactively (`feeder init client`) |
+| `make checkpoint-get` | Print the current scanner checkpoint |
+| `make checkpoint-latest` | Seed the checkpoint to the current chain tip (only new intents) |
+| `make restart` | Restart the daemon with **no** data changes |
+| `make restart-latest` | Restart skipping the backlog: reseed checkpoint to tip, **keep** DB + logs |
+| `make reset` | Delete runtime state (DB + logs + pairs) and exit; keeps CLI bootstrap files |
+| `make reset-restart` | Stop → `reset` → reseed checkpoint → start the daemon |
+| `make prune` | Prune only **old** rows/logs (keeps DB). `make prune MAX_AGE=30m` |
 
 ### Volume layout
 
 | Host / named volume | Container path | Used by | Contents |
 | --- | --- | --- | --- |
 | `./config/` | `/config` (ro) | feeder | Modular YAML config (read-only) |
-| `./config/` | `/app/config` (rw) | cli | Modular YAML config (writable — CLI writes router YAML during `router-init`) |
+| `./config/` | `/app/config` (rw) | cli | Modular YAML config (writable — router YAML is written during `make init-client`) |
 | `.env` | env_file | feeder, cli | Secrets + selectors |
 | `./state/` | `/app/state` | feeder, cli | Bootstrap JSON, pair state, logs, SQLite DB |
 | `postgres-data` | (postgres svc) | postgres | Postgres data dir |
 | `prometheus-data` | `/prometheus` | prometheus | Prometheus TSDB (metric retention) |
 | `grafana-data` | `/var/lib/grafana` | grafana | Dashboard and alert state |
 
-## Prerequisites — one-time setup
+## Running locally (npm)
 
-Before the feeder can submit Cardano transactions it needs two bootstrap
-state files produced by the CLI (see
-[offchain/cli/README.md](../cli/README.md) for how to run the CLI
-bootstrap commands):
+Run the feeder directly on your machine, without Docker. Requires
+**Node.js 22+** and the toolchain to build the native deps
+(`better-sqlite3`, `lucid-evolution`). Everything below runs from
+`offchain/feeder/`. This is the **mirror** of the Docker path above — pick
+one or the other, do not mix them.
+
+```sh
+cd offchain/feeder
+npm install
+cp .env.example .env   # fill in secrets from offchain/cli/.env
+```
+
+### Operator setup — pick your scenario
+
+**Scenario A — fresh machine, never ran the CLI.**
+First do the full on-chain setup by following the CLI runbook:
+[**Wallet Setup → Protocol Deployment → Client Deployment**](../cli/README.md#wallet-setup)
+(run locally with `npm run cli -- ...` from `offchain/cli/`). That produces
+the CLI state under `offchain/cli/state/<network>/`. Then continue with
+Scenario B.
+
+**Scenario B — CLI state already exists, feeder never started.**
+Import the CLI state into the feeder and start:
+
+```sh
+npm run feeder:dev -- init bootstrap              # import config-bootstrap.json
+npm run feeder:dev -- init client                 # import client JSON + router YAML
+npm run feeder:dev -- checkpoint set --from-latest  # seed scanner to chain tip
+npm run feeder:dev                                # start the daemon
+```
+
+**Scenario C — everything set up, just want clean logs + DB.**
+One command wipes the runtime state, reseeds the checkpoint, and starts:
+
+```sh
+npm run feeder:dev -- --clean --from-latest
+```
+
+The feeder needs two bootstrap files from the CLI; `init` copies them in:
 
 | Artifact | Produced by CLI command |
 | --- | --- |
 | `state/<network>/config-bootstrap.json` | `config:bootstrap` |
 | `state/<network>/clients/<id>.json` | `receiver:bootstrap` |
 
-The `feeder init` commands handle the copy automatically:
+`init` auto-scans `../cli/state/` for the latest matching network run; use
+`--from <path>` to point at a specific run, and `--force` to overwrite
+without the confirmation prompt. If the daemon starts and a required file
+is missing, it exits immediately printing the exact `init` command to run.
+
+### Day-2 operations (npm)
+
+| Operation | Command |
+| --- | --- |
+| Restart with no data changes | Ctrl-C, then `npm run feeder:dev` |
+| Restart skipping the backlog (keep DB + logs) | `npm run feeder:dev -- --from-latest` |
+| Restart clean (wipe DB + logs) | `npm run feeder:dev -- --clean --from-latest` |
+| Wipe runtime state and exit | `npm run feeder:dev -- reset` |
+| Prune only old rows/logs (keep DB) | `npm run feeder:dev -- prune [--max-age 30m]` |
+| Inspect / set the scanner checkpoint | `npm run feeder:dev -- checkpoint get` / `... set --from-latest` |
+
+`reset` and `--clean` never delete the CLI bootstrap files
+(`config-bootstrap.json`, `clients/*.json`) — only feeder-generated runtime
+state. `reset` exits after wiping; `--clean` wipes then starts the daemon.
+
+### All commands — copy-paste examples
+
+Every useful invocation, grouped by purpose. Copy the one you need.
 
 ```sh
-cd offchain/feeder
+# ── Import CLI state ───────────────────────────────────────────────
+npm run feeder:dev -- init bootstrap                         # auto-scan ../cli/state/ for config-bootstrap.json
+npm run feeder:dev -- init bootstrap --from ../cli/state/preview_run_20260516-090057  # explicit source
+npm run feeder:dev -- init bootstrap --force                 # overwrite without prompting
+npm run feeder:dev -- init client                            # auto-scan + interactive router YAML wizard
+npm run feeder:dev -- init client --from ../cli/state/preview_run_20260516-090057/clients/client-a.json
+npm run feeder:dev -- init client --force                    # overwrite without prompting
 
-# Copy config-bootstrap.json from the latest CLI state run.
-# Auto-scans ../cli/state/ for matching network dirs; or use --from.
-npm run feeder:dev -- init bootstrap
+# ── Start the daemon ───────────────────────────────────────────────
+npm run feeder:dev                                           # normal start (resume from persisted checkpoint)
+npm run feeder:dev -- --from-latest                          # start skipping the backlog (chain tip), keep DB + logs
+npm run feeder:dev -- --from-block 7800000                   # start from a specific block, keep DB + logs
+npm run feeder:dev -- --clean --from-latest                  # clean start: wipe DB + logs, then scan only new intents
+npm run feeder:dev -- --clean --from-block 7800000           # clean start from a specific block
+npm run feeder:dev -- --log-level debug                      # start with verbose console output
 
-# Copy a client JSON and interactively generate its router YAML.
-npm run feeder:dev -- init client
+# ── Inspect / verify (no writes) ───────────────────────────────────
+npm run feeder:dev -- --validate-only                        # load + validate the config and exit
+npm run feeder:dev -- --scan                                 # scanner + enricher only, HTTP (verify connectivity)
+npm run feeder:dev -- --scan --transport ws                  # same over WebSocket — requires DIA_WS_CREDENTIAL_*
+npm run feeder:dev -- --dry-run                              # full pipeline, no-op write-client (no txs, no fees)
 
-# Re-init with a specific source (skip auto-scan).
-npm run feeder:dev -- init bootstrap --from ../cli/state/preview_run_20260516-090057
-npm run feeder:dev -- init client    --from ../cli/state/preview_run_20260516-090057/clients/client-a.json
+# ── Scanner checkpoint (run while the daemon is stopped) ───────────
+npm run feeder:dev -- checkpoint get                         # show the persisted checkpoint + next scan block
+npm run feeder:dev -- checkpoint set --from-latest           # jump to chain tip — scan only new intents
+npm run feeder:dev -- checkpoint set --from-block 7800000    # set an explicit block
+npm run feeder:dev -- checkpoint set --clear                 # reset to the YAML start_block
 
-# Overwrite existing files without prompting.
-npm run feeder:dev -- init bootstrap --force
-npm run feeder:dev -- init client    --force
+# ── Clean up state ─────────────────────────────────────────────────
+npm run feeder:dev -- reset                                  # wipe ALL runtime state (DB + logs + pairs) and exit
+npm run feeder:dev -- prune --dry-run                        # preview an age-based prune, delete nothing
+npm run feeder:dev -- prune                                  # prune rows/logs older than 1h (default), keep DB
+npm run feeder:dev -- prune --max-age 30m                    # prune anything older than 30 minutes
 ```
 
-Docker Compose bind-mounts `offchain/feeder/state/` into `/app/state`,
-so the container uses the exact same `state/<network>/...` tree you see
-locally in the repo.
-
-`--clean` never deletes bootstrap state files — only feeder-generated
-runtime state. Re-running `init` on an existing setup asks for
-confirmation before overwriting.
-
-If the feeder starts and a required state file is missing it exits
-immediately with the exact `init` command needed to fix it.
-
-## Usage
-
-```sh
-cd offchain/feeder
-npm install
-cp .env.example .env
-# fill in secrets from offchain/cli/.env (see Environment below)
-
-# Validate the modular config and exit.
-npm run feeder:dev -- --validate-only
-
-# --scan: runs scanner + enricher only. Prints enriched intents as they
-# arrive. The router, coalescer, and write-client are not started at all.
-# Use this to verify connectivity with the DIA registry before going live.
-npm run feeder:dev -- --scan --transport http
-npm run feeder:dev -- --scan --transport ws   # requires DIA_WS_CREDENTIAL_*
-
-# --dry-run: runs the full pipeline (scanner → router → coalescer →
-# write-client) but the write-client is a no-op stub — no Cardano txs
-# are submitted and no fees are spent. All logs, lane events, and the
-# API server run exactly as in production. Use this to validate the
-# full routing logic end-to-end.
-npm run feeder:dev -- --dry-run
-npm run feeder:dev -- --dry-run --transport ws
-
-# Run the full daemon (HTTP polling, default transport).
-npm run feeder:dev
-
-# Run the full daemon (WebSocket).
-npm run feeder:dev -- --transport ws
-
-# Wipe all feeder-generated state and start fresh from the current chain tip.
-# Without --from-latest / --from-block the scanner resumes from the YAML
-# start_block, which may be weeks old — most intents will be expired.
-npm run feeder:dev -- --clean --from-latest
-
-# Start from a specific block (e.g. after a known deployment or incident).
-npm run feeder:dev -- --clean --from-block 7800000
-
-# --from-latest / --from-block can also be used without --clean to re-seed
-# an existing checkpoint without wiping other runtime state.
-npm run feeder:dev -- --from-latest
-npm run feeder:dev -- --from-block 7800000
-
-# Operator sub-commands (run while the daemon is stopped):
-
-# Inspect or mutate the block-scanner checkpoint (chain_state.last_scan_block).
-npm run feeder:dev -- checkpoint get
-npm run feeder:dev -- checkpoint set --from-latest      # scan only new intents
-npm run feeder:dev -- checkpoint set --from-block 7800000
-npm run feeder:dev -- checkpoint set --clear            # reset to YAML start_block
-
-# Prune stale feeder-generated state (old per-intent logs, rotated line logs,
-# confirmed/failed transaction_log + processed_events rows older than the
-# cutoff). CLI bootstrap state (config-bootstrap.json, client JSON) is never
-# touched. Default cutoff 1h.
-npm run feeder:dev -- cleanup --dry-run                 # preview, delete nothing
-npm run feeder:dev -- cleanup --max-age 30m
-```
+> The daemon always runs both HTTP polling and (if `ws_url` is configured)
+> a WebSocket transport — there is no `--transport` flag for the daemon.
+> `--transport` only applies to `--scan`.
 
 The active network (Cardano Preview ↔ DIA Testnet, Cardano Mainnet ↔
 DIA Mainnet) is selected by `CARDANO_NETWORK` in `.env`.
@@ -277,10 +330,13 @@ The log file (`feeder.log`) always receives all lines regardless of `--log-level
 Level prefixes (`[debug]`, `[warn]`, `[error]`) are preserved in the file for
 grep/filtering; they are stripped from console output.
 
-### `--clean` — what gets deleted
+### `--clean` flag / `reset` sub-command — what gets deleted
 
-Deletes all files the feeder writes at runtime. CLI bootstrap state files
-are never touched.
+Both delete the exact same files — everything the feeder writes at runtime;
+CLI bootstrap state files are never touched. The only difference is what
+happens next: `--clean` (flag) wipes **then starts** the daemon, while
+`reset` (sub-command) wipes **then exits**. For an age-based partial prune
+that keeps the DB, use `prune` instead.
 
 | Deleted | Reason |
 |---|---|
@@ -295,8 +351,8 @@ are never touched.
 | `state/<network>/clients/*.json` | CLI state file (`receiver:bootstrap`) |
 
 The block-scanner position is stored in `chain_state.last_scan_block` in the SQLite/Postgres DB.
-`--clean` resets it by removing the DB entirely. `feeder cleanup --max-age` prunes old rows from
-`processed_events` and `transaction_log` but never removes the DB file itself.
+`--clean` / `reset` reset it by removing the DB entirely. `feeder prune --max-age` prunes old rows
+from `processed_events` and `transaction_log` but never removes the DB file itself.
 
 ## Log streams
 
@@ -629,10 +685,11 @@ No JSON checkpoint file is written.
 
 ### Concurrent transports, single handler
 
-When `--transport ws` is active, both the HTTP fallback poller and the
-WebSocket subscription feed the same event handler. The dedup cache
-(`processed_events`) ensures that an intent arriving on both channels is
-processed exactly once.
+In daemon mode both the HTTP poller and (when `ws_url` is configured in the
+infrastructure YAML) the WebSocket subscription run concurrently and feed
+the same event handler — there is no transport switch for the daemon. The
+dedup cache (`processed_events`) ensures that an intent arriving on both
+channels is processed exactly once.
 
 ## Spectra parity and Cardano divergences
 

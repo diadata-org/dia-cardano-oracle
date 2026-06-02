@@ -7,6 +7,14 @@ GID ?= $(shell id -g)
 export UID
 export GID
 
+# One-off feeder sub-commands run through the FEEDER binary inside the image
+# (NOT dia-cli). They override the daemon command on the feeder-sqlite service
+# so they share its volumes (./state, ./config) and .env. --no-deps avoids
+# pulling in any other services; --rm removes the throwaway container.
+FEEDER_BIN := node /app/feeder/dist/cmd/feeder/main.js --config /config
+FEEDER_RUN := $(COMPOSE) --profile sqlite run --rm --no-deps feeder-sqlite $(FEEDER_BIN)
+FEEDER_RUN_IT := $(COMPOSE) --profile sqlite run --rm -it --no-deps feeder-sqlite $(FEEDER_BIN)
+
 .PHONY: help
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F: '{printf "  %-22s %s\n", $$1, $$NF}'
@@ -57,9 +65,46 @@ client-init: ## Register one client: init, bootstrap, parameterize, publish refe
 	$(COMPOSE) --profile cli run --rm cli receiver:parameterize
 	$(COMPOSE) --profile cli run --rm cli reference-scripts:publish-client
 
-.PHONY: router-init
-router-init: ## Generate router YAML for a client (interactive)
-	$(COMPOSE) --profile cli run --rm -it cli feeder init client
+.PHONY: init-bootstrap
+init-bootstrap: ## Import config-bootstrap.json from CLI state into feeder/state (feeder init bootstrap)
+	$(FEEDER_RUN) init bootstrap
+
+.PHONY: init-client
+init-client: ## Import client JSON + generate router YAML interactively (feeder init client)
+	$(FEEDER_RUN_IT) init client
+
+.PHONY: checkpoint-get
+checkpoint-get: ## Print the current scanner checkpoint
+	$(FEEDER_RUN) checkpoint get
+
+.PHONY: checkpoint-latest
+checkpoint-latest: ## Seed the scanner checkpoint to the current chain tip (only new intents)
+	$(FEEDER_RUN) checkpoint set --from-latest
+
+.PHONY: restart
+restart: ## Restart the feeder daemon with no data changes
+	$(COMPOSE) --profile sqlite restart feeder-sqlite
+
+.PHONY: restart-latest
+restart-latest: ## Restart skipping the backlog - reseed checkpoint to tip, keep DB + logs
+	-$(COMPOSE) --profile sqlite stop feeder-sqlite
+	$(FEEDER_RUN) checkpoint set --from-latest
+	$(COMPOSE) --profile sqlite up -d feeder-sqlite
+
+.PHONY: reset
+reset: ## Delete feeder runtime state (DB + logs + pairs) and exit; keeps CLI bootstrap files
+	$(FEEDER_RUN) reset
+
+.PHONY: reset-restart
+reset-restart: ## Restart clean - stop, wipe DB + logs + pairs, reseed checkpoint, start daemon
+	-$(COMPOSE) --profile sqlite stop feeder-sqlite
+	$(FEEDER_RUN) reset
+	$(FEEDER_RUN) checkpoint set --from-latest
+	$(COMPOSE) --profile sqlite up -d feeder-sqlite
+
+.PHONY: prune
+prune: ## Prune only OLD feeder rows/logs, keeps DB (e.g. make prune MAX_AGE=30m)
+	$(FEEDER_RUN) prune $(if $(MAX_AGE),--max-age $(MAX_AGE),)
 
 .PHONY: evidence
 evidence: ## Build M2 evidence pack (requires running feeder + Grafana)

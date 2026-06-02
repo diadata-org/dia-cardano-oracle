@@ -32,7 +32,7 @@ export type InitSubCommand = "bootstrap" | "client";
 export type CheckpointSubCommand = "set" | "get";
 
 /** Mutually exclusive top-level "mode" the binary runs in. */
-export type FeederMode = "daemon" | "validate" | "scan" | "init" | "checkpoint" | "cleanup";
+export type FeederMode = "daemon" | "validate" | "scan" | "init" | "checkpoint" | "prune" | "reset";
 
 export type ParsedArgs = {
   configPath: string;
@@ -54,8 +54,8 @@ export type ParsedArgs = {
   force: boolean;
   // checkpoint-specific
   checkpointSubCommand?: CheckpointSubCommand;
-  // cleanup-specific: human duration string ("1h", "30m", "2h30m") for the
-  // age cutoff. Undefined defers to runCleanup's own default.
+  // prune-specific: human duration string ("1h", "30m", "2h30m") for the
+  // age cutoff. Undefined defers to runPrune's own default.
   maxAge?: string;
 };
 
@@ -81,20 +81,44 @@ const DEFAULTS: ParsedArgs = {
  * point can print usage and exit non-zero.
  */
 export function parseArgs(argv: string[]): ParsedArgs {
-  // `init bootstrap` / `init client` — positional sub-command handled first
-  // before the flag loop so the loop can use its standard switch/case.
-  if (argv[0] === "init") {
-    return parseInitArgs(argv);
-  }
-  // `checkpoint get` / `checkpoint set --from-latest|--from-block N|--clear`
-  if (argv[0] === "checkpoint") {
-    return parseCheckpointArgs(argv);
-  }
-  // `cleanup [--max-age <duration>] [--dry-run]`
-  if (argv[0] === "cleanup") {
-    return parseCleanupArgs(argv);
+  // Positional sub-commands (init / checkpoint / prune / reset) normally come
+  // first. But some invocations prepend the global `--config <dir>` (and
+  // `--log-level <lvl>`) flags — notably the Docker Makefile, which always
+  // runs `... main.js --config /config <subcommand>`. Peel those leading
+  // global flags off so the sub-command is still detected, then apply them
+  // to whatever the sub-parser returns.
+  let idx = 0;
+  let leadingConfig: string | undefined;
+  let leadingLogLevel: LogLevel | undefined;
+  while (idx < argv.length) {
+    if (argv[idx] === "--config") {
+      leadingConfig = requireValue(argv, idx + 1, "--config");
+      idx += 2;
+    } else if (argv[idx] === "--log-level") {
+      leadingLogLevel = parseLogLevel(requireValue(argv, idx + 1, "--log-level"));
+      idx += 2;
+    } else {
+      break;
+    }
   }
 
+  const head = argv[idx];
+  if (head === "init" || head === "checkpoint" || head === "prune" || head === "reset") {
+    const subArgv = argv.slice(idx);
+    let parsed: ParsedArgs;
+    switch (head) {
+      case "init":       parsed = parseInitArgs(subArgv); break;
+      case "checkpoint": parsed = parseCheckpointArgs(subArgv); break;
+      case "prune":      parsed = parsePruneArgs(subArgv); break;
+      default:           parsed = parseResetArgs(subArgv); break;
+    }
+    if (leadingConfig !== undefined) parsed.configPath = leadingConfig;
+    if (leadingLogLevel !== undefined) parsed.logLevel = leadingLogLevel;
+    return parsed;
+  }
+
+  // No sub-command — daemon flag loop. Scan the FULL argv (the loop handles
+  // --config / --log-level wherever they appear).
   const parsed: ParsedArgs = { ...DEFAULTS };
   applyEnvOverrides(parsed);
 
@@ -201,8 +225,27 @@ function parseCheckpointArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
-function parseCleanupArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { ...DEFAULTS, mode: "cleanup" };
+function parseResetArgs(argv: string[]): ParsedArgs {
+  const parsed: ParsedArgs = { ...DEFAULTS, mode: "reset" };
+  applyEnvOverrides(parsed);
+
+  for (let i = 1; i < argv.length; i += 1) {
+    const arg = argv[i];
+    switch (arg) {
+      case "--help":
+      case "-h":
+        parsed.showHelp = true;
+        break;
+      default:
+        throw new Error(`Unknown argument for 'reset': ${arg}`);
+    }
+  }
+
+  return parsed;
+}
+
+function parsePruneArgs(argv: string[]): ParsedArgs {
+  const parsed: ParsedArgs = { ...DEFAULTS, mode: "prune" };
   applyEnvOverrides(parsed);
 
   for (let i = 1; i < argv.length; i += 1) {
@@ -222,7 +265,7 @@ function parseCleanupArgs(argv: string[]): ParsedArgs {
         parsed.dryRun = true;
         break;
       default:
-        throw new Error(`Unknown argument for 'cleanup': ${arg}`);
+        throw new Error(`Unknown argument for 'prune': ${arg}`);
     }
   }
 

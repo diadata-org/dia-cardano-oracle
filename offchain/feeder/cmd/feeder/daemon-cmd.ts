@@ -1698,7 +1698,7 @@ function resolveApiAddr(apiConfig?: InfrastructureConfig["api"]): { host: string
 
   const raw = apiConfig?.listen_addr?.trim() ?? process.env.API_LISTEN_ADDR?.trim() ?? ":8080";
   const colonIdx = raw.lastIndexOf(":");
-  const host = colonIdx > 0 ? raw.slice(0, colonIdx) : "127.0.0.1";
+  const host = colonIdx > 0 ? raw.slice(0, colonIdx) : colonIdx === 0 ? "0.0.0.0" : "127.0.0.1";
   const port = parseInt(raw.slice(colonIdx + 1), 10) || 8080;
   return { host, port };
 }
