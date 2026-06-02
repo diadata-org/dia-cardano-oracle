@@ -122,4 +122,48 @@ describe("validateModularConfig", () => {
   });
 
   // tx_mode is no longer rejected — the guard was removed as a rename leftover.
+
+  // R10.A.10 — EVM payload-reshaping config is rejected for Cardano routers,
+  // because the payload is a signed intent (transforming it breaks the
+  // on-chain EIP-712 signature). These guards convert silent no-ops into
+  // loud config errors. (Backs R10.C.19.j: there is no transformer→submit
+  // path to integration-test; the rejection IS the contract.)
+  it("rejects a non-empty processing.transformations block", () => {
+    const config = makeConfig(false);
+    config.routers["router-a"]!.processing.transformations = [
+      { field: "price", operation: "multiply", input: "price", params: { factor: 2 } },
+    ] as unknown as ModularConfig["routers"][string]["processing"]["transformations"];
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some((i) => i.severity === "error" && /transformations/.test(i.message)),
+      `expected a transformations rejection; got ${JSON.stringify(issues)}`,
+    );
+  });
+
+  it("rejects processing.datasource = 'processed'", () => {
+    const config = makeConfig(false);
+    config.routers["router-a"]!.processing.datasource = "processed";
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some((i) => i.severity === "error" && /datasource/.test(i.message)),
+      `expected a datasource rejection; got ${JSON.stringify(issues)}`,
+    );
+  });
+
+  it("rejects processing.validationenabled = false", () => {
+    const config = makeConfig(false);
+    config.routers["router-a"]!.processing.validationenabled = false;
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some((i) => i.severity === "error" && /validationenabled/.test(i.message)),
+      `expected a validationenabled rejection; got ${JSON.stringify(issues)}`,
+    );
+  });
+
+  it("accepts an empty transformations array and validationenabled=true (the real config shape)", () => {
+    const config = makeConfig(false);
+    config.routers["router-a"]!.processing.transformations = [];
+    config.routers["router-a"]!.processing.validationenabled = true;
+    assert.deepEqual(validateModularConfig(config), []);
+  });
 });

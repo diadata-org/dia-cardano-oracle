@@ -10,7 +10,8 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 - [Milestone 1 Preview Evidence](../milestones/evidence/m1-preview-20260516-090057/milestone-1-preview-evidence.md) — M1 Preview verification log.
 - [Milestone 1 Mainnet Evidence](../milestones/evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) — M1 Mainnet verification log (latest run).
 - [Milestone 2 Feeder Strategy](./milestone-2-feeder-strategy.md) — conceptual reference: feeder split, DIA stack glossary, canonical endpoints (chain ids and registries confirmed by DIA), open questions still pending DIA confirmation.
-- [Milestone 2 Final Plan](./milestone-2-final-plan.md) — operational task breakdown for M2 (phases R0-R9, acceptance criteria, evidence layout).
+- [**HANDOFF**](./HANDOFF.md) — **start here.** Current state, what's done vs. left, how to verify (test count + commands), how to run the feeder.
+- [Milestone 2 Final Plan](./milestone-2-final-plan.md) — operational task breakdown for M2 (phases R0-R10, acceptance criteria, evidence layout).
 - [M3 Deferred Features](./m3-deferred-features.md) — typed-but-not-wired Spectra-parity items and the Cardano-only extensions, with explicit "deferred / excluded / wired" classification.
 - [Mainnet Rollout](./mainnet-rollout.md) — Mainnet rollout procedure + rollback plan.
 - [Audit report](../audit/) — `audit-report-20260515.md`.

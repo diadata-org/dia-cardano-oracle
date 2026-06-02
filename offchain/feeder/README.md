@@ -229,6 +229,21 @@ npm run feeder:dev -- --clean --from-block 7800000
 # an existing checkpoint without wiping other runtime state.
 npm run feeder:dev -- --from-latest
 npm run feeder:dev -- --from-block 7800000
+
+# Operator sub-commands (run while the daemon is stopped):
+
+# Inspect or mutate the block-scanner checkpoint (chain_state.last_scan_block).
+npm run feeder:dev -- checkpoint get
+npm run feeder:dev -- checkpoint set --from-latest      # scan only new intents
+npm run feeder:dev -- checkpoint set --from-block 7800000
+npm run feeder:dev -- checkpoint set --clear            # reset to YAML start_block
+
+# Prune stale feeder-generated state (old per-intent logs, rotated line logs,
+# confirmed/failed transaction_log + processed_events rows older than the
+# cutoff). CLI bootstrap state (config-bootstrap.json, client JSON) is never
+# touched. Default cutoff 1h.
+npm run feeder:dev -- cleanup --dry-run                 # preview, delete nothing
+npm run feeder:dev -- cleanup --max-age 30m
 ```
 
 The active network (Cardano Preview ↔ DIA Testnet, Cardano Mainnet ↔
