@@ -2544,7 +2544,504 @@ stats are queried, not replayed.
 
 ---
 
-# Spectra Parity Disposition Register
+# Phase R10 — Adversarial Audit Remediation
+
+> **Origen:** audit de 190 agentes ejecutado el 2026-06-02 sobre el código
+> completo del feeder. 92 findings raw → 73 confirmados (19 refutados).
+> La metodología fue: 5 auditores paralelos (wiring, silent-failure,
+> test-coverage, spectra-parity, edge-cases) → 2 escépticos independientes
+> por finding → synthesis estructurada.
+>
+> **Precondición de este plan:** NINGUNO de los ítems R10.C.* puede marcarse
+> completado sólo con código. Cada uno requiere su test. Si el test no existe,
+> el ítem sigue abierto.
+
+---
+
+## R10.A — Critical fixes (bloqueantes para cualquier run real)
+
+### R10.A.1 — Wire `runCleanup` en `main.ts`
+
+- [ ] **R10.A.1** — `cmd/feeder/cleanup-cmd.ts` implementa `runCleanup`
+  completamente pero nunca es importado ni despachado desde `main.ts`.
+  El comando `feeder cleanup` no existe en runtime.
+  **Fix:** agregar `import { runCleanup }`, añadir `"cleanup"` a
+  `FeederMode`, parsear `argv[0] === "cleanup"` en `args.ts`, y el
+  case en el switch de `dispatch()`. Mismo patrón que `checkpoint`.
+
+### R10.A.2 — Await `db.*` fire-and-forget en daemon-cmd.ts
+
+- [ ] **R10.A.2** — Tres llamadas `void db.*` en `daemon-cmd.ts` descartan
+  silenciosamente errores de DB. Una tx confirmada en Cardano puede no tener
+  registro en `transaction_log` si hay un fallo de DB transitorio.
+
+  | Línea (aprox) | Call | Efecto del fallo |
+  |---|---|---|
+  | ~588 | `void db.insertTransactionLog(... status:"submitted" ...)` | Tx submitted sin registro |
+  | ~730 | `void db.updateTransactionLog(... status:"confirmed" ...)` | Tx confirmed sin registro |
+  | ~786 | `void db.insertTransactionLog(... status:"failed" ...)` | Tx failed sin registro |
+
+  **Fix:** reemplazar `void` por `await ... .catch(err => report(...))` al
+  menos. No propagar el error hacia arriba (no debe tirar abajo el daemon),
+  pero sí logear y emitir un counter.
+
+### R10.A.3 — `setChainHealth` sin rowCount check (SQLite + Postgres)
+
+- [ ] **R10.A.3** — `db.ts` líneas ~506 (SQLite) y ~889 (Postgres):
+  `UPDATE chain_state ... WHERE chain_id=? AND contract_id=?` sin
+  chequear `result.changes === 0` / `result.rowCount === 0`. Si el row
+  no existe, la actualización se pierde silenciosamente.
+  **Fix:** mismo patrón que `setLastScanBlock` — throw `Error("no
+  chain_state row — call initialiseChainState first")` cuando changes=0.
+
+### R10.A.4 — `updateTransactionLog` sin rowCount check (SQLite + Postgres)
+
+- [ ] **R10.A.4** — `db.ts` líneas ~629 (SQLite) y ~1023 (Postgres):
+  UPDATE silencioso sin validar rows afectadas. Si el `intentHash` no
+  existe (porque `insertTransactionLog` falló con el bug de R10.A.2),
+  el UPDATE no hace nada.
+  **Fix:** throw cuando changes/rowCount === 0.
+
+### R10.A.5 — `resolveAlert` / `acknowledgeAlert` sin rowCount check (4 funciones)
+
+- [ ] **R10.A.5** — Cuatro UPDATE en `db.ts` (~764, ~770, ~1173, ~1180)
+  para resolver y acknowledger alertas sin chequear rows afectadas.
+  Un alert ID inexistente se "resuelve" silenciosamente, creando
+  split-brain entre `activeAlertIds` en memoria y el estado en DB.
+  **Fix:** throw cuando changes/rowCount === 0 en las cuatro variantes
+  (SQLite + Postgres × resolve + acknowledge).
+
+### R10.A.6 — `toRegistryLog` con `?? 0n` / `?? "0x"` en WS scanner
+
+- [ ] **R10.A.6** — `scanner-ws.ts` ~línea 273:
+  ```ts
+  blockNumber: log.blockNumber ?? 0n,
+  transactionHash: (log.transactionHash ?? "0x") as Hex,
+  logIndex: log.logIndex ?? 0,
+  ```
+  Un log de una tx pendiente (blockNumber=null) se procesa como bloque 0
+  → checkpointed a bloque 0 → re-procesado en cada restart.
+  Un transactionHash null se convierte en `"0x"` → dedup collisions.
+  **Fix:** throw si cualquier campo requerido es null/undefined.
+
+### R10.A.7 — `processingTimeoutMs=0` causa 100% failure sin validación
+
+- [ ] **R10.A.7** — `event-worker-pool.ts` ~línea 175: `setTimeout(...,
+  processingTimeoutMs)` con valor 0 dispara en el siguiente tick → todos
+  los eventos fallan. No hay validación en el constructor.
+  **Fix:** `if (processingTimeoutMs <= 0) throw new Error(...)` en
+  `createEventWorkerPool`. También: hacer que `parallel_timeout: 0s`
+  en el YAML sea rechazado por el validator.
+
+### R10.A.8 — Recursión no acotada en `flush()` del coalescer
+
+- [ ] **R10.A.8** — `coalescer.ts` ~línea 322: cuando un batch se confirma
+  y el buffer no está vacío, `flush()` se llama a sí misma recursivamente.
+  Bajo carga alta con `maxBatchSize` pequeño, la recursión puede crecer sin
+  límite.
+  **Fix:** reemplazar la llamada recursiva por un loop `while (lane.buffer.size > 0)`.
+
+### R10.A.9 — `private_key_env` por router declarado pero no leído
+
+- [ ] **R10.A.9** — `config/types.ts:368` declara `RouterConfig.private_key_env`
+  y el validator lo exige, pero `daemon-cmd.ts` solo carga el signer global
+  `CARDANO_WALLET_SEED_<NETWORK>`. En un deployment multi-cliente, todos los
+  routers comparten el mismo signer — gap de seguridad y violación de paridad
+  Spectra.
+  **Fix:** en `daemon-cmd.ts`, al crear el write client para cada router,
+  leer `router.private_key_env` (o `router.private_key`) para resolver el
+  signer por router.
+
+### R10.A.10 — `transformations` declaradas en router config pero nunca aplicadas
+
+- [ ] **R10.A.10** — `createTransformer` está exportado de
+  `src/pipeline/index.ts` pero `daemon-cmd.ts` usa siempre
+  `identityTransformer`. Cualquier YAML con `processing.transformations:`
+  no vacío es ignorado silenciosamente.
+  **Fix:** en `daemon-cmd.ts`, construir el transformer desde
+  `router.processing.transformations` al inicio, y aplicarlo sobre el
+  intent enriquecido antes de `routeIntent()`.
+
+### R10.A.11 — DB layer: 26 métodos, cero tests directos
+
+- [ ] **R10.A.11** — `src/persistence/db.ts` expone 26 métodos. Los únicos
+  tests existentes validan paths de archivo (`db-path-validation.test.ts`)
+  y el schema SQL como string (`db-schema-parity.test.ts`). Ningún test
+  ejecuta un solo método de la interfaz `Db`.
+
+  Ver R10.C (Test Plan) para la lista completa de tests a escribir.
+
+---
+
+## R10.B — High priority (fix antes de evidencia larga de 48-72h)
+
+### R10.B.1 — `Promise.race` timeout no cancela el `onEvent` promise
+
+- [ ] **R10.B.1** — `event-worker-pool.ts`: al expirar el timeout, el `onEvent`
+  sigue ejecutándose en background. Si muta estado compartido (router
+  registry, coalescer buffer), crea race conditions.
+  **Fix:** usar `AbortController` — pasar `signal` a `onEvent`, hacer
+  `controller.abort()` cuando el timeout dispara, `clearTimeout` en `finally`.
+
+### R10.B.2 — Scanner HTTP sin reset de cursor en reorg
+
+- [ ] **R10.B.2** — `scanner-http.ts`: cuando la cabena retrocede (reorg),
+  `cursor > finalizedHead` pone el scanner en espera hasta que el head
+  vuelva a superar el cursor. Los bloques `[newHead..oldCursor]` se pierden.
+  **Fix:** detectar `head < previousHead` y resetear `cursor` a
+  `max(0, head - confirmations - blockRange)`. Loguear el reorg explícitamente.
+
+### R10.B.3 — `normalizeConfigKey` declarada pero nunca llamada al cargar YAMLs
+
+- [ ] **R10.B.3** — `config/loader.ts:62`: la función existe y tiene tests, pero
+  no se invoca durante la carga real de YAML. YAMLs con claves compactas
+  (p.ej. `enablecors`, `scaninterval`) fallan validación en lugar de ser
+  normalizadas.
+  **Fix:** aplicar `normalizeConfigKey` recursivamente a todas las claves
+  al deserializar el YAML (en `yaml-fs.ts` o al inicio de `loader.ts`).
+
+### R10.B.4 — Alias metrics `bridgeIntents*` declaradas pero nunca incrementadas
+
+- [ ] **R10.B.4** — `metrics.ts:100-108`: `bridgeIntentsScanned`,
+  `bridgeIntentsProcessed`, `bridgeIntentsSubmitted`, `bridgeIntentsConfirmed`,
+  `bridgeIntentsFailed` declaradas como `FeedCounter` pero sin ningún `.inc()`
+  en producción. Los dashboards de Grafana que usen estos nombres no muestran
+  datos.
+  **Fix:** en `daemon-cmd.ts`, junto a cada incremento de los alias no-bridge
+  (`intentsScanned`, `intentsRouted`, etc.), incrementar también el alias bridge.
+
+### R10.B.5 — `bridgeTransactionFeeLovelace` histogram declarado pero sin `.observe()`
+
+- [ ] **R10.B.5** — `metrics.ts:110`: histogram declarado, zero observaciones en
+  producción. La fee pagada existe en `transaction_log.fee_paid_lovelace` pero
+  no se emite a Prometheus.
+  **Fix:** en el handler de confirmación en `daemon-cmd.ts` o en el
+  `cardano-write-client`, hacer `metrics.bridgeTransactionFeeLovelace.observe(
+  { symbol, client_id }, feePaidLovelace)` al confirmar.
+
+### R10.B.6 — `customer` label ausente en métricas de lifecycle de tx
+
+- [ ] **R10.B.6** — `RouterConfig.customer` está disponible y el cron service lo
+  usa, pero `transactionsSubmitted`, `transactionsConfirmed`, `transactionsFailed`,
+  `intentsRouted` en `daemon-cmd.ts` no incluyen el label `{customer}`.
+  Grafana no puede filtrar el timeline de txs por cliente.
+  **Fix:** agregar `customer: dispatch.router.customer ?? "unknown"` al
+  label set de cada métrica de lifecycle de transacción.
+
+### R10.B.7 — Alert by ID: `listAlerts({limit:1000})` + in-memory find → 404 para alerts viejas
+
+- [ ] **R10.B.7** — `server.ts:347-354`: el endpoint `GET /api/v1/alerts/:id`
+  carga 1000 alerts en memoria y hace `.find()`. Si el alert es más viejo que
+  las últimas 1000 rows, devuelve 404.
+  **Fix:** agregar `getAlertById(id: number)` a la interfaz `Db` (SQLite +
+  Postgres) con `WHERE id = ?`. Reemplazar el listAlerts+find por este método.
+
+### R10.B.8 — Rate limiter sin eviction de buckets expirados → memory leak
+
+- [ ] **R10.B.8** — `server.ts:90-108`: el Map `buckets` crece un entry por IP
+  única, nunca se evicta hasta que esa IP haga una nueva request. Detrás de
+  un proxy o con IPs únicas, puede agotar memoria en horas.
+  **Fix:** en el `createRateLimiter`, agregar un `setInterval` de limpieza
+  que evicte entries con `now > bucket.resetAt`, o cap máximo de entries
+  usando LRU.
+
+### R10.B.9 — `metricsRecordPerformance` falla silenciosamente sin log
+
+- [ ] **R10.B.9** — `metrics.ts:570`: `.catch(() => {})` vacío. Si la DB está
+  degradada, los operadores no tienen visibilidad de que las métricas de
+  performance no se están persistiendo.
+  **Fix:** `catch(err => log(`metrics persist failed: ${err}`))` como mínimo.
+
+### R10.B.10 — Alert evaluator: `recordAlert`/`resolveAlert` fallan → re-fire en el próximo ciclo
+
+- [ ] **R10.B.10** — `evaluator.ts:79,90`: errores de DB logueados pero
+  `activeAlertIds.set/delete` no se ejecutan cuando la DB falla. En el
+  próximo ciclo el alert dispara de nuevo aunque debería estar activo/resuelto.
+  **Fix:** si `recordAlert` falla, NO hacer `activeAlertIds.set()`.
+  Si `resolveAlert` falla, NO hacer `activeAlertIds.delete()`.
+  Así el estado en memoria refleja el estado real de la DB.
+
+### R10.B.11 — `time_threshold=0` o negativo convierte el policy gate en no-op
+
+- [ ] **R10.B.11** — `router/policy.ts:179`: `elapsedMs >= 0` es siempre true
+  si `timeThresholdMs=0`. Un typo en el YAML deshabilita silenciosamente el
+  filtro de frecuencia.
+  **Fix:** en `parseDurationMs`, rechazar 0 y negativos con error explícito.
+  El validator debe surfacear el error en config load.
+
+### R10.B.12 — `cron-service`: router sin symbol filter salta silenciosamente sin log
+
+- [ ] **R10.B.12** — `cron-service.ts:111-117`: si un router no tiene filtro de
+  symbol, las resubmisiones de cron se saltan sin ningún warning. El operador
+  configura `cron: true` y no pasa nada.
+  **Fix:** loguear un WARNING una sola vez al inicio (no por tick) cuando un
+  destino cron-enabled tiene router sin filtro de symbol.
+
+### R10.B.13 — `scan-handler.ts`: `checkpoint.save()` no se llama si `onBatch` tira
+
+- [ ] **R10.B.13** — `scan-handler.ts:60-61`: `await onBatch(...)` → `await
+  checkpoint.save(toBlock)`. Si `onBatch` tira excepción, el checkpoint no se
+  guarda (correcto). Pero si `getBlockTimestamp` resolver tira para un solo
+  bloque, `Promise.all` rechaza y se pierde el batch completo sin intento de
+  fallback a `blockTimestamp=0n`.
+  **Fix:** si el resolver tira, loguear el error y continuar con
+  `blockTimestamp=0n` para ese bloque (degraded mode, las fases 1+2 de
+  latencia quedan en 0 pero el batch no se pierde).
+
+### R10.B.14 — `requireContractAbi` exportado pero nunca usado (código muerto)
+
+- [ ] **R10.B.14** — `config/abi-parser.ts:211`: helper completamente implementado,
+  cero importadores. Si se necesita lookup de ABI por contractId en runtime,
+  este helper existe pero nadie lo llama.
+  **Fix:** o eliminarlo o wirear como fallback en el enricher cuando el ABI
+  no viene del config inline.
+
+---
+
+## R10.C — Test plan completo (320 tests estimados)
+
+> **Regla de completitud:** cada función/método listado aquí necesita sus
+> casos de test antes de que el sistema se considere verificado. Los tests
+> van en `src/**/__tests__/*.test.ts` junto al módulo correspondiente.
+> Cada test debe compilar con `npx tsc --noEmit` y pasar con `npm test`.
+
+### R10.C.1 — DB layer (SQLite, in-memory `:memory:`) — ~120 tests
+
+- [ ] **R10.C.1.a** — `migrate()`: crea todas las tablas en DB fresca,
+  idempotente (doble llamada sin throw), migración corrupta → close + throw.
+- [ ] **R10.C.1.b** — `initialiseChainState()`: inserta row con valores
+  iniciales, idempotente en mismo `(chainId, contractId)`, diferente
+  `contractId` crea segunda row.
+- [ ] **R10.C.1.c** — `setLastProcessedBlock()`: actualiza correctamente,
+  throw cuando no existe el row, bigint > `Number.MAX_SAFE_INTEGER`
+  round-trips sin truncar, `updated_at_ms` se actualiza.
+- [ ] **R10.C.1.d** — `setLastScanBlock()`: mismos casos que `.c`, no afecta
+  `last_processed_block`.
+- [ ] **R10.C.1.e** — `setChainHealth()`: `isHealthy=true` setea `is_healthy=1`,
+  `isHealthy=false` incrementa `error_count`, setea `last_error`,
+  `errorMsg=undefined` guarda NULL, throw cuando no existe el row (fix R10.A.3).
+- [ ] **R10.C.1.f** — `getChainState()`: null cuando no existe, row completo
+  tras init, bigint fields devueltos como bigint, `is_healthy=0` → `false`.
+- [ ] **R10.C.1.g** — `listChainStates()`: array vacío, múltiples rows, orden.
+- [ ] **R10.C.1.h** — `upsertProcessedEvent()`: inserta row completo, idempotente
+  en `intentHash`, ON CONFLICT no sobreescribe status, campos opcionales como NULL.
+- [ ] **R10.C.1.i** — `hasProcessedEvent()`: false antes de upsert, true después,
+  false para otro intentHash.
+- [ ] **R10.C.1.j** — `getProcessedEvent()`: null si no existe, row completo tras
+  upsert, blockNumber como bigint.
+- [ ] **R10.C.1.k** — `listProcessedEvents()`: sin filtros, filtro por routerId,
+  por status, por fromBlock, paginación (limit+offset), array vacío.
+- [ ] **R10.C.1.l** — `insertTransactionLog()`: row completo, campos opcionales
+  como NULL, status=submitted tiene submittedAtMs y no confirmedAtMs.
+- [ ] **R10.C.1.m** — `updateTransactionLog()`: status submitted→confirmed,
+  actualiza cardanoTxHash, patch parcial no borra otros campos, patch vacío
+  retorna sin error, throw cuando intentHash no existe (fix R10.A.4).
+- [ ] **R10.C.1.n** — `getTransactionLog()`: array vacío, rows por intentHash.
+- [ ] **R10.C.1.o** — `getTransactionsByHash()`: array vacío, rows por cardanoTxHash.
+- [ ] **R10.C.1.p** — `listTransactions()`: sin filtros, por status, por symbol,
+  por routerId, filtros AND, limit, offset.
+- [ ] **R10.C.1.q** — `upsertContractSymbolUpdate()`: primer insert, segundo
+  incrementa `update_count`, `total_fee_paid_lovelace` acumula.
+- [ ] **R10.C.1.r** — `recordPerformanceMetric()`: inserta, labels como JSON,
+  retorna id > 0.
+- [ ] **R10.C.1.s** — `queryPerformanceMetrics()`: filtro por metricName, since,
+  until, combinado, limit, array vacío.
+- [ ] **R10.C.1.t** — `recordAlert()`: inserta, acknowledged=0, resolved=NULL,
+  labels JSON, ids distintos.
+- [ ] **R10.C.1.u** — `resolveAlert()`: setea resolved_at_ms, throw cuando id no
+  existe (fix R10.A.5), alert listable con active=false.
+- [ ] **R10.C.1.v** — `acknowledgeAlert()`: setea acknowledged=1, throw cuando id
+  no existe (fix R10.A.5), no afecta resolved_at_ms.
+- [ ] **R10.C.1.w** — `listAlerts()`: todos, active=true (unresolved), active=false
+  (resolved), limit, offset, ordenados por fired_at_ms DESC.
+- [ ] **R10.C.1.x** — `pruneOldRows()`: borra processed_events viejos, borra txs
+  confirmed/failed viejas, NO borra txs pending/submitted, borra alerts
+  resueltos viejos, NO borra alerts activos, borra performance_metrics viejos,
+  retorna change counts, retorna ceros cuando nada es suficientemente viejo.
+- [ ] **R10.C.1.y** — `close()`: no tira, operaciones post-close() tiran.
+
+### R10.C.2 — `price-cache.ts` — ~10 tests
+
+- [ ] **R10.C.2** — `get` undefined para key inexistente, set+get round-trip,
+  set sobreescribe, keys distintas no colisionan, `all()` snapshot inmutable,
+  `size()` correcto, `entries()` itera todo, symbol con `:` en el nombre,
+  `now()` custom controla `updatedAtMs`.
+
+### R10.C.3 — `checkpoint-db.ts` — ~5 tests
+
+- [ ] **R10.C.3** — `load()` null cuando no existe row, `load()` devuelve bigint,
+  `save()` llama `setLastScanBlock` con args correctos, error en save
+  propaga (no se traga), chainId/contractId correctos desde options.
+
+### R10.C.4 — `scanner-ws.ts` — `toRegistryLog` + reconexión — ~10 tests
+
+- [ ] **R10.C.4** — `toRegistryLog`: throw cuando `blockNumber=null`, throw cuando
+  `transactionHash=null`, throw cuando `logIndex=null`, campos válidos
+  pasan sin modificación. `nextDelay`: crecimiento exponencial verificado,
+  cap a MAX_RECONNECT_MS, jitter dentro del rango ±20%.
+
+### R10.C.5 — `scan-handler.ts` — ~7 tests
+
+- [ ] **R10.C.5** — cero eventos llama onBatch con array vacío, checkpoint.save
+  después de onBatch exitoso, checkpoint NO se llama si onBatch tira, resolver
+  ausente → blockTimestamp=0n, resolver presente → timestamp correcto desde
+  mapa, resolver tira → continuar con 0n (fix R10.B.13), resolver llamado
+  exactamente una vez por bloque distinto.
+
+### R10.C.6 — `registry-client.ts` — ~8 tests
+
+- [ ] **R10.C.6** — `composeAuthenticatedWsUrl`: appenda credential, caracteres
+  especiales encoded, mainnet/testnet network params, trailing slash en base URL.
+  `resolveSourceFromConfig`: config http válida, config ws válida, rpc_urls
+  vacío → throw, chain_id faltante → throw.
+
+### R10.C.7 — `router/symbols.ts` — ~6 tests
+
+- [ ] **R10.C.7** — `operator=in` devuelve todos los símbolos, `operator=eq`
+  devuelve uno, condición no-symbol ignorada, sin condiciones → array vacío,
+  duplicados deduplicados, router deshabilitado.
+
+### R10.C.8 — API response builders — ~30 tests
+
+- [ ] **R10.C.8.a** — `alerts.ts` `buildAlertsResponse`: array vacío, count
+  correcto, labelsJson parseado, labelsJson malformado → `{}`, resolvedAtMs
+  undefined.
+- [ ] **R10.C.8.b** — `alerts.ts` `buildAlertResponse`: null input → null, row
+  válido mapeado correctamente.
+- [ ] **R10.C.8.c** — `performance.ts` `buildPerformanceResponse`: array vacío,
+  count correcto, labelsJson parseado, malformado → `{}`.
+- [ ] **R10.C.8.d** — `transactions.ts` `buildTransactionsResponse`: array vacío,
+  count correcto.
+- [ ] **R10.C.8.e** — `transactions.ts` `buildTransactionResponse`: null cuando
+  hash no existe, txHash correcto, updates array, updateCount correcto,
+  status de primera row, múltiples intentHash en el mismo cardanoTxHash.
+- [ ] **R10.C.8.f** — `symbols.ts` `buildSymbolsResponse` y
+  `buildSymbolUpdatesResponse`: resultados vacíos y con datos.
+- [ ] **R10.C.8.g** — `chains.ts` `buildChainsResponse` y `buildChainStatusResponse`.
+- [ ] **R10.C.8.h** — `status.ts` `buildStatusResponse` y `buildComponentsResponse`.
+- [ ] **R10.C.8.i** — `events.ts` `buildEventsResponse`, `buildEventNamesResponse`,
+  `buildEventByHashResponse`.
+
+### R10.C.9 — `event-worker-pool.ts` — edge cases — ~8 tests
+
+- [ ] **R10.C.9** — `processingTimeoutMs=0` → throw en construcción (fix R10.A.7),
+  `processingTimeoutMs=-1` → throw, `workerCount<1` → throw,
+  `queueSize<1` → throw, evento completado antes del timeout → processed,
+  evento excede timeout → failed, continuación del onEvent timed-out no
+  afecta al siguiente evento.
+
+### R10.C.10 — `update-worker-pool.ts` edge cases — ~8 tests
+
+- [ ] **R10.C.10** — `submit` retorna false cuando queue llena, `onTask` exception
+  → worker sigue procesando, `stop()` durante task in-flight → espera
+  completar, `taskTimeoutMs=0` → throw en construcción, múltiples workers
+  procesan en paralelo (test de timing).
+
+### R10.C.11 — `alerting/evaluator.ts` — error recovery — ~8 tests
+
+- [ ] **R10.C.11** — señal ya abortada → loop nunca corre, `recordAlert` tira →
+  logueado, `activeAlertIds.set` NO llamado (fix R10.B.10), `resolveAlert`
+  tira → logueado, `activeAlertIds.delete` NO llamado (fix R10.B.10),
+  alert dispara cuando age > threshold, alert no re-dispara cuando
+  ya está en `activeAlertIds`, alert se resuelve cuando condition cleared,
+  priceCache vacía → sin errores.
+
+### R10.C.12 — `cron/cron-service.ts` — error paths — ~7 tests
+
+- [ ] **R10.C.12** — `enabled=false` → done resuelve inmediatamente,
+  `enabled=false` → log "disabled", señal abortada → loop nunca corre,
+  `runOneTick` tira → logueado, loop continúa, router sin symbol filter →
+  WARNING logueado una vez (fix R10.B.12), `priceCache.get` undefined →
+  `skipped_uninitialised` metric, entry no stale → skip.
+
+### R10.C.13 — `router/policy.ts` — edge cases — ~9 tests
+
+- [ ] **R10.C.13** — sin umbrales → siempre allowed, `timeThresholdMs=0` →
+  throw en construcción (fix R10.B.11), cache undefined → allowed (primer
+  submit), elapsed < threshold → blocked, elapsed >= threshold → allowed,
+  deviation >= threshold → allowed, deviation < threshold → blocked,
+  ambos umbrales: time falla pero price pasa → allowed (OR gate),
+  `last.price=0n` → pricePasses=true (no division por cero).
+
+### R10.C.14 — `router/router.ts` — edge cases — ~6 tests
+
+- [ ] **R10.C.14** — sin routers → dispatched vacío, condición pasa → todos los
+  destinations despachados, condición falla → conditionFiltered, policy gate
+  bloquea → policyFiltered, múltiples routers: uno pasa/otro filtrado,
+  campo faltante en enriched → condición falla gracefully.
+
+### R10.C.15 — `coalescer.ts` — `flush()` loop (fix R10.A.8) — ~4 tests
+
+- [ ] **R10.C.15** — buffer vacía después de single flush, buffer se recarga durante
+  in-flight → segundo flush corre como iteración de loop (no recursión),
+  100 accepts rápidos con `maxBatchSize=1` → sin stack overflow, `onResult`
+  llamado por cada request.
+
+### R10.C.16 — `server.ts` — rate limiter + parseLimit — ~10 tests
+
+- [ ] **R10.C.16** — primera request de nueva IP: permitida, 60ava request en
+  ventana: permitida, 61ava: bloqueada (returns false), request post-ventana:
+  permitida de nuevo, IPs distintas tienen buckets independientes.
+  `parseLimit`: null → 50, `"100"` → 100, `"0"` → throw, `"-1"` → throw,
+  `"5.5"` → throw, `"501"` → 500 (clamped), `"abc"` → throw.
+
+### R10.C.17 — `queue-manager.ts` — error path — ~3 tests
+
+- [ ] **R10.C.17** — `submitBatch` con requests de lanes distintas → throw con
+  mensaje esperado, batch de un elemento → no tira, batch vacío → retorna [].
+
+### R10.C.18 — `cardano-write-client.ts` — error paths — ~6 tests
+
+- [ ] **R10.C.18** — `bridge.submitOracleUpdate` tira → error capturado y
+  wrapeado, bridge retorna error result → `onTransaction` callback llamado
+  con entry=error, `onTransaction` callback tira → no propaga, submit en
+  batch con error parcial → per-request handling correcto.
+
+### R10.C.19 — Integration tests — ~10 tests
+
+- [ ] **R10.C.19.a** — Scanner HTTP → pipeline → submitter completo: mock EVM
+  node, dry-run bridge, `transaction_log` actualizado submitted→confirmed,
+  price cache populada.
+- [ ] **R10.C.19.b** — Parallel mode (`enable_parallel_mode=true`): múltiples
+  eventos concurrentes, todos los `transaction_log` entries creados.
+- [ ] **R10.C.19.c** — Cron resubmit: price cache con entry stale,
+  `cronResubmissions` metric incrementado.
+- [ ] **R10.C.19.d** — Crash recovery: checkpoint guardado en DB, restart,
+  scanner retoma desde el bloque guardado, no duplicados.
+- [ ] **R10.C.19.e** — Multi-client alert: dos routers con `customer` distintos,
+  `OraclePairStale` dispara para ambos, `alert_log` con labels correctos,
+  métricas con `client_id` correcto.
+- [ ] **R10.C.19.f** — DB failure mode: mock Db tira en `insertTransactionLog`,
+  daemon logea error (no crashea), failure metric incrementado.
+- [ ] **R10.C.19.g** — WS reconnect + backoff: mock WS cierra conexión, backoff
+  aplicado, reconexión exitosa, no duplicados via dedup.
+- [ ] **R10.C.19.h** — API full round-trip: SQLite real, GET /transactions, GET
+  /alerts, GET /prices, POST /alerts/:id/ack.
+- [ ] **R10.C.19.i** — Reorg recovery: head retrocede, cursor reseteado, rango
+  re-escaneado, no gaps en transaction_log.
+- [ ] **R10.C.19.j** — Transformer pipeline: router YAML con `transformations:`
+  no vacío, transformer aplicado, campos transformados en SubmitRequest.
+
+---
+
+## R10 — Resumen de effort estimado
+
+| Bloque | Items | Horas estimadas |
+|---|---|---|
+| R10.A — Critical fixes | 11 | ~16 h |
+| R10.B — High priority | 14 | ~18 h |
+| R10.C — Test plan | ~320 tests | ~80 h |
+| **Total** | | **~114 h** |
+
+**Secuencia recomendada:**
+1. R10.A.1 → R10.A.8 (unblock runtime, ~8h)
+2. R10.C.1 (DB tests, ~24h, descubren más bugs de R10.A)
+3. R10.A.9 + R10.A.10 (Spectra gaps, ~7h)
+4. R10.C.2 → R10.C.18 (resto de unit tests, ~46h)
+5. R10.B.1 → R10.B.14 (high priority, ~18h)
+6. R10.C.19 (integration tests, ~10h)
+
+---
 
 One row per Spectra subsystem. `Disposition` is one of: **Parity**
 (implemented to match in M2), **Extension** (Cardano-specific
