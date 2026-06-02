@@ -279,7 +279,7 @@ function watchUntilDisconnect(inputs: WatchInputs): Promise<void> {
  *  whole chain on restart) and a fake txHash="0x" would collide in the
  *  dedup cache. The watcher's onLogs handler catches this and triggers a
  *  reconnect, surfacing the bad delivery instead of corrupting state. */
-function toRegistryLog(log: Log): RegistryLog {
+export function toRegistryLog(log: Log): RegistryLog {
   if (log.blockNumber === null || log.blockNumber === undefined) {
     throw new Error(
       `scanner-ws: received log with null blockNumber (pending tx?) — ` +
