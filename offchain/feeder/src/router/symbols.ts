@@ -44,5 +44,8 @@ export function extractRouterSymbols(router: RouterConfig): string[] {
     }
   }
 
-  return out;
+  // Dedupe: a symbol named by more than one condition (or repeated in an
+  // `in` list) must be returned once. Duplicates would otherwise drive the
+  // cron service to resubmit the same pair multiple times per tick.
+  return [...new Set(out)];
 }

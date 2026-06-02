@@ -87,7 +87,7 @@ type RateLimitBucket = { count: number; resetAt: number };
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 60;
 
-function createRateLimiter() {
+export function createRateLimiter() {
   const buckets = new Map<string, RateLimitBucket>();
 
   return function isAllowed(remoteAddress: string): boolean {
@@ -528,7 +528,7 @@ function matchRoute(pathname: string): RouteMatch | null {
   return null;
 }
 
-function parseLimit(raw: string | null): number {
+export function parseLimit(raw: string | null): number {
   if (!raw) {
     return 50;
   }
