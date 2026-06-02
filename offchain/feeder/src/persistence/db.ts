@@ -15,6 +15,19 @@ import * as nodePath from "node:path";
 // Both SQLite (default, via better-sqlite3) and Postgres (opt-in via
 // DATABASE_DRIVER=postgres + DATABASE_DSN) are supported through the
 // same Db interface.
+//
+// Block-number precision note: block columns (`last_processed_block`,
+// `last_scan_block`, `processed_events.block_number`) are declared INTEGER
+// in SQLite so range/order queries (`block_number >= ?`, `ORDER BY
+// block_number`) compare numerically — a TEXT column would compare
+// lexicographically and break the scanner's `fromBlock` filter. The trade-off
+// is that better-sqlite3 returns INTEGER columns as JS numbers, so a SQLite
+// block height above 2^53 (Number.MAX_SAFE_INTEGER) would lose precision on
+// read. This is not a practical concern: at one block per second a chain
+// reaches 2^53 in ~285 million years, and the highest live EVM height is
+// ~10^7. Postgres (BIGINT, returned as a string) preserves precision to 2^63.
+// The read mappers wrap both in `BigInt(...)` so the in-memory type is always
+// bigint regardless of driver. See docs/plans/m3-deferred-features.md §D.
 
 // ---------------------------------------------------------------------------
 // Row / query types
