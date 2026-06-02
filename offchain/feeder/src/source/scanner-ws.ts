@@ -268,14 +268,40 @@ function watchUntilDisconnect(inputs: WatchInputs): Promise<void> {
 }
 
 /** Project viem's `Log` into the narrower `RegistryLog` the extractor
- *  consumes. */
+ *  consumes.
+ *
+ *  viem types `blockNumber`, `transactionHash` and `logIndex` as nullable
+ *  because they are `null` for *pending* logs (a tx in the mempool, not yet
+ *  mined). The feeder only ever subscribes to mined logs, so a null here
+ *  signals a malformed delivery — NOT a value to be silently coerced. We
+ *  throw instead of defaulting to `0n` / `"0x"` / `0`, because a fake
+ *  blockNumber=0 would checkpoint the scanner at block 0 (replaying the
+ *  whole chain on restart) and a fake txHash="0x" would collide in the
+ *  dedup cache. The watcher's onLogs handler catches this and triggers a
+ *  reconnect, surfacing the bad delivery instead of corrupting state. */
 function toRegistryLog(log: Log): RegistryLog {
+  if (log.blockNumber === null || log.blockNumber === undefined) {
+    throw new Error(
+      `scanner-ws: received log with null blockNumber (pending tx?) — ` +
+      `txHash=${log.transactionHash ?? "unknown"} logIndex=${log.logIndex ?? "unknown"}`,
+    );
+  }
+  if (log.transactionHash === null || log.transactionHash === undefined) {
+    throw new Error(
+      `scanner-ws: received log with null transactionHash at block ${log.blockNumber}`,
+    );
+  }
+  if (log.logIndex === null || log.logIndex === undefined) {
+    throw new Error(
+      `scanner-ws: received log with null logIndex (block ${log.blockNumber}, tx ${log.transactionHash})`,
+    );
+  }
   return {
     topics: log.topics as readonly Hex[],
     data: log.data as Hex,
-    blockNumber: log.blockNumber ?? 0n,
-    transactionHash: (log.transactionHash ?? ("0x" as Hex)) as Hex,
-    logIndex: log.logIndex ?? 0,
+    blockNumber: log.blockNumber,
+    transactionHash: log.transactionHash as Hex,
+    logIndex: log.logIndex,
   };
 }
 

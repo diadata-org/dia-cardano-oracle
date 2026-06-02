@@ -107,6 +107,22 @@ function createRollingAverage(capacity: number) {
 export function createEventWorkerPool(options: EventWorkerPoolOptions): EventWorkerPool {
   const { workerCount, queueSize, processingTimeoutMs, onEvent, onStats, log } = options;
 
+  // Construction-time validation. A 0 or negative timeout makes every
+  // setTimeout fire on the next tick → 100% event-processing failure with
+  // no clue why. A <1 worker count or queue size means the pool can never
+  // accept or drain work. Fail loudly at construction so a misconfigured
+  // YAML (parallel_worker_count / parallel_queue_size / parallel_timeout)
+  // is rejected at startup, not silently broken at runtime.
+  if (!Number.isInteger(workerCount) || workerCount < 1) {
+    throw new Error(`createEventWorkerPool: workerCount must be a positive integer, got ${workerCount}.`);
+  }
+  if (!Number.isInteger(queueSize) || queueSize < 1) {
+    throw new Error(`createEventWorkerPool: queueSize must be a positive integer, got ${queueSize}.`);
+  }
+  if (!Number.isFinite(processingTimeoutMs) || processingTimeoutMs <= 0) {
+    throw new Error(`createEventWorkerPool: processingTimeoutMs must be a positive number, got ${processingTimeoutMs}.`);
+  }
+
   // Queue is a simple FIFO array — push to tail, shift from head.
   const queue: ExtractedEvent[] = [];
 

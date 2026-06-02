@@ -504,22 +504,26 @@ async function createSqliteDb(filePath: string): Promise<Db> {
     },
 
     async setChainHealth(chainId, contractId, { isHealthy, errorMsg }) {
-      if (isHealthy) {
-        db.prepare(`
-          UPDATE chain_state
-          SET is_healthy = 1, last_health_check_ms = ?, updated_at_ms = ?
-          WHERE chain_id = ? AND contract_id = ?
-        `).run(Date.now(), Date.now(), chainId, contractId);
-      } else {
-        db.prepare(`
-          UPDATE chain_state
-          SET is_healthy = 0,
-              error_count = error_count + 1,
-              last_error = ?,
-              last_health_check_ms = ?,
-              updated_at_ms = ?
-          WHERE chain_id = ? AND contract_id = ?
-        `).run(errorMsg ?? null, Date.now(), Date.now(), chainId, contractId);
+      const result = isHealthy
+        ? db.prepare(`
+            UPDATE chain_state
+            SET is_healthy = 1, last_health_check_ms = ?, updated_at_ms = ?
+            WHERE chain_id = ? AND contract_id = ?
+          `).run(Date.now(), Date.now(), chainId, contractId)
+        : db.prepare(`
+            UPDATE chain_state
+            SET is_healthy = 0,
+                error_count = error_count + 1,
+                last_error = ?,
+                last_health_check_ms = ?,
+                updated_at_ms = ?
+            WHERE chain_id = ? AND contract_id = ?
+          `).run(errorMsg ?? null, Date.now(), Date.now(), chainId, contractId);
+      if (result.changes === 0) {
+        throw new Error(
+          `setChainHealth: no chain_state row for chain_id=${chainId} contract_id=${contractId}. ` +
+          `Call initialiseChainState first.`,
+        );
       }
     },
 
@@ -644,9 +648,15 @@ async function createSqliteDb(filePath: string): Promise<Db> {
       if (sets.length === 0) return;
 
       params.push(intentHash);
-      db.prepare(
+      const result = db.prepare(
         `UPDATE transaction_log SET ${sets.join(", ")} WHERE intent_hash = ?`,
       ).run(...params);
+      if (result.changes === 0) {
+        throw new Error(
+          `updateTransactionLog: no transaction_log row for intent_hash=${intentHash}. ` +
+          `The row must be inserted (insertTransactionLog) before it can be updated.`,
+        );
+      }
     },
 
     async getTransactionLog(intentHash) {
@@ -762,15 +772,21 @@ async function createSqliteDb(filePath: string): Promise<Db> {
     },
 
     async resolveAlert(id, resolvedAtMs) {
-      db.prepare(
+      const result = db.prepare(
         "UPDATE alert_log SET resolved_at_ms = ? WHERE id = ?",
       ).run(resolvedAtMs, id);
+      if (result.changes === 0) {
+        throw new Error(`resolveAlert: no alert_log row with id=${id}.`);
+      }
     },
 
     async acknowledgeAlert(id) {
-      db.prepare(
+      const result = db.prepare(
         "UPDATE alert_log SET acknowledged = 1 WHERE id = ?",
       ).run(id);
+      if (result.changes === 0) {
+        throw new Error(`acknowledgeAlert: no alert_log row with id=${id}.`);
+      }
     },
 
     async listAlerts(query) {
@@ -887,23 +903,27 @@ async function createPostgresDb(dsn: string): Promise<Db> {
     },
 
     async setChainHealth(chainId, contractId, { isHealthy, errorMsg }) {
-      if (isHealthy) {
-        await pool.query(
-          `UPDATE chain_state
-           SET is_healthy = TRUE, last_health_check_ms = $1, updated_at_ms = $1
-           WHERE chain_id = $2 AND contract_id = $3`,
-          [Date.now(), chainId, contractId],
-        );
-      } else {
-        await pool.query(
-          `UPDATE chain_state
-           SET is_healthy = FALSE,
-               error_count = error_count + 1,
-               last_error = $1,
-               last_health_check_ms = $2,
-               updated_at_ms = $2
-           WHERE chain_id = $3 AND contract_id = $4`,
-          [errorMsg ?? null, Date.now(), chainId, contractId],
+      const result = isHealthy
+        ? await pool.query(
+            `UPDATE chain_state
+             SET is_healthy = TRUE, last_health_check_ms = $1, updated_at_ms = $1
+             WHERE chain_id = $2 AND contract_id = $3`,
+            [Date.now(), chainId, contractId],
+          )
+        : await pool.query(
+            `UPDATE chain_state
+             SET is_healthy = FALSE,
+                 error_count = error_count + 1,
+                 last_error = $1,
+                 last_health_check_ms = $2,
+                 updated_at_ms = $2
+             WHERE chain_id = $3 AND contract_id = $4`,
+            [errorMsg ?? null, Date.now(), chainId, contractId],
+          );
+      if (result.rowCount === 0) {
+        throw new Error(
+          `setChainHealth: no chain_state row for chain_id=${chainId} contract_id=${contractId}. ` +
+          `Call initialiseChainState first.`,
         );
       }
     },
@@ -1039,10 +1059,16 @@ async function createPostgresDb(dsn: string): Promise<Db> {
       if (sets.length === 0) return;
 
       params.push(intentHash);
-      await pool.query(
+      const result = await pool.query(
         `UPDATE transaction_log SET ${sets.join(", ")} WHERE intent_hash = $${idx}`,
         params,
       );
+      if (result.rowCount === 0) {
+        throw new Error(
+          `updateTransactionLog: no transaction_log row for intent_hash=${intentHash}. ` +
+          `The row must be inserted (insertTransactionLog) before it can be updated.`,
+        );
+      }
     },
 
     async getTransactionLog(intentHash) {
@@ -1171,17 +1197,23 @@ async function createPostgresDb(dsn: string): Promise<Db> {
     },
 
     async resolveAlert(id, resolvedAtMs) {
-      await pool.query(
+      const result = await pool.query(
         "UPDATE alert_log SET resolved_at_ms = $1 WHERE id = $2",
         [resolvedAtMs, id],
       );
+      if (result.rowCount === 0) {
+        throw new Error(`resolveAlert: no alert_log row with id=${id}.`);
+      }
     },
 
     async acknowledgeAlert(id) {
-      await pool.query(
+      const result = await pool.query(
         "UPDATE alert_log SET acknowledged = TRUE WHERE id = $1",
         [id],
       );
+      if (result.rowCount === 0) {
+        throw new Error(`acknowledgeAlert: no alert_log row with id=${id}.`);
+      }
     },
 
     async listAlerts(query) {

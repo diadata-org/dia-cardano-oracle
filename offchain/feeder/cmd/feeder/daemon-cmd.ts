@@ -585,7 +585,14 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
               { symbol, client_id: runtime.clientId },
               (runtime.submittedAtMs - runtime.observedAtMs) / 1_000,
             );
-            void db.insertTransactionLog({
+            // onStep is a synchronous void callback (the write-client does
+            // not await it), so we cannot block here. But a lost insert
+            // breaks the transaction audit trail (a submitted tx with no
+            // DB record), so the rejection MUST be handled: attach .catch()
+            // instead of `void`-suppressing the floating promise. We log
+            // and continue — the tx is already on-chain and monotonicity
+            // protects the price; the gap is in observability, not funds.
+            db.insertTransactionLog({
               intentHash,
               cardanoTxHash: txHash,
               routerId: runtime.routerId,
@@ -598,6 +605,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
               status: "submitted",
               submittedAtMs: runtime.submittedAtMs,
               createdAtMs: runtime.submittedAtMs,
+            }).catch((err: unknown) => {
+              report(
+                `[error] daemon: transaction_log insert (submitted) failed for ` +
+                `intentHash=${sanitizeLogLine(intentHash)} — ${sanitizeLogLine((err as Error).message)}`,
+              );
             });
           }
           if (step !== "tx_start") {
@@ -727,11 +739,22 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           );
         }
 
-        void db.updateTransactionLog(result.intentHash, {
-          cardanoTxHash: result.cardanoTxHash,
-          status: "confirmed",
-          confirmedAtMs: nowMs,
-        });
+        // Await + catch: this is the confirmation update. A lost write
+        // leaves a tx stuck in "submitted" in the DB forever even though
+        // it confirmed on-chain — false-positive for stale-tx alerts and
+        // reconciliation. We are in an async handler so we can await.
+        await db
+          .updateTransactionLog(result.intentHash, {
+            cardanoTxHash: result.cardanoTxHash,
+            status: "confirmed",
+            confirmedAtMs: nowMs,
+          })
+          .catch((err: unknown) => {
+            report(
+              `[error] daemon: transaction_log update (confirmed) failed for ` +
+              `intentHash=${sanitizeLogLine(result.intentHash)} — ${sanitizeLogLine((err as Error).message)}`,
+            );
+          });
         if (result.batch && result.batch.size > 1) {
           await fileLogger.logIntentStep({
             ts: new Date().toISOString(),
@@ -783,20 +806,30 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           `symbol=${sanitizeLogLine(symbol)} batchSize=${batchSize} error="${sanitizeLogLine(result.error.message)}"`,
         );
         report(`[warn] daemon: REMEDIATION — ${sanitizeLogLine(result.remediation)}`);
-        void db.insertTransactionLog({
-          intentHash: result.intentHash,
-          cardanoTxHash: "",
-          routerId: req.routerId,
-          destinationIndex: req.destinationIndex,
-          destinationChainName: "",
-          destinationContractAddress: "",
-          symbol: req.enriched.fullIntent.symbol,
-          price: req.enriched.fullIntent.price.toString(),
-          timestamp: Number(req.enriched.fullIntent.timestamp),
-          status: "failed",
-          failedAtMs: Date.now(),
-          createdAtMs: Date.now(),
-        });
+        // Await + catch: a lost failure-insert means the system has no
+        // record an intent was even attempted — failure metrics and
+        // post-mortem reconciliation go blind. We are in an async handler.
+        await db
+          .insertTransactionLog({
+            intentHash: result.intentHash,
+            cardanoTxHash: "",
+            routerId: req.routerId,
+            destinationIndex: req.destinationIndex,
+            destinationChainName: "",
+            destinationContractAddress: "",
+            symbol: req.enriched.fullIntent.symbol,
+            price: req.enriched.fullIntent.price.toString(),
+            timestamp: Number(req.enriched.fullIntent.timestamp),
+            status: "failed",
+            failedAtMs: Date.now(),
+            createdAtMs: Date.now(),
+          })
+          .catch((err: unknown) => {
+            report(
+              `[error] daemon: transaction_log insert (failed) failed for ` +
+              `intentHash=${sanitizeLogLine(result.intentHash)} — ${sanitizeLogLine((err as Error).message)}`,
+            );
+          });
         await fileLogger.logIntentStep({
           ts: new Date().toISOString(),
           level: "error",

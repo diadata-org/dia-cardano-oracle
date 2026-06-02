@@ -32,7 +32,7 @@ export type InitSubCommand = "bootstrap" | "client";
 export type CheckpointSubCommand = "set" | "get";
 
 /** Mutually exclusive top-level "mode" the binary runs in. */
-export type FeederMode = "daemon" | "validate" | "scan" | "init" | "checkpoint";
+export type FeederMode = "daemon" | "validate" | "scan" | "init" | "checkpoint" | "cleanup";
 
 export type ParsedArgs = {
   configPath: string;
@@ -54,6 +54,9 @@ export type ParsedArgs = {
   force: boolean;
   // checkpoint-specific
   checkpointSubCommand?: CheckpointSubCommand;
+  // cleanup-specific: human duration string ("1h", "30m", "2h30m") for the
+  // age cutoff. Undefined defers to runCleanup's own default.
+  maxAge?: string;
 };
 
 const VALID_LOG_LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error"];
@@ -86,6 +89,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
   // `checkpoint get` / `checkpoint set --from-latest|--from-block N|--clear`
   if (argv[0] === "checkpoint") {
     return parseCheckpointArgs(argv);
+  }
+  // `cleanup [--max-age <duration>] [--dry-run]`
+  if (argv[0] === "cleanup") {
+    return parseCleanupArgs(argv);
   }
 
   const parsed: ParsedArgs = { ...DEFAULTS };
@@ -188,6 +195,34 @@ function parseCheckpointArgs(argv: string[]): ParsedArgs {
         break;
       default:
         throw new Error(`Unknown argument for 'checkpoint ${sub}': ${arg}`);
+    }
+  }
+
+  return parsed;
+}
+
+function parseCleanupArgs(argv: string[]): ParsedArgs {
+  const parsed: ParsedArgs = { ...DEFAULTS, mode: "cleanup" };
+  applyEnvOverrides(parsed);
+
+  for (let i = 1; i < argv.length; i += 1) {
+    const arg = argv[i];
+    switch (arg) {
+      case "--help":
+      case "-h":
+        parsed.showHelp = true;
+        break;
+      case "--config":
+        parsed.configPath = requireValue(argv, ++i, "--config");
+        break;
+      case "--max-age":
+        parsed.maxAge = requireValue(argv, ++i, "--max-age");
+        break;
+      case "--dry-run":
+        parsed.dryRun = true;
+        break;
+      default:
+        throw new Error(`Unknown argument for 'cleanup': ${arg}`);
     }
   }
 

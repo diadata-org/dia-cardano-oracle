@@ -275,57 +275,65 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
       lane.timer = null;
     }
 
-    const entries = Array.from(lane.buffer.values());
-    lane.buffer.clear();
+    // Iterative drain. When intents accumulate while a batch is in-flight,
+    // we loop instead of recursing: under sustained load with a small
+    // maxBatchSize, the previous tail-recursion grew the call stack by one
+    // frame per confirmed batch, risking a stack overflow. A while-loop
+    // keeps the control flow flat and bounded to constant stack depth.
+    while (true) {
+      const entries = Array.from(lane.buffer.values());
+      lane.buffer.clear();
 
-    if (entries.length === 0) {
-      lane.state = "idle";
-      void onLaneEvent?.({ lane: laneKey, kind: "flush_empty", fromState: "accumulating", toState: "idle" });
-      void onLaneEvent?.({ lane: laneKey, kind: "lane_idle" });
-      return;
-    }
-
-    void onLaneEvent?.({ lane: laneKey, kind: "flush_triggered", bufferSize: entries.length, fromState: lane.state, toState: "in-flight" });
-    lane.state = "in-flight";
-
-    // Age filter: drop intents whose timestamp is too old to be worth submitting.
-    const nowSec = clock() / 1_000;
-    const eligible = maxIntentAgeMs
-      ? entries.filter((req) => {
-          const intentAgeSec = nowSec - Number(req.enriched.fullIntent.timestamp);
-          return intentAgeSec * 1_000 < maxIntentAgeMs;
-        })
-      : entries;
-    const agedOut = eligible.length === entries.length
-      ? []
-      : entries.filter((req) => !eligible.includes(req));
-
-    if (agedOut.length > 0) {
-      await reportAgedOutRequests(agedOut);
-    }
-
-    const batchLimit = normalizeBatchSize(maxBatchSize);
-    const batches = chunkRequests(eligible, batchLimit);
-
-    for (const batch of batches) {
-      const results = await submitChunk(batch);
-      for (const [index, result] of results.entries()) {
-        const req = batch[index];
-        if (!req) {
-          continue;
-        }
-        await onResult?.(result, req);
+      if (entries.length === 0) {
+        lane.state = "idle";
+        void onLaneEvent?.({ lane: laneKey, kind: "flush_empty", fromState: "accumulating", toState: "idle" });
+        void onLaneEvent?.({ lane: laneKey, kind: "lane_idle" });
+        return;
       }
-    }
 
-    // Check whether intents accumulated while we were in-flight.
-    if (lane.buffer.size > 0) {
-      void onLaneEvent?.({ lane: laneKey, kind: "tx_confirmed_reflush", bufferSize: lane.buffer.size });
-      // Flush immediately — no extra accumulation window after a confirm.
-      await flush(lane, laneKey);
-    } else {
+      void onLaneEvent?.({ lane: laneKey, kind: "flush_triggered", bufferSize: entries.length, fromState: lane.state, toState: "in-flight" });
+      lane.state = "in-flight";
+
+      // Age filter: drop intents whose timestamp is too old to be worth submitting.
+      const nowSec = clock() / 1_000;
+      const eligible = maxIntentAgeMs
+        ? entries.filter((req) => {
+            const intentAgeSec = nowSec - Number(req.enriched.fullIntent.timestamp);
+            return intentAgeSec * 1_000 < maxIntentAgeMs;
+          })
+        : entries;
+      const agedOut = eligible.length === entries.length
+        ? []
+        : entries.filter((req) => !eligible.includes(req));
+
+      if (agedOut.length > 0) {
+        await reportAgedOutRequests(agedOut);
+      }
+
+      const batchLimit = normalizeBatchSize(maxBatchSize);
+      const batches = chunkRequests(eligible, batchLimit);
+
+      for (const batch of batches) {
+        const results = await submitChunk(batch);
+        for (const [index, result] of results.entries()) {
+          const req = batch[index];
+          if (!req) {
+            continue;
+          }
+          await onResult?.(result, req);
+        }
+      }
+
+      // Check whether intents accumulated while we were in-flight.
+      if (lane.buffer.size > 0) {
+        void onLaneEvent?.({ lane: laneKey, kind: "tx_confirmed_reflush", bufferSize: lane.buffer.size });
+        // Loop immediately — no extra accumulation window after a confirm.
+        continue;
+      }
+
       lane.state = "idle";
       void onLaneEvent?.({ lane: laneKey, kind: "lane_idle", fromState: "in-flight", toState: "idle" });
+      return;
     }
   }
 

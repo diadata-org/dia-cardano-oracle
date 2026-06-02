@@ -28,6 +28,7 @@ import { runValidateOnly } from "./validate-cmd.js";
 import { runDaemon } from "./daemon-cmd.js";
 import { runInit } from "./init-cmd.js";
 import { runCheckpoint } from "./checkpoint-cmd.js";
+import { runCleanup, parseDuration } from "./cleanup-cmd.js";
 
 const HELP_TEXT = `dia-cardano-oracle-feeder
 
@@ -43,6 +44,7 @@ Usage:
   feeder init client    [--from <client.json>]           [--force]
   feeder checkpoint get
   feeder checkpoint set --from-latest | --from-block <N> | --clear
+  feeder cleanup [--max-age <duration>] [--dry-run]
   feeder --help
 
 Flags:
@@ -103,6 +105,15 @@ Checkpoint sub-commands (mutate chain_state.last_scan_block in the DB):
                         daemon only reads the checkpoint at startup, so
                         running these while it is live has no effect on
                         the active scanner.
+
+Cleanup sub-command (prune stale feeder-generated state):
+  cleanup               Delete old per-intent log files, rotate line logs,
+                        and prune confirmed/failed transaction_log +
+                        processed_events rows older than the cutoff. CLI
+                        bootstrap state (config-bootstrap.json, client JSON)
+                        is never touched.
+  --max-age <duration>  Age cutoff: 1h | 30m | 2h30m | 90s. Default: 1h.
+  --dry-run             Print what would be deleted without deleting.
 
 The active network (Preview <-> DIA Testnet, Mainnet <-> DIA Mainnet)
 is selected by CARDANO_NETWORK in .env, matching the CLI behavior.
@@ -208,6 +219,16 @@ async function dispatch(args: ParsedArgs): Promise<number> {
         fromBlock: args.fromBlock,
         fromLatest: args.fromLatest,
         clear: args.clear,
+        report,
+      });
+
+    case "cleanup":
+      return runCleanup({
+        network,
+        // Default cutoff: 1h. parseDuration throws on malformed input,
+        // surfacing a clear error rather than silently using the default.
+        maxAgeMs: args.maxAge !== undefined ? parseDuration(args.maxAge) : 60 * 60 * 1_000,
+        dryRun: args.dryRun,
         report,
       });
   }
