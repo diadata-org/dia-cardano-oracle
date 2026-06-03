@@ -111,9 +111,17 @@ reset-restart: ## Restart clean - wipe DB + logs + pairs, reseed checkpoint, sta
 prune: ## Prune only OLD feeder rows/logs, keeps DB (e.g. make prune MAX_AGE=30m)
 	$(FEEDER_RUN) prune $(if $(MAX_AGE),--max-age $(MAX_AGE),)
 
+# Network for the evidence pack. NETWORK=Mainnet for the Mainnet pack.
+EVIDENCE_NETWORK ?= Preview
+
 .PHONY: evidence
-evidence: ## Build M2 evidence pack (requires running feeder + Grafana)
-	cd feeder && node --import tsx/esm scripts/m2-evidence/build-stats.ts
-	cd feeder && node --import tsx/esm scripts/m2-evidence/build-error-counts.ts
-	cd feeder && node --import tsx/esm scripts/m2-evidence/render-dashboards.ts
-	@echo "Evidence pack built. See docs/evidence/m2-*/"
+evidence: ## Build M2 evidence pack into ONE dir (NETWORK=Preview|Mainnet, default Preview)
+	@net=$$(echo "$(EVIDENCE_NETWORK)" | tr '[:upper:]' '[:lower:]'); \
+	stamp=$$(date -u +%Y%m%d-%H%M%S); \
+	db=state/$$net/feeder.sqlite; \
+	echo "Building $(EVIDENCE_NETWORK) evidence — stamp=$$stamp db=$$db"; \
+	cd feeder && \
+	  EVIDENCE_STAMP=$$stamp CARDANO_NETWORK=$(EVIDENCE_NETWORK) node --import tsx/esm scripts/m2-evidence/build-stats.ts $$db && \
+	  EVIDENCE_STAMP=$$stamp CARDANO_NETWORK=$(EVIDENCE_NETWORK) node --import tsx/esm scripts/m2-evidence/build-error-counts.ts $$db && \
+	  EVIDENCE_STAMP=$$stamp CARDANO_NETWORK=$(EVIDENCE_NETWORK) GRAFANA_ADMIN_PASSWORD=$${GRAFANA_ADMIN_PASSWORD:-admin} node --import tsx/esm scripts/m2-evidence/render-dashboards.ts; \
+	echo "Evidence pack: docs/milestones/evidence/m2-$$net-$$stamp/ (all three outputs share this dir)"

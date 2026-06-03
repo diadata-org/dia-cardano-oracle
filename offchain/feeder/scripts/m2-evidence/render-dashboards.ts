@@ -15,7 +15,7 @@
 //   GRAFANA_ADMIN_PASSWORD   Grafana admin password. Default: admin
 //
 // Output:
-//   Writes PNGs to docs/evidence/m2-<timestamp>/grafana/<dashboardName>.png
+//   Writes PNGs to docs/milestones/evidence/m2-<network>-<timestamp>/grafana/<dashboardName>.png
 //   Prints one JSON line per dashboard: { "dashboard": "name", "path": "...", "status": "ok"|"error" }
 
 import * as fs from "node:fs";
@@ -39,17 +39,21 @@ const RENDER_FROM = "now-24h";
 const RENDER_TO = "now";
 
 // ---------------------------------------------------------------------------
-// Resolve output directory: docs/evidence/m2-<timestamp>/grafana/
+// Resolve output directory: docs/milestones/evidence/m2-<network>-<timestamp>/grafana/
 // ---------------------------------------------------------------------------
 const SCRIPT_DIR = new URL(".", import.meta.url).pathname;
-// scripts/m2-evidence/ → feeder/scripts/ → feeder/ → offchain/ → repo root
-const REPO_ROOT = path.resolve(SCRIPT_DIR, "..", "..", "..", "..", "..");
-const STAMP = new Date()
+// m2-evidence → scripts → feeder → offchain → repo root (4 levels up)
+const REPO_ROOT = path.resolve(SCRIPT_DIR, "..", "..", "..", "..");
+const STAMP = process.env["EVIDENCE_STAMP"]?.trim() || new Date()
   .toISOString()
   .replace(/[-:T]/g, "")
-  .slice(0, 15)
+  .slice(0, 14)
   .replace(/(\d{8})(\d{6})/, "$1-$2");
-const OUT_DIR = path.join(REPO_ROOT, "docs", "evidence", `m2-${STAMP}`, "grafana");
+// Network in the dir name (M1 convention m1-<network>-<stamp>); evidence under
+// docs/milestones/evidence/. No DB path here, so CARDANO_NETWORK env decides
+// (default preview).
+const NETWORK = process.env["CARDANO_NETWORK"]?.trim().toLowerCase() || "preview";
+const OUT_DIR = path.join(REPO_ROOT, "docs", "milestones", "evidence", `m2-${NETWORK}-${STAMP}`, "grafana");
 
 // ---------------------------------------------------------------------------
 // HTTP helpers using only node:http / node:https

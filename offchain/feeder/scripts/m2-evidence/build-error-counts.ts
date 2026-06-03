@@ -7,7 +7,7 @@
 //   DATABASE_PATH_TESTNET  Path to the SQLite database file. Overridden by first positional arg.
 //
 // Output:
-//   Writes docs/evidence/m2-<timestamp>/error-counts.tsv (error_code\tcount)
+//   Writes docs/milestones/evidence/m2-<network>-<timestamp>/error-counts.tsv (error_code\tcount)
 //   Prints JSON array to stdout: [{ "error_code": "...", "count": N }, ...]
 
 import * as fs from "node:fs";
@@ -32,17 +32,23 @@ if (!fs.existsSync(dbPath)) {
 }
 
 // ---------------------------------------------------------------------------
-// Resolve output directory: docs/evidence/m2-<timestamp>/
+// Resolve output directory: docs/milestones/evidence/m2-<network>-<timestamp>/
 // ---------------------------------------------------------------------------
 const SCRIPT_DIR = new URL(".", import.meta.url).pathname;
-// scripts/m2-evidence/ → feeder/scripts/ → feeder/ → offchain/ → repo root
-const REPO_ROOT = path.resolve(SCRIPT_DIR, "..", "..", "..", "..", "..");
-const STAMP = new Date()
+// m2-evidence → scripts → feeder → offchain → repo root (4 levels up)
+const REPO_ROOT = path.resolve(SCRIPT_DIR, "..", "..", "..", "..");
+const STAMP = process.env["EVIDENCE_STAMP"]?.trim() || new Date()
   .toISOString()
   .replace(/[-:T]/g, "")
-  .slice(0, 15)
+  .slice(0, 14)
   .replace(/(\d{8})(\d{6})/, "$1-$2");
-const OUT_DIR = path.join(REPO_ROOT, "docs", "evidence", `m2-${STAMP}`);
+// Network in the dir name (M1 convention m1-<network>-<stamp>); evidence under
+// docs/milestones/evidence/. CARDANO_NETWORK env wins, else infer from DB path.
+const NETWORK = (
+  process.env["CARDANO_NETWORK"]?.trim().toLowerCase() ||
+  (String(dbPath).includes("mainnet") ? "mainnet" : "preview")
+);
+const OUT_DIR = path.join(REPO_ROOT, "docs", "milestones", "evidence", `m2-${NETWORK}-${STAMP}`);
 const OUT_FILE = path.join(OUT_DIR, "error-counts.tsv");
 
 // ---------------------------------------------------------------------------

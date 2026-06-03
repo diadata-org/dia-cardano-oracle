@@ -7,7 +7,7 @@
 //   DATABASE_PATH_TESTNET  Path to the SQLite database file. Overridden by first positional arg.
 //
 // Output:
-//   Writes docs/evidence/m2-<timestamp>/stats.json
+//   Writes docs/milestones/evidence/m2-<network>-<timestamp>/stats.json
 //   Prints the same JSON to stdout.
 
 import * as fs from "node:fs";
@@ -32,17 +32,25 @@ if (!fs.existsSync(dbPath)) {
 }
 
 // ---------------------------------------------------------------------------
-// Resolve output directory: docs/evidence/m2-<timestamp>/
+// Resolve output directory: docs/milestones/evidence/m2-<network>-<timestamp>/
 // ---------------------------------------------------------------------------
 const SCRIPT_DIR = new URL(".", import.meta.url).pathname;
-// scripts/m2-evidence/ → feeder/scripts/ → feeder/ → offchain/ → repo root
-const REPO_ROOT = path.resolve(SCRIPT_DIR, "..", "..", "..", "..", "..");
-const STAMP = new Date()
+// m2-evidence → scripts → feeder → offchain → repo root (4 levels up)
+const REPO_ROOT = path.resolve(SCRIPT_DIR, "..", "..", "..", "..");
+const STAMP = process.env["EVIDENCE_STAMP"]?.trim() || new Date()
   .toISOString()
   .replace(/[-:T]/g, "")
-  .slice(0, 15)
+  .slice(0, 14)
   .replace(/(\d{8})(\d{6})/, "$1-$2");
-const OUT_DIR = path.join(REPO_ROOT, "docs", "evidence", `m2-${STAMP}`);
+// Network goes in the evidence dir name (matches the M1 convention
+// m1-<network>-<stamp>): CARDANO_NETWORK env wins, else infer from the DB
+// path (.../mainnet/... vs .../preview/...), else default preview. Evidence
+// lives under docs/milestones/evidence/ alongside the M1 packs.
+const NETWORK = (
+  process.env["CARDANO_NETWORK"]?.trim().toLowerCase() ||
+  (String(dbPath).includes("mainnet") ? "mainnet" : "preview")
+);
+const OUT_DIR = path.join(REPO_ROOT, "docs", "milestones", "evidence", `m2-${NETWORK}-${STAMP}`);
 const OUT_FILE = path.join(OUT_DIR, "stats.json");
 
 // ---------------------------------------------------------------------------
