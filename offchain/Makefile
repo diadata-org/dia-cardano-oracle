@@ -111,12 +111,17 @@ reset-restart: ## Restart clean - wipe DB + logs + pairs, reseed checkpoint, sta
 prune: ## Prune only OLD feeder rows/logs, keeps DB (e.g. make prune MAX_AGE=30m)
 	$(FEEDER_RUN) prune $(if $(MAX_AGE),--max-age $(MAX_AGE),)
 
-# Network for the evidence pack. NETWORK=Mainnet for the Mainnet pack.
-EVIDENCE_NETWORK ?= Preview
+# Network for the evidence pack: read from feeder/.env (CARDANO_NETWORK) — the
+# SAME source of truth the running feeder uses. No hardcoded default. Override
+# on the CLI only if you must: make evidence EVIDENCE_NETWORK=Mainnet
+EVIDENCE_NETWORK ?= $(strip $(shell sed -n 's/^CARDANO_NETWORK=//p' feeder/.env 2>/dev/null))
 
 .PHONY: evidence
-evidence: ## Build M2 evidence pack into ONE dir (NETWORK=Preview|Mainnet, default Preview)
-	@net=$$(echo "$(EVIDENCE_NETWORK)" | tr '[:upper:]' '[:lower:]'); \
+evidence: ## Build M2 evidence pack into ONE dir (network from feeder/.env CARDANO_NETWORK)
+	@if [ -z "$(EVIDENCE_NETWORK)" ]; then \
+	  echo "ERROR: CARDANO_NETWORK not set in feeder/.env — cannot pick evidence network." >&2; exit 1; \
+	fi; \
+	net=$$(echo "$(EVIDENCE_NETWORK)" | tr '[:upper:]' '[:lower:]'); \
 	stamp=$$(date -u +%Y%m%d-%H%M%S); \
 	db=state/$$net/feeder.sqlite; \
 	echo "Building $(EVIDENCE_NETWORK) evidence — stamp=$$stamp db=$$db"; \
