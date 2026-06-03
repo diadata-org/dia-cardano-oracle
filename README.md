@@ -87,7 +87,7 @@ The fastest path to a working deployment is the unified Docker image:
 cd offchain
 make build               # builds the dia-cardano-feeder image (feeder + CLI)
 make up                  # starts the feeder daemon (sqlite profile)
-make up-monitoring       # adds Prometheus + Grafana
+make up MONITORING=1     # feeder + Prometheus + Grafana (toggle on any start target)
 make cli CMD="protocol"  # one-shot CLI command in the same image
 ```
 

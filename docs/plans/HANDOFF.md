@@ -129,11 +129,15 @@ npm run feeder:dev -- checkpoint set --from-latest
 npm run feeder:dev -- checkpoint get        # verify
 # 2. run the daemon:
 npm run feeder:dev                           # or, full stack with monitoring:
-cd ../ && make build && make up-monitoring   # feeder + Prometheus + Grafana + renderer
+cd ../ && make build && make up MONITORING=1 # feeder + Prometheus + Grafana + renderer
 ```
 
-Operator CLI sub-commands: `feeder checkpoint get|set`, `feeder cleanup
-[--max-age 1h] [--dry-run]`, `feeder init bootstrap|client`,
+`MONITORING=1` is a toggle on every Docker start target (`up`,
+`up-postgres`, `restart-latest`, `reset-restart`) — there is no separate
+`up-monitoring`. Monitoring stays up until `make down`.
+
+Operator CLI sub-commands: `feeder checkpoint get|set`, `feeder prune
+[--max-age 1h] [--dry-run]`, `feeder reset`, `feeder init bootstrap|client`,
 `feeder --validate-only`, `feeder --scan`. Full help: `feeder --help`.
 
 `.env` carries selectors + secrets; `config/infrastructure.<network>.yaml`

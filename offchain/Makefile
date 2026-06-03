@@ -7,6 +7,15 @@ GID ?= $(shell id -g)
 export UID
 export GID
 
+# Monitoring toggle. Set MONITORING=1 on any "start" target to ALSO bring up
+# Prometheus + Grafana + the renderer sidecar. Without it, only the feeder
+# starts. One flag, consistent across up / up-postgres / restart-latest /
+# reset-restart — there is no separate "up-monitoring" target.
+#   make up                → feeder only
+#   make up MONITORING=1   → feeder + Prometheus + Grafana + renderer
+#   make down              → stops everything (feeder + monitoring)
+MON_PROFILE := $(if $(MONITORING),--profile monitoring,)
+
 # One-off feeder sub-commands run through the FEEDER binary inside the image
 # (NOT dia-cli). They override the daemon command on the feeder-sqlite service
 # so they share its volumes (./state, ./config) and .env. --no-deps avoids
@@ -24,16 +33,12 @@ build: ## Build the unified feeder + CLI image
 	$(COMPOSE) --profile sqlite build
 
 .PHONY: up
-up: ## Start the feeder daemon (sqlite profile)
-	$(COMPOSE) --profile sqlite up -d
+up: ## Start the feeder daemon (add MONITORING=1 for Prometheus + Grafana)
+	$(COMPOSE) --profile sqlite $(MON_PROFILE) up -d
 
 .PHONY: up-postgres
-up-postgres: ## Start the feeder daemon (postgres profile)
-	$(COMPOSE) --profile postgres up -d
-
-.PHONY: up-monitoring
-up-monitoring: ## Start feeder + Prometheus + Grafana
-	$(COMPOSE) --profile sqlite --profile monitoring up -d
+up-postgres: ## Start the feeder daemon, Postgres backend (add MONITORING=1 for Prometheus + Grafana)
+	$(COMPOSE) --profile postgres $(MON_PROFILE) up -d
 
 .PHONY: down
 down: ## Stop everything
@@ -86,21 +91,21 @@ restart: ## Restart the feeder daemon with no data changes
 	$(COMPOSE) --profile sqlite restart feeder-sqlite
 
 .PHONY: restart-latest
-restart-latest: ## Restart skipping the backlog - reseed checkpoint to tip, keep DB + logs
+restart-latest: ## Restart skipping the backlog - reseed checkpoint to tip, keep DB + logs (MONITORING=1 opt)
 	-$(COMPOSE) --profile sqlite stop feeder-sqlite
 	$(FEEDER_RUN) checkpoint set --from-latest
-	$(COMPOSE) --profile sqlite up -d feeder-sqlite
+	$(COMPOSE) --profile sqlite $(MON_PROFILE) up -d
 
 .PHONY: reset
 reset: ## Delete feeder runtime state (DB + logs + pairs) and exit; keeps CLI bootstrap files
 	$(FEEDER_RUN) reset
 
 .PHONY: reset-restart
-reset-restart: ## Restart clean - stop, wipe DB + logs + pairs, reseed checkpoint, start daemon
+reset-restart: ## Restart clean - wipe DB + logs + pairs, reseed checkpoint, start daemon (MONITORING=1 opt)
 	-$(COMPOSE) --profile sqlite stop feeder-sqlite
 	$(FEEDER_RUN) reset
 	$(FEEDER_RUN) checkpoint set --from-latest
-	$(COMPOSE) --profile sqlite up -d feeder-sqlite
+	$(COMPOSE) --profile sqlite $(MON_PROFILE) up -d
 
 .PHONY: prune
 prune: ## Prune only OLD feeder rows/logs, keeps DB (e.g. make prune MAX_AGE=30m)

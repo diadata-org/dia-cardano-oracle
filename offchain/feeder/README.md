@@ -15,13 +15,14 @@ diverges substantively — it builds Cardano txs via the pure builders in
 
 ## Service URLs — where to look (once it's running)
 
-After `make up-monitoring` (full stack) or `make up` (feeder only), open
-these in a browser. All are published on `localhost`.
+Start with `make up MONITORING=1` (feeder + Grafana + Prometheus) or
+`make up` (feeder only), then open these in a browser. All are published
+on `localhost`.
 
 | What | URL | Up with |
 | --- | --- | --- |
-| **Grafana** dashboards | <http://localhost:3000> — login `admin` / `${GRAFANA_ADMIN_PASSWORD:-admin}` | `make up-monitoring` |
-| **Prometheus** (raw metrics, alert state) | <http://localhost:9090> | `make up-monitoring` |
+| **Grafana** dashboards | <http://localhost:3000> — login `admin` / `${GRAFANA_ADMIN_PASSWORD:-admin}` | `make up MONITORING=1` |
+| **Prometheus** (raw metrics, alert state) | <http://localhost:9090> | `make up MONITORING=1` |
 | Feeder **liveness** | <http://localhost:8080/health/live> | `make up` |
 | Feeder **readiness** | <http://localhost:8080/health/ready> | `make up` |
 | Feeder **metrics** (Prometheus scrape) | <http://localhost:8080/metrics> | `make up` |
@@ -93,9 +94,17 @@ Open `http://localhost:8080/health/live` to verify the daemon is running.
 
 ### Daemon + monitoring
 
+`MONITORING=1` is a toggle on any start target (`up`, `up-postgres`,
+`restart-latest`, `reset-restart`). With it, Prometheus + Grafana + the
+renderer come up alongside the feeder; without it, only the feeder starts.
+There is no separate `up-monitoring` target. Monitoring stays up until
+`make down`.
+
 ```sh
 cd offchain
-make up-monitoring  # starts feeder-sqlite + Prometheus + Grafana + renderer
+make up MONITORING=1   # feeder-sqlite + Prometheus + Grafana + renderer
+make up                # feeder only (monitoring untouched)
+make down              # stops everything
 ```
 
 - Prometheus: `http://localhost:9090` — raw metrics and alert state
@@ -189,7 +198,7 @@ make build             # only if the image isn't built yet
 make init-bootstrap    # import config-bootstrap.json into feeder/state/
 make init-client       # import client JSON + generate router YAML (interactive)
 make checkpoint-latest # seed scanner to current chain tip (only new intents)
-make up-monitoring     # start feeder + Prometheus + Grafana
+make up MONITORING=1   # start feeder + Prometheus + Grafana
 ```
 
 **Scenario C — everything set up, just want clean logs + DB.**
