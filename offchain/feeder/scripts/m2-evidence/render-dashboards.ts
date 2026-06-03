@@ -4,7 +4,7 @@
 // served by the `grafana-image-renderer` sidecar declared in
 // `docker-compose.yml` (service: `renderer`, image:
 // grafana/grafana-image-renderer). Make sure the `monitoring` compose
-// profile is up before running this script (`make up-monitoring` or
+// profile is up before running this script (`make up MONITORING=1` or
 // `docker compose --profile monitoring up`). No Playwright dependency.
 //
 // Usage (from offchain/feeder/):
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
     dashboards = JSON.parse(result.body) as DashboardSearchItem[];
   } catch (err) {
     process.stderr.write(`[render-dashboards] Cannot reach Grafana at ${GRAFANA_URL}: ${String(err)}\n`);
-    process.stderr.write(`[render-dashboards] Start monitoring with: cd offchain && make up-monitoring\n`);
+    process.stderr.write(`[render-dashboards] Start monitoring with: cd offchain && make up MONITORING=1\n`);
     process.exit(1);
   }
 

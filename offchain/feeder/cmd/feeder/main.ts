@@ -28,7 +28,7 @@ import { runValidateOnly } from "./validate-cmd.js";
 import { runDaemon, cleanFeederState } from "./daemon-cmd.js";
 import { runInit } from "./init-cmd.js";
 import { runCheckpoint } from "./checkpoint-cmd.js";
-import { runPrune, parseDuration } from "./cleanup-cmd.js";
+import { runPrune, parseDuration } from "./prune-cmd.js";
 
 const HELP_TEXT = `dia-cardano-oracle-feeder
 
