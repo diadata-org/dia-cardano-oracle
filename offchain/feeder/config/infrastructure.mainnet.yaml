@@ -112,9 +112,10 @@ infrastructure:
   # --------------------------------------------------------------------------
   api:
     enabled: true
-    # SECURITY: bind on loopback by default; only the container internals
-    # / Docker network reach the port. See infrastructure.preview.yaml.
-    host: 127.0.0.1
+    # Bind 0.0.0.0 INSIDE the container so Docker's published port reaches
+    # the process (127.0.0.1 is unreachable from the host). Host exposure is
+    # gated by the compose port mapping. See infrastructure.preview.yaml.
+    host: 0.0.0.0
     port: 8080
     # listen_addr: Spectra alias accepted by the loader; prefer host+port.
     # listen_addr: "127.0.0.1:8080"

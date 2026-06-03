@@ -190,12 +190,13 @@ infrastructure:
   # --------------------------------------------------------------------------
   api:
     enabled: true
-    # host: bind address. SECURITY: 127.0.0.1 is the default so the API is
-    #   only reachable from inside the Docker network / host. Set 0.0.0.0
-    #   only if the container itself is reachable behind a firewall or
-    #   reverse proxy. Docker compose publishes the port; flipping host to
-    #   0.0.0.0 inside the container is rarely needed.
-    host: 127.0.0.1
+    # host: bind address INSIDE the container/process. For Docker this MUST
+    #   be 0.0.0.0 — Docker publishes the port against the container's network
+    #   interface, so a process bound to 127.0.0.1 is NOT reachable from the
+    #   host (health/live, metrics, Grafana scrape all fail). Access from the
+    #   host is still gated by the compose port mapping (0.0.0.0:8080->8080).
+    #   For a bare local `npm run feeder:dev` you can set 127.0.0.1 instead.
+    host: 0.0.0.0
     port: 8080
     # listen_addr: Spectra alias — composite "<host>:<port>" form. The
     #   feeder accepts either `host`+`port` (above) or `listen_addr` for
