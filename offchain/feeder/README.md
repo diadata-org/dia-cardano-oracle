@@ -13,6 +13,52 @@ write-client pipeline, per-key transaction queues, HTTP API for health
 diverges substantively — it builds Cardano txs via the pure builders in
 `offchain/cli/src/lib/` instead of EVM ABI calls.
 
+## Service URLs — where to look (once it's running)
+
+After `make up-monitoring` (full stack) or `make up` (feeder only), open
+these in a browser. All are published on `localhost`.
+
+| What | URL | Up with |
+| --- | --- | --- |
+| **Grafana** dashboards | <http://localhost:3000> — login `admin` / `${GRAFANA_ADMIN_PASSWORD:-admin}` | `make up-monitoring` |
+| **Prometheus** (raw metrics, alert state) | <http://localhost:9090> | `make up-monitoring` |
+| Feeder **liveness** | <http://localhost:8080/health/live> | `make up` |
+| Feeder **readiness** | <http://localhost:8080/health/ready> | `make up` |
+| Feeder **metrics** (Prometheus scrape) | <http://localhost:8080/metrics> | `make up` |
+
+Feeder HTTP API (all under `http://localhost:8080`):
+
+| Endpoint | Shows |
+| --- | --- |
+| `/api/v1/prices` | Latest confirmed price per symbol |
+| `/api/v1/prices/:symbol` | One symbol across destinations |
+| `/api/v1/symbols` | Symbols from the active router YAMLs |
+| `/api/v1/transactions` | Recent Cardano submissions |
+| `/api/v1/transactions/:txHash` | One tx + its member intents |
+| `/api/v1/chains` · `/api/v1/chains/:id/status` | Source-chain status |
+| `/api/v1/alerts` · `/api/v1/alerts/:id` | Active + recent alerts |
+| `/api/v1/performance` | DB-backed latency/throughput samples |
+| `/api/v1/pools` · `/api/v1/pools/:router_id/tasks` | Worker-pool state |
+| `/api/v1/status` · `/api/v1/status/components` | Daemon + component status |
+| `/api/v1/events` · `/api/v1/events/:hash` | Processed `IntentRegistered` events |
+
+Quick check from the terminal:
+
+```sh
+curl -s http://localhost:8080/health/live          # {"status":"alive"}
+curl -s http://localhost:8080/api/v1/prices | jq   # latest prices
+```
+
+> If `localhost:8080` does not respond from your host while the container
+> is "healthy", confirm `api.host: 0.0.0.0` in
+> `config/infrastructure.<network>.yaml` (a process bound to `127.0.0.1`
+> inside the container is unreachable through Docker's published port), then
+> `make restart`.
+
+The full API reference (query params, response shapes) is in
+[§ HTTP API](#http-api) below. Monitoring stack details are in
+[§ Running with Docker](#running-with-docker).
+
 ## Running with Docker
 
 The feeder and all CLI admin commands ship in **one image**
