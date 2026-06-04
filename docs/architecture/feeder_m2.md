@@ -131,9 +131,12 @@ These are **two distinct stages**, often confused:
 ### Analogy: a shipping counter
 
 - **Coalescer = the packer.** Many loose intents arrive. Per symbol it keeps **only
-  the newest** (*supersede*: if a fresher BTC arrives, the old one is dropped), waits
-  the short `coalesce_window` (2s) to gather several symbols, and assembles **one
-  package** (the batch: up to `max_batch_size: 10` symbols).
+  the newest** (*supersede*: if a fresher BTC arrives, the old one is dropped) and
+  assembles **one package** (the batch: up to `max_batch_size: 10` symbols). It gathers
+  symbols in two situations: a short `coalesce_window` (2s) **only when the lane was
+  empty/idle**, and — more importantly — **for free while the previous tx is still
+  confirming** (the lane is busy, so intents pile up at no extra latency cost). See the
+  state machine below for the exact rule.
 - **Queue Manager = the single cashier per client.** It takes the assembled package
   and sends it to Cardano **one at a time**: grabs the Receiver UTxO, builds the tx,
   signs it, submits it, **waits for confirmation**, and only then handles the next
@@ -203,19 +206,29 @@ symbols that one client accumulated during the window**
 | **2–10** | **one batch tx** updating several pairs of the **same client** |
 | **>10** (`max_batch_size`) | split into multiple txs |
 
-Calm market → mostly simple updates. A burst across several of a client's pairs within
-the 2s window → a batch. Either way it's always **one client per tx** (one Receiver
-UTxO, one signer).
+Calm market → mostly simple updates. A burst across several of a client's pairs — or
+several pairs arriving **while the previous tx was still confirming** — flushes as a
+batch. Either way it's always **one client per tx** (one Receiver UTxO, one signer).
 
 ### The coalescer state machine
 
 The lane buffer is **not FIFO** — it's a `Map<symbol, newest-intent>`. Three states:
 `idle → accumulating → in-flight`.
 
-- `coalesce_window: 2s` applies **only** on the `idle→accumulating` edge. While a tx
-  is in flight, intents accumulate without waiting; on confirm, if the buffer is
-  non-empty, it flushes **immediately** with no extra window.
+- **`idle` → first intent arrives → `accumulating`**: starts the `coalesce_window` (2s)
+  timer. This 2s wait happens **only here** — when the lane was empty. Whatever lands
+  in those 2s flushes together.
+- **`in-flight` (a tx is confirming) → intents arrive**: they just accumulate
+  (supersede per symbol), **no timer**. The lane is already "waiting" on the chain, so
+  this costs zero extra latency.
+- **tx confirms with a non-empty buffer**: flush **immediately** — no second 2s window.
+  This is where most multi-symbol batches come from: everything that piled up while the
+  previous tx was confirming goes out in one batch.
 - `max_intent_age: 15m` — drops buffered intents that are too old at flush time.
+
+> **One-liner:** *"We only pause 2 seconds when the lane is idle. Once a transaction is
+> in flight, new prices accumulate for free — keeping the newest per symbol — and the
+> moment the chain confirms, the whole accumulated batch goes out with no extra wait."*
 
 ---
 
