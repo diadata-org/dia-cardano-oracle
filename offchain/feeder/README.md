@@ -156,8 +156,8 @@ make cli CMD="wallet:utxos"
 make cli CMD="client:init"
 make cli CMD="receiver:bootstrap"
 
-# Top up the receiver wallet.
-make cli CMD="receiver:top-up --amount-lovelace 5000000000"
+# Top up the receiver wallet (amount in lovelace: 5000000 = 5 ADA).
+make cli CMD="receiver:top-up --amount-lovelace 5000000"
 
 # Publish reference scripts for a client.
 make cli CMD="reference-scripts:publish-client"
@@ -655,11 +655,11 @@ Price deviation is **percent** (0–100).
 
 | Alert | Metric | YAML key | Default | Action |
 | --- | --- | --- | --- | --- |
-| `OraclePairStale` | `dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds` | `oracle_pair_stale_seconds` | `3600` s | Investigate scanner / DIA source. |
-| `ReceiverBalanceLow` | `dia_bridge_cardano_receiver_balance_lovelace` | `receiver_balance_low_lovelace` | `2 000 000 000` (2 ADA) | `dia-cli receiver:top-up --amount-lovelace 5000000000` |
-| `SettleOverdue` | `dia_bridge_cardano_receiver_accrued_lovelace` | `settle_overdue_lovelace` | `10 000 000` (10 ADA) | `dia-cli settle` |
-| `PaymentHookWithdrawReady` | `dia_bridge_cardano_payment_hook_accrued_lovelace` | `payment_hook_withdraw_ready_lovelace` | `50 000 000` (50 ADA) | DIA admin runs `dia-cli payment-hook:withdraw` |
-| `AdminWalletLow` | `dia_bridge_cardano_admin_wallet_lovelace` | `admin_wallet_low_lovelace` | `5 000 000 000` (5 ADA) | Refill the operator/signer wallet. |
+| `OraclePairStale` | `dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds` | `oracle_pair_stale_seconds` | `3600` s | Check `make logs`; usually a low Receiver or Admin wallet. |
+| `ReceiverBalanceLow` | `dia_bridge_cardano_receiver_balance_lovelace` | `receiver_balance_low_lovelace` | `2 000 000` (2 ADA) | `make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --state /app/state/preview/clients/<client>.json"` |
+| `SettleOverdue` | `dia_bridge_cardano_receiver_accrued_lovelace` | `settle_overdue_lovelace` | `10 000 000` (10 ADA) | `make cli CMD="settle --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/<client>.json"` |
+| `PaymentHookWithdrawReady` | `dia_bridge_cardano_payment_hook_accrued_lovelace` | `payment_hook_withdraw_ready_lovelace` | `50 000 000` (50 ADA) | `make cli CMD="payment-hook:withdraw --amount-lovelace <lovelace> --state /app/state/preview/config-bootstrap.json"` |
+| `AdminWalletLow` | `dia_bridge_cardano_admin_wallet_lovelace` | `admin_wallet_low_lovelace` | `5 000 000` (5 ADA) | Send ADA to the Admin address in `state/<net>/config-bootstrap.json` (Preview: Cardano faucet). |
 | `PriceDeviationHigh` | `dia_bridge_price_deviation_percent_bucket` (p95) | `price_deviation_high_percent` | `5` % | Investigate DIA source — possible misreport. |
 | `PriceAgeHigh` | `dia_bridge_price_age_seconds_bucket` (p95) | `price_age_high_seconds` | `600` s | DIA source publishing stale prices. |
 | `ReorgRateHigh` | `dia_bridge_transactions_reorg_total` | (alerts.yml only) | `> 3 / 1 h` | Check provider lag + scanner block-lag panel. |

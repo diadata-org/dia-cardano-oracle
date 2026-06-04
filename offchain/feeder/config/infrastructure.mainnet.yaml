@@ -156,10 +156,10 @@ infrastructure:
   # alerts.yml mirrors these values; both must stay in sync.
   # --------------------------------------------------------------------------
   alerting:
-    receiver_balance_low_lovelace: 2000000000          # 2 ADA — top-up needed
+    receiver_balance_low_lovelace: 2000000             # 2 ADA (= 2_000_000 lovelace) — top-up needed
     settle_overdue_lovelace: 10000000                  # 10 ADA accrued — run settle
     payment_hook_withdraw_ready_lovelace: 50000000     # 50 ADA — DIA can withdraw
-    admin_wallet_low_lovelace: 5000000000              # 5 ADA — refill operator wallet
+    admin_wallet_low_lovelace: 5000000                 # 5 ADA (= 5_000_000 lovelace) — refill operator wallet
     oracle_pair_stale_seconds: 3600                    # 1 h since last confirm
     price_deviation_high_percent: 5                    # 5 % p95 → misreport suspect
     price_age_high_seconds: 600                        # 10 min p95 → DIA source stale

@@ -142,14 +142,15 @@
       "description": "Receiver wallet balance in lovelace. Below $receiver_warn_lovelace triggers the ReceiverBalanceLow alert.",
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "ADA",
+          "decimals": 2,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "red",    "value": null },
-              { "color": "yellow", "value": 1000000000 },
-              { "color": "green",  "value": 5000000000 }
+              { "color": "yellow", "value": 2 },
+              { "color": "green",  "value": 10 }
             ]
           },
           "custom": {}
@@ -166,27 +167,28 @@
       },
       "targets": [
         {
-          "expr": "dia_bridge_cardano_receiver_balance_lovelace",
+          "expr": "dia_bridge_cardano_receiver_balance_lovelace / 1000000",
           "legendFormat": "{{client_id}}",
           "refId": "A"
         }
       ],
-      "title": "Receiver balance (per client)",
+      "title": "Receiver balance — ADA (per client)",
       "type": "gauge"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Operational wallet balances (lovelace). Top row: Admin (signer) wallet — fires AdminWalletLow when low. Bottom: PaymentHook accrued — fires PaymentHookWithdrawReady when high.",
+      "description": "Operational wallet balances in ADA. Admin (signer) wallet — fires AdminWalletLow below 5 ADA. PaymentHook accrued — fires PaymentHookWithdrawReady above 50 ADA. Receiver accrued (sum) — fires SettleOverdue above 10 ADA.",
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "ADA",
+          "decimals": 2,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "red",    "value": null },
-              { "color": "yellow", "value": 500000000 },
-              { "color": "green",  "value": 2000000000 }
+              { "color": "yellow", "value": 5 },
+              { "color": "green",  "value": 50 }
             ]
           },
           "custom": {}
@@ -204,22 +206,22 @@
       },
       "targets": [
         {
-          "expr": "dia_bridge_cardano_admin_wallet_lovelace",
+          "expr": "dia_bridge_cardano_admin_wallet_lovelace / 1000000",
           "legendFormat": "Admin wallet",
           "refId": "A"
         },
         {
-          "expr": "dia_bridge_cardano_payment_hook_accrued_lovelace",
+          "expr": "dia_bridge_cardano_payment_hook_accrued_lovelace / 1000000",
           "legendFormat": "PaymentHook accrued",
           "refId": "B"
         },
         {
-          "expr": "sum(dia_bridge_cardano_receiver_accrued_lovelace)",
+          "expr": "sum(dia_bridge_cardano_receiver_accrued_lovelace) / 1000000",
           "legendFormat": "Receiver accrued (sum)",
           "refId": "C"
         }
       ],
-      "title": "Admin wallet • PaymentHook • Receiver accrued (lovelace)",
+      "title": "Admin wallet • PaymentHook • Receiver accrued — ADA",
       "type": "stat"
     },
     {

@@ -267,7 +267,7 @@ infrastructure:
   alerting:
     # Receiver `balanceLovelace` below this value → ReceiverBalanceLow alert
     # and warning counter emitted by the feeder. Action: `receiver:top-up`.
-    receiver_balance_low_lovelace: 2000000000          # 2 ADA
+    receiver_balance_low_lovelace: 2000000             # 2 ADA (= 2_000_000 lovelace)
     # Receiver `accruedToHookLovelace` above this value → SettleOverdue
     # alert. Action: CLI `settle` to move fees to the PaymentHook.
     settle_overdue_lovelace: 10000000                  # 10 ADA accrued
@@ -276,7 +276,7 @@ infrastructure:
     payment_hook_withdraw_ready_lovelace: 50000000     # 50 ADA accumulated
     # Admin (signer) wallet total lovelace below this → AdminWalletLow.
     # Action: refill the operator wallet that pays Cardano tx fees.
-    admin_wallet_low_lovelace: 5000000000              # 5 ADA
+    admin_wallet_low_lovelace: 5000000                 # 5 ADA (= 5_000_000 lovelace)
     # Seconds since a symbol was last confirmed on-chain → OraclePairStale.
     oracle_pair_stale_seconds: 3600                    # 1 h
     # p95 of observed price deviation in percent → PriceDeviationHigh

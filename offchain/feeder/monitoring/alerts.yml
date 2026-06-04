@@ -1,21 +1,33 @@
 # Prometheus alerting rules for the DIA Cardano Oracle feeder.
 #
-# Threshold authority: every numeric value in the `expr` lines below
-# MUST mirror the canonical YAML key in
-# `infrastructure.<network>.yaml::alerting.<key>` — the comment above
-# each rule names that key. Drift between this file and the YAML is a
-# bug; the README "Thresholds and alerts" section is the operator-facing
-# reference table.
+# READING THIS FILE
+# -----------------
+# Every alert below is written so an operator can act WITHOUT reading any
+# other doc. Each `description` says, in plain language: what is wrong, why
+# it matters, and the EXACT command to fix it (Docker `make` commands run
+# from the `offchain/` directory). Values are shown in ADA, not lovelace.
 #
-# Units convention (matches the YAML):
-#   *_lovelace = lovelace (1 ADA = 1_000_000 lovelace)
-#   *_seconds  = seconds
-#   *_percent  = percent (0–100)
+# Commands assume the Preview network and client `client-a`. For Mainnet,
+# swap `preview` -> `mainnet` in the --state paths. For another client, swap
+# `client-a` for that client id (the alert's `client_id` label tells you).
+#
+# THRESHOLDS
+# ----------
+# Balance/lovelace metrics are divided by 1_000_000 in the `expr` so the
+# comparison and the displayed `{{ $value }}` are in ADA. Each ADA threshold
+# equals the canonical lovelace key in
+# `infrastructure.<network>.yaml::alerting.<key>` divided by 1_000_000:
+#   receiver_balance_low_lovelace        = 2_000_000  -> 2 ADA
+#   settle_overdue_lovelace              = 10_000_000 -> 10 ADA
+#   payment_hook_withdraw_ready_lovelace = 50_000_000 -> 50 ADA
+#   admin_wallet_low_lovelace            = 5_000_000  -> 5 ADA
+# Keep this file and the YAML in sync; the README "Thresholds and alerts"
+# table is the operator-facing summary.
 
 groups:
   - name: feeder
     rules:
-      # Canonical threshold: infrastructure.<network>.yaml::alerting.oracle_pair_stale_seconds
+      # ---------------------------------------------------------------------
       - alert: OraclePairStale
         expr: >
           (time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds) > 3600
@@ -23,75 +35,115 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Oracle pair {{ $labels.symbol }} is stale"
+          summary: "Oracle pair {{ $labels.symbol }} has stopped updating on-chain"
           description: >
-            Pair {{ $labels.symbol }} has not been confirmed on-chain for
-            {{ $value | humanizeDuration }}. Threshold mirrors
-            `alerting.oracle_pair_stale_seconds` in the network YAML.
+            Pair {{ $labels.symbol }} has not had a confirmed Cardano update
+            for {{ $value | humanizeDuration }} (alert fires after 1 hour).
+            The feeder is no longer landing price updates for this pair.
 
-      # Canonical threshold: infrastructure.<network>.yaml::alerting.receiver_balance_low_lovelace
+            WHAT TO DO — work top to bottom until updates resume:
+            1. Look for the real error in the feeder logs:
+                 cd offchain && make logs
+               (look for this {{ $labels.symbol }} and the words "Insufficient",
+               "error", or "failed").
+            2. Most common cause: the client Receiver ran out of ADA, so it
+               cannot pay the per-update fee. Top it up with 5 ADA:
+                 cd offchain && make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --state /app/state/preview/clients/{{ $labels.client_id }}.json"
+            3. Second cause: the Admin (signer) wallet ran out of ADA — see the
+               AdminWalletLow alert for how to refill it.
+            4. If both wallets have ADA and logs show no error, the DIA source
+               may have stopped publishing this symbol — check the
+               PriceAgeHigh alert.
+
+      # ---------------------------------------------------------------------
       - alert: ReceiverBalanceLow
         expr: >
-          dia_bridge_cardano_receiver_balance_lovelace < 2000000000
+          dia_bridge_cardano_receiver_balance_lovelace / 1000000 < 2
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Receiver balance low for client {{ $labels.client_id }}"
+          summary: "Receiver wallet for client {{ $labels.client_id }} is below 2 ADA"
           description: >
-            Receiver wallet balance is {{ $value | humanize }} lovelace
-            (threshold: 2 000 000 000 lovelace = 2 ADA, mirroring
-            `alerting.receiver_balance_low_lovelace`). Operator action:
-            `dia-cli receiver:top-up --amount-lovelace 5000000000`. The
-            feeder also increments `dia_bridge_cardano_receiver_topup_warnings_total`.
+            The Receiver UTxO for client {{ $labels.client_id }} holds
+            {{ $value | printf "%.2f" }} ADA (alert fires below 2 ADA). The
+            Receiver pays the protocol fee on every price update; once it is
+            empty, updates for this client stop with "ReceiverInsufficientFunds".
 
-      # Canonical threshold: infrastructure.<network>.yaml::alerting.settle_overdue_lovelace
+            WHAT TO DO — top the Receiver up with 5 ADA (run from offchain/):
+              make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --state /app/state/preview/clients/{{ $labels.client_id }}.json"
+            The amount is in lovelace: 5000000 = 5 ADA. The alert clears within
+            ~1 minute after the top-up tx confirms.
+
+      # ---------------------------------------------------------------------
       - alert: SettleOverdue
         expr: >
-          dia_bridge_cardano_receiver_accrued_lovelace > 10000000
+          dia_bridge_cardano_receiver_accrued_lovelace / 1000000 > 10
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "Settle overdue for client {{ $labels.client_id }}"
+          summary: "Client {{ $labels.client_id }} has over 10 ADA of unsettled fees"
           description: >
-            Receiver has {{ $value | humanize }} lovelace accrued and not
-            yet settled to the PaymentHook (threshold: 10 000 000 lovelace
-            = 10 ADA, mirroring `alerting.settle_overdue_lovelace`).
-            Operator action: `dia-cli settle`.
+            The Receiver for client {{ $labels.client_id }} has accrued
+            {{ $value | printf "%.2f" }} ADA of protocol fees that have not yet
+            been moved to the PaymentHook (alert fires above 10 ADA). Accrued
+            fees should be settled periodically so DIA can withdraw them.
 
-      # Canonical threshold: infrastructure.<network>.yaml::alerting.payment_hook_withdraw_ready_lovelace
+            WHAT TO DO — run a settle for this client (run from offchain/):
+              make cli CMD="settle --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
+            This drains the accrued fees from the Receiver into the global
+            PaymentHook. The alert clears after the settle tx confirms.
+
+      # ---------------------------------------------------------------------
       - alert: PaymentHookWithdrawReady
         expr: >
-          dia_bridge_cardano_payment_hook_accrued_lovelace > 50000000
+          dia_bridge_cardano_payment_hook_accrued_lovelace / 1000000 > 50
         for: 10m
         labels:
           severity: info
         annotations:
-          summary: "PaymentHook ready for withdrawal"
+          summary: "PaymentHook holds over 50 ADA — ready for DIA to withdraw"
           description: >
-            PaymentHook holds {{ $value | humanize }} lovelace of fees
-            (threshold: 50 000 000 lovelace = 50 ADA, mirroring
-            `alerting.payment_hook_withdraw_ready_lovelace`).
-            DIA admin can run `dia-cli payment-hook:withdraw`.
+            The global PaymentHook holds {{ $value | printf "%.2f" }} ADA of
+            settled fees (alert fires above 50 ADA). This is revenue ready to be
+            withdrawn by the DIA admin; nothing is broken.
 
-      # Canonical threshold: infrastructure.<network>.yaml::alerting.admin_wallet_low_lovelace
+            WHAT TO DO — withdraw the fees (run from offchain/). Set
+            --amount-lovelace to the amount you want, in lovelace (e.g.
+            50000000 = 50 ADA):
+              make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --state /app/state/preview/config-bootstrap.json"
+            NOTE: run this only once the most recent settle tx is fully
+            confirmed. Submitting a withdraw within a few seconds of a settle
+            can fail with "BadInputsUTxO" because the provider has not yet
+            indexed the new wallet UTxO — wait ~30 s and retry the same command.
+
+      # ---------------------------------------------------------------------
       - alert: AdminWalletLow
         expr: >
-          dia_bridge_cardano_admin_wallet_lovelace < 5000000000
+          dia_bridge_cardano_admin_wallet_lovelace / 1000000 < 5
         for: 5m
         labels:
           severity: critical
         annotations:
-          summary: "Admin (signer) wallet running low"
+          summary: "Admin (signer) wallet is below 5 ADA — updates will stall"
           description: >
-            Admin wallet balance is {{ $value | humanize }} lovelace
-            (threshold: 5 000 000 000 lovelace = 5 ADA, mirroring
-            `alerting.admin_wallet_low_lovelace`). Without ADA the feeder
-            cannot pay tx fees and oracle updates stall. Refill the
-            operator wallet immediately.
+            The Admin (signer) wallet holds {{ $value | printf "%.2f" }} ADA
+            (alert fires below 5 ADA). This is the operator wallet that PAYS THE
+            NETWORK FEE on every Cardano transaction the feeder submits. With no
+            ADA the feeder cannot submit any update for any client.
 
-      # Canonical threshold: infrastructure.<network>.yaml::alerting.price_deviation_high_percent
+            WHAT TO DO — send ADA to the Admin wallet (there is no CLI command;
+            it is your own operator wallet, funded from outside the protocol):
+            1. Find the address to fund:
+                 grep -A2 '"wallet"' offchain/feeder/state/preview/config-bootstrap.json
+               (the "address" field, starting with addr_test1... on Preview).
+            2. On Preview: request test ADA from the Cardano faucet
+               https://docs.cardano.org/cardano-testnets/tools/faucet and paste
+               that address. On Mainnet: send real ADA from your treasury.
+            3. The alert clears within ~1 minute once the balance is above 5 ADA.
+
+      # ---------------------------------------------------------------------
       - alert: PriceDeviationHigh
         expr: >
           histogram_quantile(0.95,
@@ -103,14 +155,23 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "High price deviation for {{ $labels.symbol }}"
+          summary: "Price for {{ $labels.symbol }} jumped more than 5% — possible bad data"
           description: >
-            The p95 price deviation for {{ $labels.symbol }} is
-            {{ $value | printf "%.2f" }}% over the last 10 minutes
-            (threshold mirrors `alerting.price_deviation_high_percent`).
-            May indicate a misreported price or a stale/outlier source feed.
+            The 95th-percentile price change for {{ $labels.symbol }} is
+            {{ $value | printf "%.2f" }}% over the last 10 minutes (alert fires
+            above 5%). This can mean a misreported or outlier price from the DIA
+            source feed, not a feeder fault.
 
-      # Canonical threshold: infrastructure.<network>.yaml::alerting.price_age_high_seconds
+            WHAT TO DO — this is a DATA-quality alert, not something a wallet
+            top-up fixes:
+            1. Compare {{ $labels.symbol }} against a public reference price.
+            2. If the on-chain value is clearly wrong, stop publishing this pair
+               by removing it from the routing config and restarting the feeder
+               (cd offchain && make restart), then raise it with the DIA data team.
+            3. If the jump was a real market move, no action is needed; the
+               alert clears on its own.
+
+      # ---------------------------------------------------------------------
       - alert: PriceAgeHigh
         expr: >
           histogram_quantile(0.95,
@@ -122,15 +183,21 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Stale price data for {{ $labels.symbol }}"
+          summary: "DIA source data for {{ $labels.symbol }} is going stale"
           description: >
-            The p95 age of incoming DIA price data for {{ $labels.symbol }}
-            is {{ $value | humanizeDuration }} (threshold mirrors
-            `alerting.price_age_high_seconds`). The DIA source may be
-            publishing outdated prices.
+            The 95th-percentile age of incoming DIA price data for
+            {{ $labels.symbol }} is {{ $value | humanizeDuration }} (alert fires
+            above 10 minutes). The feeder is healthy but the UPSTREAM DIA source
+            is publishing old prices for this symbol.
 
-      # Reorg rate alert. Not strictly a YAML threshold — set here based on
-      # an operational tolerance of <3 dropped txs per hour.
+            WHAT TO DO — this is upstream, not a feeder fix:
+            1. Confirm the feeder is still connected to the DIA source:
+                 cd offchain && make logs
+               (look for WebSocket reconnect messages near {{ $labels.symbol }}).
+            2. If the feeder is connected but the data is still old, the DIA
+               source feed is lagging — raise it with the DIA data team.
+
+      # ---------------------------------------------------------------------
       - alert: ReorgRateHigh
         expr: >
           increase(dia_bridge_transactions_reorg_total[1h]) > 3
@@ -138,9 +205,18 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Cardano reorgs dropping confirmed txs for {{ $labels.symbol }}"
+          summary: "Cardano reorgs are dropping confirmed updates for {{ $labels.symbol }}"
           description: >
-            {{ $value }} transactions for {{ $labels.symbol }} (client
-            {{ $labels.client_id }}) were dropped by chain reorganisation
-            in the last hour. Investigate provider lag and check the
-            scanner block-lag panel.
+            {{ $value }} confirmed transactions for {{ $labels.symbol }} (client
+            {{ $labels.client_id }}) were rolled back by Cardano chain
+            reorganisations in the last hour (alert fires above 3). The feeder
+            automatically re-submits dropped updates, so this is usually
+            self-healing, but a high rate points to provider lag.
+
+            WHAT TO DO:
+            1. Check the "Scanner block lag" panel in Grafana — a large lag
+               means the provider (Blockfrost/Koios) is behind the chain tip.
+            2. Check the feeder logs for repeated re-submissions:
+                 cd offchain && make logs
+            3. If the rate stays high, consider switching the Cardano provider
+               (CARDANO_PROVIDER in .env) and restarting (make restart).
