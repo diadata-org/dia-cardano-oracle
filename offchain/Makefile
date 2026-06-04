@@ -40,9 +40,12 @@ up: ## Start the feeder daemon (add MONITORING=1 for Prometheus + Grafana)
 up-postgres: ## Start the feeder daemon, Postgres backend (add MONITORING=1 for Prometheus + Grafana)
 	$(COMPOSE) --profile postgres $(MON_PROFILE) up -d
 
+# Every service is gated behind a profile, and `docker compose down` only
+# touches services whose profile is active. Without listing them all here,
+# `down` matches nothing and leaves the feeder + monitoring stack running.
 .PHONY: down
-down: ## Stop everything
-	$(COMPOSE) down
+down: ## Stop everything (all profiles: feeder, monitoring, postgres, cli)
+	$(COMPOSE) --profile sqlite --profile postgres --profile cli --profile monitoring down --remove-orphans
 
 .PHONY: logs
 logs: ## Tail feeder logs
