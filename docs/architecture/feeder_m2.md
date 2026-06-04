@@ -73,10 +73,29 @@ both paths is processed **exactly once**.
 
 ---
 
-## 4. The update decision: OR-gate
+## 4. The update decision: two filter stages
 
-For each symbol, before dispatching to a destination, two thresholds are evaluated
-(`src/router/policy.ts`):
+An intent passes through **two independent filters** before it ever becomes a tx. Both
+increment `intents_filtered_total`, but with a different `reason` label, so you can
+tell *why* an intent was dropped.
+
+### Stage 1 — trigger conditions (relevance filter) — `reason: "condition"`
+
+Each router has `triggers.conditions`, evaluated with **AND** logic, fail-fast
+(`src/router/router.ts`). For client-a the single condition is:
+
+```text
+Symbol ∈ [BTC/USD, ETH/USD, USDC/USD, USDT/USD, DOGE/USD, LTC/USD, ARB/USD, SHIB/USD, NEIRO/USD, XVG/USD]
+```
+
+An intent whose symbol is **not in that list** fails the condition and is dropped as
+**"filtered by condition"**. This is the first question: *"is this intent even
+relevant to this client?"* — it runs **before** the OR-gate. (Conditions can match any
+enriched field, not just symbol; all listed conditions must pass.)
+
+### Stage 2 — the OR-gate (freshness filter) — `reason: "time_threshold" | "price_deviation" | "timestamp_*"`
+
+For a symbol that *is* relevant, two thresholds are evaluated (`src/router/policy.ts`):
 
 - `time_threshold` — minimum time since the last on-chain confirm.
 - `price_deviation` — minimum relative price change vs. the last recorded price.
@@ -95,6 +114,10 @@ suppress (`timestamp_regression`); an equal timestamp → suppress
 
 > **One-liner:** *"We push an update when the price moves more than 0.1%, OR when 5
 > minutes have passed without an update — whichever happens first."*
+
+(A third `reason` value exists — a **preflight** check that runs right before
+submission, e.g. balance/state sanity — but the two stages above are the ones that
+shape day-to-day filtering.)
 
 ---
 
@@ -141,6 +164,48 @@ A **lane = (client, receiver UTxO)**. Parallelism across clients comes from havi
 > and writes it to Cardano one at a time per client, waiting for confirmation before
 > the next, because EUTxO does not allow two simultaneous writes against the same
 > UTxO."*
+
+### Where does the client come in? (both stages are per-client)
+
+A common confusion: *which* stage knows the client? **Both do**, and they use the
+**exact same key** to partition their work (`src/submitter/lane-key.ts`):
+
+```text
+lane = client_state_path :: protocol_state_path   →  one client (its Receiver UTxO)
+```
+
+The client is attached **upstream**: the router emits each `SubmitRequest` already
+carrying its `destination` (which points at one client's state files). So by the time
+anything reaches the coalescer, every request already knows its client. Nothing has to
+"sort by client" afterward — work is **partitioned by client**, not ordered:
+
+- **Coalescer** keeps **one buffer per lane (= per client)**. Inside each buffer it's
+  `Map<symbol, newest>`. When a lane flushes, it flushes **that one client's symbols**
+  → that's the batch. It **never mixes two clients in a batch**.
+- **Queue Manager** keeps **one serial queue per lane (= per client)**, routing each
+  request to its client's queue by the same key. `submitBatch` even **rejects** a
+  batch whose requests don't all share one lane.
+
+So client-A and client-B run on **separate queues → concurrently**; within client-A,
+**serial**. Neither stage is "the client-aware one" — both partition by the same lane.
+The real difference between them is the *job* (group/filter vs. write safely), not the
+client.
+
+### Batch vs simple update — decided automatically, per client
+
+There is **no manual "batch mode"**. At flush time the write client looks at **how many
+symbols that one client accumulated during the window**
+(`src/submitter/cardano-write-client.ts`):
+
+| Symbols buffered for the client | What is sent |
+| --- | --- |
+| **1** | a **simple update** (1 tx, 1 pair) |
+| **2–10** | **one batch tx** updating several pairs of the **same client** |
+| **>10** (`max_batch_size`) | split into multiple txs |
+
+Calm market → mostly simple updates. A burst across several of a client's pairs within
+the 2s window → a batch. Either way it's always **one client per tx** (one Receiver
+UTxO, one signer).
 
 ### The coalescer state machine
 
