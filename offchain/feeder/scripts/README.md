@@ -2,27 +2,44 @@
 
 ## Evidence pack
 
-Run `make evidence` from `offchain/` to generate the M2 evidence pack.
+Run `make evidence` from `offchain/` to generate the **complete** M2 evidence
+pack into one dated directory.
 
 ### Prerequisites
 
-- Feeder running: `make up`
-- Grafana reachable at <http://localhost:3000> (default credentials admin/admin)
-- SQLite DB at the path in `DATABASE_PATH_TESTNET` env var
+- Feeder running with accumulated data: `make up`
+- Monitoring stack up for the Grafana PNGs: `make up MONITORING=1`
+  (Grafana at <http://localhost:3000>, default credentials admin/admin; set
+  `GRAFANA_ADMIN_PASSWORD` if you changed it)
+- Network resolved from `feeder/.env` `CARDANO_NETWORK` (override with
+  `make evidence EVIDENCE_NETWORK=Mainnet`)
 
 ### Scripts
 
-- `scripts/m2-evidence/render-dashboards.ts` — capture Grafana PNG screenshots via the render API
+- `scripts/m2-evidence/package-m2-evidence.sh` — assembles the complete pack:
+  raw logs, DB CSVs, live API snapshots, Grafana PNGs (full dashboard + every
+  panel), and the `milestone-2-preview-evidence.md` report with each panel
+  embedded and its metric explained. This is what `make evidence` runs.
 - `scripts/m2-evidence/build-stats.ts` — query DB for transaction/event statistics
 - `scripts/m2-evidence/build-error-counts.ts` — bucket failed transactions by error_code
 
+`make evidence` runs all three into one shared `m2-<network>-<stamp>/` dir
+(the `.sh` for the pack, the two `.ts` for the DB-authoritative stats).
+
 ### Output
 
-Each run writes to `docs/evidence/m2-<timestamp>/`:
+Each run writes to `docs/milestones/evidence/m2-<network>-<timestamp>/`:
 
-- `grafana/` — PNG screenshots of each Grafana dashboard
-- `stats.json` — transaction and event statistics from DB
-- `error-counts.tsv` — failed transaction counts by error code
+- `logs/` — raw `feeder.log`, `transactions.jsonl`, `lane.jsonl`, `intents/`
+- `db/` — `transaction_log`, `processed_events`, `chain_state` as CSV
+- `api/` — `/api/v1/{prices,chains,symbols}` + Prometheus `/metrics` snapshots
+- `dashboards/` — full Grafana dashboard PNG + one PNG per panel
+- `stats/` — intermediate TSVs the report table is built from
+- `stats.json` — DB-authoritative transaction/event statistics
+- `error-counts.tsv` — DB-authoritative failed-tx counts by error code
+- `SUMMARY.json` — machine-readable totals
+- `milestone-2-preview-evidence.md` — the reviewer-facing report (embeds the
+  dashboards and explains each metric)
 
 ## Other scripts
 

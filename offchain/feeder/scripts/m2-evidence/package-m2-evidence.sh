@@ -1,33 +1,40 @@
 #!/usr/bin/env bash
 #
-# package-m2-evidence.sh — assemble a Milestone 2 evidence pack from a
-# running (or stopped) feeder deployment.
+# package-m2-evidence.sh — assemble the COMPLETE Milestone 2 evidence pack
+# from a running (or stopped) feeder deployment. This is what `make evidence`
+# runs; it can also be run standalone.
 #
-# Single-use script. Reads logs + sqlite + live API + Grafana renderer
-# and writes a self-contained directory under docs/milestones/evidence/.
-# No parameters — every input is the project-default path:
+# Reads logs + sqlite + live API + Grafana renderer and writes a
+# self-contained directory under docs/milestones/evidence/. Inputs:
 #
-#   logs + sqlite : offchain/feeder/state/preview/
+#   logs + sqlite : offchain/feeder/state/<network>/
 #   feeder API    : http://localhost:8080
 #   Grafana       : http://localhost:3000 (renderer profile must be up)
+#
+# Env vars (set by `make evidence`; both optional when run standalone):
+#   EVIDENCE_NETWORK  Cardano network (e.g. preview, mainnet). Default: preview.
+#   EVIDENCE_STAMP    Shared UTC dir stamp so all evidence scripts write into
+#                     one dir. Default: a fresh `date -u +%Y%m%d-%H%M%S`.
 #
 # Run AFTER the feeder has accumulated material to show. The feeder may
 # continue running while this script executes (append-only logs + SQLite
 # concurrent reads).
 #
-# Output: docs/milestones/evidence/m2-preview-<YYYYMMDD-HHMMSS>/
+# Output: docs/milestones/evidence/m2-<network>-<YYYYMMDD-HHMMSS>/
 #
 # Dependencies (all on standard Linux): bash, jq, sqlite3, curl, awk.
 
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Hardcoded paths — see header for rationale (single-use, no parameters).
+# Paths — network and dir stamp from env (see header). State dir and output
+# dir name follow the network so the pack is not preview-only.
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # scripts/m2-evidence/ → feeder/scripts/ → feeder/ → offchain/ → repo root
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-STATE_DIR="$REPO_ROOT/offchain/feeder/state/preview"
+NETWORK="$(echo "${EVIDENCE_NETWORK:-preview}" | tr '[:upper:]' '[:lower:]')"
+STATE_DIR="$REPO_ROOT/offchain/feeder/state/$NETWORK"
 LOGS_DIR="$STATE_DIR/logs"
 SQLITE_FILE="$STATE_DIR/feeder.sqlite"
 API_URL="http://localhost:8080"
@@ -36,8 +43,8 @@ GRAFANA_USER="admin"
 GRAFANA_PASS="${GRAFANA_ADMIN_PASSWORD:-admin}"
 GRAFANA_DASHBOARD_UID="dia-cardano-feeder"
 
-STAMP="$(date -u +%Y%m%d-%H%M%S)"
-OUT_DIR="$REPO_ROOT/docs/milestones/evidence/m2-preview-$STAMP"
+STAMP="${EVIDENCE_STAMP:-$(date -u +%Y%m%d-%H%M%S)}"
+OUT_DIR="$REPO_ROOT/docs/milestones/evidence/m2-$NETWORK-$STAMP"
 
 # ---------------------------------------------------------------------------
 # Pre-flight: required tools + state must exist.
@@ -113,6 +120,28 @@ fi
 # renderer). Falls back to placeholder + note if the renderer is down.
 # ---------------------------------------------------------------------------
 echo "[package-m2] step 4/6 — rendering Grafana dashboard"
+
+# Panels to snapshot, in dashboard reading order: "id|title|description".
+# IDs, titles and PromQL come from monitoring/grafana/dashboards/feeder.json —
+# keep in sync with it. The description is rendered under each PNG in the
+# report and explains the metric (NOT the data). Single-quoted so the literal
+# backticks survive into the markdown unevaluated.
+PANELS=(
+  '11|Confirmed oracle updates — all-time total (per pair)|Metric `sum by (symbol) (dia_bridge_transactions_confirmed_total)`. Running all-time count of oracle-update transactions that reached on-chain confirmation, split per price pair (the `symbol` label). This is the liveness proof — every active pair should show a non-zero, growing count.'
+  '12|Price data age p95 — 1 h window (per pair)|Metric `histogram_quantile(0.95, rate(dia_bridge_price_age_seconds_bucket[1h]))` per `symbol`, in seconds. 95th percentile of how old the DIA source price was at the moment the feeder consumed it — i.e. data freshness, not transaction speed. Lower is better; high values feed the `PriceAgeHigh` alert.'
+  '1|Pair staleness (per symbol)|Metric `time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds`, in seconds. Wall-clock age of the most recent confirmed on-chain update for each pair — how stale the value currently living on Cardano is. Drives the `OraclePairStale` alert.'
+  '2|Receiver balance — ADA (per client)|Metric `dia_bridge_cardano_receiver_balance_lovelace / 1000000`, in ADA. Current spendable balance of each Receiver address (the wallet that funds update fees), converted from lovelace. If it falls toward zero the feeder cannot pay fees and `ReceiverBalanceLow` fires.'
+  '3|Admin wallet • PaymentHook • Receiver accrued — ADA|Three ADA series (lovelace ÷ 1e6): `dia_bridge_cardano_admin_wallet_lovelace` (operator admin wallet), `dia_bridge_cardano_payment_hook_accrued_lovelace` (fees accrued inside the PaymentHook awaiting withdraw), and `sum(dia_bridge_cardano_receiver_accrued_lovelace)` (amounts accrued at receivers awaiting settle). Together they track the fee / settlement money flow.'
+  '4|End-to-end latency (p50/p95/p99)|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_end_to_end_latency_seconds_bucket[5m]))`, in seconds. End-to-end pipeline latency — from the DIA `IntentRegistered` event to the Cardano `tx_confirmed` — at the median, 95th and 99th percentiles. How fast a price becomes a confirmed on-chain update.'
+  '5|Tx confirmed rate (5m)|Metric `sum by (symbol) (rate(dia_bridge_transactions_confirmed_total[5m]))`, in ops/s. Rate of successfully confirmed update transactions over a 5-minute window, per pair. The positive-side throughput of the feeder.'
+  '6|Tx failed rate (5m)|Metric `sum by (error_code) (rate(dia_bridge_transactions_failed_total[5m]))`, in ops/s. Rate of failed transaction attempts over 5 minutes, grouped by `error_code`. A spike on a given code points straight at the failing subsystem; codes are documented in `offchain/feeder/src/errors/codes.ts`.'
+  '7|Reorg counter|Metric `sum(increase(dia_bridge_transactions_reorg_total[1h]))`. Count of already-confirmed transactions dropped by a chain reorganisation in the last hour. Should sit at 0; a sustained non-zero value triggers `ReorgRateHigh` and points at provider lag.'
+  '8|Scanner block lag|Metric `dia_bridge_scanner_block_lag`, in blocks. How many blocks behind the chain tip the DIA-side scanner currently is. A steadily rising lag means the scanner is falling behind the source chain and updates will be delayed.'
+  '9|Intents filtered by reason|Metric `sum by (reason) (rate(dia_bridge_intents_filtered_total[5m]))`, in ops/s. Rate of incoming intents the feeder deliberately discarded before submitting a transaction, grouped by `reason` (e.g. below deviation threshold, duplicate, stale). Explains why some updates are intentionally skipped.'
+  '13|Price deviation p95 — 1 h window (per pair)|Metric `histogram_quantile(0.95, rate(dia_bridge_price_deviation_percent_bucket[1h]))` per `symbol`, in percent. 95th percentile of the percentage gap between the price the feeder published and the reference price, per pair. A high value suggests a possible misreport and feeds the `PriceDeviationHigh` alert.'
+  '10|Price deviation distribution (heatmap)|Metric `sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket[5m]))`, percent buckets. Heatmap of the full price-deviation distribution over time (histogram `le` buckets, colour = frequency). Healthy feeds cluster near 0%; a vertical spread means deviations are growing.'
+)
+
 render_dashboard() {
   local slug="dia-cardano-oracle-feeder"
   local from="now-3h"
@@ -135,13 +164,26 @@ render_panel() {
     "$GRAFANA_URL/render/d-solo/$GRAFANA_DASHBOARD_UID/panel?orgId=1&panelId=$panel_id&from=$from&to=$to&width=1200&height=400&tz=UTC"
 }
 
+# Markdown for the report's "## Dashboards" section, built as PNGs land so the
+# report embeds exactly what was captured (with each panel's real title).
+DASHBOARDS_MD=""
+
 if curl -fsS --max-time 5 "$GRAFANA_URL/api/health" >/dev/null 2>&1; then
   if render_dashboard "$OUT_DIR/dashboards/dashboard-full.png" 2>/dev/null; then
     echo "[package-m2]   full dashboard PNG captured"
-    # Per-panel snapshots — IDs come from monitoring/grafana/dashboards/feeder.json.
-    for panel_id in 11 12 1 2 3 4 5 6 7 10 13; do
-      render_panel "$panel_id" "$OUT_DIR/dashboards/panel-$panel_id.png" \
-        2>/dev/null && echo "[package-m2]   panel $panel_id PNG captured" || true
+    DASHBOARDS_MD=$'### Full dashboard\n\n![DIA Cardano Oracle Feeder — full dashboard](dashboards/dashboard-full.png)\n\n_Each panel is also captured individually below. Every caption names the underlying Prometheus metric and explains what it measures._\n\n### Panels\n'
+    # Per-panel snapshots — embed each one under its title, then explain the metric.
+    for entry in "${PANELS[@]}"; do
+      panel_id="${entry%%|*}"
+      rest="${entry#*|}"
+      panel_title="${rest%%|*}"
+      panel_desc="${rest#*|}"
+      if render_panel "$panel_id" "$OUT_DIR/dashboards/panel-$panel_id.png" 2>/dev/null; then
+        echo "[package-m2]   panel $panel_id PNG captured"
+        DASHBOARDS_MD+=$'\n'"**${panel_title}**"$'\n\n'"![${panel_title}](dashboards/panel-${panel_id}.png)"$'\n\n'"${panel_desc}"$'\n'
+      else
+        echo "[package-m2]   panel $panel_id PNG FAILED — skipping in report" >&2
+      fi
     done
   else
     cat > "$OUT_DIR/dashboards/README.txt" <<EOF
@@ -153,6 +195,7 @@ the monitoring profile (which includes the renderer sidecar):
 Then re-run this script, or drop manual PNG screenshots into this folder.
 The dashboard JSON lives at offchain/feeder/monitoring/grafana/dashboards/feeder.json.
 EOF
+    DASHBOARDS_MD="_Grafana was reachable but the image renderer was not responding when this pack was assembled — no PNGs captured. See \`dashboards/README.txt\`._"
     echo "[package-m2]   Grafana up but render failed — wrote dashboards/README.txt"
   fi
 else
@@ -165,6 +208,7 @@ screenshots into this folder:
 
 The dashboard JSON lives at offchain/feeder/monitoring/grafana/dashboards/feeder.json.
 EOF
+  DASHBOARDS_MD="_Grafana was not reachable at $GRAFANA_URL when this pack was assembled — no PNGs captured. See \`dashboards/README.txt\`._"
   echo "[package-m2]   Grafana NOT reachable — wrote dashboards/README.txt"
 fi
 
@@ -374,20 +418,13 @@ Failure semantics for each code are documented in
 
 ## Dashboards
 
-The Grafana dashboard \`DIA Cardano Oracle Feeder\` covers:
+Grafana dashboard \`DIA Cardano Oracle Feeder\` (UID \`dia-cardano-feeder\`) —
+PNG snapshots taken at pack time over a \`now-3h\` window. Source JSON:
+[\`offchain/feeder/monitoring/grafana/dashboards/feeder.json\`](../../../offchain/feeder/monitoring/grafana/dashboards/feeder.json).
 
-- **Oracle Feed Liveness — M2 Evidence** (top row): cumulative confirmed
-  tx count per pair (proof of liveness), price data age p95 per pair.
-- **Row 1 — Balances & Staleness**: pair staleness, receiver balance,
-  admin wallet / PaymentHook / receiver accrued.
-- **Row 2 — Throughput & Latency**: end-to-end latency p50/p95/p99,
-  tx confirmed rate, tx failed rate by error code.
-- **Row 3 — Chain & Scanner Health**: reorg counter, scanner block lag,
-  intents filtered by reason.
-- **Row 4 — Price Quality & Anomaly Detection**: price deviation p95
-  per pair, price deviation distribution heatmap.
+$DASHBOARDS_MD
 
-To reproduce this dashboard yourself:
+To reproduce this dashboard live:
 
 \`\`\`sh
 cd offchain && make up-monitoring
