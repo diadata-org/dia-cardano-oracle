@@ -154,4 +154,30 @@ describe("createMetrics", () => {
       assert.ok(text.includes(name), `required metric absent from /metrics output: ${name}`);
     }
   });
+
+  it("does not emit a default 0 for label-less balance gauges until set (no spurious low-balance alert on restart)", async () => {
+    const metrics = await createMetrics({
+      defaultLabels: { destination_chain: "cardano", network: "Preview", source_chain_id: "10050" },
+    });
+
+    // Fresh registry, nothing set yet: the admin-wallet and payment-hook
+    // accrued gauges must be ABSENT, not 0. A default 0 would make
+    // AdminWalletLow (admin_wallet_lovelace/1e6 < 5) fire on every restart.
+    // Match DATA samples only (lines starting with the metric name), not the
+    // always-present `# HELP` / `# TYPE` comment lines.
+    const before = await metrics.getMetricsText();
+    assert.ok(
+      !/^dia_bridge_cardano_admin_wallet_lovelace[ {]/m.test(before),
+      "admin wallet gauge must emit no sample before the first real reading",
+    );
+    assert.ok(
+      !/^dia_bridge_cardano_payment_hook_accrued_lovelace[ {]/m.test(before),
+      "payment-hook accrued gauge must emit no sample before the first real reading",
+    );
+
+    // Once a real balance is reported, the series appears.
+    metrics.cardanoAdminWalletLovelace.set({}, 2_462_000_000);
+    const after = await metrics.getMetricsText();
+    assert.match(after, /^dia_bridge_cardano_admin_wallet_lovelace[ {][^\n]*2462000000/m);
+  });
 });

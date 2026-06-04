@@ -2,21 +2,44 @@
 #
 # READING THIS FILE
 # -----------------
-# Every alert below is written so an operator can act WITHOUT reading any
-# other doc. Each `description` says, in plain language: what is wrong, why
-# it matters, and the EXACT command to fix it (Docker `make` commands run
-# from the `offchain/` directory). Values are shown in ADA, not lovelace.
+# Each alert below is written so an operator can act WITHOUT reading any other
+# doc. Every `description` states, in plain language: what the metric means,
+# why it matters in the protocol's money flow, and the EXACT commands to fix
+# it — in BOTH forms:
+#   * Docker (recommended; this is how the feeder runs in production):
+#       cd offchain && make cli CMD="<verb> ..."      # state paths are /app/state/...
+#   * npm (dev / no Docker), run from offchain/cli, pointing at the live
+#     feeder's state tree:
+#       cd offchain/cli && npm run cli -- <verb> ...   # state paths are ../feeder/state/...
+# Both forms act on the SAME on-chain protocol and the SAME state files.
 #
-# Commands assume the Preview network and client `client-a`. For Mainnet,
-# swap `preview` -> `mainnet` in the state-file paths. For another client, swap
-# `client-a` for that client id (the alert's `client_id` label tells you).
+# Examples assume the Preview network and client `client-a`. For Mainnet swap
+# `preview` -> `mainnet` in the state paths; for another client swap
+# `client-a` for the id in the alert's `client_id` label.
+#
+# THE MONEY FLOW (needed to understand AdminWalletLow / SettleOverdue / etc.)
+# --------------------------------------------------------------------------
+# Per-update fee is debited from the client's Receiver and accrues, then is
+# swept to the global PaymentHook, then withdrawn to the operator wallet:
+#
+#   client tops up Receiver.balance   (receiver:top-up — prepaid pool)
+#        every price update: AccrueFee  -> Receiver.balance  -=fee
+#                                          Receiver.accrued  +=fee
+#        settle                          -> Receiver.accrued -> PaymentHook.accrued
+#        payment-hook:withdraw           -> PaymentHook.accrued -> withdraw_address
+#                                                              (= the Admin wallet)
+#
+# So the Admin (signer/operator) wallet is REPLENISHED by collecting protocol
+# revenue (settle + payment-hook:withdraw) — NOT by sending it ADA from
+# outside. External funding is only a fallback when there is no accrued
+# revenue to collect.
 #
 # THRESHOLDS
 # ----------
-# Balance/lovelace metrics are divided by 1_000_000 in the `expr` so the
-# comparison and the displayed `{{ $value }}` are in ADA. Each ADA threshold
-# equals the canonical lovelace key in
-# `infrastructure.<network>.yaml::alerting.<key>` divided by 1_000_000:
+# Balance/lovelace metrics are divided by 1_000_000 in `expr` so the
+# comparison and the displayed {{ $value }} are in ADA. Each ADA threshold is
+# the canonical lovelace key in infrastructure.<network>.yaml::alerting.<key>
+# divided by 1_000_000:
 #   receiver_balance_low_lovelace        = 2_000_000  -> 2 ADA
 #   settle_overdue_lovelace              = 10_000_000 -> 10 ADA
 #   payment_hook_withdraw_ready_lovelace = 50_000_000 -> 50 ADA
@@ -37,23 +60,30 @@ groups:
         annotations:
           summary: "Oracle pair {{ $labels.symbol }} has stopped updating on-chain"
           description: >
-            Pair {{ $labels.symbol }} has not had a confirmed Cardano update
-            for {{ $value | humanizeDuration }} (alert fires after 1 hour).
-            The feeder is no longer landing price updates for this pair.
+            Pair {{ $labels.symbol }} has not had a confirmed Cardano update for
+            {{ $value | humanizeDuration }} (alert fires after 1 hour). The
+            feeder is no longer landing price updates for this pair on-chain, so
+            consumers read an increasingly stale price.
 
-            WHAT TO DO — work top to bottom until updates resume:
-            1. Look for the real error in the feeder logs:
+            WHY: an update lands on-chain only if (a) the client's Receiver has
+            ADA to pay the per-update fee, (b) the operator (Admin) wallet has
+            ADA to pay the network fee, and (c) the DIA source is still
+            publishing this symbol. This alert does not say which of the three
+            failed — work down the list.
+
+            WHAT TO DO:
+            1. Read the running feeder's logs and look for {{ $labels.symbol }}
+               together with "Insufficient", "error", or "failed":
                  cd offchain && make logs
-               (look for this {{ $labels.symbol }} and the words "Insufficient",
-               "error", or "failed").
-            2. Most common cause: the client Receiver ran out of ADA, so it
-               cannot pay the per-update fee. Top it up with 5 ADA:
-                 cd offchain && make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
-            3. Second cause: the Admin (signer) wallet ran out of ADA — see the
-               AdminWalletLow alert for how to refill it.
-            4. If both wallets have ADA and logs show no error, the DIA source
-               may have stopped publishing this symbol — check the
-               PriceAgeHigh alert.
+            2. Most common: the Receiver ran out of ADA (see ReceiverBalanceLow).
+               Top it up with 5 ADA:
+                 Docker: cd offchain && make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
+                 npm:    cd offchain/cli && npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/{{ $labels.client_id }}.json
+            3. Next: the Admin (signer) wallet may be empty — see AdminWalletLow
+               for how to replenish it by collecting accrued fees.
+            4. If both wallets have ADA and the logs show no submit error, the
+               DIA source likely stopped publishing this symbol — see
+               PriceAgeHigh.
 
       # ---------------------------------------------------------------------
       - alert: ReceiverBalanceLow
@@ -63,17 +93,24 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Receiver wallet for client {{ $labels.client_id }} is below 2 ADA"
+          summary: "Receiver prepaid balance for client {{ $labels.client_id }} is below 2 ADA"
           description: >
             The Receiver UTxO for client {{ $labels.client_id }} holds
-            {{ $value | printf "%.2f" }} ADA (alert fires below 2 ADA). The
-            Receiver pays the protocol fee on every price update; once it is
-            empty, updates for this client stop with "ReceiverInsufficientFunds".
+            {{ $value | printf "%.2f" }} ADA of spendable balance (alert fires
+            below 2 ADA).
 
-            WHAT TO DO — top the Receiver up with 5 ADA (run from offchain/):
-              make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
-            The amount is in lovelace: 5000000 = 5 ADA. The alert clears within
-            ~1 minute after the top-up tx confirms.
+            WHY: the Receiver is the client's PREPAID FEE POOL. Every price
+            update debits the protocol fee (base_fee + n*per_pair_fee) from this
+            balance. When it reaches zero, updates for this client stop with
+            "ReceiverInsufficientFunds" and OraclePairStale follows. (The accrued
+            portion already collected is separate and cannot pay new fees — only
+            this balance can.)
+
+            WHAT TO DO — top the Receiver up (amount in lovelace, 5000000 = 5 ADA):
+              Docker: cd offchain && make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
+              npm:    cd offchain/cli && npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/{{ $labels.client_id }}.json
+            The ADA comes from the operator wallet running the command. The
+            alert clears within ~1 minute after the top-up tx confirms.
 
       # ---------------------------------------------------------------------
       - alert: SettleOverdue
@@ -83,17 +120,26 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Client {{ $labels.client_id }} has over 10 ADA of unsettled fees"
+          summary: "Client {{ $labels.client_id }} has over 10 ADA of accrued fees waiting to settle"
           description: >
             The Receiver for client {{ $labels.client_id }} has accrued
-            {{ $value | printf "%.2f" }} ADA of protocol fees that have not yet
-            been moved to the PaymentHook (alert fires above 10 ADA). Accrued
-            fees should be settled periodically so DIA can withdraw them.
+            {{ $value | printf "%.2f" }} ADA of protocol fees (alert fires above
+            10 ADA).
 
-            WHAT TO DO — run a settle for this client (run from offchain/):
-              make cli CMD="settle --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
-            This drains the accrued fees from the Receiver into the global
-            PaymentHook. The alert clears after the settle tx confirms.
+            WHY: each update moves the fee from the Receiver's balance into its
+            "accrued" bucket (AccrueFee). Those fees sit in the Receiver until an
+            admin "settle" sweeps them into the global PaymentHook, from where
+            they can be withdrawn as protocol revenue. Letting accrued grow
+            unbounded delays revenue collection and keeps lovelace locked in the
+            Receiver UTxO. Settling is safe and idempotent (it never touches the
+            spendable balance).
+
+            WHAT TO DO — run a settle for this client (sweeps accrued -> PaymentHook):
+              Docker: cd offchain && make cli CMD="settle --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
+              npm:    cd offchain/cli && npm run cli -- settle --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/{{ $labels.client_id }}.json
+            After it confirms, the accrued bucket is 0 and the alert clears. To
+            then turn that into spendable revenue, withdraw from the PaymentHook
+            (see PaymentHookWithdrawReady).
 
       # ---------------------------------------------------------------------
       - alert: PaymentHookWithdrawReady
@@ -103,20 +149,28 @@ groups:
         labels:
           severity: info
         annotations:
-          summary: "PaymentHook holds over 50 ADA — ready for DIA to withdraw"
+          summary: "PaymentHook holds over 50 ADA of collected fees — ready to withdraw"
           description: >
             The global PaymentHook holds {{ $value | printf "%.2f" }} ADA of
-            settled fees (alert fires above 50 ADA). This is revenue ready to be
-            withdrawn by the DIA admin; nothing is broken.
+            settled protocol fees (alert fires above 50 ADA). Nothing is broken —
+            this is accumulated REVENUE ready to be withdrawn.
 
-            WHAT TO DO — withdraw the fees (run from offchain/). Set
-            --amount-lovelace to the amount you want, in lovelace (e.g.
-            50000000 = 50 ADA):
-              make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --protocol-state /app/state/preview/config-bootstrap.json"
-            NOTE: run this only once the most recent settle tx is fully
-            confirmed. Submitting a withdraw within a few seconds of a settle
-            can fail with "BadInputsUTxO" because the provider has not yet
-            indexed the new wallet UTxO — wait ~30 s and retry the same command.
+            WHY: settles from all clients' Receivers accumulate here. Withdrawing
+            pays the lovelace to the protocol's configured withdraw_address, which
+            in normal operation is the Admin (operator) wallet — so this is also
+            how that wallet is replenished to keep paying network fees.
+
+            WHAT TO DO — withdraw the fees. Set --amount-lovelace to how much you
+            want (in lovelace; 50000000 = 50 ADA). Check the exact available
+            amount on the Grafana "Admin wallet / PaymentHook / Receiver accrued"
+            panel or via the dia_bridge_cardano_payment_hook_accrued_lovelace
+            metric, and do not request more than is accrued:
+              Docker: cd offchain && make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --protocol-state /app/state/preview/config-bootstrap.json"
+              npm:    cd offchain/cli && npm run cli -- payment-hook:withdraw --amount-lovelace 50000000 --protocol-state ../feeder/state/preview/config-bootstrap.json
+            TIMING: run this only after the most recent settle is fully confirmed.
+            Firing a withdraw a few seconds after a settle can fail with
+            "BadInputsUTxO" because the provider has not yet indexed the new
+            wallet/Hook UTxO — wait ~30 s and retry the same command.
 
       # ---------------------------------------------------------------------
       - alert: AdminWalletLow
@@ -126,22 +180,41 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Admin (signer) wallet is below 5 ADA — updates will stall"
+          summary: "Admin (operator) wallet is below 5 ADA — all updates will stall"
           description: >
-            The Admin (signer) wallet holds {{ $value | printf "%.2f" }} ADA
-            (alert fires below 5 ADA). This is the operator wallet that PAYS THE
-            NETWORK FEE on every Cardano transaction the feeder submits. With no
-            ADA the feeder cannot submit any update for any client.
+            The Admin (signer/operator) wallet holds {{ $value | printf "%.2f" }}
+            ADA (alert fires below 5 ADA). This is the wallet that signs every
+            Cardano transaction the feeder submits and PAYS THE NETWORK FEE for
+            it. If it empties, NO update for ANY client can be submitted —
+            everything stalls.
 
-            WHAT TO DO — send ADA to the Admin wallet (there is no CLI command;
-            it is your own operator wallet, funded from outside the protocol):
-            1. Find the address to fund:
+            WHY / HOW IT IS REFILLED: this wallet's income is the protocol
+            revenue itself. Fees flow Receiver -> (settle) -> PaymentHook ->
+            (payment-hook:withdraw) -> withdraw_address, and withdraw_address is
+            this operator wallet. So the FIRST remedy is to COLLECT accrued
+            revenue, not to send ADA from outside.
+
+            WHAT TO DO:
+            1. Sweep each client's accrued fees into the PaymentHook (repeat per
+               client id you operate):
+                 Docker: cd offchain && make cli CMD="settle --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/client-a.json"
+                 npm:    cd offchain/cli && npm run cli -- settle --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/client-a.json
+            2. Wait ~30 s for the settle to be indexed, then withdraw the
+               collected fees from the PaymentHook into this wallet (set the
+               amount in lovelace to what the PaymentHook accrued metric shows):
+                 Docker: cd offchain && make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --protocol-state /app/state/preview/config-bootstrap.json"
+                 npm:    cd offchain/cli && npm run cli -- payment-hook:withdraw --amount-lovelace 50000000 --protocol-state ../feeder/state/preview/config-bootstrap.json
+            3. FALLBACK ONLY — if there is no accrued revenue to collect (the
+               PaymentHook and all Receivers are near zero) and the wallet is
+               genuinely empty, fund it from outside. Find its address:
                  grep -A2 '"wallet"' offchain/feeder/state/preview/config-bootstrap.json
-               (the "address" field, starting with addr_test1... on Preview).
-            2. On Preview: request test ADA from the Cardano faucet
-               https://docs.cardano.org/cardano-testnets/tools/faucet and paste
-               that address. On Mainnet: send real ADA from your treasury.
-            3. The alert clears within ~1 minute once the balance is above 5 ADA.
+               then on Preview request test ADA from the Cardano faucet
+               (https://docs.cardano.org/cardano-testnets/tools/faucet); on
+               Mainnet send ADA from the treasury.
+
+            NOTE: right after a restart this metric can briefly read 0 before the
+            feeder reads the real on-chain balance. If you JUST restarted, give it
+            a minute before acting — the 5-minute `for:` window usually covers it.
 
       # ---------------------------------------------------------------------
       - alert: PriceDeviationHigh
@@ -155,21 +228,23 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Price for {{ $labels.symbol }} jumped more than 5% — possible bad data"
+          summary: "Price for {{ $labels.symbol }} moved more than 5% — possible bad data"
           description: >
             The 95th-percentile price change for {{ $labels.symbol }} is
             {{ $value | printf "%.2f" }}% over the last 10 minutes (alert fires
-            above 5%). This can mean a misreported or outlier price from the DIA
-            source feed, not a feeder fault.
+            above 5%). This is a DATA-QUALITY signal, not a feeder fault — no
+            wallet top-up fixes it. It can mean a misreported / outlier price from
+            the DIA source, or a genuinely fast market move.
 
-            WHAT TO DO — this is a DATA-quality alert, not something a wallet
-            top-up fixes:
-            1. Compare {{ $labels.symbol }} against a public reference price.
-            2. If the on-chain value is clearly wrong, stop publishing this pair
-               by removing it from the routing config and restarting the feeder
+            WHAT TO DO:
+            1. Compare {{ $labels.symbol }} against a public reference (CoinGecko,
+               Binance, etc.).
+            2. If the on-chain value is clearly wrong, stop publishing this pair:
+               remove it from the active router YAML under
+               offchain/feeder/config/ and restart the feeder
                (cd offchain && make restart), then raise it with the DIA data team.
-            3. If the jump was a real market move, no action is needed; the
-               alert clears on its own.
+            3. If it was a real market move, no action is needed; the alert
+               clears on its own once volatility subsides.
 
       # ---------------------------------------------------------------------
       - alert: PriceAgeHigh
@@ -183,19 +258,21 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "DIA source data for {{ $labels.symbol }} is going stale"
+          summary: "DIA source data for {{ $labels.symbol }} is going stale (upstream)"
           description: >
             The 95th-percentile age of incoming DIA price data for
             {{ $labels.symbol }} is {{ $value | humanizeDuration }} (alert fires
-            above 10 minutes). The feeder is healthy but the UPSTREAM DIA source
-            is publishing old prices for this symbol.
+            above 10 minutes). The feeder itself is healthy; the UPSTREAM DIA
+            source is delivering old prices for this symbol (or the source
+            WebSocket connection is degraded).
 
-            WHAT TO DO — this is upstream, not a feeder fix:
-            1. Confirm the feeder is still connected to the DIA source:
+            WHAT TO DO:
+            1. Confirm the feeder is still connected to the DIA source and watch
+               for WebSocket reconnect messages near {{ $labels.symbol }}:
                  cd offchain && make logs
-               (look for WebSocket reconnect messages near {{ $labels.symbol }}).
-            2. If the feeder is connected but the data is still old, the DIA
-               source feed is lagging — raise it with the DIA data team.
+            2. If the connection is healthy but the data stays old, the source
+               feed is lagging on DIA's side — raise it with the DIA data team.
+               There is no operator-side fix; do NOT top up wallets for this.
 
       # ---------------------------------------------------------------------
       - alert: ReorgRateHigh
@@ -210,13 +287,16 @@ groups:
             {{ $value }} confirmed transactions for {{ $labels.symbol }} (client
             {{ $labels.client_id }}) were rolled back by Cardano chain
             reorganisations in the last hour (alert fires above 3). The feeder
-            automatically re-submits dropped updates, so this is usually
-            self-healing, but a high rate points to provider lag.
+            re-submits dropped updates automatically, so this is usually
+            self-healing; a sustained high rate points to a lagging chain
+            provider (Blockfrost/Koios).
 
             WHAT TO DO:
-            1. Check the "Scanner block lag" panel in Grafana — a large lag
-               means the provider (Blockfrost/Koios) is behind the chain tip.
-            2. Check the feeder logs for repeated re-submissions:
+            1. Open Grafana (http://localhost:3000) and check the "Scanner block
+               lag" panel — a large lag means the provider is behind the tip.
+            2. Watch the running feeder for repeated re-submissions:
                  cd offchain && make logs
-            3. If the rate stays high, consider switching the Cardano provider
-               (CARDANO_PROVIDER in .env) and restarting (make restart).
+            3. If the rate stays high, switch the chain provider: set
+               CARDANO_PROVIDER in offchain/feeder/.env (e.g. Blockfrost <-> Koios)
+               and restart:
+                 cd offchain && make restart

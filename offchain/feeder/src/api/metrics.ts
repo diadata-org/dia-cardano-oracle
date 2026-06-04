@@ -230,8 +230,23 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     };
   }
 
-  function gauge(name: string, help: string, labelNames: string[] = []): FeedGauge {
+  // `lazy` is for label-less balance gauges (admin wallet, payment-hook
+  // accrued). prom-client initialises a label-less gauge to 0 at creation, so
+  // a "< threshold" alert (e.g. AdminWalletLow) would fire spuriously on every
+  // restart until the first confirmed tx reports the real balance. Removing the
+  // default series leaves the metric ABSENT until set() reports a real value,
+  // so the alert only evaluates against real data. Labelled gauges don't need
+  // this — prom-client emits no series for them until a label set is written.
+  function gauge(
+    name: string,
+    help: string,
+    labelNames: string[] = [],
+    lazy = false,
+  ): FeedGauge {
     const metric = new Gauge({ name: `${namespace}_${name}`, help, labelNames, registers: [registry] });
+    if (lazy && labelNames.length === 0) {
+      metric.remove();
+    }
     return {
       set: (labels, value) => metric.set(labels, value),
     };
@@ -391,11 +406,13 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "cardano_payment_hook_accrued_lovelace",
       "PaymentHook UTxO `accruedFeesLovelace` — fees collected from receivers and pending DIA withdrawal. When this exceeds `alerting.payment_hook_withdraw_ready_lovelace` DIA can run `payment-hook:withdraw`.",
       [],
+      true,
     ),
     cardanoAdminWalletLovelace: gauge(
       "cardano_admin_wallet_lovelace",
-      "Total lovelace held by the admin/signer wallet that pays Cardano tx fees. Below `alerting.admin_wallet_low_lovelace` the operator must refill the wallet or oracle updates will stall.",
+      "Total lovelace held by the admin/signer wallet that pays Cardano tx fees. Below `alerting.admin_wallet_low_lovelace` the operator must refill the wallet or oracle updates will stall. Absent until the first confirmed tx reports a real balance (avoids a spurious low-balance alert on restart).",
       [],
+      true,
     ),
     cardanoReceiverTopupWarnings: counter(
       "cardano_receiver_topup_warnings_total",
@@ -532,6 +549,9 @@ type PromClientLike = {
     registers: unknown[];
   }) => {
     set(labels: Record<string, string>, value: number): void;
+    // Drop a series so the metric stays absent until the next set(). Used to
+    // suppress the default 0 that label-less gauges report at creation.
+    remove(...values: string[]): void;
   };
   Histogram: new (opts: {
     name: string;
