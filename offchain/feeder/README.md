@@ -766,7 +766,7 @@ Spectra itself). The table below is the canonical reference:
 
 | Concept | Spectra | This feeder | Why |
 | --- | --- | --- | --- |
-| Worker pool (`worker_pool.max_workers`, `task_queue_size`) | Per-router pool with N concurrent submission workers. | **Not implemented**. We use a per-client "lane" model: one serial queue per `(client_state_path, protocol_state_path)`. Cross-lane parallelism comes from multiple clients (different Receivers), not multiple workers within a lane. | Cardano's EUTxO model serialises spends of the same Receiver UTxO. Parallel workers on one lane would conflict. The keys are intentionally absent from our YAMLs. |
+| Worker pool (`worker_pool.max_workers`, `task_queue_size`, `task_timeout`) | Per-router pool with N concurrent submission workers. | **Wired** via `UpdateWorkerPoolManager`: each router gets its own pool with `max_workers` workers and a `task_queue_size`-deep queue. The workers do **not** submit to Cardano directly — they drain into the shared coalescer, which serialises submissions per lane = `(client_state_path, protocol_state_path)`. So the pool raises ingest throughput from the daemon's event loop without ever breaking lane safety, and a saturated router cannot starve the others. Cross-lane parallelism still comes from multiple clients (different Receivers). | Cardano's EUTxO model serialises spends of the same Receiver UTxO, so on-chain writes stay serial per lane even though the pool itself is concurrent. |
 | In-flight lock timeout (`worker_pool.inflight_timeout_ms`) | Not present. | **Required**. Cardano-specific because the lane lock is held while a tx is in-flight. Default 15 min. | Reflects the wall-clock ceiling on Cardano submit+confirm. |
 | Parallel event processor (`event_processor.enable_parallel_mode`, `parallel_*`) | Active — parallel enrichment + gas-est pipeline. | **Active** — wired in parallel mode when `enable_parallel_mode: true`. Sequential (default) when the key is absent or false. | Sequential mode is sufficient for current throughput; parallel mode is available for high-volume deployments. |
 | Block scanner gap recovery (`block_scanner.backward_sync`, `max_block_gap`, `head_tracker_interval`, `gap_detection_interval`) | Active — backfill in 5000-block chunks when the gap exceeds `max_block_gap`. | **Active**: when `backward_sync: true`, the scanner switches to 5000-block chunks (vs `block_range` default 500) and skips `scan_interval` between chunks until caught up. Emits `dia_bridge_scanner_backfill_*` counters. | Chain-agnostic; reuses Spectra's design. |
@@ -780,9 +780,11 @@ Spectra itself). The table below is the canonical reference:
 If you are porting a deployment FROM Spectra to this feeder:
 
 - Drop `event_processor.{batch_size, validation_timeout}`,
-  `worker_pool.{max_workers, task_queue_size}`,
   `health_check.{timeout, max_queue_size}`, and the `recovery` block —
   they are silently ignored.
+- Keep `worker_pool.{max_workers, task_queue_size, task_timeout}` — they
+  are read and wired here (per-router update pools draining into the
+  serial per-lane coalescer).
 - Add `cardano.confirmation_depth`, the `alerting:` block, and
   `worker_pool.inflight_timeout_ms` — all required by our validator.
 - Per Cardano destination, optionally add `cron: true` +
