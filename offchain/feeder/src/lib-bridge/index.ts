@@ -606,8 +606,7 @@ export function createRealOracleIntentBridge(
       await waitForWalletSettlement({
         wallet,
         previousUtxos: walletUtxos,
-        spentUtxos: [],
-        requireChangeWhenNoSpentUtxos: true,
+        transaction: txSignBuilder,
         label: "oracle update",
       });
       await Promise.all([
@@ -1058,8 +1057,7 @@ export function createRealOracleIntentBridge(
       await waitForWalletSettlement({
         wallet,
         previousUtxos: walletUtxos,
-        spentUtxos: [],
-        requireChangeWhenNoSpentUtxos: true,
+        transaction: txSignBuilder,
         label: "oracle update batch",
       });
       await Promise.all([
