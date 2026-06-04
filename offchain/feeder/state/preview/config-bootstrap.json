@@ -57,9 +57,9 @@
   },
   "paymentHookState": {
     "withdrawAddress": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
-    "accruedFeesLovelace": "2450000",
-    "lifetimeCollectedLovelace": "12450000",
-    "lifetimeWithdrawnLovelace": "10000000",
+    "accruedFeesLovelace": "2950000",
+    "lifetimeCollectedLovelace": "364450000",
+    "lifetimeWithdrawnLovelace": "361500000",
     "minUtxoLovelace": "5000000"
   },
   "compiledScripts": {
@@ -103,7 +103,7 @@
   },
   "datum": {
     "configCbor": "d8799f9f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dff9f582103aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807582103c7d448ea95104a628945f43745f177f1e9895c6d4c8e43614d7b1c0395469b2dffd8799f4a444941204f7261636c6543312e3019274254f8c614a483a0427a13512f52ac72a576678be317ff1a000927c01a0003d090d8799fd8799f581c0bab2632d30e82a227c552f2ef189277839ac4b8175b833cfdfe4160504449415f5041594d454e545f484f4f4bffffd8799fd87a9f581c990107bd61178be5440d4cecf0bd21c20cd8f046897c1ef4e4b01aa4ffff19012c1a004c4b40ff",
-    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a002562501a00bdf8d01a009896801a004c4b40ff"
+    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a002d03701a15b910d01a158c0d601a004c4b40ff"
   },
   "transactions": [
     {
@@ -149,6 +149,31 @@
     {
       "step": "preview:config:update",
       "submittedTxHash": "5f2d52183c6c56bd90259dfefe46427b1af8c844fc6580c0170743688001d1dc",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "f8c1171a5c4fa7e74a4cd6f316ab00fdbdf17ab0f85e5d9919f42e751f1829de",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:withdraw",
+      "submittedTxHash": "cd81c3262168f2be08fbe8a9a7d270c2dba3773d7bb33ab38e15b504de38fd6a",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:withdraw",
+      "submittedTxHash": "ab1775770a7977875dd5a997115586717b5f58fa3271a73ff6f5e289a30cd05a",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "164ad640676c1b6dd6cbca3de1f21a36153388239fa13ec90df416cbad8563a8",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:withdraw",
+      "submittedTxHash": "9190345a1ad56ff0e63e6be41db44b729980a2742688cf13783a1df398613642",
       "confirmed": true
     }
   ]

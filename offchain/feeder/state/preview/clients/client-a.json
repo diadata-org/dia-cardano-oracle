@@ -39,7 +39,7 @@
     }
   },
   "datum": {
-    "receiverCbor": "d8799f1a028942f0001a004c4b40ff"
+    "receiverCbor": "d8799f1a1e421fd01a02dae5601a004c4b40ff"
   },
   "wallet": {
     "source": "seed",
@@ -57,8 +57,8 @@
     "receiverValidatorHash": "e6764dc87450b544fe365e5e74536258641488d33a97dbb2db5a3f1d",
     "receiverValidatorAddress": "addr_test1wrn8vnwgw3gt2387xe09uaznvfvxg9yg6vaf0kajmddr78g5wsl3w",
     "receiverState": {
-      "balanceLovelace": "42550000",
-      "accruedToHookLovelace": "0",
+      "balanceLovelace": "507650000",
+      "accruedToHookLovelace": "47900000",
       "minUtxoLovelace": "5000000"
     }
   },
@@ -96,6 +96,46 @@
     {
       "step": "preview:receiver:withdraw",
       "submittedTxHash": "905d5bddd20f9c67e8cb572509106c8377457d0c4d69d79393a98baa663b2e59",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:top-up",
+      "submittedTxHash": "ac82baf049d3d920d4b96d0b0d1ffaae44541ef959e9787feed85ee862750cfc",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "f8c1171a5c4fa7e74a4cd6f316ab00fdbdf17ab0f85e5d9919f42e751f1829de",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:top-up",
+      "submittedTxHash": "c4ba63687e116405a68d30d9c663847bc24223514b1f83ab36997a31b37c1149",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:top-up",
+      "submittedTxHash": "c20f90c004bd40ca1bd61fa37727957099ce3fb2cd7ad3efc87abf3e213bbd2d",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "164ad640676c1b6dd6cbca3de1f21a36153388239fa13ec90df416cbad8563a8",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:top-up",
+      "submittedTxHash": "8cb8810633fcb94129d70e9c6de7a868ea9c07f6b2434a2a26edb4bb38a769e6",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:top-up",
+      "submittedTxHash": "c65221b6dd7942bbaddded6af826e8a16d32b4d585d0c279e7a1ee4e31658a77",
+      "confirmed": true
+    },
+    {
+      "step": "preview:receiver:top-up",
+      "submittedTxHash": "37a0addbd2acf4bad017410b5f56bee08abd0473c0497373428910df8e6ddecf",
       "confirmed": true
     }
   ]
