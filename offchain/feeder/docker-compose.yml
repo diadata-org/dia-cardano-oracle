@@ -17,6 +17,10 @@
 services:
   feeder-sqlite:
     profiles: ["sqlite"]
+    # tini as PID 1 forwards SIGINT/SIGTERM to node. Without it node runs as
+    # PID 1, where the kernel ignores default signal dispositions, so Ctrl+C
+    # and `docker compose stop` do nothing.
+    init: true
     build:
       context: ..
       dockerfile: feeder/Dockerfile
@@ -44,6 +48,7 @@ services:
 
   feeder-postgres:
     profiles: ["postgres"]
+    init: true
     build:
       context: ..
       dockerfile: feeder/Dockerfile
@@ -91,6 +96,8 @@ services:
   #   make cli CMD="<command>"
   cli:
     profiles: ["cli"]
+    # tini as PID 1 so Ctrl+C (SIGINT) actually aborts the CLI command.
+    init: true
     build:
       context: ..
       dockerfile: feeder/Dockerfile
