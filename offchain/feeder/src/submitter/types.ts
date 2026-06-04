@@ -87,6 +87,7 @@ export type SubmitResultOk = {
     receiverAccruedLovelace?: bigint;
     paymentHookAccruedLovelace?: bigint;
     adminWalletLovelace?: bigint;
+    receiverAddress?: string;
   };
 };
 

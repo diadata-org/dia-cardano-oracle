@@ -61,7 +61,7 @@ describe("createMetrics", () => {
     metrics.scannerBackfillBlocks.inc({ chain_id: "10050" }, 100);
     metrics.scannerBackfillChunks.inc({ chain_id: "10050" });
     metrics.cardanoOracleLastConfirmedTimestampSeconds.set({ symbol: "BTC/USD", client_id: "c1" }, 1234567890);
-    metrics.cardanoReceiverBalanceLovelace.set({ client_id: "c1" }, 5000000000);
+    metrics.cardanoReceiverBalanceLovelace.set({ client_id: "c1", receiver_address: "addr_test1wrn8test" }, 5000000000);
     metrics.cardanoReceiverAccruedLovelace.set({ client_id: "c1" }, 100000);
     metrics.cardanoPaymentHookAccruedLovelace.set({}, 50000000);
     metrics.cardanoAdminWalletLovelace.set({}, 10000000000);

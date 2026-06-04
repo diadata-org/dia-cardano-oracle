@@ -788,7 +788,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         const postState = result.postState;
         if (postState?.receiverBalanceLovelace !== undefined) {
           metrics.cardanoReceiverBalanceLovelace.set(
-            { client_id: clientId },
+            { client_id: clientId, receiver_address: postState.receiverAddress ?? "" },
             Number(postState.receiverBalanceLovelace),
           );
           if (postState.receiverBalanceLovelace < receiverBalanceLowLovelace) {
@@ -1079,7 +1079,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         const b = await bridge.snapshotBalances(dest);
         const clientId = b.clientId ?? dest.clientStatePath;
         if (b.receiverBalanceLovelace !== undefined) {
-          metrics.cardanoReceiverBalanceLovelace.set({ client_id: clientId }, Number(b.receiverBalanceLovelace));
+          metrics.cardanoReceiverBalanceLovelace.set(
+            { client_id: clientId, receiver_address: b.receiverAddress ?? "" },
+            Number(b.receiverBalanceLovelace),
+          );
         }
         if (b.receiverAccruedLovelace !== undefined) {
           metrics.cardanoReceiverAccruedLovelace.set({ client_id: clientId }, Number(b.receiverAccruedLovelace));

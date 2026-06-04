@@ -78,6 +78,9 @@ export type PostConfirmChainState = {
   receiverAccruedLovelace?: bigint;
   paymentHookAccruedLovelace?: bigint;
   adminWalletLovelace?: bigint;
+  /** The client's on-chain Receiver script address — surfaced as a metric
+   *  label so the ReceiverBalanceLow alert can name the exact Receiver. */
+  receiverAddress?: string;
 };
 
 /** Structured result returned by a successful oracle-update submission. */
@@ -1257,13 +1260,19 @@ async function capturePostConfirmState(args: {
   receiverAccruedLovelace?: bigint;
   paymentHookAccruedLovelace?: bigint;
   adminWalletLovelace?: bigint;
+  receiverAddress?: string;
 }> {
   const result: {
     receiverBalanceLovelace?: bigint;
     receiverAccruedLovelace?: bigint;
     paymentHookAccruedLovelace?: bigint;
     adminWalletLovelace?: bigint;
-  } = {};
+    receiverAddress?: string;
+  } = {
+    // Known from the inputs (not a chain query) — always available so the
+    // ReceiverBalanceLow alert can always name the client's Receiver address.
+    receiverAddress: args.receiverValidatorAddress,
+  };
 
   // 1. Receiver datum — exposes balanceLovelace + accruedToHookLovelace.
   try {

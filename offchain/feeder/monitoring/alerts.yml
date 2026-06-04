@@ -95,22 +95,34 @@ groups:
         annotations:
           summary: "Receiver prepaid balance for client {{ $labels.client_id }} is below 2 ADA"
           description: >
-            The Receiver UTxO for client {{ $labels.client_id }} holds
+            The Receiver for client {{ $labels.client_id }} holds
             {{ $value | printf "%.2f" }} ADA of spendable balance (alert fires
             below 2 ADA).
 
-            WHY: the Receiver is the client's PREPAID FEE POOL. Every price
-            update debits the protocol fee (base_fee + n*per_pair_fee) from this
-            balance. When it reaches zero, updates for this client stop with
-            "ReceiverInsufficientFunds" and OraclePairStale follows. (The accrued
-            portion already collected is separate and cannot pay new fees — only
-            this balance can.)
+            Client Receiver address (on Preview, view on a testnet explorer):
+              {{ $labels.receiver_address }}
 
-            WHAT TO DO — top the Receiver up (amount in lovelace, 5000000 = 5 ADA):
+            WHY / WHOSE MONEY: the Receiver is THE CLIENT'S PREPAID FEE POOL —
+            the same model as the EVM side. The client prepays ADA into it and
+            consumes prices off-chain; this balance pays the protocol fee
+            (base_fee + n*per_pair_fee) on every update. When it hits zero,
+            updates for this client stop with "ReceiverInsufficientFunds" and
+            OraclePairStale follows. (The "accrued" bucket already collected is
+            separate and cannot pay new fees — only this spendable balance can.)
+            So topping it up is the CLIENT'S responsibility; the operator can do
+            it on the client's behalf and bill it, but the ADA is the client's.
+
+            HOW TO FUND IT — IMPORTANT: do NOT send ADA directly to the Receiver
+            address above. It is a script UTxO; a plain transfer there does
+            nothing useful and can be stranded. The ONLY correct way to add
+            funds is the `receiver:top-up` transaction, which spends and
+            re-creates the Receiver with the higher balance. The ADA is taken
+            from the wallet that RUNS the command (the client runs it from their
+            own wallet, or the operator runs it from the operator wallet).
+            Amount is in lovelace (5000000 = 5 ADA):
               Docker: cd offchain && make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
               npm:    cd offchain/cli && npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/{{ $labels.client_id }}.json
-            The ADA comes from the operator wallet running the command. The
-            alert clears within ~1 minute after the top-up tx confirms.
+            The alert clears within ~1 minute after the top-up tx confirms.
 
       # ---------------------------------------------------------------------
       - alert: SettleOverdue
