@@ -72,6 +72,7 @@ describe("createCardanoWriteClient", () => {
     const transactions: TransactionLogEntry[] = [];
 
     const bridge: OracleIntentBridge = {
+      async snapshotBalances() { return {}; },
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-single");
         return {
@@ -133,6 +134,7 @@ describe("createCardanoWriteClient", () => {
     const transactions: TransactionLogEntry[] = [];
 
     const bridge: OracleIntentBridge = {
+      async snapshotBalances() { return {}; },
       async submitOracleUpdate() {
         throw new Error("unexpected single call");
       },
@@ -193,6 +195,7 @@ describe("createCardanoWriteClient", () => {
     const transactions: TransactionLogEntry[] = [];
 
     const bridge: OracleIntentBridge = {
+      async snapshotBalances() { return {}; },
       async submitOracleUpdate() {
         throw new Error("unexpected single call");
       },
@@ -232,6 +235,7 @@ describe("createCardanoWriteClient", () => {
 
   it("populates feePaidLovelace on success when bridge returns it", async () => {
     const bridge: OracleIntentBridge = {
+      async snapshotBalances() { return {}; },
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-fee");
         return {
@@ -261,6 +265,7 @@ describe("createCardanoWriteClient", () => {
 
   it("leaves feePaidLovelace undefined when bridge omits it", async () => {
     const bridge: OracleIntentBridge = {
+      async snapshotBalances() { return {}; },
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-nofee");
         return {
@@ -293,6 +298,7 @@ describe("createCardanoWriteClient", () => {
     let batchCalls = 0;
 
     const bridge: OracleIntentBridge = {
+      async snapshotBalances() { return {}; },
       async submitOracleUpdate(params) {
         singleCalls++;
         emitStandardSteps(params.onStep, "tx-singleton");

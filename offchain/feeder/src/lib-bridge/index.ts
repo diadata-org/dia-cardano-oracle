@@ -125,6 +125,17 @@ export type OracleIntentBridge = {
   submitOracleUpdateBatch(
     params: OracleIntentBatchSubmitParams,
   ): Promise<OracleBatchUpdateResult>;
+  /**
+   * Read the four operational balances (receiver balance + accrued, payment
+   * hook accrued, admin wallet) straight from chain WITHOUT submitting a tx.
+   * The daemon polls this on a timer so the Prometheus gauges stay current
+   * even when no oracle update is flowing — a balance dashboard must never
+   * depend on update traffic. Read-only; never signs or submits.
+   */
+  snapshotBalances(params: {
+    clientStatePath: string;
+    protocolStatePath: string;
+  }): Promise<PostConfirmChainState & { clientId?: string }>;
 };
 
 // ---------------------------------------------------------------------------
@@ -1127,6 +1138,72 @@ export function createRealOracleIntentBridge(
           isCreate: entry.isCreate,
         })),
         postState,
+      };
+    },
+
+    async snapshotBalances(params: {
+      clientStatePath: string;
+      protocolStatePath: string;
+    }): Promise<PostConfirmChainState & { clientId?: string }> {
+      // Read-only balance probe used by the daemon's periodic refresh. Reuses
+      // the same on-chain reads as the post-confirm capture, but sets up Lucid
+      // with no signer override and never builds or submits a tx.
+      const [
+        { getCliConfig },
+        { makeConfiguredLucidWithConfig, selectConfiguredWalletWithConfig },
+        { readClientContext },
+        {
+          findSingleUtxoAtUnit,
+          decodeReceiverDatum,
+          decodePaymentHookDatum,
+          requireInlineDatum,
+        },
+      ] = await Promise.all([
+        import(cliPath("core/config.js")),
+        import(cliPath("core/lucid.js")),
+        import(cliPath("core/artifact-context.js")),
+        import(cliPath("core/chain-helpers.js")),
+      ]);
+
+      const { client, protocol } = await readClientContext({
+        clientStatePath: path.resolve(params.clientStatePath),
+        protocolStatePath: path.resolve(params.protocolStatePath),
+      });
+
+      const receiver = (client as Record<string, unknown>).receiver as
+        | Record<string, unknown>
+        | undefined;
+      const protocolScripts = (protocol as Record<string, unknown>).scripts as
+        | Record<string, unknown>
+        | undefined;
+      if (!receiver || !protocolScripts) {
+        throw new Error(
+          `Bridge.snapshotBalances: state missing receiver/scripts (client=${params.clientStatePath})`,
+        );
+      }
+
+      const lucid = await makeConfiguredLucidWithConfig(getCliConfig());
+      await selectConfiguredWalletWithConfig(lucid, getCliConfig());
+      const wallet = lucid.wallet();
+
+      const balances = await capturePostConfirmState({
+        lucid,
+        wallet,
+        receiverValidatorAddress: receiver.receiverValidatorAddress as string,
+        receiverUnit: receiver.receiverUnit as string,
+        paymentHookValidatorAddress: protocolScripts.paymentHookValidatorAddress as string,
+        paymentHookUnit: protocolScripts.paymentHookUnit as string,
+        helpers: {
+          findSingleUtxoAtUnit,
+          decodeReceiverDatum,
+          decodePaymentHookDatum,
+          requireInlineDatum,
+        },
+        log,
+      });
+      return {
+        ...balances,
+        clientId: (client as Record<string, unknown>).clientId as string | undefined,
       };
     },
   };

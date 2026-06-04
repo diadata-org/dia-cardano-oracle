@@ -1049,6 +1049,70 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }, { once: true });
 
   // ------------------------------------------------------------------
+  // 9.4d. Balance refresh — keep the wallet/contract balance gauges current
+  //       INDEPENDENTLY of oracle-update traffic. A balance dashboard must
+  //       show the real numbers even when no update is flowing (e.g. the
+  //       Receiver is empty), so we poll chain on the cron cadence rather
+  //       than only at post-confirmation. Read-only; never submits.
+  // ------------------------------------------------------------------
+  const balanceRefreshDests: Array<{ clientStatePath: string; protocolStatePath: string }> = [];
+  {
+    const seenDest = new Set<string>();
+    for (const router of Object.values(config.routers)) {
+      if (!router.enabled) continue;
+      for (const dest of router.destinations) {
+        if (!dest.cardano) continue;
+        const key = `${dest.cardano.client_state_path}::${dest.cardano.protocol_state_path}`;
+        if (seenDest.has(key)) continue;
+        seenDest.add(key);
+        balanceRefreshDests.push({
+          clientStatePath: dest.cardano.client_state_path,
+          protocolStatePath: dest.cardano.protocol_state_path,
+        });
+      }
+    }
+  }
+
+  async function refreshBalanceGauges(): Promise<void> {
+    for (const dest of balanceRefreshDests) {
+      try {
+        const b = await bridge.snapshotBalances(dest);
+        const clientId = b.clientId ?? dest.clientStatePath;
+        if (b.receiverBalanceLovelace !== undefined) {
+          metrics.cardanoReceiverBalanceLovelace.set({ client_id: clientId }, Number(b.receiverBalanceLovelace));
+        }
+        if (b.receiverAccruedLovelace !== undefined) {
+          metrics.cardanoReceiverAccruedLovelace.set({ client_id: clientId }, Number(b.receiverAccruedLovelace));
+        }
+        if (b.paymentHookAccruedLovelace !== undefined) {
+          metrics.cardanoPaymentHookAccruedLovelace.set({}, Number(b.paymentHookAccruedLovelace));
+        }
+        if (b.adminWalletLovelace !== undefined) {
+          metrics.cardanoAdminWalletLovelace.set({}, Number(b.adminWalletLovelace));
+        }
+      } catch (err) {
+        report(`balance-refresh: ${dest.clientStatePath} failed: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  let balanceRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  if (!dryRun && balanceRefreshDests.length > 0) {
+    // Seed once at startup so the gauges populate before the first scrape,
+    // then refresh on the cron cadence (cron_service.tick_interval).
+    void refreshBalanceGauges();
+    balanceRefreshTimer = setInterval(() => {
+      void refreshBalanceGauges();
+    }, cronTickIntervalMs);
+    signal?.addEventListener("abort", () => {
+      if (balanceRefreshTimer) {
+        clearInterval(balanceRefreshTimer);
+        balanceRefreshTimer = null;
+      }
+    }, { once: true });
+  }
+
+  // ------------------------------------------------------------------
   // 9.5. Startup reconciliation — sync local pair-state files with the
   //      live on-chain pair UTxOs for every Cardano destination. Runs
   //      once before the scan pipeline starts. Failures are logged as
@@ -1657,6 +1721,10 @@ function makeDryRunBridge(report: (line: string) => void): OracleIntentBridge {
           isCreate: false,
         })),
       };
+    },
+    async snapshotBalances() {
+      // Dry-run never touches chain; report no balances (gauges stay absent).
+      return {};
     },
   };
 }

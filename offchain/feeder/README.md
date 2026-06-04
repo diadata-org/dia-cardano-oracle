@@ -676,10 +676,16 @@ in the oracle update flow:
 | `dia_bridge_cardano_payment_hook_accrued_lovelace` | Singleton PaymentHook `accruedFeesLovelace` (DIA-managed) | Grows on each `settle`. DIA withdraws via `payment-hook:withdraw`. |
 | `dia_bridge_cardano_admin_wallet_lovelace` | Operator/signer wallet (off-chain) | Pays Cardano tx fees for every oracle update. Receives PaymentHook withdrawals. |
 
-All four are emitted post-confirm by the bridge — the feeder re-queries
-chain state right after `tx_confirmed` so the gauges reflect actual UTxO
-contents. A transient provider failure leaves an individual gauge
-unchanged (no misleading 0).
+All four are refreshed two ways: (1) post-confirm, right after each
+`tx_confirmed`, and (2) on a periodic **balance-refresh poll** that runs
+independently of oracle-update traffic (read-only, on the
+`cron_service.tick_interval` cadence, default 30 s). The poll exists so the
+dashboard shows real balances even when NO update is flowing — e.g. when a
+Receiver is empty and updates are stalled, you can still see the Admin
+wallet and PaymentHook balances. A transient provider failure leaves an
+individual gauge unchanged (no misleading 0); the label-less gauges
+(`admin_wallet`, `payment_hook_accrued`) stay absent until the first real
+reading rather than reporting a default 0.
 
 ## Architecture
 
