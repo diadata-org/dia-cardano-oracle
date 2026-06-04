@@ -188,9 +188,8 @@ export async function receiverUpdateMinUtxo(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "receiver update-min-utxo",
-      requireChangeWhenNoSpentUtxos: true,
     });
 
     await waitForUnitUtxoReplacement({

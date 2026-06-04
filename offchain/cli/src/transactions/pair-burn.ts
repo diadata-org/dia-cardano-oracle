@@ -139,9 +139,8 @@ export async function burnSpecificPairUtxo(args: {
   await waitForWalletSettlement({
     wallet,
     previousUtxos: walletUtxos,
-    spentUtxos: [pairUtxo],
+    transaction: txSignBuilder,
     label,
-    requireChangeWhenNoSpentUtxos: false,
   });
 
   await waitForOutRefGone({ lucid, outRef: pairUtxo, label: "pair" });

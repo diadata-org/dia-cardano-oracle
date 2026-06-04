@@ -187,9 +187,8 @@ export async function pairUpdateMinUtxo(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "pair update-min-utxo",
-      requireChangeWhenNoSpentUtxos: true,
     });
 
     await waitForUnitUtxoReplacement({

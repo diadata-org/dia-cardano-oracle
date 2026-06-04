@@ -153,9 +153,8 @@ export async function receiverTopUp(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "receiver top-up",
-      requireChangeWhenNoSpentUtxos: true,
     });
   }
 

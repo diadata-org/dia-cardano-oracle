@@ -21,7 +21,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Constr, getAddressDetails, type UTxO } from "@lucid-evolution/lucid";
+import { Constr, getAddressDetails, type TxSignBuilder, type UTxO } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
 import { type DiaOracleIntent } from "./dia-intent.js";
@@ -434,43 +434,55 @@ export async function waitForOutRefGone(args: {
 }
 
 /**
- * "wait 2" — wait until the wallet's UTxO set reflects the submitted tx:
- * the spent inputs are no longer visible AND the wallet snapshot has
- * changed since `previousUtxos`. Used by every non-deploy and deploy tx
- * after `awaitTxConfirmation` and before any script-side wait.
+ * "wait 2" — wait until the provider no longer lists the wallet inputs the
+ * submitted tx actually spent. Used by every non-deploy and deploy tx after
+ * `awaitTxConfirmation` and before any script-side wait.
+ *
+ * The set of inputs to wait on is read FROM THE TRANSACTION ITSELF, not from
+ * a caller-supplied list. Lucid's `.complete()` auto-selects wallet UTxOs for
+ * the fee, collateral, and change; the caller does not know which ones it
+ * picked. We therefore intersect the tx's real inputs with `previousUtxos`
+ * (the wallet snapshot taken before the tx) to recover exactly the wallet
+ * UTxOs this tx consumed, then block until the provider stops returning all
+ * of them. Because every tx pays its fee from the wallet, this set is never
+ * empty — there is always at least one input to wait on, so the wait can't be
+ * silently skipped.
+ *
+ * Why this matters: the provider (Blockfrost/Koios) can surface the new
+ * change UTxO while still listing a just-spent input for a few more seconds.
+ * Returning before the spent inputs disappear lets the NEXT command's
+ * `.complete()` re-select an already-spent UTxO, which the node rejects with
+ * `BadInputsUTxO` / `NoCollateralInputs`. Waiting on the spent inputs
+ * specifically (not merely "the snapshot changed") closes that window.
  *
  * Default ceiling: 480 attempts × 1.5 s ≈ 12 min. The wallet UTxO set
  * typically settles within 30 s; the 12-min ceiling guards against slow
  * provider indexing without blocking indefinitely.
- *
- * Behavior knobs:
- *  - `spentUtxos: []` + `requireChangeWhenNoSpentUtxos: true` → wait
- *    purely on snapshot change (Lucid picked the inputs; we don't know
- *    which). This is the right shape when no explicit `.collectFrom` was
- *    used.
- *  - `spentUtxos: [...]` → also wait until each named outRef has left the
- *    wallet snapshot. Use when we explicitly collected from a known
- *    wallet UTxO (bootstrap seed inputs).
- *  - `spentUtxos: []` + `requireChangeWhenNoSpentUtxos: false` (default)
- *    → short-circuits and returns the current snapshot immediately. Only
- *    legitimate for the rare case where nothing in the wallet should
- *    change.
  */
 export async function waitForWalletSettlement(args: {
   wallet: WalletUtxoReader;
   previousUtxos: UTxO[];
-  spentUtxos: UTxO[];
+  transaction: TxSignBuilder;
   label: string;
   maxAttempts?: number;
   delayMs?: number;
-  requireChangeWhenNoSpentUtxos?: boolean;
 }): Promise<UTxO[]> {
-  const spentOutRefs = args.spentUtxos.map((utxo) => outRefKey(utxo));
-  if (spentOutRefs.length === 0 && !args.requireChangeWhenNoSpentUtxos) {
-    return args.wallet.getUtxos();
+  // Recover the wallet UTxOs this tx actually spent: its real inputs that
+  // were present in the wallet before the tx. Script and reference inputs
+  // live at other addresses the wallet never lists, so the intersection with
+  // `previousUtxos` naturally drops them.
+  const previousSnapshot = utxoSnapshot(args.previousUtxos);
+  const txBody = args.transaction.toTransaction().body();
+  const txInputs = txBody.inputs();
+  const spentWalletOutRefs: string[] = [];
+  for (let index = 0; index < Number(txInputs.len()); index += 1) {
+    const input = txInputs.get(index);
+    const outRef = `${input.transaction_id().to_hex()}#${Number(input.index())}`;
+    if (previousSnapshot.has(outRef)) {
+      spentWalletOutRefs.push(outRef);
+    }
   }
 
-  const previousSnapshot = utxoSnapshot(args.previousUtxos);
   const maxAttempts = args.maxAttempts ?? 480;
   const delayMs = args.delayMs ?? 1_500;
   let lastError: unknown = null;
@@ -479,10 +491,11 @@ export async function waitForWalletSettlement(args: {
     try {
       const currentUtxos = await args.wallet.getUtxos();
       const currentSnapshot = utxoSnapshot(currentUtxos);
-      const spentInputsStillVisible = spentOutRefs.some((outRef) => currentSnapshot.has(outRef));
-      const walletChanged = !sameSnapshot(previousSnapshot, currentSnapshot);
+      const spentInputsStillVisible = spentWalletOutRefs.some((outRef) =>
+        currentSnapshot.has(outRef),
+      );
 
-      if (!spentInputsStillVisible && walletChanged) {
+      if (!spentInputsStillVisible) {
         return currentUtxos;
       }
     } catch (error) {
@@ -496,7 +509,7 @@ export async function waitForWalletSettlement(args: {
     ? ` Last provider error: ${describeUnknownError(lastError)}.`
     : "";
   throw new Error(
-    `Transaction confirmation was observed, but the wallet UTxO set did not refresh after ${args.label}.${detail}`,
+    `Transaction confirmation was observed, but the provider still lists the wallet inputs spent by ${args.label} after ${maxAttempts} attempts.${detail}`,
   );
 }
 
@@ -669,20 +682,6 @@ function outRefKey(outRef: OutRefLike): string {
 
 function utxoSnapshot(utxos: UTxO[]): Set<string> {
   return new Set(utxos.map((utxo) => outRefKey(utxo)));
-}
-
-function sameSnapshot(left: Set<string>, right: Set<string>): boolean {
-  if (left.size !== right.size) {
-    return false;
-  }
-
-  for (const value of left) {
-    if (!right.has(value)) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 export function updateWitnessData(

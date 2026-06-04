@@ -1,6 +1,6 @@
 import "./_test-env.js";
 import assert from "node:assert/strict";
-import { Constr, type Data as PlutusData } from "@lucid-evolution/lucid";
+import { Constr, type Data as PlutusData, type TxSignBuilder, type UTxO } from "@lucid-evolution/lucid";
 import { Data } from "@lucid-evolution/plutus";
 import {
   ensureCompatibleBatch,
@@ -29,6 +29,7 @@ import {
   decodePaymentHookDatum,
   decodeReceiverDatum,
   addressToPlutusData,
+  waitForWalletSettlement,
 } from "../core/chain-helpers.js";
 import {
   normalizeHex,
@@ -118,10 +119,81 @@ testBootstrapNftPayPreflight();
 testSettleAndPaymentHookPreflight();
 testOracleUpdatePreflightPureGuards();
 
+// --- Wallet settlement wait (provider lag / stale-UTxO regression) ----------
+await testWalletSettlementWaitsForSpentInputs();
+
 // --- Lucid emulator harness (smoke: pay + reference script genesis) ---------
 await runLucidEmulatorHarnessSmokeTests();
 
 console.log("CLI tests passed");
+
+// Regression for the stale-UTxO / provider-lag bug: waitForWalletSettlement
+// must derive the spent wallet inputs FROM THE TX and block until the
+// provider stops listing them — not return on the first "wallet changed".
+// Here the provider keeps listing the spent wallet input for two polls, then
+// drops it; the wait must poll until it is gone and never return while it is
+// still visible. The tx also carries a script input (not a wallet UTxO) which
+// must be ignored.
+async function testWalletSettlementWaitsForSpentInputs(): Promise<void> {
+  const spentTxHash = "ab".repeat(32);
+  const scriptTxHash = "cd".repeat(32);
+  const changeTxHash = "ef".repeat(32);
+
+  const mkUtxo = (txHash: string, outputIndex: number): UTxO => ({
+    txHash,
+    outputIndex,
+    address: "addr_test1qpgtest",
+    assets: { lovelace: 5_000_000n },
+  });
+
+  // Wallet before the tx: the input the tx will spend + an unrelated UTxO.
+  const previousUtxos: UTxO[] = [mkUtxo(spentTxHash, 0), mkUtxo("11".repeat(32), 0)];
+  const spentInput = mkUtxo(spentTxHash, 0);
+  const changeUtxo = mkUtxo(changeTxHash, 0);
+
+  // Fake built tx: one wallet input (in previousUtxos) + one script input
+  // (NOT in the wallet, must be ignored by the wait).
+  const fakeTransaction = {
+    toTransaction: () => ({
+      body: () => ({
+        inputs: () => ({
+          len: () => 2,
+          get: (index: number) =>
+            index === 0
+              ? { transaction_id: () => ({ to_hex: () => spentTxHash }), index: () => 0n }
+              : { transaction_id: () => ({ to_hex: () => scriptTxHash }), index: () => 1n },
+        }),
+      }),
+    }),
+  } as unknown as TxSignBuilder;
+
+  // Provider lists the spent input as still-available for the first two polls
+  // (even though the change UTxO already appeared), then finally drops it.
+  let polls = 0;
+  const wallet = {
+    getUtxos: async (): Promise<UTxO[]> => {
+      polls += 1;
+      if (polls < 3) {
+        return [spentInput, changeUtxo];
+      }
+      return [changeUtxo];
+    },
+  };
+
+  const settled = await waitForWalletSettlement({
+    wallet,
+    previousUtxos,
+    transaction: fakeTransaction,
+    label: "settlement-wait test",
+    delayMs: 1,
+  });
+
+  assert.equal(polls, 3, "must keep polling while the spent wallet input is still listed");
+  assert.ok(
+    !settled.some((u) => u.txHash === spentTxHash && u.outputIndex === 0),
+    "must only return once the spent wallet input is gone from the provider",
+  );
+}
 
 function testCardanoWalletCreate(): void {
   const originalNetwork = process.env.CARDANO_NETWORK;

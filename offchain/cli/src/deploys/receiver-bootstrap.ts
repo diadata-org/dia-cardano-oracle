@@ -193,7 +193,7 @@ export async function receiverBootstrap(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [receiverBootstrapUtxo],
+      transaction: txSignBuilder,
       label: "receiver bootstrap",
     });
   }

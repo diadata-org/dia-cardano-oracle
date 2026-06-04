@@ -319,9 +319,8 @@ export async function submitBatchOracleUpdate(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "oracle batch update",
-      requireChangeWhenNoSpentUtxos: true,
     });
   }
 

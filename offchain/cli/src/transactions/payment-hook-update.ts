@@ -185,9 +185,8 @@ export async function paymentHookUpdate(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "payment-hook update",
-      requireChangeWhenNoSpentUtxos: true,
     });
   }
 

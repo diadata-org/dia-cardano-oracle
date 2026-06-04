@@ -192,9 +192,8 @@ export async function receiverWithdraw(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "receiver withdraw",
-      requireChangeWhenNoSpentUtxos: true,
     });
   }
 

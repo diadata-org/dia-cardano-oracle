@@ -220,7 +220,7 @@ export async function paymentHookBootstrap(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [paymentHookBootstrapUtxo],
+      transaction: txSignBuilder,
       label: "payment-hook bootstrap",
     });
   }

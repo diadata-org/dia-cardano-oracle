@@ -261,8 +261,7 @@ export async function submitOracleUpdate(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
-      requireChangeWhenNoSpentUtxos: true,
+      transaction: txSignBuilder,
       label: "oracle update",
     });
   }

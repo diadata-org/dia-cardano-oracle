@@ -260,7 +260,7 @@ async function buildAndSubmit(args: {
     await waitForWalletSettlement({
       wallet: args.lucid.wallet(),
       previousUtxos: args.walletUtxos,
-      spentUtxos: args.targetUtxos,
+      transaction: txSignBuilder,
       label: `reclaim-reference-script (${args.script})`,
     });
 

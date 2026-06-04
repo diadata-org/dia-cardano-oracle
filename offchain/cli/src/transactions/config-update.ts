@@ -180,9 +180,8 @@ export async function configUpdate(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "config update",
-      requireChangeWhenNoSpentUtxos: true,
     });
   }
 

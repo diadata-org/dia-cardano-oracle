@@ -187,9 +187,8 @@ export async function settleAccruedFees(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "settle",
-      requireChangeWhenNoSpentUtxos: true,
     });
   }
 

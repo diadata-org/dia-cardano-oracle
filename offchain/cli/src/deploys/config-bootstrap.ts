@@ -202,7 +202,7 @@ export async function configBootstrap(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [walletBootstrapUtxo],
+      transaction: txSignBuilder,
       label: "config bootstrap",
     });
   }

@@ -192,9 +192,8 @@ export async function paymentHookWithdraw(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "payment-hook withdraw",
-      requireChangeWhenNoSpentUtxos: true,
     });
   }
 

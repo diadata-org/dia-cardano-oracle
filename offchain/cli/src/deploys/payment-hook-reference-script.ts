@@ -91,9 +91,8 @@ export async function publishPaymentHookReferenceScript(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "payment-hook reference-script publish",
-      requireChangeWhenNoSpentUtxos: true,
     });
 
     await waitForOutRefAvailable({

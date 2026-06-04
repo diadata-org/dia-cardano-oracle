@@ -136,9 +136,8 @@ export async function publishClientReferenceScripts(args: {
     await waitForWalletSettlement({
       wallet,
       previousUtxos: walletUtxos,
-      spentUtxos: [],
+      transaction: txSignBuilder,
       label: "client reference-script publish",
-      requireChangeWhenNoSpentUtxos: true,
     });
 
     await Promise.all([
