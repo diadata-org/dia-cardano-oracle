@@ -566,11 +566,7 @@ prerequisites, env vars, and the full output description.
 4. **Do they need HA / multi-instance (M3 replica)?** Is a single point of failure
    acceptable for now?
 5. **Do they want `cron: true` active?** Today client-a doesn't have it → events only.
-6. **Wallet operations:** who funds the receiver and the admin wallet, and on what
-   cadence do `settle` / `payment-hook:withdraw` run?
-7. **Mainnet timeline:** which symbols, how many clients/receivers (drives lane
-   parallelism).
-8. **Rollback tolerance** → is `confirmation_depth: 1` fine, or do they want more depth?
+6. **Rollback tolerance** → is `confirmation_depth: 1` fine, or do they want more depth?
 
 ---
 
