@@ -50,35 +50,35 @@ function printUsage(): void {
   npm run cli -- ethereum-wallet:create
   npm run cli -- protocol:init [--valid-config-signers <pkh[,pkh...]> --authorized-dia-public-keys <pubkey[,pubkey...]> --domain-name <name> --domain-version <ver> --domain-source-chain-id <id> --domain-verifying-contract <addr> --base-fee-lovelace 600000 --per-pair-fee-lovelace 400000 --max-bootstrap-drift-seconds 300 --min-utxo-lovelace 5000000 --config-asset-label DIA_CONFIG --payment-hook-asset-label DIA_PAYMENT_HOOK --payment-hook-withdraw-address <addr>] [--out ./state/<network>/config-bootstrap.json]
         (DIA domain / chain id / registry default to the *_TESTNET or *_MAINNET block in .env based on CARDANO_NETWORK.)
-  npm run cli -- client:init [--state ./state/<network>/config-bootstrap.json] [--client-id client-a --receiver-asset-label DIA_RECEIVER_CLIENT_A] [--out ./state/<network>/clients/client-a.json]
-  npm run cli -- intent:create [--state ./state/<network>/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ./state/<network>/intents/usdc-usd.unsigned.json]
+  npm run cli -- client:init [--protocol-state ./state/<network>/config-bootstrap.json] [--client-id client-a --receiver-asset-label DIA_RECEIVER_CLIENT_A] [--out ./state/<network>/clients/client-a.json]
+  npm run cli -- intent:create [--protocol-state ./state/<network>/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ./state/<network>/intents/usdc-usd.unsigned.json]
   npm run cli -- intent:sign [--input ./state/<network>/intents/usdc-usd.unsigned.json] [--out ./state/<network>/intents/usdc-usd.signed.json]
-  npm run cli -- intent:create-and-sign [--state ./state/<network>/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ./state/<network>/intents/usdc-usd.signed.json]
-  npm run cli -- config:update:create [--state ./state/<network>/config-bootstrap.json] [--out ./state/<network>/config-updates/config-update.json]
-  npm run cli -- config:parameterize --state ./state/<network>/config-bootstrap.json
-  npm run cli -- config:reference-scripts --state ./state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- config:bootstrap --state ./state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- payment-hook:parameterize --state ./state/<network>/config-bootstrap.json
-  npm run cli -- payment-hook:reference-script --state ./state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- payment-hook:bootstrap --state ./state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- payment-hook:update --input ./state/<network>/hook-updates/payment-hook-update.json --state ./state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- receiver:parameterize --protocol-state ./state/<network>/config-bootstrap.json --state ./state/<network>/clients/client-a.json
-  npm run cli -- reference-scripts:publish-client --protocol-state ./state/<network>/config-bootstrap.json --state ./state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- receiver:bootstrap --protocol-state ./state/<network>/config-bootstrap.json --state ./state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- update --intent ./state/<network>/intents/usdc-usd.signed.json --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json --state ./state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
-  npm run cli -- config:update --input ./state/<network>/config-updates/config-update.json --state ./state/<network>/config-bootstrap.json [--build-only]
+  npm run cli -- intent:create-and-sign [--protocol-state ./state/<network>/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ./state/<network>/intents/usdc-usd.signed.json]
+  npm run cli -- config:update:create [--protocol-state ./state/<network>/config-bootstrap.json] [--out ./state/<network>/config-updates/config-update.json]
+  npm run cli -- config:parameterize --protocol-state ./state/<network>/config-bootstrap.json
+  npm run cli -- config:reference-scripts --protocol-state ./state/<network>/config-bootstrap.json [--build-only]
+  npm run cli -- config:bootstrap --protocol-state ./state/<network>/config-bootstrap.json [--build-only]
+  npm run cli -- payment-hook:parameterize --protocol-state ./state/<network>/config-bootstrap.json
+  npm run cli -- payment-hook:reference-script --protocol-state ./state/<network>/config-bootstrap.json [--build-only]
+  npm run cli -- payment-hook:bootstrap --protocol-state ./state/<network>/config-bootstrap.json [--build-only]
+  npm run cli -- payment-hook:update --input ./state/<network>/hook-updates/payment-hook-update.json --protocol-state ./state/<network>/config-bootstrap.json [--build-only]
+  npm run cli -- receiver:parameterize --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json
+  npm run cli -- reference-scripts:publish-client --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
+  npm run cli -- receiver:bootstrap --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
+  npm run cli -- update --intent ./state/<network>/intents/usdc-usd.signed.json --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
+  npm run cli -- config:update --input ./state/<network>/config-updates/config-update.json --protocol-state ./state/<network>/config-bootstrap.json [--build-only]
   npm run cli -- update:batch:create [--pairs-dir ./state/<network>/clients/client-a/pairs] [--intents-dir ./state/<network>/intents] [--out ./state/<network>/update-batches/update-batch.manifest.json]
   npm run cli -- update:batch --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json --manifest ./state/<network>/update-batches/update-batch.manifest.json [--build-only] [--out ./state/<network>/update-batches/update-batch.result.json]
-  npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ./state/<network>/config-bootstrap.json --state ./state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- receiver:withdraw --amount-lovelace 2000000 [--recipient-address <addr>] --protocol-state ./state/<network>/config-bootstrap.json --state ./state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- receiver:update-min-utxo --new-min-utxo-lovelace 3000000 --protocol-state ./state/<network>/config-bootstrap.json --state ./state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- pair:update-min-utxo --new-min-utxo-lovelace 3000000 --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json --state ./state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
-  npm run cli -- pair:burn --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json --state ./state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
+  npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
+  npm run cli -- receiver:withdraw --amount-lovelace 2000000 [--recipient-address <addr>] --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
+  npm run cli -- receiver:update-min-utxo --new-min-utxo-lovelace 3000000 --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
+  npm run cli -- pair:update-min-utxo --new-min-utxo-lovelace 3000000 --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
+  npm run cli -- pair:burn --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
   npm run cli -- pair:dedup --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
   npm run cli -- settle --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- payment-hook:withdraw --amount-lovelace 2000000 --state ./state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- reclaim-reference-script --script <config|payment-hook> --state ./state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- reclaim-reference-script --script client --protocol-state ./state/<network>/config-bootstrap.json --state ./state/<network>/clients/client-a.json [--build-only]`);
+  npm run cli -- payment-hook:withdraw --amount-lovelace 2000000 --protocol-state ./state/<network>/config-bootstrap.json [--build-only]
+  npm run cli -- reclaim-reference-script --script <config|payment-hook> --protocol-state ./state/<network>/config-bootstrap.json [--build-only]
+  npm run cli -- reclaim-reference-script --script client --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]`);
 }
 
 function requireInputPath(): string {
@@ -190,7 +190,7 @@ async function run(): Promise<void> {
     case "reference-holder": {
       const { readConfigState } = await import("./core/state.js");
       const statePath =
-        optionalFlagValue("--state") ?? `state/${networkTag()}/config-bootstrap.json`;
+        optionalFlagValue("--protocol-state") ?? `state/${networkTag()}/config-bootstrap.json`;
       const state = await readConfigState(path.resolve(statePath));
       if (!state.scripts.referenceHolderAddress || !state.scripts.referenceHolderValidatorHash) {
         throw new Error("ReferenceHolder address not found. Run config:parameterize first.");
@@ -309,7 +309,7 @@ async function run(): Promise<void> {
       const { normalizeHex, utf8ToHex } = await import("./core/dia-intent.js");
       getCliConfig();
       const statePath = await resolveTextFlag({
-        flag: "--state",
+        flag: "--protocol-state",
         message: "Protocol state path",
         defaultValue: "./state/<network>/config-bootstrap.json",
       });
@@ -350,7 +350,7 @@ async function run(): Promise<void> {
         defaultUnsignedIntentOutputPath,
       } = await import("./oracle/intent-create.js");
       const result = await createPreviewOracleIntent({
-        statePath: optionalFlagValue("--state"),
+        statePath: optionalFlagValue("--protocol-state"),
         intentType: optionalFlagValue("--intent-type"),
         nonce: optionalFlagValue("--nonce"),
         expiry: optionalFlagValue("--expiry"),
@@ -393,7 +393,7 @@ async function run(): Promise<void> {
         defaultSignedIntentOutputPath,
       } = await import("./oracle/intent-create.js");
       const result = await createAndSignPreviewOracleIntent({
-        statePath: optionalFlagValue("--state"),
+        statePath: optionalFlagValue("--protocol-state"),
         intentType: optionalFlagValue("--intent-type"),
         nonce: optionalFlagValue("--nonce"),
         expiry: optionalFlagValue("--expiry"),
@@ -418,7 +418,7 @@ async function run(): Promise<void> {
       const { createConfigUpdateDraft } = await import("./init/config-update-create.js");
       getCliConfig();
       const statePath = await resolveTextFlag({
-        flag: "--state",
+        flag: "--protocol-state",
         message: "Protocol state path",
         defaultValue: "./state/<network>/config-bootstrap.json",
       });
@@ -438,7 +438,7 @@ async function run(): Promise<void> {
         "./deploys/config-parameterize.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--protocol-state");
       const result = await parameterizeConfigScripts({ statePath });
       if (statePath) {
         await writeJsonOutput(statePath, result);
@@ -452,7 +452,7 @@ async function run(): Promise<void> {
         "./deploys/config-reference-scripts.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--protocol-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await publishConfigReferenceScripts({
         statePath,
@@ -470,7 +470,7 @@ async function run(): Promise<void> {
         "./deploys/config-bootstrap.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--protocol-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await configBootstrap({ statePath, buildOnly });
       if (statePath && !buildOnly) {
@@ -483,7 +483,7 @@ async function run(): Promise<void> {
     case "config:update": {
       const { configUpdate } = await import("./transactions/config-update.js");
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--protocol-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await configUpdate({
         inputPath: requireInputPath(),
@@ -502,7 +502,7 @@ async function run(): Promise<void> {
         "./deploys/payment-hook-bootstrap.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--protocol-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await paymentHookBootstrap({ statePath, buildOnly });
       if (statePath && !buildOnly) {
@@ -517,7 +517,7 @@ async function run(): Promise<void> {
         "./deploys/payment-hook-parameterize.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--protocol-state");
       const result = await parameterizePaymentHookScripts({ statePath });
       if (statePath) {
         await writeJsonOutput(statePath, result);
@@ -531,7 +531,7 @@ async function run(): Promise<void> {
         "./deploys/payment-hook-reference-script.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--protocol-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await publishPaymentHookReferenceScript({
         statePath,
@@ -549,7 +549,7 @@ async function run(): Promise<void> {
         "./transactions/payment-hook-withdraw.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--protocol-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await paymentHookWithdraw({
         amountLovelace: requireFlagValue("--amount-lovelace"),
@@ -568,7 +568,7 @@ async function run(): Promise<void> {
         "./transactions/payment-hook-update.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--protocol-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await paymentHookUpdate({
         inputPath: requireInputPath(),
@@ -602,7 +602,7 @@ async function run(): Promise<void> {
         "./deploys/receiver-bootstrap.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--client-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await receiverBootstrap({
         statePath,
@@ -621,7 +621,7 @@ async function run(): Promise<void> {
         "./deploys/receiver-parameterize.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--client-state");
       const result = await parameterizeReceiverScripts({
         statePath,
         protocolStatePath: requireFlagValue("--protocol-state"),
@@ -638,7 +638,7 @@ async function run(): Promise<void> {
         "./deploys/client-reference-scripts.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--client-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await publishClientReferenceScripts({
         statePath,
@@ -655,7 +655,7 @@ async function run(): Promise<void> {
     case "receiver:top-up": {
       const { receiverTopUp } = await import("./transactions/receiver-top-up.js");
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--client-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await receiverTopUp({
         amountLovelace: requireFlagValue("--amount-lovelace"),
@@ -673,7 +673,7 @@ async function run(): Promise<void> {
     case "receiver:withdraw": {
       const { receiverWithdraw } = await import("./transactions/receiver-withdraw.js");
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--client-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await receiverWithdraw({
         amountLovelace: requireFlagValue("--amount-lovelace"),
@@ -694,7 +694,7 @@ async function run(): Promise<void> {
         "./transactions/receiver-update-min-utxo.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--client-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await receiverUpdateMinUtxo({
         newMinUtxoLovelace: requireFlagValue("--new-min-utxo-lovelace"),
@@ -714,7 +714,7 @@ async function run(): Promise<void> {
         "./transactions/pair-update-min-utxo.js"
       );
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--pair-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await pairUpdateMinUtxo({
         newMinUtxoLovelace: requireFlagValue("--new-min-utxo-lovelace"),
@@ -736,7 +736,7 @@ async function run(): Promise<void> {
       // notes for the on-chain invariants this drives.
       const { pairBurn } = await import("./transactions/pair-burn.js");
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--pair-state");
       const buildOnly = hasBuildOnlyFlag();
       const result = await pairBurn({
         protocolStatePath: requireFlagValue("--protocol-state"),
@@ -803,9 +803,9 @@ async function run(): Promise<void> {
     case "update": {
       const { submitOracleUpdate } = await import("./transactions/update.js");
       getCliConfig();
-      const statePath = optionalFlagValue("--state");
+      const statePath = optionalFlagValue("--pair-state");
       if (!statePath) {
-        throw new Error("Missing required argument: --state <path>");
+        throw new Error("Missing required argument: --pair-state <path>");
       }
       const buildOnly = hasBuildOnlyFlag();
       const result = await submitOracleUpdate({
@@ -831,7 +831,7 @@ async function run(): Promise<void> {
       const buildOnly = hasBuildOnlyFlag();
 
       if (scriptArg === "config" || scriptArg === "payment-hook") {
-        const statePath = requireFlagValue("--state");
+        const statePath = requireFlagValue("--protocol-state");
         const result = await reclaimProtocolReferenceScript({ script: scriptArg, statePath, buildOnly });
         if (!buildOnly) await writeJsonOutput(statePath, result);
         printJson(result);
@@ -840,7 +840,7 @@ async function run(): Promise<void> {
 
       if (scriptArg === "client") {
         const protocolStatePath = requireFlagValue("--protocol-state");
-        const statePath = requireFlagValue("--state");
+        const statePath = requireFlagValue("--client-state");
         const result = await reclaimClientReferenceScript({ script: scriptArg, protocolStatePath, statePath, buildOnly });
         if (!buildOnly) await writeJsonOutput(statePath, result);
         printJson(result);

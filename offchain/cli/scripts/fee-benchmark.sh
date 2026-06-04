@@ -287,7 +287,7 @@ generate_intent() {
   echo "[bench] intent: $slug  tag=$tag  price=$price  seq=$PRICE_SEQ"
   npm run --silent cli -- \
     intent:create-and-sign \
-    --state "$STATE_REL/config-bootstrap.json" \
+    --protocol-state "$STATE_REL/config-bootstrap.json" \
     --intent-type OracleUpdate \
     --symbol "$symbol" \
     --price "$price" \
@@ -372,7 +372,7 @@ seed_pair() {
      --intent $BENCH_STATE_REL/intents/${slug}-${tag}.signed.json \
      --protocol-state $STATE_REL/config-bootstrap.json \
      --client-state $STATE_REL/clients/${CLIENT_ID}.json \
-     --state $STATE_REL/clients/${CLIENT_ID}/pairs/${slug}.json"
+     --pair-state $STATE_REL/clients/${CLIENT_ID}/pairs/${slug}.json"
 }
 
 # extract_resource LOG_FILE FIELD → prints integer value
@@ -473,7 +473,7 @@ echo "[bench] top-up       : $TOP_UP_LOVELACE lovelace ($(awk "BEGIN{printf \"%.
 echo ""
 echo "[bench] ── Top-up receiver: $TOP_UP_LOVELACE lovelace ──"
 run_tx "$BENCH_EVIDENCE/topup.log" \
-  "receiver:top-up --amount-lovelace $TOP_UP_LOVELACE --protocol-state $STATE_REL/config-bootstrap.json --state $STATE_REL/clients/${CLIENT_ID}.json"
+  "receiver:top-up --amount-lovelace $TOP_UP_LOVELACE --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/${CLIENT_ID}.json"
 
 # ── Pre-seed: make sure the first SEED_TARGET pairs already exist ─────────────
 # So the first batch the chosen mode runs (probe-PROBE_START or batch-MAX_BATCH)
@@ -578,7 +578,7 @@ for cycle in $(seq 1 "$CYCLES"); do
      --intent $BENCH_STATE_REL/intents/${UPDATE_SLUG}-${upd_tag}.signed.json \
      --protocol-state $STATE_REL/config-bootstrap.json \
      --client-state $STATE_REL/clients/${CLIENT_ID}.json \
-     --state $STATE_REL/clients/${CLIENT_ID}/pairs/${UPDATE_SLUG}.json"
+     --pair-state $STATE_REL/clients/${CLIENT_ID}/pairs/${UPDATE_SLUG}.json"
 
   fee="$(extract_resource "$upd_log" fee)"
   cpu="$(extract_resource "$upd_log" cpu)"

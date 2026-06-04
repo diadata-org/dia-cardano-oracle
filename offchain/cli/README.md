@@ -130,7 +130,7 @@ npm install
 
 ```sh
 npm run cli -- blueprint:list
-npm run cli -- reference-holder --state ./state/<network>/config-bootstrap.json
+npm run cli -- reference-holder --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 `reference-holder` requires a parameterized state artifact (run after `config:parameterize`).
@@ -205,7 +205,7 @@ Selects a pure ADA wallet UTxO and derives the Config, Coordinator, and Referenc
 
 ```sh
 npm run cli -- config:parameterize \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 No transaction is submitted here.
@@ -216,7 +216,7 @@ Consumes the selected wallet UTxO, mints the Config NFT, and creates the Config 
 
 ```sh
 npm run cli -- config:bootstrap \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 ### 9. Publish Config reference scripts
@@ -225,7 +225,7 @@ Creates the Config and Coordinator reference scripts at `reference_holder`.
 
 ```sh
 npm run cli -- config:reference-scripts \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 ### 10. Parameterize PaymentHook scripts
@@ -234,7 +234,7 @@ Selects a pure ADA wallet UTxO and derives the PaymentHook scripts offline.
 
 ```sh
 npm run cli -- payment-hook:parameterize \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 No transaction is submitted here.
@@ -245,14 +245,14 @@ Consumes the selected wallet UTxO, mints the PaymentHook NFT, updates Config, an
 
 ```sh
 npm run cli -- payment-hook:bootstrap \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 ### 12. Publish PaymentHook reference script
 
 ```sh
 npm run cli -- payment-hook:reference-script \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 ## Client Deployment
@@ -276,7 +276,7 @@ Selects a pure ADA wallet UTxO and derives Receiver and Pair scripts offline.
 ```sh
 npm run cli -- receiver:parameterize \
   --protocol-state ./state/<network>/config-bootstrap.json \
-  --state ./state/<network>/clients/client-a.json
+  --client-state ./state/<network>/clients/client-a.json
 ```
 
 No transaction is submitted here.
@@ -288,7 +288,7 @@ Creates the on-chain Receiver UTxO with `balanceLovelace = 0`. The client funds 
 ```sh
 npm run cli -- receiver:bootstrap \
   --protocol-state ./state/<network>/config-bootstrap.json \
-  --state ./state/<network>/clients/client-a.json
+  --client-state ./state/<network>/clients/client-a.json
 ```
 
 ### 16. Publish client reference scripts
@@ -298,7 +298,7 @@ Publishes the Receiver spend validator, Pair spend validator, and Pair minting p
 ```sh
 npm run cli -- reference-scripts:publish-client \
   --protocol-state ./state/<network>/config-bootstrap.json \
-  --state ./state/<network>/clients/client-a.json
+  --client-state ./state/<network>/clients/client-a.json
 ```
 
 ### 17. Top up the Receiver
@@ -309,7 +309,7 @@ This is the client funding step. The Receiver was bootstrapped with `balanceLove
 npm run cli -- receiver:top-up \
   --amount-lovelace 100000000 \
   --protocol-state ./state/<network>/config-bootstrap.json \
-  --state ./state/<network>/clients/client-a.json
+  --client-state ./state/<network>/clients/client-a.json
 ```
 
 ## Oracle Intent Flow
@@ -329,7 +329,7 @@ There are three intent commands:
 
 ```sh
 npm run cli -- intent:create \
-  --state ./state/<network>/config-bootstrap.json \
+  --protocol-state ./state/<network>/config-bootstrap.json \
   --out ./state/<network>/intents/usdc-usd.unsigned.json
 ```
 
@@ -345,7 +345,7 @@ npm run cli -- intent:sign \
 
 ```sh
 npm run cli -- intent:create-and-sign \
-  --state ./state/<network>/config-bootstrap.json \
+  --protocol-state ./state/<network>/config-bootstrap.json \
   --out ./state/<network>/intents/usdt-usd.signed.json
 ```
 
@@ -366,7 +366,7 @@ npm run cli -- update \
   --intent ./state/<network>/intents/usdc-usd.signed.json \
   --protocol-state ./state/<network>/config-bootstrap.json \
   --client-state ./state/<network>/clients/client-a.json \
-  --state ./state/<network>/clients/client-a/pairs/usdc-usd.json
+  --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json
 ```
 
 ### 22. Create a Config update draft
@@ -375,7 +375,7 @@ Generates a structured draft instead of asking you to hand-write JSON.
 
 ```sh
 npm run cli -- config:update:create \
-  --state ./state/<network>/config-bootstrap.json \
+  --protocol-state ./state/<network>/config-bootstrap.json \
   --out ./state/<network>/config-updates/config-update.json
 ```
 
@@ -384,7 +384,7 @@ npm run cli -- config:update:create \
 ```sh
 npm run cli -- config:update \
   --input ./state/<network>/config-updates/config-update.json \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 ### 24. Create a batch manifest
@@ -446,7 +446,7 @@ npm run cli -- receiver:withdraw \
   --amount-lovelace 2000000 \
   --recipient-address <addr_test...> \
   --protocol-state ./state/<network>/config-bootstrap.json \
-  --state ./state/<network>/clients/client-a.json
+  --client-state ./state/<network>/clients/client-a.json
 ```
 
 If `--recipient-address` is omitted, the configured wallet address is used.
@@ -456,7 +456,7 @@ If `--recipient-address` is omitted, the configured wallet address is used.
 ```sh
 npm run cli -- payment-hook:withdraw \
   --amount-lovelace 2000000 \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 ### 28. Update min UTxO for Receiver (admin only)
@@ -467,7 +467,7 @@ Updates the `min_utxo_lovelace` field on a Receiver UTxO using the dedicated `Up
 npm run cli -- receiver:update-min-utxo \
   --new-min-utxo-lovelace 3000000 \
   --protocol-state ./state/<network>/config-bootstrap.json \
-  --state ./state/<network>/clients/client-a.json
+  --client-state ./state/<network>/clients/client-a.json
 ```
 
 The Receiver UTxO must be adjusted to hold the new minimum ADA. The `balance_lovelace` and `accrued_to_hook_lovelace` fields remain unchanged.
@@ -481,7 +481,7 @@ npm run cli -- pair:update-min-utxo \
   --new-min-utxo-lovelace 3000000 \
   --protocol-state ./state/<network>/config-bootstrap.json \
   --client-state ./state/<network>/clients/client-a.json \
-  --state ./state/<network>/clients/client-a/pairs/usdc-usd.json
+  --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json
 ```
 
 All Pair datum fields except `min_utxo_lovelace` remain unchanged.
@@ -494,7 +494,7 @@ Burns the Pair NFT of an existing pair and recovers the locked min-ADA back to t
 npm run cli -- pair:burn \
   --protocol-state ./state/<network>/config-bootstrap.json \
   --client-state ./state/<network>/clients/client-a.json \
-  --state ./state/<network>/clients/client-a/pairs/usdc-usd.json
+  --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json
 ```
 
 A subsequent `update` for the same symbol will mint a fresh Pair NFT and rebuild pair state from a new signed intent. See architecture §5.13 for the on-chain validation.
@@ -527,7 +527,7 @@ Updates `min_utxo_lovelace` on the Config UTxO through the general `AdminUpdate`
 ```sh
 npm run cli -- config:update \
   --input ./state/<network>/config-updates/min-utxo-update.json \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 ### 31. Update min UTxO for PaymentHook (admin only)
@@ -537,7 +537,7 @@ Updates `min_utxo_lovelace` on the PaymentHook UTxO through the general `AdminUp
 ```sh
 npm run cli -- payment-hook:update \
   --input ./state/<network>/hook-updates/min-utxo-update.json \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 The PaymentHook UTxO output must hold `new_min_utxo + accrued_fees_lovelace` total lovelace.
@@ -577,12 +577,12 @@ Reclaim `--script` values and what each reclaims in one transaction:
 # Reclaims config + coordinator together (they were published in the same tx):
 npm run cli -- reclaim-reference-script \
   --script config \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 
 # Reclaims payment-hook alone:
 npm run cli -- reclaim-reference-script \
   --script payment-hook \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 ```
 
 **Client scripts:**
@@ -592,7 +592,7 @@ npm run cli -- reclaim-reference-script \
 npm run cli -- reclaim-reference-script \
   --script client \
   --protocol-state ./state/<network>/config-bootstrap.json \
-  --state ./state/<network>/clients/client-a.json
+  --client-state ./state/<network>/clients/client-a.json
 ```
 
 After reclaiming, re-publish with the standard publish command:
@@ -600,16 +600,16 @@ After reclaiming, re-publish with the standard publish command:
 ```sh
 # After reclaiming config (republishes config + coordinator in one tx):
 npm run cli -- config:reference-scripts \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 
 # After reclaiming payment-hook:
 npm run cli -- payment-hook:reference-script \
-  --state ./state/<network>/config-bootstrap.json
+  --protocol-state ./state/<network>/config-bootstrap.json
 
 # After reclaiming client (republishes receiver + pair + pairMint in one tx):
 npm run cli -- reference-scripts:publish-client \
   --protocol-state ./state/<network>/config-bootstrap.json \
-  --state ./state/<network>/clients/client-a.json
+  --client-state ./state/<network>/clients/client-a.json
 ```
 
 ## Build Only
@@ -630,7 +630,7 @@ npm run cli -- update \
   --intent ./state/<network>/intents/usdc-usd.signed.json \
   --protocol-state ./state/<network>/config-bootstrap.json \
   --client-state ./state/<network>/clients/client-a.json \
-  --state ./state/<network>/clients/client-a/pairs/usdc-usd.json \
+  --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json \
   --build-only \
   > ./state/<network>/builds/update.build-only.json
 ```

@@ -8,7 +8,7 @@
 # from the `offchain/` directory). Values are shown in ADA, not lovelace.
 #
 # Commands assume the Preview network and client `client-a`. For Mainnet,
-# swap `preview` -> `mainnet` in the --state paths. For another client, swap
+# swap `preview` -> `mainnet` in the state-file paths. For another client, swap
 # `client-a` for that client id (the alert's `client_id` label tells you).
 #
 # THRESHOLDS
@@ -48,7 +48,7 @@ groups:
                "error", or "failed").
             2. Most common cause: the client Receiver ran out of ADA, so it
                cannot pay the per-update fee. Top it up with 5 ADA:
-                 cd offchain && make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --state /app/state/preview/clients/{{ $labels.client_id }}.json"
+                 cd offchain && make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
             3. Second cause: the Admin (signer) wallet ran out of ADA — see the
                AdminWalletLow alert for how to refill it.
             4. If both wallets have ADA and logs show no error, the DIA source
@@ -71,7 +71,7 @@ groups:
             empty, updates for this client stop with "ReceiverInsufficientFunds".
 
             WHAT TO DO — top the Receiver up with 5 ADA (run from offchain/):
-              make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --state /app/state/preview/clients/{{ $labels.client_id }}.json"
+              make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
             The amount is in lovelace: 5000000 = 5 ADA. The alert clears within
             ~1 minute after the top-up tx confirms.
 
@@ -112,7 +112,7 @@ groups:
             WHAT TO DO — withdraw the fees (run from offchain/). Set
             --amount-lovelace to the amount you want, in lovelace (e.g.
             50000000 = 50 ADA):
-              make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --state /app/state/preview/config-bootstrap.json"
+              make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --protocol-state /app/state/preview/config-bootstrap.json"
             NOTE: run this only once the most recent settle tx is fully
             confirmed. Submitting a withdraw within a few seconds of a settle
             can fail with "BadInputsUTxO" because the provider has not yet
