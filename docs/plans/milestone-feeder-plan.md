@@ -1,4 +1,4 @@
-# Milestone — Feeder Plan (consolidated)
+# Milestone — Feeder Plan
 
 **Status date:** 2026-06-05 · **Tests:** 475 pass, 0 fail (`cd offchain/feeder && npm test`) · **Branch:** main
 
@@ -12,7 +12,7 @@ Statuses below were **verified against the codebase on 2026-06-05**.
 
 ## Contents
 
-- [Milestone — Feeder Plan (consolidated)](#milestone--feeder-plan-consolidated)
+- [Milestone — Feeder Plan](#milestone--feeder-plan)
   - [Contents](#contents)
   - [1. Verified DONE baseline (do not re-litigate)](#1-verified-done-baseline-do-not-re-litigate)
     - [Done THIS session (2026-06-04/05) — monitoring \& ops correctness](#done-this-session-2026-06-0405--monitoring--ops-correctness)
