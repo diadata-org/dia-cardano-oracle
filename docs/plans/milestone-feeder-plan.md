@@ -18,7 +18,8 @@ Tasks for the DIA Cardano Oracle feeder: done, left for M2, Mainnet, and deferre
 - [x] DB as source of truth: 6-table SQLite/Postgres schema, crash-safe checkpoint, no runtime JSON state.
 - [x] HTTP API: prices, symbols, transactions, chains, status, events, alerts, performance, pools + health/metrics.
 - [x] Metrics: `dia_bridge_*`, 6-phase latency, Cardano balance gauges, Prometheus aliases.
-- [x] Security hardening + adversarial-audit remediation; 475 tests pass.
+- [x] Security hardening + adversarial-audit remediation; 475 feeder tests pass.
+- [x] On-chain adversarial coverage: 117 inline Aiken tests across the validators — expired / stale / replayed / tampered intents, unauthorized + non-admin signer, accrued-drain-via-withdraw rejection, duplicate-receiver + manifest-mismatch + zero/wrong-delta settle, cross-script redeemer confusion, wrong-pair-NFT.
 - [x] In-process tx waits: confirmation → wallet settlement (spent wallet inputs derived from the built tx) → script-side replacement.
 - [x] CLI state flags unified: `--protocol-state` / `--client-state` / `--pair-state` (no overloaded `--state`).
 - [x] Alert thresholds corrected to real ADA values in both infrastructure YAMLs; alert exprs evaluate in ADA.
@@ -66,7 +67,7 @@ Real future work, intentionally outside Milestone 2 (M2 is the feeder + its oper
 - [ ] **Developer documentation on DIA's dev site (M4).** The operator runbook exists locally; publishing developer-facing docs on DIA's website (oracle configuration, on-chain contracts available for consumption, how to request DIA's price / real-world-asset feeds) is an M4 deliverable.
 - [ ] **QA validation report + anomaly-detection evidence (M3).** The Monitoring milestone's formal QA write-up (validation results + anomaly detection) on top of the metrics/alerts that already exist. Needs a sustained live run to produce.
 - [ ] **Final closeout report + video (M4).** The Catalyst closeout deliverable for the whole integration.
-- [ ] **Contract adversarial test matrix (hardening).** Extra negative-case coverage on the on-chain validators via the Lucid emulator. The happy-path orchestrator exists; the remaining adversarial cases are open: two-client parallelism, expired intent, stale-bootstrap duplicate, NFT redirect on settle and on config-update, accrued-fee drain via withdraw, settle without admin signature, non-admin withdraw, duplicate live pair. Not gating (the contracts are delivered) — added hardening.
+- [ ] **End-to-end emulator negative scenarios (extra hardening).** The on-chain adversarial cases are already covered by the 117 inline Aiken tests (see Done). What's missing is the *multi-transaction, end-to-end* layer on the Lucid emulator — scenarios that aren't expressible as a single-validator unit test: two-client parallelism, an NFT-redirect attempt spanning settle + config-update, a duplicate-live-pair race. Happy-path emulator orchestrator exists. Not gating (contracts delivered + unit-tested) — added integration hardening.
 
 **Excluded by design — NOT pending, will never be done:** EVM gas semantics (`default_gas_limit` / `gas_multiplier` / `max_gas_price` — Cardano fees are deterministic); EVM method ABIs (`contracts.yaml::methods`); router `processing.transformations` (the validator rejects them — they would mutate the payload and break EIP-712 signature verification); `processing.validation_enabled: false` (intent-signature validation is mandatory); `processing.datasource: "processed"` (only `event` / `enrichment` are accepted).
 
