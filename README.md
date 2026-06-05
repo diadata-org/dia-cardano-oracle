@@ -4,10 +4,12 @@ Implementation repository for the DIA oracle integration on Cardano.
 
 ## Contents
 
-- [Repository Scope](#repository-scope)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Operator Workflow](#operator-workflow)
+- [DIA Cardano Oracle](#dia-cardano-oracle)
+  - [Contents](#contents)
+  - [Repository Scope](#repository-scope)
+  - [Prerequisites](#prerequisites)
+  - [Quick Start](#quick-start)
+  - [Operator Workflow](#operator-workflow)
 
 The source-of-truth architecture is:
 
