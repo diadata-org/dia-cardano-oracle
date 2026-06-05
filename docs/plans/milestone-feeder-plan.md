@@ -137,6 +137,31 @@ The scripts and one-folder pipeline exist; what's missing is a real long run.
     `price_age_seconds` (by `symbol`, source-data); latency phases 1–2
     (`intent_to_registration`, `registration_to_scan`) are pre-routing, `symbol`-only.
   - Apply to BOTH the existing `feeder.json` and the new metrics dashboard.
+- [ ] **Network-scoped router config (config correctness).** Today routers are NOT
+  network-aware: `loadRouterDirectory` reads **every** `*.yaml` under `config/routers/`
+  and merges them, ignoring both the filename suffix and the `cardano.network` field
+  (`loader.ts:136,189-190`). The `.preview` in `client-a.preview.yaml` is a human label
+  only; `cardano.network` is type-checked (`validate.ts:740` `oneOf`) but never compared to
+  the active `CARDANO_NETWORK`. Consequence: under `CARDANO_NETWORK=Mainnet` the preview
+  router (preview state paths + `CARDANO_WALLET_SEED_TESTNET`) still loads and runs; adding
+  a mainnet router would load BOTH at once. Only "works" today because there is one router
+  file and we run Preview. (Contrast: `infrastructure.<network>.yaml` IS network-selected.)
+  - **Decision (chosen design):** **per-network subfolders**, not a filename suffix
+    (subfolders scale when there are many routers). Layout:
+    `config/routers/preview/*.yaml` and `config/routers/mainnet/*.yaml`. The loader reads
+    **only** the active network's subfolder (`routers/${networkTag}/`) — no filename check
+    needed; the folder is the source of truth.
+  - **Keep the `cardano.network` field as a secondary guard:** within the active subfolder,
+    if a router's `network` ≠ the active network, **log a WARNING and skip it** (do not use
+    it) rather than silently running it. Belt-and-suspenders against a misfiled router.
+  - **Work involved:** change `loadRouterDirectory` to take the network tag and read
+    `routers/<networkTag>/` (`loader.ts:136,184-211`); add the warn-and-skip guard
+    (extend the `validate.ts:740` network check into a cross-check vs active network); move
+    `config/routers/client-a.preview.yaml` → `config/routers/preview/client-a.yaml` (drop
+    the suffix); create `config/routers/mainnet/` for the Mainnet client(s) at rollout (R8);
+    update `config/README.md` and the feeder README config-layout section; adjust any tests
+    that point at `config/routers/`. No router-content change (state paths stay
+    `state/<network>/...`).
 
 ### P2 — Plan hygiene (this task)
 - [x] Consolidate into this plan + `work-plan.md`; archive the rest with header notes.
