@@ -8,7 +8,6 @@ the operator commands are documented in [`../README.md`](../README.md).
 
 - [Scripts](#scripts)
 - [tools/](#tools)
-- [Cleanup note](#cleanup-note)
 
 ## Scripts
 
@@ -23,8 +22,3 @@ the operator commands are documented in [`../README.md`](../README.md).
 ## tools/
 
 - `probe-dia-ws.ts` — diagnostic probe for the DIA source WebSocket (connectivity / payload sanity).
-
-## Cleanup note
-
-`_OLD/` holds a superseded `reconcile-batch.ts`. It is dead code kept only as a
-reference and can be deleted.
