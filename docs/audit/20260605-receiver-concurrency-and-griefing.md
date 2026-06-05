@@ -6,17 +6,22 @@ contracts but are design/operational concerns worth a joint decision before Main
 
 This note is deliberately a *discussion* document, not a remediation PR. Each issue
 states the current behaviour (grounded in code), the concern, concrete scenarios, and a
-menu of options with trade-offs. No option is chosen here — that is the point of the
-review.
+menu of options with trade-offs. For Issue 2 no option is chosen — that is the point of
+the review. For Issue 1 the trade-off menu still matters, but we already treat the
+side-deposit model (**Option A**) as a **requirement** rather than a suggestion —
+primarily on **client-usability** grounds (a client must be able to fund their balance
+with an ordinary wallet payment, no CLI/SDK), and only secondarily because it removes the
+contention. See Issue 1 below.
 
 ## Contents
 
 - [Receiver Concurrency \& Update-Griefing — Discussion Note](#receiver-concurrency--update-griefing--discussion-note)
   - [Contents](#contents)
   - [Background: the single-NFT Receiver model](#background-the-single-nft-receiver-model)
-  - [Issue 1 — Top-up vs update contention on the Receiver UTxO](#issue-1--top-up-vs-update-contention-on-the-receiver-utxo)
+  - [Issue 1 — Client top-up: usability and update contention](#issue-1--client-top-up-usability-and-update-contention)
     - [Current behaviour](#current-behaviour)
-    - [The concern](#the-concern)
+    - [The usability concern (arguably the bigger problem)](#the-usability-concern-arguably-the-bigger-problem)
+    - [The concurrency concern (the race)](#the-concurrency-concern-the-race)
     - [Why the "two UTxOs" idea is the right direction but needs a contract change](#why-the-two-utxos-idea-is-the-right-direction-but-needs-a-contract-change)
     - [Options for Issue 1 (trade-offs)](#options-for-issue-1-trade-offs)
   - [Issue 2 — Active update-griefing with valid DIA intents](#issue-2--active-update-griefing-with-valid-dia-intents)
@@ -56,7 +61,7 @@ intent*.
 
 ---
 
-## Issue 1 — Top-up vs update contention on the Receiver UTxO
+## Issue 1 — Client top-up: usability and update contention
 
 ### Current behaviour
 
@@ -65,7 +70,31 @@ feeder serialises its own updates per lane `(client_state, protocol_state)` (fee
 §5, "the UTxO lock"), but a client's top-up transaction is built **out of band** by the
 client/operator and is not part of that lane's serial queue.
 
-### The concern
+A top-up today is **not** a plain payment: the only supported path spends the canonical
+NFT-bearing Receiver UTxO and recreates it with the correct datum
+(`offchain/cli/src/transactions/receiver-top-up.ts:62-120`,
+`collectFrom([currentReceiverUtxo], ...)`). In practice that requires DIA's protocol-aware
+off-chain tooling — the CLI `receiver:top-up`, the script/datum knowledge, and the current
+on-chain state. A naive wallet transfer to the Receiver address does not credit the
+balance and can even brick the UTxO (the validator does `expect Some(...)` on the datum).
+
+### The usability concern (arguably the bigger problem)
+
+Set the race aside for a moment: the more fundamental issue is **who can even perform a
+top-up, and how**. For an oracle that wants real client adoption on Cardano, requiring
+every client (or DIA on their behalf) to run protocol-aware tooling *just to keep their
+feed funded* is a serious barrier. The whole promise of a **prepaid** model is that
+funding should be the easy part — a client should be able to top up the way they pay
+anyone else: send ADA from an ordinary wallet, done. Today they cannot; they need the CLI
+and the full system.
+
+We consider closing this gap a **requirement**, not a nice-to-have — and arguably more
+important than the contention race below, because it is about whether the product is
+usable by clients at all, not just about an occasional stale window. **Option A**
+(side-deposit + feeder merge) is the option that delivers exactly this "just send ADA"
+experience while keeping the on-chain guarantee.
+
+### The concurrency concern (the race)
 
 When the feeder is continuously producing updates for a client (a busy lane that starts
 the next update as soon as the previous one confirms), the client cannot reliably get a
@@ -139,12 +168,13 @@ aggregate accrued across shards.
 
 ### Options for Issue 1 (trade-offs)
 
-- **Option A — Side-deposit + feeder merge. ⭐ RECOMMENDED.**
+- **Option A — Side-deposit + feeder merge. ✅ REQUIRED (not just recommended).**
   A per-client **deposit script address**. Clients fund their balance with an **ordinary
   wallet payment** to that address — **no CLI, no SDK, no datum, no script knowledge**. The
   feeder later sweeps the accumulated deposits into the Receiver's `balance_lovelace`. This
   is the only option that gives the client a one-step "just send ADA" UX while keeping the
-  guarantee on-chain.
+  guarantee on-chain — which is why we treat it as a requirement on **usability** grounds
+  first (the funding experience), and as the **contention** fix second.
 
   **Why a plain send works and is safe (Plutus V3 specifics):**
   - In Plutus V3 the spend validator's datum argument is an `Option` (cf.
@@ -333,8 +363,11 @@ both together, not in isolation.
    or the submitter (Option III)?
 3. **Is a minimum inter-update interval acceptable** given the deviation-trigger SLA, and
    if so what `min_gap` per pair (Option II)?
-4. **Prepay continuity target.** Is the occasional refill-time stale window (current
-   behaviour) acceptable, or is uninterrupted prepay a hard requirement (→ Option A or B)?
+4. **Prepay continuity & funding UX.** Two parts: (a) is the occasional refill-time stale
+   window acceptable, or is uninterrupted prepay a hard requirement? — and (b), which we
+   consider settled rather than open: clients must be able to fund with an **ordinary
+   wallet payment (no CLI/SDK)**. That funding-UX requirement alone makes the side-deposit
+   model (Option A) a requirement, independent of the answer to (a).
 5. **Appetite for contract change before Mainnet** vs. shipping an off-chain mitigation
    (Option C) now and a contract change later.
 
@@ -345,13 +378,16 @@ both together, not in isolation.
 - **Issue 2 first, via Option I (gate the updater)** — highest impact, smallest surface,
   and it removes the economic incentive behind the liveness attack. If permissionless
   relaying must stay, fall back to Option II + III.
-- **Issue 1 via Option A (side-deposit + feeder merge) — recommended.** It is the only
-  option that lets a client fund balance with an **ordinary wallet payment (no CLI/SDK,
-  no datum)** while keeping the single-NFT Receiver model and an on-chain guarantee. The
-  feeder sweeps deposits into balance, triggered by the existing `receiver_balance_low`
-  threshold so the prepay never runs dry and there is no refill-time stale window. Option B
-  (shards) remains the heavier target design only if DIA later wants per-update buffering;
-  Option C is a stop-gap, not a fix.
+- **Issue 1 via Option A (side-deposit + feeder merge) — a requirement, not just a
+  recommendation.** The primary driver is **client usability**: today a top-up needs the
+  CLI and the full protocol tooling, and for real adoption a client must be able to fund
+  their balance with an **ordinary wallet payment (no CLI/SDK, no datum)**. Option A is the
+  only option that delivers that while keeping the single-NFT Receiver model and an
+  on-chain guarantee — and it removes the contention race as a bonus. The feeder sweeps
+  deposits into balance, triggered by the existing `receiver_balance_low` threshold so the
+  prepay never runs dry and there is no refill-time stale window. Option B (shards) remains
+  the heavier target design only if DIA later wants per-update buffering; Option C is a
+  stop-gap, not a fix.
 - Revisit `security-notes.md` ("Censorship resistance of updates") and `feeder.md §18`
   (limitations) to distinguish **passive withholding** from **active griefing** once a
   direction is chosen.

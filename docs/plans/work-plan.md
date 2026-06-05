@@ -114,7 +114,7 @@ High-level deliverables tracked here:
 - [x] Security hardening: rate limiter, path-length caps, log injection sanitizer,
   `synchronous = FULL`, path traversal check, WS exponential backoff.
 - [x] Mainnet rollout guide and rollback plan (`docs/plans/mainnet-rollout.md`).
-- [ ] M2 evidence packs (Preview 48-72 h window, all 10 pairs, Grafana screenshots,
+- [ ] M2 evidence packs (sustained Preview window, all 10 pairs, Grafana screenshots,
   error-counts TSV, alert firing demonstration) — pending live run. Tracked in detail in
   [milestone-feeder-plan.md](./milestone-feeder-plan.md) §2 (the feeder core itself is
   done and verified; 475 tests pass).
@@ -137,7 +137,7 @@ Tasks:
   events to `alert_log`; Prometheus alert rules in `monitoring/alerts.yml`.
 - [x] Grafana dashboards: `feeder-overview.json`, `feeder-latency.json`,
   `feeder-cardano.json` (provisioned at `monitoring/grafana/`).
-- [ ] QA validation report and anomaly-detection evidence (requires 48-72 h live run).
+- [ ] QA validation report and anomaly-detection evidence (requires a sustained live run).
 - [ ] Dashboard screenshots capturing real data from the live evidence window.
 
 ## Workstream F — Deployment, operations and developer documentation

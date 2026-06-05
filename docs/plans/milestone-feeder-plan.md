@@ -67,9 +67,12 @@ The core feeder is built, tested, and operational. Verified in code:
 ## 2. PENDING — Milestone 2 (priority order)
 
 ### P0 — M2 evidence pack (the Catalyst acceptance gate)
-The scripts and one-folder pipeline exist; what's missing is a real long run.
-- [ ] **48–72 h continuous Preview run** with uptime, intent counts, fee totals, worker
-  stats (current packs are short ~4 h windows).
+The scripts and one-folder pipeline exist; what's missing is a sustained Preview run to
+populate the evidence.
+- [ ] **Sustained Preview run** long enough to show uptime, intent counts, fee totals and
+  worker stats across all 10 pairs (current packs are short ~4 h windows). The milestone
+  does not fix a duration — M2 asks for a lightweight preview / early signal, not a
+  production deployment.
 - [ ] **All 10 pairs** present in the evidence tables (incl. USDT/USD).
 - [ ] **Real Grafana PNGs** in the pack (renderer already produces real 1400×900 PNGs).
 - [ ] **Alert-firing demonstration** captured (`OraclePairStale` + `PriceDeviationHigh`).
@@ -258,7 +261,7 @@ From `m3-deferred-features.md` (reconciled against code):
 - **Per-destination cron schedules** (single global tick in M2).
 - **Developer documentation published on DIA's dev site (M4)** — operator runbook exists
   locally; publication pending.
-- **QA validation report + anomaly-detection evidence (M3)** — needs the 48–72 h run.
+- **QA validation report + anomaly-detection evidence (M3)** — needs a sustained live run.
 - **Final closeout report + video (M4).**
 - **M1 leftover:** off-chain Lucid emulator **adversarial** negative-case matrix (happy path
   done; two-client parallelism, expired intent, NFT redirect on settle/config-update,

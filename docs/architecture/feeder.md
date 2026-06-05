@@ -783,7 +783,8 @@ purpose, so it is clear where to look.
 - [`offchain/feeder/README.md`](../../offchain/feeder/README.md) — the feeder operator
   manual: Docker & npm workflows, all `make` targets and flags, log streams,
   env/secrets, the 6-table DB schema, config knobs, the full HTTP API reference, the
-  finality/reorg model, the alert map, and the complete Spectra-parity divergence table.
+  finality/reorg model, and the alert map — it points back to this guide for the
+  architecture and the Spectra-parity table (§15).
 - [`offchain/cli/README.md`](../../offchain/cli/README.md) — the CLI runbook: the full
   numbered sequence to deploy the protocol, onboard a client, publish reference scripts,
   run updates, settle fees, and reclaim — for Preview and Mainnet.
