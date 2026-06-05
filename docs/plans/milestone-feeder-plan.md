@@ -154,6 +154,26 @@ The scripts and one-folder pipeline exist; what's missing is a real long run.
     update `config/README.md` and the feeder README config-layout section; adjust any tests
     that point at `config/routers/`. No router-content change (state paths stay
     `state/<network>/...`).
+- [ ] **OpenAPI / Swagger for the HTTP API — single-source, generated (chosen: Option B).**
+  The API has no machine-readable contract today; for a client deliverable it needs one,
+  plus an interactive `/docs`. The server is raw `node:http` (`createServer`, no framework)
+  and every route is already enumerated in one `Route` union (`src/api/server.ts:57-80`,
+  ~24 endpoints, all GET except `POST /api/v1/alerts/:id/ack`). Rather than hand-write a
+  spec that can drift, **generate the OpenAPI document from the routes themselves**:
+  - Refactor the `Route` union + the dispatch `switch` into a **route table** where each
+    entry carries metadata: method, path template, path/query params, summary/tags, and a
+    **response schema** (zod via `@asteasolutions/zod-to-openapi`, or TypeBox which is
+    JSON-Schema-native). One table drives routing, the generated spec, and (optionally)
+    runtime response validation — so the docs cannot drift from the code by construction.
+  - Generate an **OpenAPI 3.1** doc from that table and serve it at
+    `GET /api/v1/openapi.json` (build-time or first-request).
+  - Serve **Swagger UI or Redoc at `/docs`** from bundled static assets (no CDN) so it works
+    air-gapped inside Docker.
+  - **Scope/impact:** invasive — touches `src/api/server.ts` (route union + matchRoute +
+    handler switch) and the `src/api/*.ts` handlers (attach schemas); adds a dep
+    (zod + zod-to-openapi, or TypeBox). Payoff: drift-proof docs, a real client contract,
+    and optional output validation from the same source. (The lighter hand-authored-spec
+    alternative was considered and rejected in favour of single-source.)
 
 ### P2 — Plan hygiene (this task)
 - [x] Consolidate into this plan + `work-plan.md`; archive the rest with header notes.
