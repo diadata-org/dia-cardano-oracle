@@ -59,7 +59,7 @@ to evidence below.
 | End-to-end Mainnet chain walk (31 steps) | [`milestone-1-mainnet-evidence.md`](./milestone-1-mainnet-evidence.md) and per-step `*.log` files in this folder |
 | Final on-chain state snapshot | [`SUMMARY.json`](./SUMMARY.json) |
 | Architecture (datums, redeemers, invariants, fee flow, batch algorithm, trust model) | [`docs/architecture/cardano-oracle-architecture.md`](../../../architecture/cardano-oracle-architecture.md) |
-| Security notes (trust model, in/out of scope) | [`docs/security/m1-security-notes.md`](../../../security/m1-security-notes.md) |
+| Security notes (trust model, in/out of scope) | [`docs/security/security-notes.md`](../../../security/security-notes.md) |
 
 The chain walk demonstrates the oracle processing external DIA-signed price
 intents and committing them on-chain to per-pair Pair UTxOs, then returning
@@ -113,7 +113,7 @@ in the GitHub repository** at submission time:
 | Architecture (protocol design, datums, redeemers, cross-script invariants, fee flow, batch validation, trust model) | [`docs/architecture/cardano-oracle-architecture.md`](../../../architecture/cardano-oracle-architecture.md) |
 | On-chain (Aiken) developer docs | [`contracts/aiken/README.md`](../../../../contracts/aiken/README.md) |
 | Off-chain CLI developer docs and end-to-end runbook (configuration, deployment, oracle access) | [`offchain/cli/README.md`](../../../../offchain/cli/README.md) |
-| Security notes (trust model and exclusions) | [`docs/security/m1-security-notes.md`](../../../security/m1-security-notes.md) |
+| Security notes (trust model and exclusions) | [`docs/security/security-notes.md`](../../../security/security-notes.md) |
 | Milestone tracking and project plan | [`docs/milestones/`](../../) and [`docs/plans/`](../../../plans/) |
 
 This covers each documentation requirement quoted in AC #3:
@@ -223,7 +223,7 @@ performed on Mainnet for this PoA is captured in
 - Architecture:
   [`docs/architecture/cardano-oracle-architecture.md`](../../../architecture/cardano-oracle-architecture.md)
 - Security notes:
-  [`docs/security/m1-security-notes.md`](../../../security/m1-security-notes.md)
+  [`docs/security/security-notes.md`](../../../security/security-notes.md)
 - On-chain (Aiken) README:
   [`contracts/aiken/README.md`](../../../../contracts/aiken/README.md)
 - Off-chain CLI runbook:

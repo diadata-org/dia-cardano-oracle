@@ -1,5 +1,17 @@
 # Product Requirements Document: Cardano Integration
 
+## Contents
+
+- [1\. Overview](#1-overview)
+- [2\. Background](#2-background)
+- [3\. Destination Chain Oracle Smart Contract: PushOracleReceiverV2](#3-destination-chain-oracle-smart-contract-pushoraclereceiverv2)
+- [4\. Destination Chain Fee Manager Contract: ProtocolFeeHook](#4-destination-chain-fee-manager-contract-protocolfeehook)
+- [5\. Go Code Snippet](#5-go-code-snippet)
+- [6\. Node.js/TypeScript Snippet](#6-nodejstypescript-snippet)
+- [7\. Documentation](#7-documentation)
+- [8\. Monitoring](#8-monitoring)
+- [9\. Reference Smart Contracts](#9-reference-smart-contracts)
+
 ## 1\. Overview
 
 This document outlines the requirements for developing an Oracle price data receiver for the Cardano blockchain. The receiver will be designed to accept EIP712-signed oracle updates, ensuring data integrity and authenticity.

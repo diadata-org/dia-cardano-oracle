@@ -1,5 +1,33 @@
 # Final Security and Coherence Audit for diadata-org/dia-cardano-oracle
 
+## Contents
+
+- [Executive summary](#executive-summary)
+- [Repository map and audit scope](#repository-map-and-audit-scope)
+- [Validator and transaction validation map](#validator-and-transaction-validation-map)
+  - [Validator-level responsibilities and redeemers](#validator-level-responsibilities-and-redeemers)
+  - [Transaction family map](#transaction-family-map)
+- [Security findings](#security-findings)
+  - [Pair creation is now correctly admin-gated on-chain](#pair-creation-is-now-correctly-admin-gated-on-chain)
+  - [Duplicate live pairs are still possible for an admin](#duplicate-live-pairs-are-still-possible-for-an-admin)
+  - [The batch optimization is sound as written, but the coordinator is now the critical trust anchor inside update txs](#the-batch-optimization-is-sound-as-written-but-the-coordinator-is-now-the-critical-trust-anchor-inside-update-txs)
+  - [Permissionless relaying still means signed intents can be used to spend receiver fees](#permissionless-relaying-still-means-signed-intents-can-be-used-to-spend-receiver-fees)
+  - [The settle path is safer on-chain than in the CLI, but the CLI limitation must be documented](#the-settle-path-is-safer-on-chain-than-in-the-cli-but-the-cli-limitation-must-be-documented)
+- [Performance and fee analysis](#performance-and-fee-analysis)
+  - [Batch capacity and canonical ordering](#batch-capacity-and-canonical-ordering)
+  - [Protocol fee calculation](#protocol-fee-calculation)
+  - [Where the evidence markdown is still wrong](#where-the-evidence-markdown-is-still-wrong)
+- [Documentation and coherence updates required before final M1 submission](#documentation-and-coherence-updates-required-before-final-m1-submission)
+  - [Update the latest Preview evidence markdown](#update-the-latest-preview-evidence-markdown)
+  - [Correct the Aiken README wording about duplicate-pair prevention](#correct-the-aiken-readme-wording-about-duplicate-pair-prevention)
+  - [Update the CLI README source-file list and settle limitation](#update-the-cli-readme-source-file-list-and-settle-limitation)
+  - [Keep the root README as-is](#keep-the-root-readme-as-is)
+- [Remediation and test plan](#remediation-and-test-plan)
+  - [Priority actions before final M1 presentation](#priority-actions-before-final-m1-presentation)
+  - [Priority actions before mainnet production](#priority-actions-before-mainnet-production)
+  - [Suggested additional tests](#suggested-additional-tests)
+- [Open questions and limitations](#open-questions-and-limitations)
+
 ## Executive summary
 
 I reviewed the on-chain validators, the shared Aiken logic, the off-chain CLI transaction builders and preflights, the committed test suites, and the latest Milestone 1 evidence packs. The current code is materially stronger than the earlier version you described: Pair NFT creation is now admin-gated on-chain, the CLI adds the admin signer on create paths, and the Aiken suite explicitly covers missing-admin and non-admin failures for pair minting and burning. I did not find a non-admin path to mint Pair NFTs, bypass receiver fee charging, or confuse update vs. settle redeemers in the current code. fileciteturn55file0L1-L3 fileciteturn31file0L1-L3 fileciteturn29file0L1-L3 fileciteturn35file0L1-L3

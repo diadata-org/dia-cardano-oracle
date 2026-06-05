@@ -2,6 +2,13 @@
 
 Implementation repository for the DIA oracle integration on Cardano.
 
+## Contents
+
+- [Repository Scope](#repository-scope)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Operator Workflow](#operator-workflow)
+
 The source-of-truth architecture is:
 
 - [Cardano Oracle Architecture](docs/architecture/cardano-oracle-architecture.md)
@@ -94,4 +101,4 @@ make cli CMD="protocol"  # one-shot CLI command in the same image
 For the protocol design behind each phase — datums, redeemers, cross-script
 invariants, fee flow, batch validation algorithm, trust model — see the
 [architecture document](docs/architecture/cardano-oracle-architecture.md)
-and [security notes](docs/security/m1-security-notes.md).
+and [security notes](docs/security/security-notes.md).

@@ -1,5 +1,14 @@
 # Feeder scripts
 
+## Contents
+
+- [Evidence pack](#evidence-pack)
+  - [Prerequisites](#prerequisites)
+  - [Scripts](#scripts)
+  - [Output](#output)
+- [Other scripts](#other-scripts)
+  - [`scan-dia-intents.ts`](#scan-dia-intentsts)
+
 ## Evidence pack
 
 Run `make evidence` from `offchain/` to generate the **complete** M2 evidence

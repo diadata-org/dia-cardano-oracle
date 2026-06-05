@@ -2,6 +2,18 @@
 
 Single work plan for the Cardano port of DIA's push-oracle contracts.
 
+## Contents
+
+- [Related documents](#related-documents)
+- [Scope](#scope)
+- [Workstream A — On-chain contracts](#workstream-a--on-chain-contracts)
+- [Workstream B — Off-chain CLI and deployment tooling](#workstream-b--off-chain-cli-and-deployment-tooling)
+- [Workstream C — Data feeder (bridge)](#workstream-c--data-feeder-bridge)
+- [Workstream D — Indexer](#workstream-d--indexer)
+- [Workstream E — Monitoring](#workstream-e--monitoring)
+- [Workstream F — Deployment, operations and developer documentation](#workstream-f--deployment-operations-and-developer-documentation)
+- [Mapping to Catalyst milestones](#mapping-to-catalyst-milestones)
+
 ## Related documents
 
 - [Cardano Oracle Architecture](../architecture/cardano-oracle-architecture.md) — single architecture reference.
@@ -14,7 +26,7 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
   polish), Mainnet rollout (corrected), open DIA questions, and what's deferred to M3/M4.
   Supersedes the former HANDOFF / milestone-2-final-plan / milestone-2-feeder-strategy /
   mainnet-rollout / m3-deferred-features (all now under `_archived/`).
-- [Audit report](../audit/) — `audit-report-20260515.md`.
+- [Audit report](../audit/20260515-audit-report.md) — `20260515-audit-report.md`.
 
 ## Scope
 
@@ -54,7 +66,7 @@ Tasks:
 - [x] Unit tests for Config, Hook, Receiver, Pair, and coordinator logic, with real DIA `OracleIntent` fixtures for signature validation. Inline Aiken `test` blocks cover every redeemer transition and the documented attack vectors (NFT exfiltration, accrued-fee drain via withdraw, expired/replayed intents, stale bootstrap, zero-add griefing, settle manifest mismatch, cross-script redeemer confusion).
 - [x] Finalize pair-NFT asset-name derivation as `blake2b_256(pair_id)`.
 - [x] Finalize batch-update fee unit as Config-defined `base_fee_lovelace + n × per_pair_fee_lovelace` (two-component fee model).
-- [x] Admin-gated Pair NFT creation and burn paths in `pair_state` (see architecture §5.13 and `docs/security/m1-security-notes.md`).
+- [x] Admin-gated Pair NFT creation and burn paths in `pair_state` (see architecture §5.13 and `docs/security/security-notes.md`).
 - [~] Off-chain Lucid emulator adversarial matrix: happy-path orchestrator delivered via `npm run benchmark:emulator` (see `_archived/20260516-emulator-benchmark-plan.md`; latest evidence `docs/milestones/evidence/m1-emulator-benchmark-20260515124543/`). Adversarial negative-case matrix (two-client parallelism, expired intent, stale bootstrap duplicate, NFT redirect on settle and config-update, accrued drain via withdraw, settle without admin signature, non-admin withdraw, duplicate live pair) is still open.
 
 ## Workstream B — Off-chain CLI and deployment tooling

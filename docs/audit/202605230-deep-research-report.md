@@ -1,5 +1,15 @@
 # Auditoría de fees y plan de compresión para DIA Cardano Oracle
 
+## Contents
+
+- [Conclusión ejecutiva](#conclusión-ejecutiva)
+- [Arquitectura actual y rutas de costo](#arquitectura-actual-y-rutas-de-costo)
+- [Hallazgos de auditoría on-chain](#hallazgos-de-auditoría-on-chain)
+- [Backlog de mejoras prioritarias](#backlog-de-mejoras-prioritarias)
+- [Rediseños estructurales de alto impacto](#rediseños-estructurales-de-alto-impacto)
+- [Plan de implementación y validación](#plan-de-implementación-y-validación)
+- [Anexo — Línea base `aiken bench` (2026-05-23)](#anexo--línea-base-aiken-bench-2026-05-23)
+
 ## Conclusión ejecutiva
 
 Sí: hay espacio real para bajar fees de forma agresiva sin sacrificar seguridad, pero el mayor retorno no va a venir de “hacer el script un poco más corto”, sino de comprimir los caminos calientes que se ejecutan muchas veces: `update`, `update:batch` y `settle`. En este repositorio ya existe una base correcta para eso: se usan reference inputs, inline datums y reference scripts; el batch coordinator ya fue optimizado para evitar barridos completos repetidos de inputs y outputs; y `pair_state.spend(ApplyUpdate)` ya evita decodificar el datum de continuación y usa un fingerprint del redeemer del coordinator para no pagar la decodificación completa del batch en cada par. fileciteturn17file0L1-L3 fileciteturn18file0L1-L3 fileciteturn20file0L1-L3 fileciteturn23file0L1-L3

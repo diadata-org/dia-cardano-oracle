@@ -1,5 +1,12 @@
 # Deep Security And Efficiency Review
 
+## Contents
+
+- [Executive Assessment](#executive-assessment)
+- [Current Batch State](#current-batch-state)
+- [Findings](#findings)
+- [Review Guidance](#review-guidance)
+
 ## Executive Assessment
 
 The repository implements the full milestone flow across Aiken validators, the TypeScript CLI, local emulator execution, and Preview-oriented evidence. The core safety model remains the coordinator-witness pattern: `update_coordinator` performs cross-UTxO validation, while `pair_state`, `receiver`, and `payment_hook` each enforce their local transition and bind themselves to the exact coordinator redeemer branch in the same transaction.

@@ -12,6 +12,15 @@ hashes, addresses, and policy ids.
 > [`docs/architecture/cardano-oracle-architecture.md`](../../docs/architecture/cardano-oracle-architecture.md).
 > This README is a map of the code, not a re-statement of the design.
 
+## Contents
+
+- [Contracts](#contracts)
+- [Design highlights worth knowing](#design-highlights-worth-knowing)
+- [Layout](#layout)
+- [Prerequisites](#prerequisites)
+- [Commands](#commands)
+- [Benchmarks](#benchmarks)
+
 ## Contracts
 
 Six validators, each in its own file under [`validators/`](validators/).
@@ -58,7 +67,7 @@ linked inline below.
   live pairs for the same `(client, symbol)` unless a live-pair registry is
   added on-chain. The matching burn path is admin-gated on both the
   spend-side and mint-side validators. See
-  [`docs/security/m1-security-notes.md`](../../docs/security/m1-security-notes.md)
+  [`docs/security/security-notes.md`](../../docs/security/security-notes.md)
   and architecture §5.7 + §5.13.
 
 ## Layout
