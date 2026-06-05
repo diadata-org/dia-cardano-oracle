@@ -22,10 +22,7 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 - [Milestone 1 Preview Evidence](../milestones/evidence/m1-preview-20260516-090057/milestone-1-preview-evidence.md) — M1 Preview verification log.
 - [Milestone 1 Mainnet Evidence](../milestones/evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) — M1 Mainnet verification log (latest run).
 - [**Milestone Feeder Plan**](./milestone-feeder-plan.md) — **start here for the feeder.**
-  Single consolidated plan: verified-done baseline, M2 pending (evidence pack, monitoring
-  polish), Mainnet rollout (corrected), open DIA questions, and what's deferred to M3/M4.
-  Supersedes the former HANDOFF / milestone-2-final-plan / milestone-2-feeder-strategy /
-  mainnet-rollout / m3-deferred-features (all now under `_archived/`).
+  Done / M2 pending / Mainnet / deferred / open DIA decisions.
 - [Audit report](../audit/20260515-audit-report.md) — `20260515-audit-report.md`.
 
 ## Scope
@@ -92,11 +89,8 @@ oracle update transactions, plus the operational surface (health, metrics,
 inflight tracking, evidence packaging) required by the M2 acceptance
 criteria in [`final-cardano-milestones.md`](../milestones/final-cardano-milestones.md).
 
-The full operational breakdown, verified status, evidence layout, Mainnet
-rollout, and the open DIA dependencies (signer set, WebSocket creds, wallet
-custody, update cadence) all live in the consolidated
-[`milestone-feeder-plan.md`](./milestone-feeder-plan.md). The original R0–R10
-breakdown and conceptual reference are archived under `_archived/`.
+The full task breakdown, status, evidence layout, Mainnet rollout, and open
+DIA dependencies live in [`milestone-feeder-plan.md`](./milestone-feeder-plan.md).
 
 High-level deliverables tracked here:
 
