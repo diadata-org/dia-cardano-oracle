@@ -28,9 +28,9 @@
 - [16. HTTP API](#16-http-api)
 - [17. State: implemented / M2 / deferred to M3](#17-state-implemented--m2--deferred-to-m3)
 - [18. Current limitations](#18-current-limitations)
-- [19. Questions for DIA](#19-questions-for-dia)
-- [20. Metrics that exist but are NOT in Grafana](#20-metrics-that-exist-but-are-not-in-grafana)
+- [19. Metrics that exist but are NOT in Grafana](#19-metrics-that-exist-but-are-not-in-grafana)
 - [Where to find everything (documentation map)](#where-to-find-everything-documentation-map)
+- [Open questions & constraints to verify](#open-questions--constraints-to-verify)
 
 ---
 
@@ -140,6 +140,13 @@ An intent whose symbol is **not in that list** fails the condition and is droppe
 **"filtered by condition"**. This is the first question: *"is this intent even
 relevant to this client?"* — it runs **before** the OR-gate. (Conditions can match any
 enriched field, not just symbol; all listed conditions must pass.)
+
+**This is per client, evaluated independently.** Each client is its own router with its
+own `conditions`, and every intent is checked against every router separately — there is
+no single global pass/fail. So the same intent can be **dispatched for one client and
+filtered for another at the same time** (e.g. BTC/USD is in client-a's list but not
+client-b's → it passes for client-a and is filtered for client-b). That is why
+`intents_filtered_total{reason="condition"}` is counted per `(router_id, symbol)`.
 
 ### Stage 2 — the OR-gate (freshness filter) — `reason: "time_threshold" | "price_deviation" | "timestamp_*"`
 
@@ -311,7 +318,7 @@ segments**, so we know *where* time is spent (a Spectra idea).
 DIA slow to register (phase 1)? RPC slow (phase 2)? Cardano congested (phase 5)?
 
 > Today Grafana shows **only phase 6** (end-to-end). Phases 1–5 **are emitted but not
-> dashboarded** — they're in the "metrics to add" list (§20).
+> dashboarded** — they're in the "metrics to add" list (§19).
 
 ---
 
@@ -639,21 +646,7 @@ prerequisites, env vars, and the full output description.
 
 ---
 
-## 19. Questions for DIA
-
-1. **Intent emission rate/volume** per symbol → validates that sequential mode, the
-   `coalesce_window`, and `max_batch_size 10` are enough.
-2. **Freshness/staleness SLA** per pair → drives `time_threshold` and the cron cadence.
-   (Is 1h max acceptable, or do they need less?)
-3. **Per-pair `price_deviation`** → today 0.1% for all; do they want it to differ per pair?
-4. **Do they need HA / multi-instance (M3 replica)?** Is a single point of failure
-   acceptable for now?
-5. **Do they want `cron: true` active?** Today client-a doesn't have it → events only.
-6. **Rollback tolerance** → is `confirmation_depth: 1` fine, or do they want more depth?
-
----
-
-## 20. Metrics that exist but are NOT in Grafana
+## 19. Metrics that exist but are NOT in Grafana
 
 The feeder exposes ~50 `dia_bridge_*` metrics at `/metrics`. The current dashboard
 (`monitoring/grafana/dashboards/feeder.json`) uses **13**. Below is what's missing —
@@ -832,3 +825,20 @@ purpose, so it is clear where to look.
 
 - [`docs/plans/milestone-feeder-plan.md`](../plans/milestone-feeder-plan.md) and
   [`docs/plans/work-plan.md`](../plans/work-plan.md) — the live delivery plans.
+
+---
+
+## Open questions & constraints to verify
+
+Not blockers — items to confirm with the data owner or measure during real use.
+
+- **Throughput headroom under load.** DIA emits intents frequently; the bottleneck is
+  **Cardano confirmation** (one tx per receiver at a time, ~30 s–2 min), not the feeder's
+  enrichment. The open item is whether the per-lane submission rate keeps every pair
+  within its freshness target at peak emission — and, if not, whether to scale out (more
+  receivers/lanes per client) rather than rely on parallel enrichment. Best measured once
+  live volumes are known.
+- **Rollback tolerance.** The feeder runs at `confirmation_depth: 1` — a tx is treated as
+  final as soon as it lands in a block (practically final for an oracle, lowest latency).
+  To verify: is depth 1 acceptable, or should it wait extra Cardano blocks to ride out
+  short rollbacks, at some latency cost? (See §11.)
