@@ -9,6 +9,57 @@ or alternate command set are needed to target a different network. Set
 `CARDANO_NETWORK` and the matching Blockfrost project id in `.env`, generate or
 fund the right wallet, and re-run.
 
+## Contents
+
+- [Overview](#overview)
+  - [Folder structure](#folder-structure)
+- [Prerequisites](#prerequisites)
+- [Environment](#environment)
+- [Install](#install)
+- [Wallet Setup](#wallet-setup)
+  - [1. Inspect contracts](#1-inspect-contracts)
+  - [2. Inspect network](#2-inspect-network)
+  - [3. Create a Cardano wallet](#3-create-a-cardano-wallet)
+  - [4. Create an Ethereum wallet](#4-create-an-ethereum-wallet)
+  - [5. Fund and inspect the Cardano wallet](#5-fund-and-inspect-the-cardano-wallet)
+- [Protocol Deployment](#protocol-deployment)
+  - [6. Initialize the protocol artifact](#6-initialize-the-protocol-artifact)
+  - [7. Parameterize Config scripts](#7-parameterize-config-scripts)
+  - [8. Bootstrap Config](#8-bootstrap-config)
+  - [9. Publish Config reference scripts](#9-publish-config-reference-scripts)
+  - [10. Parameterize PaymentHook scripts](#10-parameterize-paymenthook-scripts)
+  - [11. Bootstrap PaymentHook](#11-bootstrap-paymenthook)
+  - [12. Publish PaymentHook reference script](#12-publish-paymenthook-reference-script)
+- [Client Deployment](#client-deployment)
+  - [13. Initialize the client artifact](#13-initialize-the-client-artifact)
+  - [14. Parameterize Receiver and Pair scripts](#14-parameterize-receiver-and-pair-scripts)
+  - [15. Bootstrap the Receiver](#15-bootstrap-the-receiver)
+  - [16. Publish client reference scripts](#16-publish-client-reference-scripts)
+  - [17. Top up the Receiver](#17-top-up-the-receiver)
+- [Oracle Intent Flow](#oracle-intent-flow)
+  - [18. Create an unsigned intent](#18-create-an-unsigned-intent)
+  - [19. Sign the intent](#19-sign-the-intent)
+  - [20. Create and sign in one step](#20-create-and-sign-in-one-step)
+- [Live Updates](#live-updates)
+  - [21. Submit one update](#21-submit-one-update)
+  - [22. Create a Config update draft](#22-create-a-config-update-draft)
+  - [23. Submit a Config update](#23-submit-a-config-update)
+  - [24. Create a batch manifest](#24-create-a-batch-manifest)
+  - [25. Submit a batch update](#25-submit-a-batch-update)
+  - [25b. Settle accrued fees](#25b-settle-accrued-fees)
+- [Maintenance Transactions](#maintenance-transactions)
+  - [26. Withdraw from the Receiver](#26-withdraw-from-the-receiver)
+  - [27. Withdraw protocol fees from PaymentHook](#27-withdraw-protocol-fees-from-paymenthook)
+  - [28. Update min UTxO for Receiver (admin only)](#28-update-min-utxo-for-receiver-admin-only)
+  - [29. Update min UTxO for Pair (admin only)](#29-update-min-utxo-for-pair-admin-only)
+  - [29b. Burn a Pair (admin only)](#29b-burn-a-pair-admin-only)
+  - [29c. Deduplicate Pair UTxOs (admin only)](#29c-deduplicate-pair-utxos-admin-only)
+  - [30. Update min UTxO for Config (admin only)](#30-update-min-utxo-for-config-admin-only)
+  - [31. Update min UTxO for PaymentHook (admin only)](#31-update-min-utxo-for-paymenthook-admin-only)
+  - [32. Reclaim reference-script UTxOs](#32-reclaim-reference-script-utxos)
+- [Build Only](#build-only)
+- [Artifact rules](#artifact-rules)
+
 ## Overview
 
 The CLI uses three kinds of inputs and outputs:
@@ -52,6 +103,9 @@ offchain/cli/
     ├── config-updates/config-update.json           # generated Config-update drafts
     └── update-batches/update-batch.manifest.json   # generated batch manifests
 ```
+
+Sub-folder docs: [`scripts/README.md`](./scripts/README.md) (developer / CI tooling) and
+[`state/README.md`](./state/README.md) (the generated state-artifact field reference).
 
 The normal flow is:
 
