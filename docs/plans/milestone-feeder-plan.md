@@ -197,6 +197,31 @@ populate the evidence.
     "exactly 1" preflight with the manifest non-empty + unique check (the on-chain coordinator
     already enforces sum-of-drains == hook delta). Update the `SettleOverdue` alert
     remediation + README to mention batching multiple clients in one settle.
+- [ ] **Per-client push policy: deviation-driven + long heartbeat (fewer tx, lower fees).**
+  A per-client config knob to drastically cut transaction count — important on Cardano where
+  the chain is slow and fees matter, on top of the compressed-contract work.
+  - **Today:** the gate is OR — submit if `time_threshold` elapsed **OR** price moved ≥
+    `price_deviation` (`src/router/policy.ts:12-25`), AND the cron re-submits every
+    `time_threshold` **regardless of whether the price changed or any new event arrived**
+    (`src/config/types.ts:261`). So with `time_threshold: 5m` the feeder pushes at least
+    every 5 min even on a flat price → many txs.
+  - **New per-client mode:** disable the short time-based push; submit **only** when the
+    price moves ≥ `price_deviation`, **or** when a **much longer** max-staleness / heartbeat
+    interval elapses (a NEW separate parameter, e.g. `max_staleness` / `heartbeat`). The long
+    heartbeat bounds how stale an on-chain price can get while still avoiding a tx on every
+    short tick.
+  - **Trade-off (must be documented for consumers + in the runbook):** with fewer updates, a
+    consumer reading the on-chain price cannot tell from the price alone whether it is
+    unchanged because (a) the feeder deliberately skipped it (no deviation), or (b) the feeder
+    is down. Mitigations: the heartbeat bounds max staleness; consumers should check feeder
+    **liveness/readiness** (`/health/live`, `/health/ready`) and watch
+    `oracle_last_confirmed_timestamp` / the `OraclePairStale` alert. This is an **operational
+    decision DIA makes per client** — cost vs freshness.
+  - **Work:** add the per-destination config keys (toggle + long `max_staleness`/`heartbeat`)
+    with validation + README; change the policy gate so the time arm becomes the long
+    heartbeat (not the short `time_threshold`) when the mode is on; stop the cron from
+    forcing short-interval re-submits for those clients; document the consumer trade-off and
+    the liveness mitigation. Default OFF (current time-driven behaviour stays the default).
 
 ### P2 — Plan hygiene (this task)
 - [x] Consolidate into this plan + `work-plan.md`; archive the rest with header notes.
