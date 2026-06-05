@@ -1,13 +1,61 @@
-# Feeder M2 — Architecture Guide (quick read)
+# DIA Cardano Oracle Feeder — Architecture Guide
 
-> Support document to explain the current state of the feeder. Written to be read
-> top-to-bottom before a meeting. Concepts build on each other, so the order matters.
->
-> At its core the feeder is a **port of DIA's Spectra bridge** to a Cardano
-> destination: same modular YAML config layout, same
-> `scanner → enricher → router → write-client` pipeline, same HTTP API surface, same
-> `dia_bridge_*` metric prefix. What **diverges** is the Cardano side, where the
-> EUTxO model forces us to serialize on-chain writes.
+> This document explains the Cardano oracle feeder: what it is, how it relates to the
+> Spectra bridge it is ported from, how it works end to end, and where to find the rest
+> of the repository's documentation. Read it top to bottom — the concepts build on each
+> other. It is the plain-language companion to the formal architecture spec
+> ([`cardano-oracle-architecture.md`](./cardano-oracle-architecture.md)) and to the
+> operator manuals (the READMEs, mapped in the final section).
+
+## Contents
+
+- [Overview: what it is, and how it maps to Spectra](#overview-what-it-is-and-how-it-maps-to-spectra)
+- [1. What the feeder is (high level)](#1-what-the-feeder-is-high-level)
+- [2. End-to-end flow (from an intent to a Cardano tx)](#2-end-to-end-flow-from-an-intent-to-a-cardano-tx)
+- [3. Ingestion: HTTP and WebSocket in parallel](#3-ingestion-http-and-websocket-in-parallel)
+- [4. The update decision: two filter stages](#4-the-update-decision-two-filter-stages)
+- [5. Batching & submission: Coalescer vs Queue Manager](#5-batching--submission-coalescer-vs-queue-manager)
+- [6. Latency: the 6 phases](#6-latency-the-6-phases)
+- [7. Caches & the price cache](#7-caches--the-price-cache)
+- [8. The database](#8-the-database)
+- [9. Loops & cadences](#9-loops--cadences)
+- [10. Cron service](#10-cron-service)
+- [11. Confirmation depth (Cardano finality)](#11-confirmation-depth-cardano-finality)
+- [12. Sequential vs parallel processing](#12-sequential-vs-parallel-processing)
+- [13. Worker pools](#13-worker-pools)
+- [14. Single-instance vs multi-instance (HA / failover)](#14-single-instance-vs-multi-instance-ha--failover)
+- [15. Config `infrastructure.preview.yaml` — key blocks](#15-config-infrastructurepreviewyaml--key-blocks)
+- [16. HTTP API](#16-http-api)
+- [17. State: implemented / M2 / deferred to M3](#17-state-implemented--m2--deferred-to-m3)
+- [18. Current limitations](#18-current-limitations)
+- [19. Questions for DIA](#19-questions-for-dia)
+- [20. Metrics that exist but are NOT in Grafana](#20-metrics-that-exist-but-are-not-in-grafana)
+- [Where to find everything (documentation map)](#where-to-find-everything-documentation-map)
+
+---
+
+## Overview: what it is, and how it maps to Spectra
+
+**What it is.** A production-style *feeder*: a long-running service that watches DIA
+oracle intents on the EVM side (Lasernet) and turns them into confirmed price-update
+transactions on **Cardano**, for one or more client receivers — with full monitoring
+(Grafana/Prometheus), an HTTP API, alerting, and an operator CLI.
+
+**It is a port of DIA's Spectra bridge.** Rather than invent a new design, it mirrors
+[`diadata-org/Spectra-interoperability/services/bridge`](https://github.com/diadata-org/Spectra-interoperability/tree/main/services/bridge)
+so it stays familiar to anyone who knows Spectra and behaves the same wherever Cardano
+allows it. The four buckets below summarise the relationship; the full disposition table
+is in §15.
+
+| Relationship | Spectra (DIA's EVM bridge) | This feeder (Cardano) |
+| --- | --- | --- |
+| **Taken 1:1** | modular YAML config; the `scanner → enricher → router → write-client` pipeline; the HTTP API surface; the `dia_bridge_*` metric names; the OR-gate policy (`time_threshold` / `price_deviation`); the cron liveness service; the 6 latency phases; gap-recovery/backfill | same names, same shapes, same metrics — a Spectra dashboard reads largely the same |
+| **Adapted for Cardano** | one worker pool per router submitting concurrently | a **lane model**: one serial queue per (client, receiver UTxO), because Cardano's EUTxO model forbids two txs spending the same UTxO at once. We added a **coalescer** (keep the newest price per symbol; batch a client's symbols) and an **in-flight lock timeout** |
+| **Cardano-only (no Spectra equivalent)** | — | `confirmation_depth` (Ouroboros finality), the `lib-bridge` Cardano tx builder, and the whole **fee flow** (receiver top-up → settle → payment-hook withdraw) |
+| **Deliberately left out (for now)** | HA failover monitor (`replica.*`), dedicated head-tracker/gap loops, EVM-destination subsystems | typed in config so a Spectra-shaped YAML still loads, but **not wired** — reserved for M3 (see §17) |
+
+The rest of this document walks the pipeline in order. §15 and the feeder README hold the
+full Spectra-parity table; §17 lists exactly what is implemented vs. deferred.
 
 ---
 
@@ -50,7 +98,7 @@ Result Handler ── writes DB (transaction_log + contract_symbol_updates) + pr
 
 ---
 
-## 3. Ingestion: HTTP + WebSocket "in parallel"
+## 3. Ingestion: HTTP and WebSocket in parallel
 
 **These are NOT two processes.** The feeder is **one Node.js process** (one thread,
 one event loop). Inside it, two async tasks run **concurrently** via
@@ -471,6 +519,41 @@ That's exactly why it's a later milestone.
   finality), the `lib-bridge` write client, and the whole **fee flow** (receiver
   top-up → settle → payment-hook withdraw).
 
+### Spectra parity and Cardano divergences (full table)
+
+This is the canonical disposition register — which Spectra config keys, metrics, and
+behaviours are matched 1:1 versus adapted or extended for Cardano. The feeder is
+intentionally close to
+[`diadata-org/Spectra-interoperability/services/bridge`](https://github.com/diadata-org/Spectra-interoperability/tree/main/services/bridge):
+same modular YAML config layout, same scanner → enricher → router → write-client
+pipeline, same HTTP API surface, same `dia_bridge_*` metric prefix. Most code-path
+behaviours map 1:1; the Cardano-destination side diverges where the EUTxO model forces
+it and where Spectra config fields are dead (declared but never read in Spectra itself).
+
+| Concept | Spectra | This feeder | Why |
+| --- | --- | --- | --- |
+| Worker pool (`worker_pool.max_workers`, `task_queue_size`, `task_timeout`) | Per-router pool with N concurrent submission workers. | **Wired** via `UpdateWorkerPoolManager`: each router gets its own pool with `max_workers` workers and a `task_queue_size`-deep queue. The workers do **not** submit to Cardano directly — they drain into the shared coalescer, which serialises submissions per lane = `(client_state_path, protocol_state_path)`. So the pool raises ingest throughput from the daemon's event loop without ever breaking lane safety, and a saturated router cannot starve the others. Cross-lane parallelism still comes from multiple clients (different Receivers). | Cardano's EUTxO model serialises spends of the same Receiver UTxO, so on-chain writes stay serial per lane even though the pool itself is concurrent. |
+| In-flight lock timeout (`worker_pool.inflight_timeout_ms`) | Not present. | **Required**. Cardano-specific because the lane lock is held while a tx is in-flight. Default 15 min. | Reflects the wall-clock ceiling on Cardano submit+confirm. |
+| Parallel event processor (`event_processor.enable_parallel_mode`, `parallel_*`) | Active — parallel enrichment + gas-est pipeline. | **Active** — wired in parallel mode when `enable_parallel_mode: true`. Sequential (default) when the key is absent or false. | Sequential mode is sufficient for current throughput; parallel mode is available for high-volume deployments. |
+| Block scanner gap recovery (`block_scanner.backward_sync`, `max_block_gap`, `head_tracker_interval`, `gap_detection_interval`) | Active — backfill in 5000-block chunks when the gap exceeds `max_block_gap`. | **Active**: when `backward_sync: true`, the scanner switches to 5000-block chunks (vs `block_range` default 500) and skips `scan_interval` between chunks until caught up. Emits `dia_bridge_scanner_backfill_*` counters. | Chain-agnostic; reuses Spectra's design. |
+| Cron service (`cron_service.*` + per-destination `cron: true`) | Active — per-router cron timer re-pushes the latest cached intent when `time_threshold` elapsed. | **Active**: ticks every `cron_service.tick_interval`, re-submits via the same queue as the event-driven flow. Outcome partitioned in `dia_bridge_cron_resubmissions_total{outcome}`. | Ensures uptime and accuracy guarantees when the deviation filter suppresses every incoming event during low-volatility windows. |
+| `health_check.max_processing_lag` | Declared but never read in Spectra. | **Active** — drives the `registry` check in `/health/ready`. | Cardano-feeder extension. |
+| `health_check.timeout`, `max_queue_size`, `recovery.*`, `event_processor.batch_size`, `validation_timeout` | Declared but never read in Spectra. | **Removed** from our types + YAMLs (cruft in both repos). | Reduces operator confusion. |
+| `replica.*` | Active — HA failover monitor. | **Typed, not yet wired** — fields parse cleanly from YAML; failover logic is reserved for a future implementation. | Operational HA requires multi-instance coordination not yet implemented. |
+| `cardano.confirmation_depth` | N/A. | **Active** — feeder waits `(depth - 1) × 20 s` past inclusion and re-verifies the tx is still on chain. Reflected in `/api/v1/prices` `confirmedAtDepth`. | Cardano-specific (Ouroboros Praos finality model). |
+| `alerting.*` block | N/A. | **Active** — canonical thresholds for both feeder warnings and Prometheus alert rules. | Centralises operational thresholds. |
+
+Porting a deployment FROM Spectra to this feeder:
+
+- Drop `event_processor.{batch_size, validation_timeout}`,
+  `health_check.{timeout, max_queue_size}`, and the `recovery` block — silently ignored.
+- Keep `worker_pool.{max_workers, task_queue_size, task_timeout}` — read and wired here
+  (per-router update pools draining into the serial per-lane coalescer).
+- Add `cardano.confirmation_depth`, the `alerting:` block, and
+  `worker_pool.inflight_timeout_ms` — all required by our validator.
+- Per Cardano destination, optionally add `cron: true` + `time_threshold: 5m` to opt
+  into cron-driven liveness.
+
 ---
 
 ## 16. HTTP API
@@ -683,3 +766,69 @@ panel they'd read 0/empty. Don't add them until they're wired:
 3. **Cost per tx** (`transaction_fee_lovelace`): tracks ADA spend.
 4. **Scanner health** (`last_block`, `rpc_errors`, `backfill`).
 5. **Cron** (`cron_resubmissions_total` by outcome).
+
+---
+
+## Where to find everything (documentation map)
+
+The feeder is one part of a larger repository. Every document worth reading, grouped by
+purpose, so it is clear where to look.
+
+### Start here — understand the system
+
+- [`README.md`](../../README.md) (repo root) — repository entry point: scope,
+  prerequisites, quick start, and pointers to every component.
+- [`docs/architecture/cardano-oracle-architecture.md`](./cardano-oracle-architecture.md)
+  — the formal, canonical architecture spec: the on-chain contracts, compile-time
+  parameters, UTxO model, datums, every transaction shape (with diagrams), the fee flow,
+  and the feeder's DB/API/metrics. **This `feeder.md` is the plain-language companion to
+  it** — read this first, that one for the rigorous detail.
+- **This document** — the narrative feeder walkthrough.
+
+### Operator manuals — how to run it
+
+- [`offchain/feeder/README.md`](../../offchain/feeder/README.md) — the feeder operator
+  manual: Docker & npm workflows, all `make` targets and flags, log streams,
+  env/secrets, the 6-table DB schema, config knobs, the full HTTP API reference, the
+  finality/reorg model, the alert map, and the complete Spectra-parity divergence table.
+- [`offchain/cli/README.md`](../../offchain/cli/README.md) — the CLI runbook: the full
+  numbered sequence to deploy the protocol, onboard a client, publish reference scripts,
+  run updates, settle fees, and reclaim — for Preview and Mainnet.
+- [`offchain/feeder/scripts/README.md`](../../offchain/feeder/scripts/README.md) — the
+  evidence-pack tooling (`make evidence`) and the on-chain pair-scan helper.
+
+### Developer reference
+
+- [`contracts/aiken/README.md`](../../contracts/aiken/README.md) — map of the on-chain
+  Aiken validators (the contracts, design highlights, build/bench commands).
+- [`offchain/cli/state/README.md`](../../offchain/cli/state/README.md) — the generated
+  state-artifact tree (what each field in the bootstrap/client JSON files means).
+
+### Requirements & scope (the contract)
+
+- [`docs/requirements/cardano-integration-requirement-pf.md`](../requirements/cardano-integration-requirement-pf.md)
+  — the DIA PRD: the EVM reference contracts and required behaviour the feeder was built
+  against.
+- [`docs/milestones/final-cardano-milestones.md`](../milestones/final-cardano-milestones.md)
+  — the Catalyst milestone definitions (M1–M4): outputs, acceptance criteria, evidence.
+
+### Evidence — proof it works
+
+- [`docs/milestones/evidence/m2-preview-20260604-100120/milestone-2-preview-evidence.md`](../milestones/evidence/m2-preview-20260604-100120/milestone-2-preview-evidence.md)
+  — the **auto-generated M2 evidence report**: per-pair confirmed-tx counts, sample tx
+  hashes, end-to-end latency, failures by error code, embedded Grafana dashboard/panel
+  PNGs, and the alerts active at capture time. Regenerate any time with `make evidence`
+  (see §17).
+- Earlier M1 packs live under
+  [`docs/milestones/evidence/`](../milestones/evidence/) — dated, per network.
+
+### Security & audits
+
+- [`docs/security/security-notes.md`](../security/security-notes.md) — the trust
+  model and in-scope security properties.
+- [`docs/audit/`](../audit/) — the security and fee/efficiency audit reports.
+
+### Planning (internal)
+
+- [`docs/plans/milestone-feeder-plan.md`](../plans/milestone-feeder-plan.md) and
+  [`docs/plans/work-plan.md`](../plans/work-plan.md) — the live delivery plans.

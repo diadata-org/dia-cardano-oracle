@@ -2,6 +2,50 @@
 
 This document is the single architecture reference for the Cardano port of DIA's push-oracle contracts. It defines the contract set, UTxO model, datums, transaction shapes, deployment sequence, and open items pending DIA confirmation.
 
+## Contents
+
+- [1. Contracts (scripts)](#1-contracts-scripts)
+  - [1.1 Scripts and compile-time parameters](#11-scripts-and-compile-time-parameters)
+  - [1.2 Compile-time dependency graph](#12-compile-time-dependency-graph)
+  - [1.3 Setup sequence](#13-setup-sequence)
+  - [1.4 Reference-script deployment (global)](#14-reference-script-deployment-global)
+  - [1.5 Reference-script deployment (per client, per-client step 4 above)](#15-reference-script-deployment-per-client-per-client-step-4-above)
+- [2. Identity tokens (state tokens)](#2-identity-tokens-state-tokens)
+- [3. UTxOs per script address](#3-utxos-per-script-address)
+- [4. Datums](#4-datums)
+  - [4.1 Config datum](#41-config-datum)
+  - [4.2 PaymentHook datum](#42-paymenthook-datum)
+  - [4.3 Receiver datum (per client)](#43-receiver-datum-per-client)
+  - [4.4 Pair datum (per client, per pair)](#44-pair-datum-per-client-per-pair)
+- [5. Transactions](#5-transactions)
+  - [5.1 Config bootstrap](#51-config-bootstrap)
+  - [5.2 PaymentHook bootstrap](#52-paymenthook-bootstrap)
+  - [5.3 Config update](#53-config-update)
+  - [5.4 Receiver bootstrap (per client)](#54-receiver-bootstrap-per-client)
+  - [5.5 Receiver top-up](#55-receiver-top-up)
+  - [5.6 Receiver withdraw (equivalent to EVM `retrieveLostTokens`)](#56-receiver-withdraw-equivalent-to-evm-retrievelosttokens)
+  - [5.7 First pair update/create (per client × pair)](#57-first-pair-updatecreate-per-client--pair)
+  - [5.8 Price update (single) — main tx](#58-price-update-single--main-tx)
+  - [5.9 Price update (batch)](#59-price-update-batch)
+  - [5.10 PaymentHook withdraw](#510-paymenthook-withdraw)
+  - [5.11 Settle accrued fees](#511-settle-accrued-fees)
+  - [5.12 Update min UTxO (admin only)](#512-update-min-utxo-admin-only)
+  - [5.13 Pair burn (admin only)](#513-pair-burn-admin-only)
+- [6. Finalized design decisions](#6-finalized-design-decisions)
+- [7. Redeemer index reference](#7-redeemer-index-reference)
+- [8. Script identities and references](#8-script-identities-and-references)
+  - [8.1 Table E — Where each policy ID / script hash is stored and read](#81-table-e--where-each-policy-id--script-hash-is-stored-and-read)
+  - [8.2 Table F — Identity NFTs](#82-table-f--identity-nfts)
+  - [8.3 Table G — Config datum as a source of truth](#83-table-g--config-datum-as-a-source-of-truth)
+  - [8.4 Table H — Parameterization vs runtime references](#84-table-h--parameterization-vs-runtime-references)
+- [9. Off-chain feeder architecture](#9-off-chain-feeder-architecture)
+  - [9.1 Persistence model — DB as source of truth](#91-persistence-model--db-as-source-of-truth)
+  - [9.2 Worker-pool layering](#92-worker-pool-layering)
+  - [9.3 Cron service](#93-cron-service)
+  - [9.4 Alert evaluator and `alert_log`](#94-alert-evaluator-and-alert_log)
+  - [9.5 API endpoint → table map](#95-api-endpoint--table-map)
+  - [9.6 Spectra parity](#96-spectra-parity)
+
 Reference inputs to this document:
 
 - [Cardano Integration Requirement [PF]](../requirements/cardano-integration-requirement-pf.md)
@@ -627,7 +671,7 @@ PaymentHook is **not** involved. Fees are accrued locally on the Receiver and se
    - At least one minted pair entry; each has `qty == 1`.
    - For every minted name: an output holds that NFT `qty 1` and inline `PairDatum`; payment credential `Script(pair_policy_id)`; `pair_asset_name(datum.pair_id) == minted_name`; `valid_pair_state(datum)`; `exact_locked_lovelace`.
    - Config NFT visible as reference input `qty 1`; decodes as `ConfigDatum`; `valid_config_state(config_datum)`.
-   - **Admin gate:** `has_config_signer(config_datum, tx)` — at least one `config_admins` payment key must appear in `tx.extra_signatories`. A signed DIA intent alone is NOT sufficient to create a Pair NFT: without this gate, an attacker holding a fresh DIA intent could replay it across two transactions to mint two NFTs with the same `pair_token_name`, since at creation time there is no prior on-chain `PairDatum` to anchor nonce uniqueness against. After this transaction the freshly stored `PairDatum.nonce` becomes the anti-replay anchor used by every later `is_fresh_update`. See `docs/security/m1-security-notes.md`.
+   - **Admin gate:** `has_config_signer(config_datum, tx)` — at least one `config_admins` payment key must appear in `tx.extra_signatories`. A signed DIA intent alone is NOT sufficient to create a Pair NFT: without this gate, an attacker holding a fresh DIA intent could replay it across two transactions to mint two NFTs with the same `pair_token_name`, since at creation time there is no prior on-chain `PairDatum` to anchor nonce uniqueness against. After this transaction the freshly stored `PairDatum.nonce` becomes the anti-replay anchor used by every later `is_fresh_update`. See `docs/security/security-notes.md`.
    - **Coordinator intent binding + local expiry:** `pair_mint_intent_satisfied(tx, config_datum, pair_policy_id, pair_token_name)` — the coordinator withdraw redeemer in `tx.redeemers` must decode as `ApplySingle` or `ApplyBatch` and name **this** minted pair (`pair_policy_id` + minted asset name) AND that witness's intent must satisfy `intent_expiry_satisfied` against the tx's finite upper validity bound. This blocks piggy-backing on `ApplySettle` or on another pair's update witness, and re-asserts intent expiry on the same code path that consumes the intent (defence in depth: expiry is enforced both here and in the coordinator).
 
 3. **`receiver` spend** — redeemer `ReceiverRedeemer::AccrueFee` (index 1). Validates:
@@ -1351,14 +1395,16 @@ The feeder naming follows the
 (`services/bridge/`) as the canonical reference for all metric names, API paths,
 config keys, and DB column names. Deviations from Spectra are Cardano-specific
 extensions (e.g. `cardano.*` config block, `fee_paid_lovelace`, Cardano network
-selectors). The full disposition register is maintained in
-[`docs/plans/_archived/milestone-2-final-plan.md` — Spectra Parity Disposition Register](../plans/_archived/milestone-2-final-plan.md)
-(archived; live feeder plan is [`docs/plans/milestone-feeder-plan.md`](../plans/milestone-feeder-plan.md)).
+selectors). The full disposition register — which Spectra metric names, API paths,
+config keys, and DB columns are matched 1:1 versus adapted for Cardano — is the
+"Spectra parity and Cardano divergences" table in the feeder architecture guide
+([`docs/architecture/feeder.md` §15](./feeder.md#spectra-parity-and-cardano-divergences-full-table)).
 
-Typed Spectra keys that are surfaced in the YAML but **not wired** to runtime
-behaviour yet are inventoried in
-[`docs/plans/_archived/m3-deferred-features.md`](../plans/_archived/m3-deferred-features.md). Every
-row there must correspond either to a future M3 wiring task or to a permanent
-"excluded" classification (multi-chain / EVM-destination Spectra subsystems).
+Typed Spectra keys that are surfaced in the YAML but **not wired** to runtime behaviour
+yet (e.g. `replica.*` HA failover, dedicated head-tracker / gap-detection loops,
+`listen_addr`) are inventoried in
+[`docs/architecture/feeder.md` §17](./feeder.md#17-state-implemented--m2--deferred-to-m3).
+Each is either a future M3 wiring task or a permanent "excluded" classification
+(multi-chain / EVM-destination Spectra subsystems).
 
 ---

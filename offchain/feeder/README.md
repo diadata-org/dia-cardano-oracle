@@ -13,6 +13,58 @@ write-client pipeline, per-key transaction queues, HTTP API for health
 diverges substantively — it builds Cardano txs via the pure builders in
 `offchain/cli/src/lib/` instead of EVM ABI calls.
 
+## Contents
+
+- [Directory guide](#directory-guide)
+- [Service URLs — where to look (once it's running)](#service-urls--where-to-look-once-its-running)
+- [Running with Docker](#running-with-docker)
+  - [Daemon only](#daemon-only)
+  - [Daemon + monitoring](#daemon--monitoring)
+  - [Capturing an operational snapshot](#capturing-an-operational-snapshot)
+  - [Admin commands (CLI)](#admin-commands-cli)
+  - [Operator setup — pick your scenario](#operator-setup--pick-your-scenario)
+  - [Day-2 operations (Docker)](#day-2-operations-docker)
+  - [Volume layout](#volume-layout)
+- [Running locally (npm)](#running-locally-npm)
+  - [Operator setup — pick your scenario](#operator-setup--pick-your-scenario-1)
+  - [Day-2 operations (npm)](#day-2-operations-npm)
+  - [All commands — copy-paste examples](#all-commands--copy-paste-examples)
+- [Flags](#flags)
+  - [`--log-level` — what each level shows](#--log-level--what-each-level-shows)
+  - [`--clean` flag / `reset` sub-command — what gets deleted](#--clean-flag--reset-sub-command--what-gets-deleted)
+- [Log streams](#log-streams)
+- [Environment](#environment)
+- [Database](#database)
+  - [Schema — 6 tables](#schema--6-tables)
+- [Config layout](#config-layout)
+  - [Validation](#validation)
+  - [`event_processor` knobs](#event_processor-knobs)
+  - [`block_scanner` knobs](#block_scanner-knobs)
+  - [`worker_pool` knobs](#worker_pool-knobs)
+  - [`cron_service` knobs](#cron_service-knobs)
+  - [`api` knobs](#api-knobs)
+- [HTTP API](#http-api)
+  - [What "confirmed" means](#what-confirmed-means)
+- [Thresholds and alerts](#thresholds-and-alerts)
+  - [Built-in alert evaluator](#built-in-alert-evaluator)
+  - [Prometheus alert thresholds](#prometheus-alert-thresholds)
+  - [Full alert map](#full-alert-map)
+  - [Operational wallets at a glance](#operational-wallets-at-a-glance)
+- [Architecture & Spectra parity](#architecture--spectra-parity)
+
+## Directory guide
+
+| Path | What's there |
+| --- | --- |
+| [`config/`](./config/README.md) | YAML configuration the feeder loads — infrastructure, chains, contracts, events, routers, pair selection. |
+| [`scripts/`](./scripts/README.md) | Evidence-pack tooling (`make evidence`) and the on-chain pair-scan helper. |
+| [`state/`](./state/README.md) | Per-network state: imported CLI artifacts (committed) + runtime DB/logs (gitignored). |
+| `src/`, `cmd/` | The feeder daemon source (TypeScript). |
+
+The deep architecture and the Spectra-parity table live in
+[`docs/architecture/feeder.md`](../../docs/architecture/feeder.md) — see
+[Architecture & Spectra parity](#architecture--spectra-parity) below.
+
 ## Service URLs — where to look (once it's running)
 
 Start with `make up MONITORING=1` (feeder + Grafana + Prometheus) or
@@ -687,105 +739,19 @@ individual gauge unchanged (no misleading 0); the label-less gauges
 (`admin_wallet`, `payment_hook_accrued`) stay absent until the first real
 reading rather than reporting a default 0.
 
-## Architecture
+## Architecture & Spectra parity
 
-```text
-DIA Lasernet (EVM)
-       │
-       ▼
-  Block scanner / WS monitor
-  (HTTP polling or WebSocket)
-       │ raw eth_getLogs / subscription events
-       ▼
-  Event extractor + dedup cache
-  (processed_events DB table — prevents replay)
-       │ unique IntentRegistered events
-       ▼
-  Enricher (getIntent RPC → fullIntent)
-       │ EnrichedIntent
-       ▼
-  Router (trigger conditions → policy gate)
-  (time_threshold OR price_deviation — OR-gate)
-       │ dispatched (routerId, destIndex) pairs
-       ▼
-  Lane coalescer (per-client buffer)
-  (contract_symbol_updates DB — last confirmed price)
-       │ flush batch
-       ▼
-  Queue manager (one serial lane per receiver UTxO)
-  ├─ Lane A: client-a (serial, EUTxO-safe)
-  └─ Lane B: client-b (serial, independent of A)
-       │
-       ▼
-  Cardano write client (lib-bridge)
-  (load state → build tx → sign → submit → await confirm)
-       │ OracleUpdateResult (txHash, postState)
-       ▼
-  Result handler
-  ├─ DB: transaction_log (confirmed / failed row)
-  ├─ DB: contract_symbol_updates (new confirmed price)
-  ├─ priceCache (hot-path in-memory update)
-  └─ Prometheus gauges (wallets, latency, errors)
+The deep architecture — the full pipeline (scanner → enricher → router → coalescer →
+queue → write-client), the DB-as-source-of-truth model, the concurrent HTTP + WebSocket
+transports, and the **canonical Spectra-parity / Cardano-divergence table** — lives in
+the architecture guide, so it stays in one place instead of drifting across docs:
 
-Side loops (independent goroutines):
-  Cron service ─── ticks every tick_interval
-                   re-submits stale cron-enabled pairs
-                   via the same queue manager
-  Alert evaluator ─ evaluates OraclePairStale rule (etc.)
-                    writes alert_log table
-                    queryable at GET /api/v1/alerts
-  HTTP API server ─ /health, /metrics, /api/v1/*
-```
+- [`docs/architecture/feeder.md`](../../docs/architecture/feeder.md) — plain-language
+  walkthrough of the whole feeder; the Spectra-parity disposition table is in
+  [§15](../../docs/architecture/feeder.md#spectra-parity-and-cardano-divergences-full-table).
+- [`docs/architecture/cardano-oracle-architecture.md`](../../docs/architecture/cardano-oracle-architecture.md)
+  — the formal architecture spec (on-chain contracts, UTxO model, transaction shapes,
+  fee flow, and the feeder's DB/API/metrics).
 
-### DB as source of truth
-
-All state that must survive a restart lives in the 6-table DB schema (see
-`src/persistence/db.ts`). The in-memory `priceCache` is the hot path for
-routing decisions but is re-seeded from `contract_symbol_updates` at boot.
-No JSON checkpoint file is written.
-
-### Concurrent transports, single handler
-
-In daemon mode both the HTTP poller and (when `ws_url` is configured in the
-infrastructure YAML) the WebSocket subscription run concurrently and feed
-the same event handler — there is no transport switch for the daemon. The
-dedup cache (`processed_events`) ensures that an intent arriving on both
-channels is processed exactly once.
-
-## Spectra parity and Cardano divergences
-
-This feeder is intentionally close to
-[`diadata-org/Spectra-interoperability/services/bridge`](https://github.com/diadata-org/Spectra-interoperability/tree/main/services/bridge):
-same modular YAML config layout, same scanner → enricher → router →
-write-client pipeline, same HTTP API surface, same metric prefix
-(`dia_bridge_*`). Most code-path behaviours map 1:1.
-
-The Cardano-destination side diverges where the EUTxO model forces it
-and where Spectra config fields are dead (declared but never read in
-Spectra itself). The table below is the canonical reference:
-
-| Concept | Spectra | This feeder | Why |
-| --- | --- | --- | --- |
-| Worker pool (`worker_pool.max_workers`, `task_queue_size`, `task_timeout`) | Per-router pool with N concurrent submission workers. | **Wired** via `UpdateWorkerPoolManager`: each router gets its own pool with `max_workers` workers and a `task_queue_size`-deep queue. The workers do **not** submit to Cardano directly — they drain into the shared coalescer, which serialises submissions per lane = `(client_state_path, protocol_state_path)`. So the pool raises ingest throughput from the daemon's event loop without ever breaking lane safety, and a saturated router cannot starve the others. Cross-lane parallelism still comes from multiple clients (different Receivers). | Cardano's EUTxO model serialises spends of the same Receiver UTxO, so on-chain writes stay serial per lane even though the pool itself is concurrent. |
-| In-flight lock timeout (`worker_pool.inflight_timeout_ms`) | Not present. | **Required**. Cardano-specific because the lane lock is held while a tx is in-flight. Default 15 min. | Reflects the wall-clock ceiling on Cardano submit+confirm. |
-| Parallel event processor (`event_processor.enable_parallel_mode`, `parallel_*`) | Active — parallel enrichment + gas-est pipeline. | **Active** — wired in parallel mode when `enable_parallel_mode: true`. Sequential (default) when the key is absent or false. | Sequential mode is sufficient for current throughput; parallel mode is available for high-volume deployments. |
-| Block scanner gap recovery (`block_scanner.backward_sync`, `max_block_gap`, `head_tracker_interval`, `gap_detection_interval`) | Active — backfill in 5000-block chunks when the gap exceeds `max_block_gap`. | **Active**: when `backward_sync: true`, the scanner switches to 5000-block chunks (vs `block_range` default 500) and skips `scan_interval` between chunks until caught up. Emits `dia_bridge_scanner_backfill_*` counters. | Chain-agnostic; reuses Spectra's design. |
-| Cron service (`cron_service.*` + per-destination `cron: true`) | Active — per-router cron timer re-pushes the latest cached intent when `time_threshold` elapsed. | **Active**: ticks every `cron_service.tick_interval`, re-submits via the same queue as the event-driven flow. Outcome partitioned in `dia_bridge_cron_resubmissions_total{outcome}`. | Ensures uptime and accuracy guarantees when the deviation filter suppresses every incoming event during low-volatility windows. |
-| `health_check.max_processing_lag` | Declared but never read in Spectra. | **Active** — drives the `registry` check in `/health/ready`. | Cardano-feeder extension. |
-| `health_check.timeout`, `max_queue_size`, `recovery.*`, `event_processor.batch_size`, `validation_timeout` | Declared but never read in Spectra. | **Removed** from our types + YAMLs (cruft in both repos). | Reduces operator confusion. |
-| `replica.*` | Active — HA failover monitor. | **Typed, not yet wired** — fields parse cleanly from YAML; failover logic is reserved for a future implementation. | Operational HA requires multi-instance coordination not yet implemented. |
-| `cardano.confirmation_depth` | N/A. | **Active** — feeder waits `(depth - 1) × 20 s` past inclusion and re-verifies the tx is still on chain. Reflected in `/api/v1/prices` `confirmedAtDepth`. | Cardano-specific (Ouroboros Praos finality model). |
-| `alerting.*` block | N/A. | **Active** — canonical thresholds for both feeder warnings and Prometheus alert rules. | Centralises operational thresholds; documented above. |
-
-If you are porting a deployment FROM Spectra to this feeder:
-
-- Drop `event_processor.{batch_size, validation_timeout}`,
-  `health_check.{timeout, max_queue_size}`, and the `recovery` block —
-  they are silently ignored.
-- Keep `worker_pool.{max_workers, task_queue_size, task_timeout}` — they
-  are read and wired here (per-router update pools draining into the
-  serial per-lane coalescer).
-- Add `cardano.confirmation_depth`, the `alerting:` block, and
-  `worker_pool.inflight_timeout_ms` — all required by our validator.
-- Per Cardano destination, optionally add `cron: true` +
-  `time_threshold: 5m` to opt into cron-driven liveness.
+This README stays focused on **operating** the feeder (the sections above); the
+architecture guide explains **how it works** and **why it diverges from Spectra**.
