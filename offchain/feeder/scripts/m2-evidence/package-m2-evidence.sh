@@ -352,6 +352,20 @@ Window observed in \`transactions.jsonl\`:
 
 Evidence pack location: this directory.
 
+## Contents
+
+- [Official Milestone 2 Outputs](#official-milestone-2-outputs)
+- [Totals (this window)](#totals-this-window)
+- [Confirmed Cardano tx count per pair](#confirmed-cardano-tx-count-per-pair)
+- [Sample Cardano tx hashes (one per pair, first observed)](#sample-cardano-tx-hashes-one-per-pair-first-observed)
+- [End-to-end latency per pair](#end-to-end-latency-per-pair)
+- [Failures (grouped by error_code)](#failures-grouped-by-error_code)
+- [Raw artefacts in this pack](#raw-artefacts-in-this-pack)
+- [Dashboards](#dashboards)
+  - [Full dashboard](#full-dashboard)
+  - [Panels](#panels)
+- [Alerts active during the window](#alerts-active-during-the-window)
+
 ## Official Milestone 2 Outputs
 
 | Official output | Repository status |
