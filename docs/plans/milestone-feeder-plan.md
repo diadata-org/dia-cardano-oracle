@@ -20,6 +20,19 @@ the old checkboxes.
 
 ---
 
+## Contents
+
+- [1. Verified DONE baseline (do not re-litigate)](#1-verified-done-baseline-do-not-re-litigate)
+  - [Done THIS session (2026-06-04/05) — monitoring & ops correctness](#done-this-session-2026-06-0405--monitoring--ops-correctness)
+- [2. PENDING — Milestone 2 (priority order)](#2-pending--milestone-2-priority-order)
+  - [P0 — M2 evidence pack (the Catalyst acceptance gate)](#p0--m2-evidence-pack-the-catalyst-acceptance-gate)
+  - [P1 — Monitoring correctness & coverage (found this session)](#p1--monitoring-correctness--coverage-found-this-session)
+  - [P2 — Plan hygiene (this task)](#p2--plan-hygiene-this-task)
+- [3. PENDING — Mainnet rollout (R8)](#3-pending--mainnet-rollout-r8)
+- [4. OPEN questions pending DIA (carried from feeder-strategy)](#4-open-questions-pending-dia-carried-from-feeder-strategy)
+- [5. Deferred to M3 / M4 (NOT M2)](#5-deferred-to-m3--m4-not-m2)
+- [6. Known stale references to clean up (low priority)](#6-known-stale-references-to-clean-up-low-priority)
+
 ## 1. Verified DONE baseline (do not re-litigate)
 
 The core feeder is built, tested, and operational. Verified in code:
@@ -95,6 +108,35 @@ The scripts and one-folder pipeline exist; what's missing is a real long run.
   `recovery_attempts_total`, ingest/sanitation counters, `cron_resubmissions_total`,
   db ops, plus node/process defaults. Align panel windows with alert windows
   (PriceAge/PriceDeviation alert at 10 m; panels currently 1 h).
+- [ ] **Dashboard filter variables — `$client` first, then every label we can split by.**
+  Right now panels show raw aggregates; an operator can't ask "show me ONLY client-a". Add
+  Grafana template variables and rewrite every per-label panel to honour them. When a
+  filter is left at **All**, the panel must AGGREGATE across that label (sum / multi-series),
+  not vanish.
+  - **Implementation (verified against `src/api/metrics.ts` label sets, 2026-06-05):**
+    - Add template vars (type=query, `includeAll`, multi-value): `$client`
+      (`label_values(dia_bridge_cardano_receiver_balance_lovelace, client_id)`), `$symbol`
+      (`label_values(dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds, symbol)`),
+      and where useful `$customer`, `$error_code`. Set each var's All-value to `.*`.
+    - In every per-label query, filter with regex-match and aggregate excluding the filtered
+      label, e.g. counters: `sum by (symbol) (rate(dia_bridge_transactions_confirmed_total{client_id=~"$client", symbol=~"$symbol"}[5m]))`;
+      histograms: `histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_end_to_end_latency_seconds_bucket{client_id=~"$client"}[5m])))`.
+      All → `.*` matches every client and `sum by` aggregates across them; one client →
+      just that client. This is the "filter, else aggregate" pattern the operator asked for.
+  - **Metrics that CAN be filtered by client** (have `client_id`): transactions
+    submitted/confirmed/failed(+`error_code`)/reorg; latency phases 3–5
+    (`scan_to_processing`, `processing_to_submission`, `submission_to_confirmation`,
+    `end_to_end_latency`); `cardano_oracle_last_confirmed_timestamp_seconds`;
+    `cardano_receiver_balance_lovelace`(+`receiver_address`); `cardano_receiver_accrued_lovelace`;
+    `cardano_receiver_topup_warnings_total`; `cardano_pair_is_create`;
+    `cron_resubmissions_total`(+`router_id`,`outcome`); `intents_{submitted,confirmed,failed}_lifecycle_total`(+`customer`);
+    `transaction_fee_lovelace`(+`customer`). These MUST get the `$client` filter.
+  - **Metrics that are GLOBAL (no `client_id`, document as not client-filterable):**
+    `cardano_admin_wallet_lovelace`, `cardano_payment_hook_accrued_lovelace` (protocol-wide);
+    `scanner_*`, `http_*`, `db_*`, `worker_*`, `component_health` (infra); `price_deviation_percent`,
+    `price_age_seconds` (by `symbol`, source-data); latency phases 1–2
+    (`intent_to_registration`, `registration_to_scan`) are pre-routing, `symbol`-only.
+  - Apply to BOTH the existing `feeder.json` and the new metrics dashboard.
 
 ### P2 — Plan hygiene (this task)
 - [x] Consolidate into this plan + `work-plan.md`; archive the rest with header notes.
