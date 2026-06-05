@@ -3,6 +3,14 @@ Generated Preview/Mainnet state artifacts live here while running the CLI.
 Do not commit generated protocol, client, pair, intent, batch, or build-only
 JSON files. They are environment-specific outputs created by the operator CLI.
 
+## Contents
+
+- [Layout](#layout)
+- [Protocol artifact (`config-bootstrap.json`) — `scripts` block](#protocol-artifact-config-bootstrapjson--scripts-block)
+- [Protocol artifact — `compiledScripts` block](#protocol-artifact--compiledscripts-block)
+- [Protocol artifact — `referenceScripts` block](#protocol-artifact--referencescripts-block)
+- [Receiver state fields](#receiver-state-fields)
+
 ## Layout
 
 ```
