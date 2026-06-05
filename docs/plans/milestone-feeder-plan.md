@@ -3,35 +3,27 @@
 **Status date:** 2026-06-05 · **Tests:** 475 pass, 0 fail (`cd offchain/feeder && npm test`) · **Branch:** main
 
 This is the single source of truth for the DIA Cardano Oracle **feeder** (Catalyst
-Milestone 2) and its path to Mainnet. It **supersedes and consolidates**:
-
-- `milestone-2-final-plan.md` — operational R0–R10 breakdown (its checkboxes were
-  stale; verified status is captured here).
-- `milestone-2-feeder-strategy.md` — conceptual reference + open DIA questions.
-- `HANDOFF.md` — current-state / how-to-verify.
-- `mainnet-rollout.md` — Mainnet runbook (its CLI commands were broken; corrected here).
-- `m3-deferred-features.md` — deferred/excluded/wired classification.
-
-All five are archived under `docs/plans/_archived/` with a header note. The only live
+Milestone 2) and its path to Mainnet. The only live
 plans are this file and `work-plan.md` (the cross-workstream rolling plan).
 
-Statuses below were **verified against the codebase on 2026-06-05**, not copied from
-the old checkboxes.
+Statuses below were **verified against the codebase on 2026-06-05**.
 
 ---
 
 ## Contents
 
-- [1. Verified DONE baseline (do not re-litigate)](#1-verified-done-baseline-do-not-re-litigate)
-  - [Done THIS session (2026-06-04/05) — monitoring & ops correctness](#done-this-session-2026-06-0405--monitoring--ops-correctness)
-- [2. PENDING — Milestone 2 (priority order)](#2-pending--milestone-2-priority-order)
-  - [P0 — M2 evidence pack (the Catalyst acceptance gate)](#p0--m2-evidence-pack-the-catalyst-acceptance-gate)
-  - [P1 — Monitoring correctness & coverage (found this session)](#p1--monitoring-correctness--coverage-found-this-session)
-  - [P2 — Plan hygiene (this task)](#p2--plan-hygiene-this-task)
-- [3. PENDING — Mainnet rollout (R8)](#3-pending--mainnet-rollout-r8)
-- [4. OPEN questions pending DIA (carried from feeder-strategy)](#4-open-questions-pending-dia-carried-from-feeder-strategy)
-- [5. Deferred to M3 / M4 (NOT M2)](#5-deferred-to-m3--m4-not-m2)
-- [6. Known stale references to clean up (low priority)](#6-known-stale-references-to-clean-up-low-priority)
+- [Milestone — Feeder Plan (consolidated)](#milestone--feeder-plan-consolidated)
+  - [Contents](#contents)
+  - [1. Verified DONE baseline (do not re-litigate)](#1-verified-done-baseline-do-not-re-litigate)
+    - [Done THIS session (2026-06-04/05) — monitoring \& ops correctness](#done-this-session-2026-06-0405--monitoring--ops-correctness)
+  - [2. PENDING — Milestone 2 (priority order)](#2-pending--milestone-2-priority-order)
+    - [P0 — M2 evidence pack (the Catalyst acceptance gate)](#p0--m2-evidence-pack-the-catalyst-acceptance-gate)
+    - [P1 — Monitoring correctness \& coverage (found this session)](#p1--monitoring-correctness--coverage-found-this-session)
+    - [P2 — Plan hygiene (this task)](#p2--plan-hygiene-this-task)
+  - [3. PENDING — Mainnet rollout (R8)](#3-pending--mainnet-rollout-r8)
+  - [4. OPEN questions pending DIA (carried from feeder-strategy)](#4-open-questions-pending-dia-carried-from-feeder-strategy)
+  - [5. Deferred to M3 / M4 (NOT M2)](#5-deferred-to-m3--m4-not-m2)
+  - [6. Known stale references to clean up (low priority)](#6-known-stale-references-to-clean-up-low-priority)
 
 ## 1. Verified DONE baseline (do not re-litigate)
 
