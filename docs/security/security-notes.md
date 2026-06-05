@@ -1,9 +1,19 @@
-# M1 Security Notes
+# Security Notes
 
-Short, focused write-up of the trust model and known exclusions for the
-Milestone-1 DIA Cardano Oracle. The authoritative protocol description lives in
+Short, focused write-up of the DIA Cardano Oracle trust model and known exclusions.
+The trust roots and invariants below are foundational — established at Milestone 1 and
+maintained as the protocol evolves. The authoritative protocol description lives in
 [`docs/architecture/cardano-oracle-architecture.md`](../architecture/cardano-oracle-architecture.md);
 this file only records what is in/out of scope and what to watch for in audits.
+
+**Scope:** baseline defined at Milestone 1; applies to the protocol generally.
+
+## Contents
+
+- [Trust model](#trust-model)
+- [In-scope security properties](#in-scope-security-properties)
+- [Known exclusions (out of scope)](#known-exclusions-out-of-scope)
+- [Notable invariants worth re-checking on audit](#notable-invariants-worth-re-checking-on-audit)
 
 ## Trust model
 
