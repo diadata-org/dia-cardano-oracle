@@ -1,3 +1,10 @@
+> **ARCHIVED 2026-06-05** — superseded by [`../milestone-feeder-plan.md`](../milestone-feeder-plan.md).
+> Conceptual reference; its open DIA questions and canonical endpoints were folded into §4 of the new plan. Any still-open items were carried into that consolidated plan; the only live
+> plans are `../work-plan.md` and `../milestone-feeder-plan.md`. Kept for history — do
+> not use as the live plan.
+
+---
+
 # Milestone 2 Feeder Strategy
 
 This note explains the proposed Cardano feeder for Milestone 2, using the same

@@ -9,11 +9,11 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 - [Final Cardano Milestones](../milestones/final-cardano-milestones.md) — Catalyst milestone text.
 - [Milestone 1 Preview Evidence](../milestones/evidence/m1-preview-20260516-090057/milestone-1-preview-evidence.md) — M1 Preview verification log.
 - [Milestone 1 Mainnet Evidence](../milestones/evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) — M1 Mainnet verification log (latest run).
-- [Milestone 2 Feeder Strategy](./milestone-2-feeder-strategy.md) — conceptual reference: feeder split, DIA stack glossary, canonical endpoints (chain ids and registries confirmed by DIA), open questions still pending DIA confirmation.
-- [**HANDOFF**](./HANDOFF.md) — **start here.** Current state, what's done vs. left, how to verify (test count + commands), how to run the feeder.
-- [Milestone 2 Final Plan](./milestone-2-final-plan.md) — operational task breakdown for M2 (phases R0-R10, acceptance criteria, evidence layout).
-- [M3 Deferred Features](./m3-deferred-features.md) — typed-but-not-wired Spectra-parity items and the Cardano-only extensions, with explicit "deferred / excluded / wired" classification.
-- [Mainnet Rollout](./mainnet-rollout.md) — Mainnet rollout procedure + rollback plan.
+- [**Milestone Feeder Plan**](./milestone-feeder-plan.md) — **start here for the feeder.**
+  Single consolidated plan: verified-done baseline, M2 pending (evidence pack, monitoring
+  polish), Mainnet rollout (corrected), open DIA questions, and what's deferred to M3/M4.
+  Supersedes the former HANDOFF / milestone-2-final-plan / milestone-2-feeder-strategy /
+  mainnet-rollout / m3-deferred-features (all now under `_archived/`).
 - [Audit report](../audit/) — `audit-report-20260515.md`.
 
 ## Scope
@@ -80,12 +80,11 @@ oracle update transactions, plus the operational surface (health, metrics,
 inflight tracking, evidence packaging) required by the M2 acceptance
 criteria in [`final-cardano-milestones.md`](../milestones/final-cardano-milestones.md).
 
-The full operational task breakdown for this workstream — phases,
-acceptance criteria, evidence layout, and dependencies on DIA
-confirmations (signer set, WebSocket creds, repo location, wallet custody,
-update cadence) — lives in [`milestone-2-final-plan.md`](./milestone-2-final-plan.md).
-The conceptual reference (why and how, glossary, canonical endpoints)
-lives in [`milestone-2-feeder-strategy.md`](./milestone-2-feeder-strategy.md).
+The full operational breakdown, verified status, evidence layout, Mainnet
+rollout, and the open DIA dependencies (signer set, WebSocket creds, wallet
+custody, update cadence) all live in the consolidated
+[`milestone-feeder-plan.md`](./milestone-feeder-plan.md). The original R0–R10
+breakdown and conceptual reference are archived under `_archived/`.
 
 High-level deliverables tracked here:
 
@@ -104,7 +103,9 @@ High-level deliverables tracked here:
   `synchronous = FULL`, path traversal check, WS exponential backoff.
 - [x] Mainnet rollout guide and rollback plan (`docs/plans/mainnet-rollout.md`).
 - [ ] M2 evidence packs (Preview 48-72 h window, all 10 pairs, Grafana screenshots,
-  error-counts TSV, alert firing demonstration) — pending live run.
+  error-counts TSV, alert firing demonstration) — pending live run. Tracked in detail in
+  [milestone-feeder-plan.md](./milestone-feeder-plan.md) §2 (the feeder core itself is
+  done and verified; 475 tests pass).
 
 ## Workstream D — Indexer
 
@@ -131,7 +132,7 @@ Tasks:
 
 Tasks:
 
-- [x] **Preview evidence pack — fresh capture** on the current bytecode: full bootstrap (Config, PaymentHook, Receiver), reference-script publication, Receiver top-up, single oracle update, batch oracle update, **Settle**, Receiver withdraw, PaymentHook withdraw, reference-script reclaim + republish. Latest capture 2026-05-15 under `docs/milestones/evidence/m1-preview-20260515-130925/`. Historical packs `docs/milestones/evidence/m1-preview-20260427/` and `preview_20260504/` predate the current contracts and are kept only as historical proof.
+- [x] **Preview evidence pack — fresh capture** on the current bytecode: full bootstrap (Config, PaymentHook, Receiver), reference-script publication, Receiver top-up, single oracle update, batch oracle update, **Settle**, Receiver withdraw, PaymentHook withdraw, reference-script reclaim + republish. Latest capture under `docs/milestones/evidence/m1-preview-20260516-090057/`. Historical packs `docs/milestones/evidence/m1-preview-20260427/` and `preview_20260504/` predate the current contracts and are kept only as historical proof.
 - [ ] Mainnet deployment scripts and evidence (contract addresses, reference-script UTxOs, verified mainnet tx hashes).
 - [x] Operator runbook (onboarding a new client, subscribing a new pair, rotating signers, withdrawing accrued fees).
 - [ ] Developer documentation published via DIA's developer documentation website, covering:

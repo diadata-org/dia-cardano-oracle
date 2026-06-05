@@ -1352,11 +1352,12 @@ The feeder naming follows the
 config keys, and DB column names. Deviations from Spectra are Cardano-specific
 extensions (e.g. `cardano.*` config block, `fee_paid_lovelace`, Cardano network
 selectors). The full disposition register is maintained in
-[`docs/plans/milestone-2-final-plan.md` — Spectra Parity Disposition Register](../plans/milestone-2-final-plan.md).
+[`docs/plans/_archived/milestone-2-final-plan.md` — Spectra Parity Disposition Register](../plans/_archived/milestone-2-final-plan.md)
+(archived; live feeder plan is [`docs/plans/milestone-feeder-plan.md`](../plans/milestone-feeder-plan.md)).
 
 Typed Spectra keys that are surfaced in the YAML but **not wired** to runtime
 behaviour yet are inventoried in
-[`docs/plans/m3-deferred-features.md`](../plans/m3-deferred-features.md). Every
+[`docs/plans/_archived/m3-deferred-features.md`](../plans/_archived/m3-deferred-features.md). Every
 row there must correspond either to a future M3 wiring task or to a permanent
 "excluded" classification (multi-chain / EVM-destination Spectra subsystems).
 

@@ -1,3 +1,10 @@
+> **ARCHIVED 2026-06-05** — superseded by [`../milestone-feeder-plan.md`](../milestone-feeder-plan.md).
+> Current-state/how-to-verify folded into §1 of the new plan (its 464-test count was stale — actual is 475). Any still-open items were carried into that consolidated plan; the only live
+> plans are `../work-plan.md` and `../milestone-feeder-plan.md`. Kept for history — do
+> not use as the live plan.
+
+---
+
 # DIA Cardano Oracle Feeder — Handoff
 
 **Last updated:** 2026-06-02

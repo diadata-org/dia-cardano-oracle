@@ -1,3 +1,10 @@
+> **ARCHIVED 2026-06-05** — superseded by [`../milestone-feeder-plan.md`](../milestone-feeder-plan.md).
+> Its R0–R10 checkboxes were stale (much was done-but-unchecked); the verified status is in §1 of the new plan. Any still-open items were carried into that consolidated plan; the only live
+> plans are `../work-plan.md` and `../milestone-feeder-plan.md`. Kept for history — do
+> not use as the live plan.
+
+---
+
 # Milestone 2 — Final Plan (Spectra-shaped)
 
 Single canonical plan to close Milestone 2 (Data Feeder and
