@@ -6,6 +6,12 @@
 #
 # Add a new file here (e.g. client-b.preview.yaml) to onboard another
 # client without touching any other config.
+#
+# This file's `triggers.conditions` symbol list is the SOURCE OF TRUTH for which
+# pairs are published. The selection rationale (which pairs and why) is recorded as
+# a dated snapshot at:
+#   docs/milestones/evidence/pair-selection-<date>/pair-selection.md
+# Keep that snapshot in sync when you change the list here.
 
 routers:
   client_a_preview:

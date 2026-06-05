@@ -20,11 +20,11 @@ infrastructure files is documented inline and summarised in
 | `contracts.yaml` | Source contract addresses + ABIs the scanner watches. |
 | `events.yaml` | Event signatures the extractor decodes (`IntentRegistered`). |
 | `routers/*.yaml` | One file per client — which symbols map to which Cardano destination, with trigger conditions and the per-destination policy (`time_threshold` / `price_deviation`). |
-| `pair-selection.md` | Which price pairs the active router publishes, and the selection rationale. |
 
 ## Routers
 
 Each `routers/<client>.yaml` onboards one client without touching any other config; the
-feeder loads every `*.yaml` under `routers/` at startup. See
-[`pair-selection.md`](./pair-selection.md) for the active pair set and
-[`../README.md`](../README.md) for how routers, lanes, and the policy gate work.
+feeder loads every `*.yaml` under `routers/` at startup. The active pair set lives in
+each router's `triggers.conditions`; see [`../README.md`](../README.md) for how routers,
+lanes, and the policy gate work. The pair-selection rationale is kept as a dated snapshot at
+[`docs/milestones/evidence/pair-selection-20260605/pair-selection.md`](../../../docs/milestones/evidence/pair-selection-20260605/pair-selection.md).
