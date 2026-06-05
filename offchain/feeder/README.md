@@ -18,6 +18,7 @@ diverges substantively — it builds Cardano txs via the pure builders in
 - [Directory guide](#directory-guide)
 - [Service URLs — where to look (once it's running)](#service-urls--where-to-look-once-its-running)
 - [Running with Docker](#running-with-docker)
+  - [Compose services & profiles](#compose-services--profiles)
   - [Daemon only](#daemon-only)
   - [Daemon + monitoring](#daemon--monitoring)
   - [Capturing an operational snapshot](#capturing-an-operational-snapshot)
@@ -124,6 +125,35 @@ Run `make help` for a complete target list.
 The Makefile exports your current host `UID`/`GID` so Docker can write to
 the bind-mounted `offchain/feeder/state/` tree without leaving it
 read-only to the daemon.
+
+### Compose services & profiles
+
+Everything runs from one image (`dia-cardano-feeder:local`) selected through Docker
+Compose **profiles**. You normally drive these with `make` (below); this is the
+underlying map.
+
+| Service | Profile | What it is |
+| --- | --- | --- |
+| `feeder-sqlite` | `sqlite` | The feeder daemon with the **SQLite** backend (default). SQLite is an embedded file (`state/<network>/feeder.sqlite`) — **there is no database server**; the service *is* the feeder. |
+| `feeder-postgres` | `postgres` | The **same** feeder daemon with the **PostgreSQL** backend. |
+| `postgres` | `postgres` | A real PostgreSQL 15 server, started only under this profile (data in the `postgres-data` volume). |
+| `cli` | `cli` | Short-lived admin container for one-off CLI commands (`make cli CMD="…"`). |
+| `prometheus`, `grafana`, `renderer` | `monitoring` | The observability stack (`MONITORING=1`). |
+
+Things worth knowing:
+
+- `feeder-sqlite` and `feeder-postgres` are the **same image** — the suffix only picks
+  the DB backend. Run **exactly one** (both publish port 8080).
+- **SQLite needs no server** (it is just a file in the `state/` volume). **PostgreSQL**
+  adds the `postgres` server container. SQLite is the default and is sufficient for
+  single-instance deployments; Postgres is there for higher-scale / external-DB setups.
+- Pick the backend with the make target: `make up` (SQLite, default) or
+  `make up-postgres`. That sets `DATABASE_DRIVER`; the path/DSN come from `.env`
+  (`DATABASE_PATH_*` for SQLite, `DATABASE_DSN_*` for Postgres), and the `database` block
+  in `config/infrastructure.<network>.yaml` documents the knobs (see
+  [`config/`](./config/README.md)).
+- Profiles **compose**: `MONITORING=1` adds the `monitoring` profile on top of the
+  feeder profile. `make down` stops every profile.
 
 ### Daemon only
 
