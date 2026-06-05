@@ -8,8 +8,10 @@ infrastructure files is documented inline and summarised in
 
 ## Contents
 
-- [Files](#files)
-- [Routers](#routers)
+- [Feeder config](#feeder-config)
+  - [Contents](#contents)
+  - [Files](#files)
+  - [Routers](#routers)
 
 ## Files
 
