@@ -174,6 +174,26 @@ The scripts and one-folder pipeline exist; what's missing is a real long run.
     (zod + zod-to-openapi, or TypeBox). Payoff: drift-proof docs, a real client contract,
     and optional output validation from the same source. (The lighter hand-authored-spec
     alternative was considered and rejected in favour of single-source.)
+- [ ] **Multi-client (batch) `settle` in the CLI.** The on-chain protocol supports settling
+  **multiple Receivers in one tx** — coordinator `ApplySettle(SettleManifest { receivers:
+  List<SettleReceiver> })` (`contracts/aiken/lib/dia_cardano_oracle/coordinator_logic.ak:18-34`),
+  which validates the manifest is non-empty + unique and that the summed receiver drains
+  equal the PaymentHook delta. The CLI does **not** expose this: `settleAccruedFees` takes a
+  single `--client-state` and builds a 1-element manifest, and the preflight
+  `assertSettleManifestMatchesSingleClientReceiver` (`offchain/cli/src/transactions/settle.ts:50,132`)
+  **rejects any manifest whose length ≠ 1**. Not a security bug (on-chain arithmetic can't be
+  bypassed), but a real capability gap — documented in the audits but NOT surfaced anywhere
+  in the live plans (`docs/audit/20260515-audit-report.md:209-211,290`;
+  `docs/audit/202605230-deep-research-report.md:56` lists it **P0, effort Low**).
+  - **Why it matters:** one settle that drains N clients **amortizes the coordinator +
+    PaymentHook cost across all of them** in a single tx, instead of one settle tx (and one
+    network fee) per client. Directly relevant once there is more than one client.
+  - **Work:** extend `settle` to accept **multiple clients** — repeatable `--client-state`
+    (or a `--manifest` file listing client state paths); build the `SettleManifest` from all
+    N receivers, `collectFrom` every receiver UTxO + the hook in one tx; replace the
+    "exactly 1" preflight with the manifest non-empty + unique check (the on-chain coordinator
+    already enforces sum-of-drains == hook delta). Update the `SettleOverdue` alert
+    remediation + README to mention batching multiple clients in one settle.
 
 ### P2 — Plan hygiene (this task)
 - [x] Consolidate into this plan + `work-plan.md`; archive the rest with header notes.
