@@ -48,7 +48,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (symbol) (dia_bridge_transactions_confirmed_total)",
+          "expr": "sum by (symbol) (dia_bridge_transactions_confirmed_total{symbol=~\"$symbol\", client_id=~\"$client\"})",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -85,7 +85,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_age_seconds_bucket[1h])))",
+          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_age_seconds_bucket{symbol=~\"$symbol\"}[1h])))",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -129,7 +129,7 @@
       },
       "targets": [
         {
-          "expr": "time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds",
+          "expr": "time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds{symbol=~\"$symbol\", client_id=~\"$client\"}",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -167,7 +167,7 @@
       },
       "targets": [
         {
-          "expr": "dia_bridge_cardano_receiver_balance_lovelace / 1000000",
+          "expr": "dia_bridge_cardano_receiver_balance_lovelace{client_id=~\"$client\"} / 1000000",
           "legendFormat": "{{client_id}}",
           "refId": "A"
         }
@@ -177,7 +177,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Operational wallet balances in ADA. Admin (signer) wallet — fires AdminWalletLow below 5 ADA. PaymentHook accrued — fires PaymentHookWithdrawReady above 50 ADA. Receiver accrued (sum) — fires SettleOverdue above 10 ADA.",
+      "description": "Operational wallet balances in ADA (all clients). Admin (signer) wallet — fires AdminWalletLow below 5 ADA. PaymentHook accrued — fires PaymentHookWithdrawReady above 50 ADA. Receiver accrued (sum) — fires SettleOverdue above 10 ADA.",
       "fieldConfig": {
         "defaults": {
           "unit": "ADA",
@@ -276,17 +276,17 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, symbol) (rate(dia_bridge_end_to_end_latency_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le, symbol) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
           "legendFormat": "p50 {{symbol}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_end_to_end_latency_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
           "legendFormat": "p95 {{symbol}}",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le, symbol) (rate(dia_bridge_end_to_end_latency_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le, symbol) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
           "legendFormat": "p99 {{symbol}}",
           "refId": "C"
         }
@@ -309,7 +309,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "expr": "sum by (symbol) (increase(dia_bridge_transactions_confirmed_total[5m]))",
+          "expr": "sum by (symbol) (increase(dia_bridge_transactions_confirmed_total{symbol=~\"$symbol\", client_id=~\"$client\"}[5m]))",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -332,7 +332,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "expr": "sum by (symbol, error_code) (increase(dia_bridge_transactions_failed_total[5m]))",
+          "expr": "sum by (symbol, error_code) (increase(dia_bridge_transactions_failed_total{symbol=~\"$symbol\", client_id=~\"$client\", error_code=~\"$error_code\"}[5m]))",
           "legendFormat": "{{symbol}} · {{error_code}}",
           "refId": "A"
         }
@@ -376,7 +376,7 @@
       },
       "targets": [
         {
-          "expr": "sum(increase(dia_bridge_transactions_reorg_total[1h]))",
+          "expr": "sum(increase(dia_bridge_transactions_reorg_total{symbol=~\"$symbol\", client_id=~\"$client\"}[1h]))",
           "legendFormat": "reorgs / 1h",
           "refId": "A"
         }
@@ -386,7 +386,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Blocks behind the chain tip. High values indicate the scanner is falling behind.",
+      "description": "Blocks behind the chain tip. High values indicate the scanner is falling behind (all clients).",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -422,7 +422,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "expr": "sum by (symbol, reason) (increase(dia_bridge_intents_filtered_total[5m]))",
+          "expr": "sum by (symbol, reason) (increase(dia_bridge_intents_filtered_total{symbol=~\"$symbol\"}[5m]))",
           "legendFormat": "{{symbol}} · {{reason}}",
           "refId": "A"
         }
@@ -466,7 +466,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket[1h])))",
+          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket{symbol=~\"$symbol\"}[1h])))",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -494,7 +494,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket[5m]))",
+          "expr": "sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket{symbol=~\"$symbol\"}[5m]))",
           "legendFormat": "{{symbol}} le={{le}}",
           "refId": "A",
           "format": "heatmap"
@@ -502,6 +502,36 @@
       ],
       "title": "Price deviation distribution (heatmap)",
       "type": "heatmap"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 53 },
+      "id": 104,
+      "title": "Row 5 — Billing (per client / customer)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Median Cardano transaction fee (lovelace) paid per oracle update over a 5-minute window, broken out by customer. Filter with $client, $symbol, and $customer.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "lineWidth": 2 }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 54 },
+      "id": 14,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, customer) (rate(dia_bridge_transaction_fee_lovelace_bucket{symbol=~\"$symbol\", client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "{{customer}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx fee p50 — lovelace (per customer)",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -519,6 +549,62 @@
         "query": "prometheus",
         "refresh": 1,
         "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Client",
+        "name": "client",
+        "options": [],
+        "query": { "query": "label_values(dia_bridge_transactions_submitted_total, client_id)", "refId": "client" },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Symbol",
+        "name": "symbol",
+        "options": [],
+        "query": { "query": "label_values(dia_bridge_transactions_submitted_total, symbol)", "refId": "symbol" },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Customer",
+        "name": "customer",
+        "options": [],
+        "query": { "query": "label_values(dia_bridge_transaction_fee_lovelace, customer)", "refId": "customer" },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Error code",
+        "name": "error_code",
+        "options": [],
+        "query": { "query": "label_values(dia_bridge_transactions_failed_total, error_code)", "refId": "error_code" },
+        "refresh": 2,
+        "type": "query"
       }
     ]
   },

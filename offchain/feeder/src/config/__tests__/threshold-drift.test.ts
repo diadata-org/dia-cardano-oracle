@@ -154,13 +154,24 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     assert.equal(overrideStep(wallets, "Receiver accrued (sum)", "yellow"), yaml.settle_overdue_lovelace / 1_000_000);
   });
 
-  it("dashboard has no dead template variables (only the datasource picker)", () => {
-    const { templating } = loadDashboard();
+  it("dashboard has no dead template variables (every filter var is wired to a panel)", () => {
+    const dashboard = loadDashboard() as unknown as {
+      templating: { list: Array<{ name: string }> };
+      panels: Array<{ targets?: Array<{ expr?: string }> }>;
+    };
     assert.deepEqual(
-      templating.list.map((v) => v.name),
-      ["datasource"],
+      dashboard.templating.list.map((v) => v.name),
+      ["datasource", "client", "symbol", "customer", "error_code"],
       "remove unused template vars or wire them to a panel",
     );
+    // Every non-datasource var must be referenced by at least one panel target expr.
+    const exprs = dashboard.panels.flatMap((p) => (p.targets ?? []).map((t) => t.expr ?? ""));
+    for (const name of ["client", "symbol", "customer", "error_code"]) {
+      assert.ok(
+        exprs.some((e) => e.includes(`$${name}`)),
+        `template var $${name} is not referenced by any panel target expr`,
+      );
+    }
   });
 
   it("count panels show counts (increase), not per-second rates, and keep the symbol label", () => {
