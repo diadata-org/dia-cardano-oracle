@@ -431,6 +431,25 @@ export type RouterDestination = {
   condition?: string;
   time_threshold?: string;
   price_deviation?: string;
+  /**
+   * Per-destination upper bound on on-chain staleness (duration string,
+   * e.g. "1h"). Opt-in / default OFF. Only meaningful in the
+   * deviation-only push mode, i.e. when `time_threshold` is "0s"/absent
+   * (no short periodic heartbeat). In that mode the policy gate passes an
+   * update when the price deviates OR when the last confirmed on-chain
+   * update is older than `max_staleness`, and the cron service uses
+   * `max_staleness` (instead of the short `time_threshold`) as the
+   * resubmission ceiling — fewer Cardano txs and lower fees for clients
+   * who do not need a tight time cadence.
+   *
+   * When `time_threshold` > 0 this field is ignored: the existing
+   * `time_threshold || price_deviation` behaviour is preserved unchanged.
+   *
+   * Parsed with `parseDurationMs` (see `src/router/policy.ts`). Consumer
+   * trade-off and mitigations are documented in the policy.ts module
+   * header.
+   */
+  max_staleness?: string;
   cron?: boolean;
   gas_limit?: number;
   gas_multiplier?: number;

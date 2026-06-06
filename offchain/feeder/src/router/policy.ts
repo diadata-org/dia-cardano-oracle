@@ -28,6 +28,28 @@
 //   - if both configured: pass iff timePasses OR pricePasses
 //   - if no prior cache entry exists: always pass
 //
+// Deviation-only push mode (opt-in, default OFF):
+//
+//   max_staleness    — an upper bound on on-chain staleness. Only active
+//                      when `time_threshold` is disabled (0 / absent): in
+//                      that mode there is no short periodic heartbeat and
+//                      the gate passes iff the price deviates OR the last
+//                      confirmed update is older than `max_staleness`
+//                      (treated as another OR-term that passes the gate,
+//                      reason `max_staleness`). When `time_threshold` > 0
+//                      this knob is IGNORED and the gate keeps the exact
+//                      `time_threshold || price_deviation` behaviour above.
+//                      Intended for clients who don't need a tight time
+//                      cadence — fewer Cardano txs, lower fees.
+//
+//   Consumer trade-off (the important bit): in deviation-only mode an
+//   unchanged on-chain price cannot, by itself, be told apart from
+//   "feeder skipped it (no deviation)" vs "feeder down". This is mitigated
+//   by the `max_staleness` bound (the price is guaranteed to refresh at
+//   least that often), the daemon `/health` liveness probe, and the
+//   `OraclePairStale` Prometheus alert. Enabling this mode is therefore an
+//   operational decision DIA makes per client.
+//
 // Timestamp monotonicity:
 //   - newTimestamp < lastTimestamp: warn + suppress (timestamp_regression)
 //   - newTimestamp === lastTimestamp: suppress (timestamp_duplicate)
@@ -36,6 +58,7 @@
 //   time_threshold   accepts "1m", "30s", "2h", "1h30m", etc.
 //   price_deviation  accepts "0.5%", "1%", "0.1%". Leading/trailing
 //                    whitespace is stripped.
+//   max_staleness    accepts the same duration format as time_threshold.
 
 import type { PriceCache, PriceCacheKey } from "../processor/price-cache.js";
 
@@ -49,6 +72,11 @@ export type PolicyGateOptions = {
   /** Parsed from `price_deviation` in the router YAML. `undefined` = no gate.
    *  Value is in percent (e.g. 0.5 means 0.5%). */
   priceDeviationPct?: number;
+  /** Parsed from `max_staleness` in the router YAML. `undefined` = disabled.
+   *  Only active in deviation-only push mode (`timeThresholdMs` 0 / absent):
+   *  the gate passes when the last confirmed update is older than this.
+   *  Ignored when `timeThresholdMs` > 0. */
+  maxStalenessMs?: number;
   /** Injectable clock for tests. */
   now?: () => number;
 };
@@ -57,6 +85,7 @@ export type PolicyVerdict =
   | { allowed: true }
   | { allowed: false; reason: "time_threshold"; lastUpdatedAtMs: number; thresholdMs: number; filterReason: string }
   | { allowed: false; reason: "price_deviation"; oldPrice: bigint; newPrice: bigint; deviationPct: number; thresholdPct: number; filterReason: string }
+  | { allowed: false; reason: "max_staleness"; lastUpdatedAtMs: number; maxStalenessMs: number; filterReason: string }
   | { allowed: false; reason: "timestamp_regression"; lastTimestamp: bigint; newTimestamp: bigint; filterReason: string }
   | { allowed: false; reason: "timestamp_duplicate"; timestamp: bigint; filterReason: string };
 
@@ -142,8 +171,15 @@ export function createPolicyGate(
   priceCache: PriceCache,
   options: PolicyGateOptions,
 ): (key: PriceCacheKey, newPrice: bigint, newTimestamp?: bigint) => PolicyVerdict {
-  const { timeThresholdMs, priceDeviationPct } = options;
+  const { timeThresholdMs, priceDeviationPct, maxStalenessMs } = options;
   const clock = options.now ?? Date.now;
+
+  // Deviation-only push mode is active when there is no short periodic
+  // heartbeat (time_threshold disabled: undefined or 0) AND a max_staleness
+  // bound is configured. When time_threshold > 0 the new knob is ignored and
+  // the classic time_threshold || price_deviation OR-gate is preserved.
+  const deviationOnlyMode =
+    (timeThresholdMs === undefined || timeThresholdMs === 0) && maxStalenessMs !== undefined;
 
   return (key, newPrice, newTimestamp) => {
     const last = priceCache.get(key);
@@ -174,6 +210,40 @@ export function createPolicyGate(
       return { allowed: true };
     }
 
+    // --- Deviation-only push mode: pass on deviation OR age > max_staleness ---
+    // The short time-based pass is OFF in this mode; only a real price move or
+    // crossing the max_staleness ceiling pushes an update.
+    if (deviationOnlyMode) {
+      const stalenessMs = clock() - last.updatedAtMs;
+      if (stalenessMs > maxStalenessMs) {
+        return { allowed: true };
+      }
+      // Within the staleness window — fall back to the price-deviation check.
+      if (priceDeviationPct === undefined) {
+        // No deviation gate either: suppress until max_staleness is exceeded.
+        return {
+          allowed: false,
+          reason: "max_staleness",
+          lastUpdatedAtMs: last.updatedAtMs,
+          maxStalenessMs,
+          filterReason: `max_staleness: ${Math.round(stalenessMs / 1000)}s elapsed <= ${Math.round(maxStalenessMs / 1000)}s`,
+        };
+      }
+      const priceVerdict = evaluatePriceDeviation(last.price, newPrice, priceDeviationPct);
+      if (priceVerdict === undefined) {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        reason: "max_staleness",
+        lastUpdatedAtMs: last.updatedAtMs,
+        maxStalenessMs,
+        filterReason:
+          `max_staleness: ${Math.round(stalenessMs / 1000)}s elapsed <= ${Math.round(maxStalenessMs / 1000)}s; ` +
+          priceVerdict.filterReason,
+      };
+    }
+
     // If no thresholds configured, always pass.
     if (timeThresholdMs === undefined && priceDeviationPct === undefined) {
       return { allowed: true };
@@ -200,26 +270,9 @@ export function createPolicyGate(
     let pricePasses: boolean | undefined;
     let priceVerdictOnFail: Extract<PolicyVerdict, { reason: "price_deviation" }> | undefined;
 
-    if (priceDeviationPct !== undefined && last.price !== 0n) {
-      const diff = newPrice > last.price ? newPrice - last.price : last.price - newPrice;
-      // deviation% = diff / old * 100.  All bigint arithmetic; multiply by
-      // 10^6 before dividing to keep fractional precision.
-      const deviationMilliPct = Number((diff * 100_000_000n) / last.price) / 1_000_000;
-      pricePasses = deviationMilliPct >= priceDeviationPct;
-      if (!pricePasses) {
-        priceVerdictOnFail = {
-          allowed: false,
-          reason: "price_deviation",
-          oldPrice: last.price,
-          newPrice,
-          deviationPct: deviationMilliPct,
-          thresholdPct: priceDeviationPct,
-          filterReason: `price_deviation: ${deviationMilliPct.toFixed(4)}% < ${priceDeviationPct}%`,
-        };
-      }
-    } else if (priceDeviationPct !== undefined && last.price === 0n) {
-      // Division-by-zero guard: old price is zero, treat as passing.
-      pricePasses = true;
+    if (priceDeviationPct !== undefined) {
+      priceVerdictOnFail = evaluatePriceDeviation(last.price, newPrice, priceDeviationPct);
+      pricePasses = priceVerdictOnFail === undefined;
     }
 
     // Apply OR-gate logic.
@@ -242,5 +295,37 @@ export function createPolicyGate(
     if (pricePasses) return { allowed: true };
     // priceVerdictOnFail may be undefined when last.price === 0n (treated as pass above).
     return priceVerdictOnFail ?? { allowed: true };
+  };
+}
+
+/**
+ * Evaluate the price-deviation check for one (oldPrice → newPrice) move.
+ * Returns `undefined` when the deviation passes the gate (move is large
+ * enough, or oldPrice is 0 which is treated as passing to avoid a
+ * division by zero), or a `price_deviation` verdict when it fails (the
+ * move is within `thresholdPct`).
+ */
+function evaluatePriceDeviation(
+  oldPrice: bigint,
+  newPrice: bigint,
+  thresholdPct: number,
+): Extract<PolicyVerdict, { reason: "price_deviation" }> | undefined {
+  // Division-by-zero guard: old price is zero, treat as passing.
+  if (oldPrice === 0n) return undefined;
+
+  const diff = newPrice > oldPrice ? newPrice - oldPrice : oldPrice - newPrice;
+  // deviation% = diff / old * 100.  All bigint arithmetic; multiply by
+  // 10^6 before dividing to keep fractional precision.
+  const deviationMilliPct = Number((diff * 100_000_000n) / oldPrice) / 1_000_000;
+  if (deviationMilliPct >= thresholdPct) return undefined;
+
+  return {
+    allowed: false,
+    reason: "price_deviation",
+    oldPrice,
+    newPrice,
+    deviationPct: deviationMilliPct,
+    thresholdPct,
+    filterReason: `price_deviation: ${deviationMilliPct.toFixed(4)}% < ${thresholdPct}%`,
   };
 }

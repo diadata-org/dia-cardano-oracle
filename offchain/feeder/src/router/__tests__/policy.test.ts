@@ -57,6 +57,13 @@ describe("parseDurationMs", () => {
   it("throws on a negative duration (the regex rejects the leading '-')", () => {
     assert.throws(() => parseDurationMs("-5s"), /Invalid duration/);
   });
+
+  it("parses a max_staleness-style long duration", () => {
+    // max_staleness uses the same duration grammar as time_threshold.
+    assert.equal(parseDurationMs("1h"), 3_600_000);
+    assert.equal(parseDurationMs("6h"), 6 * 3_600_000);
+    assert.equal(parseDurationMs("1d"), 86_400_000);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -234,6 +241,124 @@ describe("createPolicyGate — both thresholds (OR-gate)", () => {
       now: () => now,
     });
     assert.deepEqual(gate(BASE_KEY, 2_000n), { allowed: true });
+  });
+});
+
+describe("createPolicyGate — deviation-only push mode (max_staleness)", () => {
+  // Active when time_threshold is disabled (0 / absent) AND max_staleness set.
+  const MAX_STALENESS_MS = 3_600_000; // 1h
+
+  it("passes on deviation while still within the staleness window", () => {
+    let now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    now = 60_000; // 60s — far inside the 1h staleness window
+    const gate = createPolicyGate(cache, {
+      priceDeviationPct: 1.0,
+      maxStalenessMs: MAX_STALENESS_MS,
+      now: () => now,
+    });
+    // 2% change >= 1% threshold → deviation passes.
+    assert.deepEqual(gate(BASE_KEY, 1_020n, 1n), { allowed: true });
+  });
+
+  it("blocks on a flat price within the staleness window (reason max_staleness)", () => {
+    let now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    now = 60_000; // inside the 1h window
+    const gate = createPolicyGate(cache, {
+      priceDeviationPct: 1.0,
+      maxStalenessMs: MAX_STALENESS_MS,
+      now: () => now,
+    });
+    // 0.5% change < 1% threshold and within window → suppressed.
+    const result = gate(BASE_KEY, 1_005n, 1n);
+    assert.equal(result.allowed, false);
+    assert.equal("reason" in result && result.reason, "max_staleness");
+    assert.ok("filterReason" in result && result.filterReason.includes("max_staleness"));
+  });
+
+  it("passes once age exceeds max_staleness even with a flat price", () => {
+    let now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    now = MAX_STALENESS_MS + 1; // just past the ceiling
+    const gate = createPolicyGate(cache, {
+      priceDeviationPct: 1.0,
+      maxStalenessMs: MAX_STALENESS_MS,
+      now: () => now,
+    });
+    // Flat price (0% change) but age > max → passes on the staleness term.
+    assert.deepEqual(gate(BASE_KEY, 1_000n, 1n), { allowed: true });
+  });
+
+  it("treats time_threshold '0s' the same as absent (deviation-only mode)", () => {
+    let now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    now = 60_000;
+    const gate = createPolicyGate(cache, {
+      timeThresholdMs: 0, // explicit disabled-gate sentinel
+      priceDeviationPct: 1.0,
+      maxStalenessMs: MAX_STALENESS_MS,
+      now: () => now,
+    });
+    const result = gate(BASE_KEY, 1_005n, 1n); // flat-within-window
+    assert.equal(result.allowed, false);
+    assert.equal("reason" in result && result.reason, "max_staleness");
+  });
+
+  it("blocks within window when no deviation gate is set (max_staleness only)", () => {
+    let now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    now = 60_000;
+    const gate = createPolicyGate(cache, { maxStalenessMs: MAX_STALENESS_MS, now: () => now });
+    // No price gate: a 100% move is still suppressed until the ceiling.
+    const result = gate(BASE_KEY, 2_000n, 1n);
+    assert.equal(result.allowed, false);
+    assert.equal("reason" in result && result.reason, "max_staleness");
+  });
+
+  it("always passes when no prior entry exists", () => {
+    const cache = createPriceCache();
+    const gate = createPolicyGate(cache, {
+      priceDeviationPct: 1.0,
+      maxStalenessMs: MAX_STALENESS_MS,
+      now: () => 0,
+    });
+    assert.deepEqual(gate(BASE_KEY, 1_000n, 1n), { allowed: true });
+  });
+
+  it("is IGNORED when time_threshold > 0 (classic OR-gate preserved)", () => {
+    let now = 100_000;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 0n, intentHash: "0xaaa", updatedAtMs: now });
+    now = 200_000; // 100s elapsed >= 60s time_threshold → classic time pass
+    const gate = createPolicyGate(cache, {
+      timeThresholdMs: 60_000,
+      priceDeviationPct: 5.0, // 0.1% move would fail deviation
+      maxStalenessMs: MAX_STALENESS_MS, // present but must be ignored
+      now: () => now,
+    });
+    // Classic OR-gate: time passes → allowed, and reason is never max_staleness.
+    assert.deepEqual(gate(BASE_KEY, 1_001n, 1n), { allowed: true });
+  });
+
+  it("still enforces timestamp monotonicity before the staleness check", () => {
+    let now = 0;
+    const cache = createPriceCache({ now: () => now });
+    cache.set(BASE_KEY, { symbol: SYMBOL, price: 1_000n, timestamp: 1_000n, intentHash: "0xaaa", updatedAtMs: now });
+    now = MAX_STALENESS_MS + 1; // age would otherwise pass on staleness
+    const gate = createPolicyGate(cache, {
+      priceDeviationPct: 1.0,
+      maxStalenessMs: MAX_STALENESS_MS,
+      now: () => now,
+    });
+    const result = gate(BASE_KEY, 2_000n, 500n); // regression timestamp
+    assert.equal(result.allowed, false);
+    assert.equal("reason" in result && result.reason, "timestamp_regression");
   });
 });
 

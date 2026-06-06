@@ -4,7 +4,20 @@
 // destination that opted into cron-driven liveness (`cron: true` in the
 // router YAML). For each such destination it re-submits the latest known
 // intent for any symbol whose last on-chain confirm is older than the
-// destination's `time_threshold`.
+// destination's resubmission ceiling.
+//
+// Resubmission ceiling per destination:
+//   - `time_threshold` > 0      → the short periodic heartbeat (classic
+//                                  behaviour; resubmit once a pair is older
+//                                  than `time_threshold`).
+//   - `time_threshold` 0/absent + `max_staleness` set → deviation-only push
+//                                  mode (B6): the short heartbeat is OFF, so
+//                                  the cron uses `max_staleness` as the
+//                                  ceiling — it only resubmits once a pair
+//                                  exceeds `max_staleness`, leaving the
+//                                  deviation gate to drive normal updates.
+//                                  Fewer Cardano txs, lower fees.
+//   - neither set               → no cron cadence; the destination is skipped.
 //
 // Why this exists: the router policy can filter every incoming intent
 // because the price barely moved (deviation below threshold). Without
@@ -132,8 +145,15 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
         continue;
       }
 
+      // Resubmission ceiling: the short `time_threshold` heartbeat when set,
+      // otherwise the long `max_staleness` bound in deviation-only push mode.
       const timeThresholdMs = parseDurationMs(dest.time_threshold);
-      if (timeThresholdMs === undefined || timeThresholdMs === 0) continue;
+      const maxStalenessMs = parseDurationMs(dest.max_staleness);
+      const ceilingMs =
+        timeThresholdMs !== undefined && timeThresholdMs > 0 ? timeThresholdMs : maxStalenessMs;
+      // No cadence configured (no heartbeat and no max_staleness) — nothing to
+      // enforce; the deviation gate alone drives this destination.
+      if (ceilingMs === undefined || ceilingMs === 0) continue;
 
       const clientId = clientIdFromCardanoDestination(dest.cardano);
 
@@ -156,7 +176,7 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
         }
 
         // The pair is fresh enough — no resubmission needed.
-        if (now - confirmed.updatedAtMs <= timeThresholdMs) {
+        if (now - confirmed.updatedAtMs <= ceilingMs) {
           continue;
         }
 
@@ -189,7 +209,7 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
         options.log(
           `cron-service: resubmitting ${symbol} (router=${router.id}, ` +
             `confirmedAge=${Math.round((now - confirmed.updatedAtMs) / 1000)}s, ` +
-            `threshold=${Math.round(timeThresholdMs / 1000)}s, ` +
+            `ceiling=${Math.round(ceilingMs / 1000)}s, ` +
             `intentHash=${latest.intentHash}).`,
         );
         options.metrics.cronResubmissions.inc({ ...labels, outcome: "submitted" });

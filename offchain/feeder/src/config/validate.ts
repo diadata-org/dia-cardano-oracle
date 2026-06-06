@@ -722,6 +722,9 @@ function validateDestination(
     case "cardano":
       validateCardanoDestination(dest.cardano!, c.scope("cardano"));
       validateOptionalContractRef(dest.contract_ref, c, config);
+      // `max_staleness` is a duration string (deviation-only push mode, B6);
+      // reject a bare number the same way the infra duration fields do.
+      requiresDurationSuffix("max_staleness", dest.max_staleness, c);
       return;
   }
 }

@@ -88,6 +88,7 @@ export function routeIntent(
       const gate = createPolicyGate(priceCache, {
         timeThresholdMs: parseDurationMs(destination.time_threshold),
         priceDeviationPct: parseDeviationPct(destination.price_deviation),
+        maxStalenessMs: parseDurationMs(destination.max_staleness),
         now: clockNow,
       });
       const verdict = gate(cacheKey, enriched.fullIntent.price, enriched.fullIntent.timestamp);

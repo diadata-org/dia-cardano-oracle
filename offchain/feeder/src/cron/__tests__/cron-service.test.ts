@@ -28,7 +28,12 @@ const FAKE_CARDANO: CardanoDestinationConfig = {
   protocol_state_path: "state/preview/config-bootstrap.json",
 };
 
-function makeRouter(symbol: string, cron: boolean, timeThreshold?: string): RouterConfig {
+function makeRouter(
+  symbol: string,
+  cron: boolean,
+  timeThreshold?: string,
+  maxStaleness?: string,
+): RouterConfig {
   return {
     id: "router-a",
     name: "Router A",
@@ -44,6 +49,7 @@ function makeRouter(symbol: string, cron: boolean, timeThreshold?: string): Rout
         cardano: FAKE_CARDANO,
         cron,
         time_threshold: timeThreshold,
+        max_staleness: maxStaleness,
       } as unknown as RouterConfig["destinations"][number],
     ],
   };
@@ -434,5 +440,123 @@ describe("runOneTick", () => {
     // skipped_uninitialised but the labels should include customer
     assert.equal(cronCalls.length, 1);
     assert.equal(cronCalls[0]!.customer, "acme-corp");
+  });
+
+  // --- Deviation-only push mode (B6): time_threshold=0 + max_staleness ---
+
+  it("deviation-only mode (time_threshold=0s): does NOT resubmit within max_staleness", async () => {
+    // No short heartbeat (0s) + a 1h max_staleness ceiling. A pair confirmed
+    // 5 minutes ago is well inside the ceiling → no cron resubmission.
+    const router = makeRouter("BTC/USD", true, "0s", "1h");
+    const now = 1_700_000_000_000;
+    const priceCache = createPriceCache({ now: () => now - 300_000 });
+    priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, intentHash: "0xold", cardanoTxHash: "tx", updatedAtMs: now - 300_000 },
+    );
+    const latestIntents = createLatestIntentCache({ now: () => now });
+    latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew" },
+    );
+
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      now: () => now,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 0, "within max_staleness — no resubmission");
+    assert.equal(cronCalls.length, 0, "no counter emit when within ceiling");
+  });
+
+  it("deviation-only mode (time_threshold=0s): resubmits once age exceeds max_staleness", async () => {
+    // Pair confirmed 2h ago, ceiling is 1h → cron resubmits the newer intent.
+    const router = makeRouter("BTC/USD", true, "0s", "1h");
+    const now = 1_700_000_000_000;
+    const confirmedAt = now - 7_200_000; // 2h ago
+    const priceCache = createPriceCache({ now: () => confirmedAt });
+    priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, intentHash: "0xold", cardanoTxHash: "tx", updatedAtMs: confirmedAt },
+    );
+    const latestIntents = createLatestIntentCache({ now: () => now });
+    latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew" },
+    );
+
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      now: () => now,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 1, "age exceeded max_staleness — resubmit");
+    assert.equal(submits[0]!.intentHash, "0xnew");
+    assert.equal(cronCalls[0]!.outcome, "submitted");
+  });
+
+  it("time_threshold=0s with NO max_staleness: cron has no cadence (skipped)", async () => {
+    // Neither a heartbeat nor a max_staleness ceiling → nothing to enforce.
+    const router = makeRouter("BTC/USD", true, "0s");
+    const now = 1_700_000_000_000;
+    const priceCache = createPriceCache({ now: () => now - 7_200_000 });
+    priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, intentHash: "0xold", cardanoTxHash: "tx", updatedAtMs: now - 7_200_000 },
+    );
+    const latestIntents = createLatestIntentCache({ now: () => now });
+    latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew" },
+    );
+
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      now: () => now,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 0);
+    assert.equal(cronCalls.length, 0);
+  });
+
+  it("time_threshold > 0 takes precedence over max_staleness (heartbeat ceiling)", async () => {
+    // 30s heartbeat with a 1h max_staleness present: the short heartbeat wins,
+    // so a pair confirmed 60s ago is already past the 30s ceiling → resubmit.
+    const router = makeRouter("BTC/USD", true, "30s", "1h");
+    const now = 1_700_000_000_000;
+    const priceCache = createPriceCache({ now: () => now - 60_000 });
+    priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, intentHash: "0xold", cardanoTxHash: "tx", updatedAtMs: now - 60_000 },
+    );
+    const latestIntents = createLatestIntentCache({ now: () => now });
+    latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew" },
+    );
+
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      now: () => now,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 1, "60s > 30s heartbeat ceiling — resubmit");
+    assert.equal(cronCalls[0]!.outcome, "submitted");
   });
 });
