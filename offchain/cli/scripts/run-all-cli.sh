@@ -73,8 +73,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if ! [[ "$FROM_STEP" =~ ^[0-9]+$ ]] || (( FROM_STEP < 1 || FROM_STEP > 31 )); then
-  echo "--from-step must be an integer between 1 and 31" >&2
+if ! [[ "$FROM_STEP" =~ ^[0-9]+$ ]] || (( FROM_STEP < 1 || FROM_STEP > 35 )); then
+  echo "--from-step must be an integer between 1 and 35" >&2
   exit 1
 fi
 
@@ -168,6 +168,9 @@ RECEIVER_TOP_UP_1_LOVELACE="30000000"
 RECEIVER_TOP_UP_2_LOVELACE="30000000"
 RECEIVER_WITHDRAW_LOVELACE="5000000"
 PAYMENT_HOOK_WITHDRAW_LOVELACE="10000000"
+# Side-deposit funding (Option A): each deposit:fund step sends this much ADA to
+# the per-client deposit address; deposit:merge then sweeps them into the balance.
+DEPOSIT_FUND_LOVELACE="5000000"
 INTENT_EXPIRY_SECONDS="3600"
 
 declare -ar BOOTSTRAP_SLUGS=(
@@ -800,6 +803,29 @@ BURN_PAIR_SLUG="dot-usd"
 if should_run_step 31; then
   run_tx_logged "31-pair-burn-${BURN_PAIR_SLUG}.log" \
     "pair:burn --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/${CLIENT_ID}.json --pair-state $STATE_REL/clients/${CLIENT_ID}/pairs/${BURN_PAIR_SLUG}.json"
+fi
+
+# Steps 32–35: side-deposit funding (Option A). A client funds their Receiver
+# balance with an ORDINARY wallet payment to a per-client deposit script address
+# (no datum, no protocol tooling); the feeder/CLI later sweeps the accumulated
+# deposits into the Receiver balance in one tx (reusing the Receiver TopUp
+# redeemer). Here: print the address, fund it twice as a client would, then
+# merge both deposits — proving the deposit validator + merge end-to-end.
+if should_run_step 32; then
+  run_cli_logged "32-deposit-address.log" \
+    "deposit:address --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/${CLIENT_ID}.json"
+fi
+if should_run_step 33; then
+  run_tx_logged "33-deposit-fund-1.log" \
+    "deposit:fund --amount-lovelace $DEPOSIT_FUND_LOVELACE --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/${CLIENT_ID}.json"
+fi
+if should_run_step 34; then
+  run_tx_logged "34-deposit-fund-2.log" \
+    "deposit:fund --amount-lovelace $DEPOSIT_FUND_LOVELACE --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/${CLIENT_ID}.json"
+fi
+if should_run_step 35; then
+  run_tx_logged "35-deposit-merge.log" \
+    "deposit:merge --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/${CLIENT_ID}.json"
 fi
 
 STATE_ROOT="$STATE_ROOT" EVIDENCE_ROOT="$EVIDENCE_ROOT" SUCCESS_BATCH_SIZE="$SUCCESS_BATCH_SIZE" CLIENT_ID="$CLIENT_ID" BURN_PAIR_SLUG="$BURN_PAIR_SLUG" node --input-type=module <<'NODE' > "$EVIDENCE_ROOT/30-summary-build.log" 2>&1
