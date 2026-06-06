@@ -483,6 +483,41 @@ npm run cli -- settle \
 
 This moves all accrued fees from the Receiver to the PaymentHook and updates both state artifacts.
 
+### 25c. Side-deposit funding (Option A)
+
+So a client can fund their Receiver balance with an **ordinary wallet payment**
+(no CLI, no datum), each client has a **deposit script address**. The feeder/CLI
+later sweeps the accumulated deposits into the Receiver balance in one tx,
+reusing the Receiver `TopUp` redeemer — see
+[`contracts/aiken/validators/deposit.ak`](../../contracts/aiken/validators/deposit.ak)
+and the [2026-06-05 audit](../../docs/audit/20260605-receiver-concurrency-and-griefing.md).
+The deposit can only ever credit *that* client's Receiver (a CollectDeposit
+spend is valid only when the tx raises the Receiver's lovelace by ≥ the full
+swept total), so funds are never at risk.
+
+```sh
+# Print the address a client funds (give this to the client):
+npm run cli -- deposit:address \
+  --protocol-state ./state/<network>/config-bootstrap.json \
+  --client-state ./state/<network>/clients/client-a.json
+
+# Fund it (a plain ADA payment — what a client does from any wallet):
+npm run cli -- deposit:fund --amount-lovelace 5000000 \
+  --protocol-state ./state/<network>/config-bootstrap.json \
+  --client-state ./state/<network>/clients/client-a.json
+
+# Sweep accumulated deposits into the Receiver balance:
+npm run cli -- deposit:merge \
+  --protocol-state ./state/<network>/config-bootstrap.json \
+  --client-state ./state/<network>/clients/client-a.json
+```
+
+`deposit:merge` selects clean ADA-only deposits at or above 1 ADA (dust, native
+tokens, and datum-bearing UTxOs a griefer might park there are skipped, capped
+at 20 per tx) and credits their full total to `balanceLovelace`. The daemon will
+later run this automatically when a Receiver falls below
+`receiver_balance_low_lovelace`; until then, run it manually (or on a timer).
+
 > **Single-receiver limitation.** The on-chain `update_coordinator.ApplySettle`
 > path supports a `SettleManifest` of multiple receivers in one transaction.
 > The current CLI implementation builds a one-element manifest from the loaded

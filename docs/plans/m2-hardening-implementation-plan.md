@@ -15,6 +15,16 @@ Detailed, code-grounded implementation plan for two bodies of work to land befor
 > of this plan — it is a separate DIA policy discussion, tracked in the audit
 > note, not engineering work scheduled here.
 
+**Status (2026-06-06).** Landed + tested: B1 thresholds drift test (`21634ff`),
+B2 count panels (`89bd0ec`), B3 dashboard filters (`41b215d`), B4 OpenAPI+Redoc
+(`0a1ba53`), B6 deviation+heartbeat policy (`1997025`), and **A1 contracts +
+CLI** — the `deposit` validator (`d576163`, `aiken check` 124/0) and
+`deposit:address/fund/merge` (`0111dee`) wired into `run-all-cli.sh` (`dec4248`).
+A1's contract path is proven end-to-end through real Plutus in the emulator flow
+and on the live Preview testnet run. **Remaining:** A1 feeder-daemon auto-merge
+(§A1, needs lane integration), B5 multi-client settle (needs ≥2 clients), and the
+"new metrics dashboard". Suites: aiken 124, feeder 513, cli emulator — all green.
+
 Every file/line reference below was verified against the current tree on
 2026-06-06. Where a sketch is shown it is marked **[sketch — verify on impl]**.
 
