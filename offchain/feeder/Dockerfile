@@ -34,6 +34,9 @@ RUN npm ci
 COPY feeder/tsconfig.json ./
 COPY feeder/cmd ./cmd
 COPY feeder/src ./src
+# Static assets served by the API at runtime (the offline Redoc bundle behind
+# /docs). Vendored under feeder/public/ and not part of the TS build.
+COPY feeder/public ./public
 RUN npm run build
 
 RUN npm prune --omit=dev
@@ -48,6 +51,9 @@ WORKDIR /app
 COPY --from=feeder-build /build/feeder/package.json /app/feeder/package.json
 COPY --from=feeder-build /build/feeder/node_modules /app/feeder/node_modules
 COPY --from=feeder-build /build/feeder/dist /app/feeder/dist
+# Static assets (offline Redoc bundle for /docs). Placed next to dist/ so the
+# API's public-dir locator finds /app/feeder/public at request time.
+COPY --from=feeder-build /build/feeder/public /app/feeder/public
 
 # CLI build output.
 COPY --from=cli-build /build/cli/package.json /app/cli/package.json

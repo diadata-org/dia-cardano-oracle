@@ -847,6 +847,111 @@ describe("createApiServer", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // B4 — OpenAPI / Redoc docs (offline)
+  // ---------------------------------------------------------------------------
+
+  it("/api/v1/openapi.json returns a valid OpenAPI doc covering known routes", async () => {
+    const port = nextPort();
+    const server = createApiServer({
+      port,
+      config: makeConfig(),
+      db: makeDb(),
+      metrics: noopMetrics,
+      priceCache: createPriceCache(),
+      chainRuntime: createChainRuntimeState(),
+      healthState: makeState(),
+    });
+    await server.start();
+    after(() => server.stop());
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/v1/openapi.json`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /application\/json/);
+    const doc = await res.json();
+    assert.match(doc.openapi, /^3\.0\./);
+    assert.ok(doc.info && typeof doc.info.title === "string");
+    assert.ok(doc.paths && typeof doc.paths === "object");
+    // A representative sample of known routes must be documented.
+    for (const path of [
+      "/health",
+      "/api/v1/prices",
+      "/api/v1/prices/{symbol}",
+      "/api/v1/transactions",
+      "/api/v1/alerts/{id}/ack",
+      "/api/v1/openapi.json",
+      "/docs",
+    ]) {
+      assert.ok(path in doc.paths, `openapi doc missing path ${path}`);
+    }
+    // The ack route must expose the POST method.
+    assert.ok("post" in doc.paths["/api/v1/alerts/{id}/ack"], "ack route should be POST");
+  });
+
+  it("/docs returns 200 HTML referencing the spec and the bundled Redoc asset", async () => {
+    const port = nextPort();
+    const server = createApiServer({
+      port,
+      config: makeConfig(),
+      db: makeDb(),
+      metrics: noopMetrics,
+      priceCache: createPriceCache(),
+      chainRuntime: createChainRuntimeState(),
+      healthState: makeState(),
+    });
+    await server.start();
+    after(() => server.stop());
+
+    const res = await fetch(`http://127.0.0.1:${port}/docs`);
+    const body = await res.text();
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /text\/html/);
+    assert.match(body, /\/api\/v1\/openapi\.json/);
+    // Offline: references the locally-served bundle, never a CDN.
+    assert.match(body, /\/public\/redoc\.standalone\.js/);
+    assert.doesNotMatch(body, /https?:\/\/[^"']*redoc/i);
+  });
+
+  it("/public/redoc.standalone.js serves the vendored bundle (no network)", async () => {
+    const port = nextPort();
+    const server = createApiServer({
+      port,
+      config: makeConfig(),
+      db: makeDb(),
+      metrics: noopMetrics,
+      priceCache: createPriceCache(),
+      chainRuntime: createChainRuntimeState(),
+      healthState: makeState(),
+    });
+    await server.start();
+    after(() => server.stop());
+
+    const res = await fetch(`http://127.0.0.1:${port}/public/redoc.standalone.js`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /javascript/);
+    const body = await res.text();
+    assert.ok(body.length > 10_000, "bundle should be a substantial JS file");
+    assert.match(body, /Redoc/, "bundle should expose the Redoc global");
+  });
+
+  it("an arbitrary /public/* path is not served (only the vendored asset)", async () => {
+    const port = nextPort();
+    const server = createApiServer({
+      port,
+      config: makeConfig(),
+      db: makeDb(),
+      metrics: noopMetrics,
+      priceCache: createPriceCache(),
+      chainRuntime: createChainRuntimeState(),
+      healthState: makeState(),
+    });
+    await server.start();
+    after(() => server.stop());
+
+    const res = await get(port, "/public/../package.json");
+    assert.equal(res.status, 404);
+  });
+
+  // ---------------------------------------------------------------------------
   // R5.4 — Rate limiting
   // ---------------------------------------------------------------------------
 

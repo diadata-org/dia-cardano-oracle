@@ -26,6 +26,13 @@ import {
 import { buildAlertsResponse, buildAlertResponse } from "./alerts.js";
 import { buildPerformanceResponse } from "./performance.js";
 import { sanitizeLogLine } from "../utils/sanitize.js";
+import { apiRoutes } from "./routes.js";
+import { buildOpenApiDocument } from "./openapi.js";
+import {
+  loadRedocAsset,
+  renderDocsHtml,
+  REDOC_ASSET_PATH,
+} from "./docs.js";
 
 export type ApiServerOptions = {
   host?: string;
@@ -59,6 +66,9 @@ type RouteMatch =
   | { endpoint: "/health/ready"; kind: "health-ready" }
   | { endpoint: "/metrics"; kind: "metrics" }
   | { endpoint: "/debug"; kind: "debug" }
+  | { endpoint: "/api/v1/openapi.json"; kind: "openapi" }
+  | { endpoint: "/docs"; kind: "docs" }
+  | { endpoint: "/public/*"; kind: "public-asset" }
   | { endpoint: "/api/v1/prices"; kind: "prices" }
   | { endpoint: "/api/v1/prices/:symbol"; kind: "price-by-symbol"; symbol: string }
   | { endpoint: "/api/v1/symbols"; kind: "symbols" }
@@ -137,6 +147,15 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
 
   const rateLimiter = createRateLimiter();
 
+  // Build the OpenAPI document once from the metadata route table — it never
+  // changes during the server's lifetime. The /docs page renders it via the
+  // vendored Redoc bundle, loaded once and held in memory (1 MB asset; reading
+  // it per-request would be wasteful). When the asset is missing /docs serves
+  // a minimal offline fallback that links to the raw spec (see docs.ts).
+  const openApiDocument = JSON.stringify(buildOpenApiDocument(apiRoutes));
+  const redocAsset = loadRedocAsset();
+  const docsHtml = renderDocsHtml("/api/v1/openapi.json", redocAsset !== null);
+
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const startedAtNs = process.hrtime.bigint();
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -171,6 +190,16 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
 
     const sendText = (status: number, payload: string): void => {
       finish(status, payload, "text/plain; version=0.0.4; charset=utf-8");
+    };
+
+    const sendHtml = (status: number, payload: string): void => {
+      finish(status, payload, "text/html; charset=utf-8");
+    };
+
+    // Pre-serialized JSON (the OpenAPI doc) — skip the JSON.stringify in
+    // sendJson since the body is already a string.
+    const sendRawJson = (status: number, payload: string): void => {
+      finish(status, payload, "application/json");
     };
 
     // CORS preflight.
@@ -224,6 +253,25 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
             return;
           }
           sendJson(200, { status: "debug", note: "debug mode enabled" });
+          return;
+        }
+
+        case "openapi":
+          sendRawJson(200, openApiDocument);
+          return;
+
+        case "docs":
+          sendHtml(200, docsHtml);
+          return;
+
+        case "public-asset": {
+          // Only the one vendored Redoc bundle is served — no arbitrary file
+          // access. matchRoute already restricts the path to REDOC_ASSET_PATH.
+          if (redocAsset === null) {
+            sendJson(404, { error: "Not Found" });
+            return;
+          }
+          finish(200, redocAsset, "application/javascript; charset=utf-8");
           return;
         }
 
@@ -466,6 +514,9 @@ function matchRoute(pathname: string): RouteMatch | null {
   if (pathname === "/health/ready") return { endpoint: "/health/ready", kind: "health-ready" };
   if (pathname === "/metrics") return { endpoint: "/metrics", kind: "metrics" };
   if (pathname === "/debug") return { endpoint: "/debug", kind: "debug" };
+  if (pathname === "/api/v1/openapi.json") return { endpoint: "/api/v1/openapi.json", kind: "openapi" };
+  if (pathname === "/docs") return { endpoint: "/docs", kind: "docs" };
+  if (pathname === REDOC_ASSET_PATH) return { endpoint: "/public/*", kind: "public-asset" };
   if (pathname === "/api/v1/prices") return { endpoint: "/api/v1/prices", kind: "prices" };
   if (pathname === "/api/v1/symbols") return { endpoint: "/api/v1/symbols", kind: "symbols" };
   if (pathname === "/api/v1/chains") return { endpoint: "/api/v1/chains", kind: "chains" };

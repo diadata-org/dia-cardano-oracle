@@ -12,6 +12,7 @@
     "test": "node --import tsx/esm --test $(find src cmd -path '*/__tests__/*.test.ts' | tr '\\n' ' ')"
   },
   "dependencies": {
+    "@sinclair/typebox": "^0.34.49",
     "dotenv": "^16.6.1",
     "viem": "^2.50.4",
     "yaml": "^2.9.0"
