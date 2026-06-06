@@ -1,7 +1,18 @@
 # DIA Cardano Oracle — operator shortcuts.
 # All targets delegate to docker compose running from offchain/feeder/.
 
-COMPOSE := docker compose -f feeder/docker-compose.yml --project-directory feeder
+# The compose PROJECT is scoped per network (dia-feeder-<network>) so Preview
+# and Mainnet get completely separate containers AND named volumes, and never
+# clobber each other: switching networks leaves the other one's container and
+# data intact (stopped). The network comes from feeder/.env CARDANO_NETWORK —
+# the SAME selector the daemon reads — so the project always matches the network
+# the feeder actually runs; there is no second source of truth to drift.
+# Ports are shared, so run ONE network at a time. To switch: `make down`, change
+# CARDANO_NETWORK in feeder/.env, then `make up` (see feeder/README.md →
+# "Network-scoped stacks").
+NET_TAG := $(strip $(shell sed -n 's/^CARDANO_NETWORK=//p' feeder/.env 2>/dev/null | tr '[:upper:]' '[:lower:]'))
+NET_TAG := $(if $(NET_TAG),$(NET_TAG),preview)
+COMPOSE := docker compose -f feeder/docker-compose.yml --project-directory feeder -p dia-feeder-$(NET_TAG)
 UID ?= $(shell id -u)
 GID ?= $(shell id -g)
 export UID
@@ -51,8 +62,16 @@ up-postgres: ## Start the feeder daemon, Postgres backend (add MONITORING=1 for 
 # touches services whose profile is active. Without listing them all here,
 # `down` matches nothing and leaves the feeder + monitoring stack running.
 .PHONY: down
-down: ## Stop everything (all profiles: feeder, monitoring, postgres, cli)
+down: ## Stop everything for the CURRENT network (all profiles; other network untouched)
 	$(COMPOSE) --profile sqlite --profile postgres --profile cli --profile monitoring down --remove-orphans
+
+# Stops BOTH network stacks regardless of feeder/.env — use it when you are not
+# sure which network is up, or to tear everything down before maintenance.
+ALL_PROFILES := --profile sqlite --profile postgres --profile cli --profile monitoring
+.PHONY: down-all
+down-all: ## Stop EVERY network's stack (dia-feeder-preview AND dia-feeder-mainnet)
+	-docker compose -f feeder/docker-compose.yml --project-directory feeder -p dia-feeder-preview $(ALL_PROFILES) down --remove-orphans
+	-docker compose -f feeder/docker-compose.yml --project-directory feeder -p dia-feeder-mainnet $(ALL_PROFILES) down --remove-orphans
 
 .PHONY: logs
 logs: ## Tail feeder logs

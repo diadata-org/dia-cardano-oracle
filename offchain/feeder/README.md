@@ -23,6 +23,7 @@ diverges substantively — it builds Cardano txs via the pure builders in
   - [Migrating a flat deployment onto a run dir](#migrating-a-flat-deployment-onto-a-run-dir)
 - [Running with Docker](#running-with-docker)
   - [Compose services & profiles](#compose-services--profiles)
+  - [Network-scoped stacks](#network-scoped-stacks)
   - [Daemon only](#daemon-only)
   - [Daemon + monitoring](#daemon--monitoring)
   - [Capturing an operational snapshot](#capturing-an-operational-snapshot)
@@ -228,7 +229,52 @@ Things worth knowing:
   in `config/infrastructure.<network>.yaml` documents the knobs (see
   [`config/`](./config/README.md)).
 - Profiles **compose**: `MONITORING=1` adds the `monitoring` profile on top of the
-  feeder profile. `make down` stops every profile.
+  feeder profile. `make down` stops every profile **for the current network**
+  (see [Network-scoped stacks](#network-scoped-stacks)).
+
+### Network-scoped stacks
+
+`make` scopes the Compose **project** per network — `dia-feeder-<network>`, taken
+from `CARDANO_NETWORK` in `feeder/.env` (the same selector the daemon reads). So
+Preview and Mainnet get separate containers **and** separate named volumes, and
+switching networks never destroys the other one's state:
+
+| `feeder/.env` | Compose project | Containers | Named volumes |
+| --- | --- | --- | --- |
+| `CARDANO_NETWORK=Preview` | `dia-feeder-preview` | `dia-feeder-preview-feeder-sqlite-1`, … | `dia-feeder-preview_grafana-data`, … |
+| `CARDANO_NETWORK=Mainnet` | `dia-feeder-mainnet` | `dia-feeder-mainnet-feeder-sqlite-1`, … | `dia-feeder-mainnet_grafana-data`, … |
+
+Ports (8080 API, 3000 Grafana, 9090 Prometheus) are **shared**, so run **one
+network at a time**. The feeder DB and logs live on the bind-mounted
+`state/<network>_run_<id>/` (a host path, not a named volume), so they survive a
+switch either way.
+
+**Switching networks** — stop the current stack *before* changing the selector,
+so `make down` targets the network that is actually up:
+
+```sh
+make down                  # stops the current network's stack (the other stays put)
+# edit feeder/.env -> CARDANO_NETWORK=Mainnet
+make up MONITORING=1       # starts the dia-feeder-mainnet stack
+```
+
+`make down-all` stops **both** `dia-feeder-preview` and `dia-feeder-mainnet` when
+you're unsure what's running.
+
+**One-time migration from the old single-project layout.** Deployments created
+before network-scoped projects ran under one project named `feeder`
+(container `feeder-feeder-sqlite-1`, volumes `feeder_*`). Stop that old stack
+once so it doesn't keep holding port 8080:
+
+```sh
+docker compose -f feeder/docker-compose.yml --project-directory feeder -p feeder \
+  --profile sqlite --profile postgres --profile cli --profile monitoring down --remove-orphans
+```
+
+The feeder DB/logs under `state/` are on the host bind mount and are kept; only
+the old monitoring volumes (`feeder_prometheus-data`, `feeder_grafana-data`) are
+left behind — the per-network stack starts fresh ones (Grafana dashboards
+re-provision automatically; Prometheus history restarts).
 
 ### Daemon only
 
@@ -408,6 +454,13 @@ These targets run the **feeder** binary as one-off containers (not `dia-cli`):
 | `prometheus-data` | `/prometheus` | prometheus | Prometheus TSDB (metric retention) |
 | `grafana-data` | `/var/lib/grafana` | grafana | Dashboard and alert state |
 
+The three **named** volumes are project-scoped, so each network gets its own —
+`dia-feeder-<network>_postgres-data`, `…_prometheus-data`, `…_grafana-data` (see
+[Network-scoped stacks](#network-scoped-stacks)). The `./config/`, `.env`, and
+`./state/` rows are **host bind mounts**, shared across networks; they stay
+network-safe because their contents are already keyed by network
+(`config/routers/<network>/`, `*_<NETWORK>` env suffixes, `state/<network>_run_<id>/`).
+
 ## Running locally (npm)
 
 Run the feeder directly on your machine, without Docker. Requires
@@ -415,6 +468,13 @@ Run the feeder directly on your machine, without Docker. Requires
 (`better-sqlite3`, `lucid-evolution`). Everything below runs from
 `offchain/feeder/`. This is the **mirror** of the Docker path above — pick
 one or the other, do not mix them.
+
+Network isolation works the same way conceptually, but there is no container or
+named volume to clobber: each `npm run feeder:dev` is **one process for one
+network** (the network from `CARDANO_NETWORK`, the run from `RUN_ID` — see
+[Per-run state (RUN_ID)](#per-run-state-run_id)). To run two networks at once,
+start two processes from two shells, each with its own `CARDANO_NETWORK` (and a
+distinct API port via `api.host`/port in `config/infrastructure.<network>.yaml`).
 
 ```sh
 cd offchain/feeder

@@ -8,11 +8,20 @@
 #   cli         — on-demand CLI admin container (short-lived)
 #   monitoring  — Prometheus + Grafana stack
 #
+# Network-scoped project: the Makefile runs every command with
+# `-p dia-feeder-<network>` (network from feeder/.env CARDANO_NETWORK), so
+# Preview and Mainnet get separate containers (dia-feeder-<network>-feeder-sqlite-1)
+# AND separate named volumes (dia-feeder-<network>_grafana-data, …) and never
+# clobber each other. Ports are shared, so run one network at a time. Always
+# drive this through `make` — running `docker compose` here without `-p` lands
+# everything in one shared project and defeats that isolation.
+#
 # Common usage:
-#   docker compose --profile sqlite up -d
-#   docker compose --profile sqlite --profile monitoring up -d
-#   docker compose --profile cli run --rm cli protocol
-#   make help  (from offchain/)
+#   make up                          (from offchain/ — preferred)
+#   make up MONITORING=1
+#   make cli CMD="protocol"
+#   make help
+#   docker compose -p dia-feeder-preview --profile sqlite up -d   (raw, if you must)
 
 services:
   feeder-sqlite:
