@@ -26,6 +26,7 @@ diverges substantively — it builds Cardano txs via the pure builders in
   - [Operator setup — pick your scenario](#operator-setup--pick-your-scenario)
   - [Day-2 operations (Docker)](#day-2-operations-docker)
   - [Volume layout](#volume-layout)
+  - [Per-run state (RUN_ID)](#per-run-state-run_id)
 - [Running locally (npm)](#running-locally-npm)
   - [Operator setup — pick your scenario](#operator-setup--pick-your-scenario-1)
   - [Day-2 operations (npm)](#day-2-operations-npm)
@@ -334,6 +335,36 @@ These targets run the **feeder** binary as one-off containers (not `dia-cli`):
 | `postgres-data` | (postgres svc) | postgres | Postgres data dir |
 | `prometheus-data` | `/prometheus` | prometheus | Prometheus TSDB (metric retention) |
 | `grafana-data` | `/var/lib/grafana` | grafana | Dashboard and alert state |
+
+### Per-run state (RUN_ID)
+
+Each deployment keeps its DB, logs, and pair state under a **per-run dir**,
+`state/<network>_run_<id>/` — keyed by the **same run id the CLI used**
+(`../cli/state/<network>_run_<id>/`). This is why multiple deployments of one
+network (e.g. two mainnet receivers) never clobber each other's database or
+scanner checkpoint. `make init-bootstrap` / `init-client` import a CLI run into
+the matching feeder run dir, preserving the id.
+
+Every feeder command resolves the active run dir the same way:
+
+| `RUN_ID` | Active run dir |
+| --- | --- |
+| set — `make up RUN_ID=20260517-063917` | `state/<network>_run_20260517-063917/` |
+| empty | the **newest** `state/<network>_run_*/` |
+| empty **and** no run dirs exist | the flat `state/<network>/` |
+
+Set it per-invocation on any target (`make up`, `checkpoint-latest`, `reset`,
+`prune`, `make evidence`) — `RUN_ID=…` — or pin one deployment by setting `RUN_ID`
+in `.env`. The lowercase `<network>` comes from `CARDANO_NETWORK`. Locally (npm),
+the same env var works: `RUN_ID=20260517-063917 npm run feeder:dev -- daemon`.
+
+**Migrating a flat `state/<network>/` deployment.** A feeder first set up under
+the older flat layout (no run id, e.g. `state/preview/`) keeps working untouched:
+with `RUN_ID` empty and no `state/preview_run_*` present, the resolver falls back
+to `state/preview/`. To move it onto the per-run layout, re-run
+`make init-bootstrap` / `init-client` against the CLI run — that writes a fresh
+`state/<network>_run_<id>/`; then start with `make up RUN_ID=<id>`. Remove the old
+flat dir once you've confirmed the run dir is in use.
 
 ## Running locally (npm)
 
