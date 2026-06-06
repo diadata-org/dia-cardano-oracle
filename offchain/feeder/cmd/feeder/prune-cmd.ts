@@ -25,6 +25,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { createDb, type DbConfig } from "../../src/persistence/index.js";
+import { resolveRunStateDir } from "./run-state.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -151,7 +152,7 @@ async function deleteIfOld(
 export async function runPrune(options: PruneCmdOptions): Promise<number> {
   const { network, maxAgeMs, dryRun, report } = options;
 
-  const stateBase  = `state/${network.toLowerCase()}`;
+  const stateBase  = resolveRunStateDir(network as "Preview" | "Mainnet");
   const logDir     = process.env.FEEDER_LOG_DIR?.trim() ?? `${stateBase}/logs`;
   const intentsDir = path.join(logDir, "intents");
   const cutoffMs   = Date.now() - maxAgeMs;

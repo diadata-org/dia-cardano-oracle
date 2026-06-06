@@ -38,8 +38,10 @@ import {
   type ResolvedSource,
   type ScannedBatch,
 } from "../../src/source/index.js";
+import path from "node:path";
 import { createDb, type DbConfig } from "../../src/persistence/index.js";
 import { createDbCheckpoint } from "../../src/source/checkpoint-db.js";
+import { resolveRunStateDir } from "./run-state.js";
 import { createPublicClient, http, type PublicClient } from "viem";
 
 /** What the scan command supports. */
@@ -97,7 +99,7 @@ function resolveDbConfig(network: CardanoNetwork): DbConfig {
     return { driver: "postgres", dsn };
   }
 
-  const defaultPath = `state/${network.toLowerCase()}/feeder.sqlite`;
+  const defaultPath = path.join(resolveRunStateDir(network), "feeder.sqlite");
   const filePath = process.env[`DATABASE_PATH_${suffix}`]?.trim() ?? defaultPath;
   return { driver: "sqlite", path: filePath };
 }

@@ -79,13 +79,14 @@ Flags:
   --help, -h            Show this help message and exit.
 
 Init sub-commands (one-time setup):
-  init bootstrap        Copy config-bootstrap.json from a CLI state dir
-                        into state/<network>/. Auto-scans ../cli/state/
-                        for matching network run dirs; use --from to
-                        supply a path explicitly.
+  init bootstrap        Copy config-bootstrap.json from a CLI state dir into
+                        the matching state/<network>_run_<id>/ (same run id as
+                        the CLI). Auto-scans ../cli/state/ for matching network
+                        run dirs; use --from to supply a path explicitly.
   init client           Copy a client JSON from a CLI state dir into
-                        state/<network>/clients/, then run an interactive
-                        wizard to generate config/routers/<id>.<network>.yaml.
+                        state/<network>_run_<id>/clients/, then run an
+                        interactive wizard to generate
+                        config/routers/<network>/<id>.yaml.
                         Use --from <client.json> to skip auto-scan.
 
   --from <path>         Source path for init sub-commands. For 'bootstrap':

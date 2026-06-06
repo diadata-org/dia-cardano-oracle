@@ -29,6 +29,7 @@
 //   METRICS_NAMESPACE        metric name prefix — default "dia_bridge".
 
 import { access, rm, readdir } from "node:fs/promises";
+import path from "node:path";
 
 import { seedCheckpointIfNeeded } from "./checkpoint-seed.js";
 
@@ -87,6 +88,7 @@ import {
 import type { OracleIntentBridge } from "../../src/lib-bridge/index.js";
 import { createRealOracleIntentBridge } from "../../src/lib-bridge/index.js";
 import { reconcileAllDestinations } from "../../src/lib-bridge/reconcile.js";
+import { resolveRunStateDir } from "./run-state.js";
 import { createCardanoWriteClient } from "../../src/submitter/cardano-write-client.js";
 import {
   createApiServer,
@@ -208,14 +210,15 @@ function parsePositiveInteger(raw: number | undefined): number | undefined {
 // ---------------------------------------------------------------------------
 
 /**
- * Delete all feeder-generated state for the given network so the next
- * run starts clean.  Never touches CLI bootstrap state files:
- *   config-bootstrap.json, clients/<name>.json.
+ * Delete all feeder-generated state in the ACTIVE run dir (resolved via
+ * RUN_ID / newest / flat fallback) so the next run starts clean. Never touches
+ * CLI bootstrap state files: config-bootstrap.json, clients/<name>.json. A
+ * different deployment's run dir is left untouched.
  *
- * Deleted:
- *   state/<network>/logs/                    (all log streams)
- *   state/<network>/feeder.sqlite*           (SQLite DB + WAL files)
- *   state/<network>/clients/*\/pairs/*.json  (feeder-written pair state)
+ * Deleted (<run> = state/<network>_run_<id>/, or flat state/<network>/):
+ *   <run>/logs/                    (all log streams)
+ *   <run>/feeder.sqlite*           (SQLite DB + WAL files)
+ *   <run>/clients/*\/pairs/*.json  (feeder-written pair state)
  */
 // ---------------------------------------------------------------------------
 // Log-level filter
@@ -275,7 +278,10 @@ export async function cleanFeederState(
   report: (line: string) => void,
   stateBase = "state",
 ): Promise<void> {
-  const base = `${stateBase}/${network.toLowerCase()}`;
+  // Clean the ACTIVE run dir (RUN_ID / newest / flat fallback), so a reset
+  // never wipes a different deployment's run dir. `stateBase` lets tests point
+  // at a temp root.
+  const base = resolveRunStateDir(network as CardanoNetwork, stateBase);
 
   const targets: string[] = [
     `${base}/logs`,
@@ -284,7 +290,7 @@ export async function cleanFeederState(
     `${base}/feeder.sqlite-wal`,
   ];
 
-  // Pair state files: state/<network>/clients/*/pairs/*.json
+  // Pair state files: <run>/clients/*/pairs/*.json
   const clientsDir = `${base}/clients`;
   try {
     const clientEntries = await readdir(clientsDir, { withFileTypes: true });
@@ -454,7 +460,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // ------------------------------------------------------------------
   // 2b. File logger — structured JSON logs per intent/transaction.
   // ------------------------------------------------------------------
-  const logDir = process.env.FEEDER_LOG_DIR?.trim() ?? `state/${network.toLowerCase()}/logs`;
+  const logDir = process.env.FEEDER_LOG_DIR?.trim() ?? path.join(resolveRunStateDir(network), "logs");
   const fileLogger: FileLogger = await createFileLogger(logDir);
   
   // After fileLogger is ready, wrap so the file gets all lines (unfiltered)
@@ -1751,7 +1757,7 @@ function resolveDbConfig(network: CardanoNetwork): DbConfig {
     return { driver: "postgres", dsn };
   }
 
-  const defaultPath = `state/${network.toLowerCase()}/feeder.sqlite`;
+  const defaultPath = path.join(resolveRunStateDir(network), "feeder.sqlite");
   const filePath = process.env[`DATABASE_PATH_${suffix}`]?.trim() ?? defaultPath;
   return { driver: "sqlite", path: filePath };
 }

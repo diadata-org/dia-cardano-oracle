@@ -7,6 +7,13 @@ GID ?= $(shell id -g)
 export UID
 export GID
 
+# RUN_ID selects the per-run state dir (state/<network>_run_<RUN_ID>/), the same
+# id the CLI deployment used. Exported so `make up RUN_ID=...` (and every feeder
+# target) reaches the container's compose `${RUN_ID}` interpolation. Empty -> the
+# daemon uses the newest run dir.  e.g.  make up RUN_ID=20260517-063917 MONITORING=1
+RUN_ID ?=
+export RUN_ID
+
 # Monitoring toggle. Set MONITORING=1 on any "start" target to ALSO bring up
 # Prometheus + Grafana + the renderer sidecar. Without it, only the feeder
 # starts. One flag, consistent across up / up-postgres / restart-latest /
@@ -127,7 +134,9 @@ evidence: ## Build the COMPLETE M2 evidence pack into ONE dir (network from feed
 	net=$$(echo "$(EVIDENCE_NETWORK)" | tr '[:upper:]' '[:lower:]'); \
 	stamp=$$(date -u +%Y%m%d-%H%M%S); \
 	out=docs/milestones/evidence/m2-$$net-$$stamp; \
-	db=state/$$net/feeder.sqlite; \
+	if [ -n "$(RUN_ID)" ]; then sdir=state/$${net}_run_$(RUN_ID); \
+	else sdir=$$(ls -d state/$${net}_run_*/ 2>/dev/null | sort | tail -1); sdir=$${sdir%/}; sdir=$${sdir:-state/$$net}; fi; \
+	db=$$sdir/feeder.sqlite; \
 	echo "Building $(EVIDENCE_NETWORK) COMPLETE evidence pack — stamp=$$stamp db=$$db"; \
 	EVIDENCE_STAMP=$$stamp EVIDENCE_NETWORK=$$net \
 	  GRAFANA_ADMIN_PASSWORD=$${GRAFANA_ADMIN_PASSWORD:-admin} \

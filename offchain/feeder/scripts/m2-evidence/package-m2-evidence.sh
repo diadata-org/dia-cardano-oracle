@@ -7,7 +7,8 @@
 # Reads logs + sqlite + live API + Grafana renderer and writes a
 # self-contained directory under docs/milestones/evidence/. Inputs:
 #
-#   logs + sqlite : offchain/feeder/state/<network>/
+#   logs + sqlite : offchain/feeder/state/<network>_run_<id>/ (or flat
+#                   state/<network>/ when no run dir exists; honors RUN_ID)
 #   feeder API    : http://localhost:8080
 #   Grafana       : http://localhost:3000 (renderer profile must be up)
 #
@@ -34,7 +35,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # scripts/m2-evidence/ → feeder/scripts/ → feeder/ → offchain/ → repo root
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 NETWORK="$(echo "${EVIDENCE_NETWORK:-preview}" | tr '[:upper:]' '[:lower:]')"
-STATE_DIR="$REPO_ROOT/offchain/feeder/state/$NETWORK"
+
+# Resolve the per-run state dir — mirror cmd/feeder/run-state.ts resolveRunStateDir
+# so the pack reads the SAME deployment the daemon writes:
+#   RUN_ID set   -> state/<network>_run_<RUN_ID>
+#   RUN_ID empty -> newest state/<network>_run_*
+#   no run dirs  -> flat state/<network>  (pre-per-run layout / live preview)
+STATE_ROOT="$REPO_ROOT/offchain/feeder/state"
+if [[ -n "${RUN_ID:-}" ]]; then
+  STATE_DIR="$STATE_ROOT/${NETWORK}_run_${RUN_ID}"
+else
+  newest="$(ls -d "$STATE_ROOT/${NETWORK}_run_"*/ 2>/dev/null | sort | tail -1)"
+  STATE_DIR="${newest:+${newest%/}}"
+  STATE_DIR="${STATE_DIR:-$STATE_ROOT/$NETWORK}"
+fi
 LOGS_DIR="$STATE_DIR/logs"
 SQLITE_FILE="$STATE_DIR/feeder.sqlite"
 API_URL="http://localhost:8080"

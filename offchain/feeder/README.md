@@ -59,7 +59,7 @@ diverges substantively — it builds Cardano txs via the pure builders in
 | --- | --- |
 | [`config/`](./config/README.md) | YAML configuration the feeder loads — infrastructure, chains, contracts, events, routers, pair selection. |
 | [`scripts/`](./scripts/README.md) | Evidence-pack tooling (`make evidence`) and the on-chain pair-scan helper. |
-| [`state/`](./state/README.md) | Per-network state: imported CLI artifacts (committed) + runtime DB/logs (gitignored). |
+| [`state/`](./state/README.md) | Per-run, per-network state (`state/<network>_run_<id>/`): imported CLI artifacts (committed) + runtime DB/logs (gitignored). |
 | `src/`, `cmd/` | The feeder daemon source (TypeScript). |
 
 The deep architecture and the Spectra-parity table live in
@@ -134,7 +134,7 @@ underlying map.
 
 | Service | Profile | What it is |
 | --- | --- | --- |
-| `feeder-sqlite` | `sqlite` | The feeder daemon with the **SQLite** backend (default). SQLite is an embedded file (`state/<network>/feeder.sqlite`) — **there is no database server**; the service *is* the feeder. |
+| `feeder-sqlite` | `sqlite` | The feeder daemon with the **SQLite** backend (default). SQLite is an embedded file (`state/<network>_run_<id>/feeder.sqlite`) — **there is no database server**; the service *is* the feeder. |
 | `feeder-postgres` | `postgres` | The **same** feeder daemon with the **PostgreSQL** backend. |
 | `postgres` | `postgres` | A real PostgreSQL 15 server, started only under this profile (data in the `postgres-data` volume). |
 | `cli` | `cli` | Short-lived admin container for one-off CLI commands (`make cli CMD="…"`). |
@@ -273,15 +273,25 @@ in `offchain/cli/README.md`. That produces the CLI state under
 `offchain/cli/state/<network>/`. Then continue with Scenario B.
 
 **Scenario B — CLI state already exists, feeder never started.**
-Import the CLI state into the feeder and start:
+First set the target network in `offchain/feeder/.env`: `CARDANO_NETWORK=Preview`
+or `Mainnet` (plus that network's Blockfrost key, wallet seed, DIA creds). Then
+import the CLI deployment and start:
 
 ```sh
 make build             # only if the image isn't built yet
-make init-bootstrap    # import config-bootstrap.json into feeder/state/
-make init-client       # import client JSON + generate router YAML (interactive)
-make checkpoint-latest # seed scanner to current chain tip (only new intents)
-make up MONITORING=1   # start feeder + Prometheus + Grafana
+make init-bootstrap    # import cli/state/<net>_run_<id>/config-bootstrap.json
+                       #   into feeder/state/<net>_run_<id>/  (prints the RUN_ID)
+make init-client       # import client JSON + generate config/routers/<net>/<client>.yaml (interactive)
+make checkpoint-latest RUN_ID=<id>      # seed scanner to chain tip for that run
+make up RUN_ID=<id> MONITORING=1        # start the daemon on that run
 ```
+
+`<id>` is the run id `init-bootstrap` prints (the same id as the CLI run,
+e.g. `20260517-063917`). It selects the per-run state dir
+`state/<network>_run_<id>/` (DB, logs, pair state) so multiple deployments never
+clobber each other. Omit `RUN_ID` to use the **newest** `state/<network>_run_*`
+dir. A feeder set up under the older flat `state/<network>/` layout (no run dir)
+keeps working until you re-run `init` to migrate it to a run dir.
 
 **Scenario C — everything set up, just want clean logs + DB.**
 The CLI state and router YAML already exist; you only want a fresh runtime:
@@ -475,17 +485,20 @@ happens next: `--clean` (flag) wipes **then starts** the daemon, while
 `reset` (sub-command) wipes **then exits**. For an age-based partial prune
 that keeps the DB, use `prune` instead.
 
+All paths below are inside the active run dir (`state/<network>_run_<id>/`,
+selected by `RUN_ID`; the flat `state/<network>/` when no run dir exists).
+
 | Deleted | Reason |
 |---|---|
-| `state/<network>/logs/` | All log streams (feeder.log, transactions.jsonl, lane.jsonl, intents/) |
-| `state/<network>/feeder-checkpoint.json` | Stale file from an older run — deleted if present; scanner position is now stored in the DB (`chain_state` table) |
-| `state/<network>/feeder.sqlite*` | Full DB reset — clears processed_events, chain_state (scanner position), transaction_log |
-| `state/<network>/clients/*/pairs/*.json` | Feeder-written pair state — reconstructed from chain on next update |
+| `<run>/logs/` | All log streams (feeder.log, transactions.jsonl, lane.jsonl, intents/) |
+| `<run>/feeder-checkpoint.json` | Stale file from an older run — deleted if present; scanner position is now stored in the DB (`chain_state` table) |
+| `<run>/feeder.sqlite*` | Full DB reset — clears processed_events, chain_state (scanner position), transaction_log |
+| `<run>/clients/*/pairs/*.json` | Feeder-written pair state — reconstructed from chain on next update |
 
 | Never deleted | Why |
 |---|---|
-| `state/<network>/config-bootstrap.json` | CLI state file (`config:bootstrap`) |
-| `state/<network>/clients/*.json` | CLI state file (`receiver:bootstrap`) |
+| `<run>/config-bootstrap.json` | CLI state file (`config:bootstrap`) |
+| `<run>/clients/*.json` | CLI state file (`receiver:bootstrap`) |
 
 The block-scanner position is stored in `chain_state.last_scan_block` in the SQLite/Postgres DB.
 `--clean` / `reset` reset it by removing the DB entirely. `feeder prune --max-age` prunes old rows
@@ -493,7 +506,8 @@ from `processed_events` and `transaction_log` but never removes the DB file itse
 
 ## Log streams
 
-The feeder writes four separate log streams under `state/<network>/logs/`:
+The feeder writes four separate log streams under the active run dir's logs
+(`state/<network>_run_<id>/logs/`, or `state/<network>/logs/` when no run dir exists):
 
 | File | Contents |
 |---|---|

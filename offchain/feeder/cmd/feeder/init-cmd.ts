@@ -1,13 +1,18 @@
 // `feeder init` — one-time setup wizard.
 //
 // Sub-commands:
-//   init bootstrap   Copy config-bootstrap.json from a CLI state dir into
-//                    the feeder's state/<network>/ directory.
-//   init client      Copy a client JSON from a CLI state dir, then run an
-//                    interactive wizard to generate config/routers/<id>.<network>.yaml.
+//   init bootstrap   Copy config-bootstrap.json from a CLI <network>_run_<id>
+//                    dir into the feeder's matching state/<network>_run_<id>/.
+//   init client      Copy a client JSON from the same CLI run dir, then run an
+//                    interactive wizard to generate config/routers/<network>/<id>.yaml.
 //
 // Run from offchain/feeder/ (the feeder working directory). The auto-scan
 // looks for CLI state dirs at ../cli/state/ relative to cwd.
+//
+// The CLI run id is preserved so the feeder's run dir matches the deployment
+// (state/<network>_run_<id>/), and multiple deployments never clobber each
+// other. The daemon selects the run via the RUN_ID env (or the newest run dir
+// by default) — see cmd/feeder/run-state.ts.
 
 import { access, copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createInterface, type Interface } from "node:readline/promises";
@@ -32,6 +37,23 @@ export async function runInit(options: InitCmdOptions): Promise<number> {
   return runInitClient(options);
 }
 
+/**
+ * Recover the deployment run id from a CLI state path by finding its
+ * `<network>_run_<id>` segment (the CLI run dir). The feeder reuses that id
+ * for its own run dir so the two share a deployment identity. Falls back to
+ * the RUN_ID env; returns null if neither is available so the caller errors
+ * rather than invent a run id divorced from the deployment.
+ */
+function runIdFromSourcePath(sourcePath: string, networkLower: string): string | null {
+  const prefix = `${networkLower}_run_`;
+  for (const segment of sourcePath.split(/[\\/]+/)) {
+    if (segment.startsWith(prefix)) {
+      return segment.slice(prefix.length);
+    }
+  }
+  return process.env.RUN_ID?.trim() || null;
+}
+
 // ---------------------------------------------------------------------------
 // init bootstrap
 // ---------------------------------------------------------------------------
@@ -39,7 +61,6 @@ export async function runInit(options: InitCmdOptions): Promise<number> {
 async function runInitBootstrap(options: InitCmdOptions): Promise<number> {
   const { network, from, force, report } = options;
   const networkLower = network.toLowerCase();
-  const target = `state/${networkLower}/config-bootstrap.json`;
 
   report(`init bootstrap: network=${network}`);
 
@@ -68,6 +89,15 @@ async function runInitBootstrap(options: InitCmdOptions): Promise<number> {
       return 1;
     }
 
+    // Import into the feeder run dir that matches the CLI deployment's run id,
+    // so multiple deployments stay isolated (state/<network>_run_<id>/).
+    const runId = runIdFromSourcePath(sourcePath, networkLower);
+    if (!runId) {
+      report(`init bootstrap: could not determine the run id. Use --from a CLI <network>_run_<id> dir, or set RUN_ID.`);
+      return 1;
+    }
+    const target = `state/${networkLower}_run_${runId}/config-bootstrap.json`;
+
     if (await fileExists(target) && !force) {
       const ok = await askConfirm(rl, `  ${target} already exists. Overwrite?`, false);
       if (!ok) {
@@ -79,7 +109,9 @@ async function runInitBootstrap(options: InitCmdOptions): Promise<number> {
     await mkdir(dirname(target), { recursive: true });
     await copyFile(sourcePath, target);
     report(`init bootstrap: wrote ${target}`);
-    out(`\n  Done. Bootstrap state file ready at ${target}`);
+    out(`\n  Done. Bootstrap state ready at ${target}`);
+    out(`  Run id: ${runId}. Start this run with: make up RUN_ID=${runId} MONITORING=1`);
+    out(`  (Without RUN_ID the feeder uses the newest state/${networkLower}_run_* dir.)`);
     return 0;
   } finally {
     rl.close();
@@ -130,8 +162,14 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
       return 1;
     }
 
-    // --- Step 3: copy client JSON to feeder state ---
-    const clientTarget = `state/${networkLower}/clients/${clientId}.json`;
+    // --- Step 3: copy client JSON into the feeder run dir matching the CLI run ---
+    const runId = runIdFromSourcePath(sourcePath, networkLower);
+    if (!runId) {
+      report(`init client: could not determine the run id. Use --from a CLI <network>_run_<id> client JSON, or set RUN_ID.`);
+      return 1;
+    }
+    const runDir = `state/${networkLower}_run_${runId}`;
+    const clientTarget = `${runDir}/clients/${clientId}.json`;
     if (await fileExists(clientTarget) && !force) {
       const ok = await askConfirm(rl, `  ${clientTarget} already exists. Overwrite?`, false);
       if (!ok) {
@@ -147,7 +185,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     out(`\n  Now let's configure the router for ${clientId} on Cardano ${network}.\n`);
 
     const routerId = `${clientId.replace(/-/g, "_")}_${networkLower}`;
-    const routerTarget = `config/routers/${clientId}.${networkLower}.yaml`;
+    const routerTarget = `config/routers/${networkLower}/${clientId}.yaml`;
 
     const existingPairs = await loadExistingPairsFromYaml(routerTarget);
     const DEFAULT_PAIRS = [
@@ -185,7 +223,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
       keyEnv,
       pairs: activePairs,
       clientStatePath: clientTarget,
-      protocolStatePath: `state/${networkLower}/config-bootstrap.json`,
+      protocolStatePath: `${runDir}/config-bootstrap.json`,
       timeThreshold: timeThresh,
       priceDeviation: priceDev,
     });
@@ -208,9 +246,10 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     await writeFile(routerTarget, yaml, "utf8");
     report(`init client: wrote ${routerTarget}`);
 
-    out(`\n  All done. Start the feeder:`);
-    out(`    Docker:  make up            (from offchain/)`);
-    out(`    Local:   npm run feeder:dev (from offchain/feeder/)`);
+    out(`\n  All done (run id ${runId}). Start the feeder for THIS run:`);
+    out(`    Docker:  make up RUN_ID=${runId} MONITORING=1     (from offchain/)`);
+    out(`    Local:   RUN_ID=${runId} npm run feeder:dev -- daemon  (from offchain/feeder/)`);
+    out(`  Without RUN_ID the feeder picks the newest state/${networkLower}_run_* dir.`);
     out(``);
     return 0;
   } finally {

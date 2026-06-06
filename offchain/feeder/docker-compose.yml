@@ -36,8 +36,12 @@ services:
     env_file: [.env]
     environment:
       DATABASE_DRIVER: sqlite
-      DATABASE_PATH_PREVIEW: /app/state/preview/feeder.sqlite
-      DATABASE_PATH_MAINNET: /app/state/mainnet/feeder.sqlite
+      # RUN_ID selects the per-run state dir state/<network>_run_<RUN_ID>/.
+      # Empty -> the daemon uses the newest run dir (else the flat state/<network>).
+      RUN_ID: ${RUN_ID:-}
+      # DATABASE_PATH is intentionally NOT set here: the daemon derives it from
+      # the active run dir (state/<network>_run_<id>/feeder.sqlite). Setting
+      # DATABASE_PATH_TESTNET/MAINNET would pin a fixed path and defeat per-run.
       # CARDANO_FEEDER_CLI_DIST_ROOT already set by Dockerfile ENV.
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
@@ -64,6 +68,7 @@ services:
     env_file: [.env]
     environment:
       DATABASE_DRIVER: postgres
+      RUN_ID: ${RUN_ID:-}
       # DATABASE_DSN_PREVIEW and DATABASE_DSN_MAINNET come from .env
     depends_on:
       postgres:
