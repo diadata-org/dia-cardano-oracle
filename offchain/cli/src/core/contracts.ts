@@ -25,6 +25,7 @@ const RECEIVER_MINT_TITLE = "receiver.receiver.mint";
 const RECEIVER_SPEND_TITLE = "receiver.receiver.spend";
 const COORDINATOR_WITHDRAW_TITLE = "update_coordinator.update_coordinator.withdraw";
 const REFERENCE_HOLDER_SPEND_TITLE = "reference_holder.reference_holder.spend";
+const DEPOSIT_SPEND_TITLE = "deposit.deposit.spend";
 
 export async function makeConfigStateMintingPolicy(args: {
   bootstrapOutRef: OutRef;
@@ -158,6 +159,26 @@ export async function makeReceiverValidator(args: {
       args.assetName,
       args.configPolicyId,
       args.configAssetName,
+    ]),
+  };
+}
+
+/**
+ * Per-client side-deposit spend validator (Option A). Parametrised by the
+ * client's Receiver NFT (policy id + asset name) so the deposit address is
+ * unique per client and can only authorise crediting THAT Receiver. See
+ * `contracts/aiken/validators/deposit.ak`.
+ */
+export async function makeDepositValidator(args: {
+  receiverPolicyId: string;
+  receiverAssetName: string;
+}): Promise<SpendingValidator> {
+  const validator = await getBlueprintValidator(DEPOSIT_SPEND_TITLE);
+  return {
+    type: "PlutusV3",
+    script: applyParamsToScript(validator.compiledCode!, [
+      args.receiverPolicyId,
+      args.receiverAssetName,
     ]),
   };
 }

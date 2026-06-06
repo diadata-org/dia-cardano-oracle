@@ -76,6 +76,9 @@ function printUsage(): void {
   npm run cli -- pair:burn --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
   npm run cli -- pair:dedup --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
   npm run cli -- settle --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
+  npm run cli -- deposit:address --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json
+  npm run cli -- deposit:fund --amount-lovelace 5000000 --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
+  npm run cli -- deposit:merge --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]
   npm run cli -- payment-hook:withdraw --amount-lovelace 2000000 --protocol-state ./state/<network>/config-bootstrap.json [--build-only]
   npm run cli -- reclaim-reference-script --script <config|payment-hook> --protocol-state ./state/<network>/config-bootstrap.json [--build-only]
   npm run cli -- reclaim-reference-script --script client --protocol-state ./state/<network>/config-bootstrap.json --client-state ./state/<network>/clients/client-a.json [--build-only]`);
@@ -592,6 +595,42 @@ async function run(): Promise<void> {
         protocolStatePath: requireFlagValue("--protocol-state"),
         clientStatePath: requireFlagValue("--client-state"),
         buildOnly,
+      });
+      printJson(result);
+      return;
+    }
+
+    case "deposit:address": {
+      const { depositAddress } = await import("./transactions/deposit.js");
+      getCliConfig();
+      const result = await depositAddress({
+        protocolStatePath: requireFlagValue("--protocol-state"),
+        clientStatePath: requireFlagValue("--client-state"),
+      });
+      printJson(result);
+      return;
+    }
+
+    case "deposit:fund": {
+      const { depositFund } = await import("./transactions/deposit.js");
+      getCliConfig();
+      const result = await depositFund({
+        amountLovelace: requireFlagValue("--amount-lovelace"),
+        protocolStatePath: requireFlagValue("--protocol-state"),
+        clientStatePath: requireFlagValue("--client-state"),
+        buildOnly: hasBuildOnlyFlag(),
+      });
+      printJson(result);
+      return;
+    }
+
+    case "deposit:merge": {
+      const { depositMerge } = await import("./transactions/deposit.js");
+      getCliConfig();
+      const result = await depositMerge({
+        protocolStatePath: requireFlagValue("--protocol-state"),
+        clientStatePath: requireFlagValue("--client-state"),
+        buildOnly: hasBuildOnlyFlag(),
       });
       printJson(result);
       return;

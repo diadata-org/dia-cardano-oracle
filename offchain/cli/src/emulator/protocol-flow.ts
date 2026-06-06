@@ -38,6 +38,10 @@ const DOMAIN_NAME = "DIA Oracle";
 // batch-N (`base + N*per_pair`). With base=0.6 / per_pair=0.4, the worst-case
 // probe burn is ~136 ADA; 200 ADA leaves room for the final withdraw step.
 const RECEIVER_TOP_UP_LOVELACE = "200000000";
+// Side-deposit (Option A) exercise: fund two separate deposits, then merge both
+// in one sweep — drives the deposit validator's anti-skim sum + the Receiver
+// TopUp credit through real Plutus evaluation in the emulator.
+const DEPOSIT_FUND_LOVELACE = "5000000";
 const RECEIVER_WITHDRAW_LOVELACE = "5000000";
 const PAYMENT_HOOK_WITHDRAW_LOVELACE = "10000000";
 
@@ -260,6 +264,40 @@ export async function runEmulatorProtocolFlow(
       const state = await receiverTopUp({
         amountLovelace: RECEIVER_TOP_UP_LOVELACE,
         statePath: clientStatePath,
+        protocolStatePath,
+        buildOnly: false,
+      });
+      await writeStateJsonFile(clientStatePath, state);
+    });
+
+    // ── Side-deposit funding (Option A) ─────────────────────────────
+    // Two plain payments to the per-client deposit address, then one merge
+    // that sweeps both into the Receiver balance (reusing the TopUp redeemer).
+    // The merge tx must satisfy BOTH the deposit validator (anti-skim: the
+    // Receiver lovelace must rise by the full swept total) and the Receiver
+    // spend validator — so a passing step is end-to-end proof of Option A.
+    await runTxStep(steps, "deposit:fund", reportProgress, async () => {
+      const { depositFund } = await import("../transactions/deposit.js");
+      await depositFund({
+        amountLovelace: DEPOSIT_FUND_LOVELACE,
+        clientStatePath,
+        protocolStatePath,
+        buildOnly: false,
+      });
+    });
+    await runTxStep(steps, "deposit:fund:2", reportProgress, async () => {
+      const { depositFund } = await import("../transactions/deposit.js");
+      await depositFund({
+        amountLovelace: DEPOSIT_FUND_LOVELACE,
+        clientStatePath,
+        protocolStatePath,
+        buildOnly: false,
+      });
+    });
+    await runTxStep(steps, "deposit:merge", reportProgress, async () => {
+      const { depositMerge } = await import("../transactions/deposit.js");
+      const state = await depositMerge({
+        clientStatePath,
         protocolStatePath,
         buildOnly: false,
       });
