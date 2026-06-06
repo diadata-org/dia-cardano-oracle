@@ -7,7 +7,7 @@
 //   <baseDir>/chains.yaml
 //   <baseDir>/contracts.yaml
 //   <baseDir>/events.yaml
-//   <baseDir>/routers/*.yaml                   one router per file
+//   <baseDir>/routers/<network>/*.yaml         one router per file, per network
 //
 // Spectra ships a single `infrastructure.yaml` because each bridge
 // deployment targets a single source chain. The Cardano feeder is
@@ -15,6 +15,13 @@
 // rebuilding, so we accept a per-network infrastructure file
 // (`infrastructure.preview.yaml`, `infrastructure.mainnet.yaml`) and the
 // caller picks one at load time.
+//
+// Routers are network-scoped the same way: they live under
+// `routers/<network>/` (e.g. `routers/preview/client-a.yaml`,
+// `routers/mainnet/client-a.yaml`) and ONLY the active network's folder is
+// loaded. The per-destination `cardano.network` field is a second guard — a
+// router whose destination network does not match the active network is a
+// misfiled file and is skipped with a warning (see `loadRouterDirectory`).
 //
 // Key normalisation: Spectra config YAMLs appear in the wild with both
 // snake_case (`scan_interval`) and compact no-separator spellings
@@ -133,7 +140,7 @@ export async function loadModularConfig(options: LoaderOptions): Promise<Modular
       path.join(baseDir, "events.yaml"),
       "event_definitions",
     ),
-    loadRouterDirectory(path.join(baseDir, "routers")),
+    loadRouterDirectory(path.join(baseDir, "routers", networkTag), options.network),
   ]);
 
   return {
@@ -170,18 +177,28 @@ function unwrapInfrastructure(
 }
 
 // ---------------------------------------------------------------------------
-// Router collection — each file in `routers/` may contain one or many
-// routers, in one of three Spectra-compatible YAML shapes. The shapes are
-// tolerated centrally here so that the rest of the codebase can treat
-// `routers` as a single flat map.
+// Router collection — `dir` is the active network's folder
+// (`routers/<network>/`). Each file may contain one or many routers, in one
+// of three Spectra-compatible YAML shapes. The shapes are tolerated centrally
+// here so that the rest of the codebase can treat `routers` as a single flat
+// map.
 // ---------------------------------------------------------------------------
 
 /**
- * Walk `routers/` and merge every `*.yaml` file into a flat map keyed by
- * router id. Returns `{}` if the directory is absent. Duplicate ids
- * across files are an error and surface the two source paths.
+ * Walk the active network's `routers/<network>/` folder and merge every
+ * `*.yaml` file into a flat map keyed by router id. Returns `{}` if the
+ * folder is absent (a network with no routers yet). Duplicate ids across
+ * files are an error and surface the two source paths.
+ *
+ * `network` is the active `CARDANO_NETWORK`. The folder already scopes which
+ * routers load; `network` is a second guard against a misfiled router — if a
+ * router's Cardano destination names a different network, it is skipped with
+ * a warning rather than run against the wrong network.
  */
-async function loadRouterDirectory(dir: string): Promise<Record<string, RouterConfig>> {
+export async function loadRouterDirectory(
+  dir: string,
+  network: "Preview" | "Mainnet",
+): Promise<Record<string, RouterConfig>> {
   if (!(await directoryExists(dir))) {
     return {};
   }
@@ -197,6 +214,22 @@ async function loadRouterDirectory(dir: string): Promise<Record<string, RouterCo
     const filePath = path.join(dir, fileName);
     const fileContent = await readYaml<RouterFileShape>(filePath);
     for (const router of collectRoutersFromFile(fileContent, filePath)) {
+      // Network guard: a router under routers/<network>/ must target the
+      // active network. A destination naming a different network means the
+      // file is misfiled — warn and skip it instead of running, say, a
+      // Preview router (testnet wallet seed, state/preview paths) on Mainnet.
+      const mismatched = router.destinations.find(
+        (dest) => dest.cardano !== undefined && dest.cardano.network !== network,
+      );
+      if (mismatched) {
+        process.stderr.write(
+          `[config] WARNING: skipping router "${router.id}" in ${filePath} — its ` +
+          `destination network "${mismatched.cardano?.network}" does not match the active ` +
+          `network "${network}". Move it to routers/${network.toLowerCase()}/.\n`,
+        );
+        continue;
+      }
+
       const existingSource = sourceById.get(router.id);
       if (existingSource) {
         throw new Error(

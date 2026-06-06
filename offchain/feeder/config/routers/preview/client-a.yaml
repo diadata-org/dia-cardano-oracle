@@ -1,11 +1,12 @@
 # Router config — client-a on Cardano Preview.
 #
 # Each router file maps a set of DIA oracle intents to one or more
-# Cardano destinations. The feeder loads every *.yaml under config/routers/
-# at startup; one router per file is the recommended layout.
+# Cardano destinations. Routers are network-scoped: the feeder loads every
+# *.yaml under config/routers/<network>/ matching the active CARDANO_NETWORK
+# (this file is under routers/preview/). One router per file is the layout.
 #
-# Add a new file here (e.g. client-b.preview.yaml) to onboard another
-# client without touching any other config.
+# Add a new file in this folder (e.g. routers/preview/client-b.yaml) to
+# onboard another client; the Mainnet copy lives in routers/mainnet/.
 #
 # This file's `triggers.conditions` symbol list is the SOURCE OF TRUTH for which
 # pairs are published. The selection rationale (which pairs and why) is recorded as

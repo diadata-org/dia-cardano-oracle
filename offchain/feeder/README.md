@@ -568,8 +568,10 @@ config/
 ├── chains.yaml                     # DIA Testnet/Mainnet chain definitions
 ├── contracts.yaml                  # OracleIntentRegistry per network (ABI + address)
 ├── events.yaml                     # IntentRegistered ABI + getIntent enrichment
-└── routers/
-    └── client-a.preview.yaml       # 10 active DIA testnet pairs → one Cardano client
+└── routers/                        # network-scoped: only the active network's folder loads
+    ├── preview/
+    │   └── client-a.yaml           # 10 active DIA testnet pairs → one Cardano client
+    └── mainnet/                    # one file per client when onboarding Mainnet
 ```
 
 ### Validation
