@@ -401,16 +401,17 @@ import the CLI deployment and start:
 ```sh
 make build             # only if the image isn't built yet
 make init-bootstrap    # import cli/state/<net>_run_<id>/config-bootstrap.json
-                       #   into feeder/state/<net>_run_<id>/  (prints the RUN_ID)
+                       #   into feeder/state/<net>_run_<id>/  (prints the run id)
 make init-client       # import client JSON + generate config/routers/<net>/<client>.yaml (interactive)
-make checkpoint-latest RUN_ID=<id>      # seed scanner to chain tip for that run
-make up RUN_ID=<id> MONITORING=1        # start the daemon on that run
+make checkpoint-latest # seed scanner to chain tip
+make up MONITORING=1   # start the daemon
 ```
 
-`<id>` is the run id `init-bootstrap` prints (the same id as the CLI run,
-e.g. `20260517-063917`). It selects the per-run state dir — see
-[Per-run state (RUN_ID)](#per-run-state-run_id) for the full selection rule,
-the flat-layout fallback, and migration.
+No `RUN_ID` needed here: `init` creates the one run dir, and the other commands
+default to the **newest** run, so they pick it automatically. You only pass
+`RUN_ID=<id>` once you keep **several** deployments of the same network and want
+to pin a specific one — see [Per-run state (RUN_ID)](#per-run-state-run_id) for
+the full rule, the flat-layout fallback, and migration.
 
 **Scenario C — everything set up, just want clean logs + DB.**
 The CLI state and router YAML already exist; you only want a fresh runtime:
@@ -493,19 +494,19 @@ Scenario B.
 
 **Scenario B — CLI state already exists, feeder never started.**
 First set the target network in `.env`: `CARDANO_NETWORK=Preview` or `Mainnet`
-(plus that network's secrets). Then import the CLI deployment and start. `init`
-derives the run id from the CLI source and prints it; pass it as `RUN_ID` to the
-commands that operate on the run (see [Per-run state (RUN_ID)](#per-run-state-run_id)):
+(plus that network's secrets). Then import the CLI deployment and start:
 
 ```sh
-npm run feeder:dev -- init bootstrap                # import config-bootstrap.json (prints RUN_ID)
+npm run feeder:dev -- init bootstrap                # import config-bootstrap.json (prints the run id)
 npm run feeder:dev -- init client                   # import client JSON + router YAML
-RUN_ID=<id> npm run feeder:dev -- checkpoint set --from-latest  # seed scanner to chain tip
-RUN_ID=<id> npm run feeder:dev                      # start the daemon on that run
+npm run feeder:dev -- checkpoint set --from-latest  # seed scanner to chain tip
+npm run feeder:dev                                  # start the daemon
 ```
 
-`<id>` is the run id `init bootstrap` prints (the same id as the CLI run). Omit
-`RUN_ID` to use the newest `state/<network>_run_*` dir.
+No `RUN_ID` needed here: `init` creates the one run dir, and the other commands
+default to the **newest** run. You only set `RUN_ID=<id>` (inline, e.g.
+`RUN_ID=… npm run feeder:dev`) once you keep **several** deployments of the same
+network and want to pin one — see [Per-run state (RUN_ID)](#per-run-state-run_id).
 
 **Scenario C — everything set up, just want clean logs + DB.**
 One command wipes the runtime state, reseeds the checkpoint, and starts:
