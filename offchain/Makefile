@@ -140,6 +140,10 @@ reset-restart: ## Restart clean - wipe DB + logs + pairs, reseed checkpoint, sta
 prune: ## Prune only OLD feeder rows/logs, keeps DB (e.g. make prune MAX_AGE=30m)
 	$(FEEDER_RUN) prune $(if $(MAX_AGE),--max-age $(MAX_AGE),)
 
+.PHONY: check-thresholds
+check-thresholds: ## Fail if monitoring/ thresholds drift from infrastructure.<network>.yaml::alerting.*
+	cd feeder && node --import tsx/esm --test src/config/__tests__/threshold-drift.test.ts
+
 # Network for the evidence pack: read from feeder/.env (CARDANO_NETWORK) — the
 # SAME source of truth the running feeder uses. No hardcoded default. Override
 # on the CLI only if you must: make evidence EVIDENCE_NETWORK=Mainnet

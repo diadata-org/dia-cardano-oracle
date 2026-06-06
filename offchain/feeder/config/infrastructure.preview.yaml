@@ -285,6 +285,10 @@ infrastructure:
     # p95 of incoming price-data age (seconds at processing time) →
     # PriceAgeHigh (DIA source publishing stale prices).
     price_age_high_seconds: 600                        # 10 min
+    # Confirmed-tx reorgs in the last hour above this count → ReorgRateHigh.
+    # Prometheus-only (not consumed by feeder code); kept here so every alert
+    # threshold has one canonical home (enforced by the threshold-drift test).
+    reorg_rate_high_per_hour: 3                         # >3 reorg-dropped txs/1h
 
   # --------------------------------------------------------------------------
   # replica — Spectra parity, HA failover monitor.

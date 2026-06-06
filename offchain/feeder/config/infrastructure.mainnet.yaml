@@ -163,6 +163,7 @@ infrastructure:
     oracle_pair_stale_seconds: 3600                    # 1 h since last confirm
     price_deviation_high_percent: 5                    # 5 % p95 → misreport suspect
     price_age_high_seconds: 600                        # 10 min p95 → DIA source stale
+    reorg_rate_high_per_hour: 3                         # >3 reorg-dropped txs/1h → chain provider lagging
 
   # --------------------------------------------------------------------------
   # replica — Spectra parity HA failover. NOT WIRED (see M3 deferred features).

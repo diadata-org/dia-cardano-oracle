@@ -69,6 +69,7 @@ function makeConfig(includeTxMode = false): ModularConfig {
         oracle_pair_stale_seconds: 3600,
         price_deviation_high_percent: 5,
         price_age_high_seconds: 600,
+        reorg_rate_high_per_hour: 3,
       },
     },
     chains: {

@@ -246,6 +246,11 @@ export type AlertingConfig = {
   /** Incoming price-data age p95 (in seconds) above this value triggers
    *  the PriceAgeHigh alert (DIA source publishing stale prices). */
   price_age_high_seconds?: number;
+  /** Confirmed-tx reorgs in the last hour above this count triggers the
+   *  ReorgRateHigh alert. Prometheus-only (the feeder code does not consume
+   *  it); kept here so every alert threshold has one canonical home and the
+   *  threshold-drift test can enforce it against `monitoring/`. */
+  reorg_rate_high_per_hour?: number;
 };
 
 export type ReplicaConfig = {

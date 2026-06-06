@@ -36,16 +36,24 @@
 #
 # THRESHOLDS
 # ----------
-# Balance/lovelace metrics are divided by 1_000_000 in `expr` so the
-# comparison and the displayed {{ $value }} are in ADA. Each ADA threshold is
-# the canonical lovelace key in infrastructure.<network>.yaml::alerting.<key>
-# divided by 1_000_000:
+# infrastructure.<network>.yaml::alerting.* is the SINGLE SOURCE OF TRUTH for
+# every threshold below. This file mirrors those values; the drift test
+# (src/config/__tests__/threshold-drift.test.ts, run by `npm test` or
+# `make check-thresholds`) FAILS if any value here — or any Grafana panel
+# threshold — diverges from the YAML. Edit the YAML, then update this file and
+# the dashboard to match.
+#
+# Balance/lovelace metrics are divided by 1_000_000 in `expr` so the comparison
+# and the displayed {{ $value }} are in ADA. Each ADA threshold is the canonical
+# lovelace key in alerting.<key> divided by 1_000_000:
 #   receiver_balance_low_lovelace        = 2_000_000  -> 2 ADA
 #   settle_overdue_lovelace              = 10_000_000 -> 10 ADA
 #   payment_hook_withdraw_ready_lovelace = 50_000_000 -> 50 ADA
 #   admin_wallet_low_lovelace            = 5_000_000  -> 5 ADA
-# Keep this file and the YAML in sync; the README "Thresholds and alerts"
-# table is the operator-facing summary.
+# Non-lovelace keys are used verbatim:
+#   oracle_pair_stale_seconds = 3600   price_age_high_seconds = 600
+#   price_deviation_high_percent = 5   reorg_rate_high_per_hour = 3
+# The README "Thresholds and alerts" table is the operator-facing summary.
 
 groups:
   - name: feeder

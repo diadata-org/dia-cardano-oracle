@@ -880,10 +880,17 @@ Operational thresholds live in two places with explicit responsibilities:
   The feeder code reads these values directly (e.g. to emit
   `dia_bridge_cardano_receiver_topup_warnings_total` when the receiver
   balance drops below `receiver_balance_low_lovelace`).
-- `monitoring/alerts.yml` (Prometheus rules) — mirrors the YAML values
-  in alert `expr` lines. Each rule carries an inline comment naming the
-  YAML key so the two cannot drift silently. Operators tune thresholds
-  in the YAML; if you change a number, update `alerts.yml` to match.
+- `monitoring/alerts.yml` (Prometheus rules) **and** the Grafana panels in
+  `monitoring/grafana/dashboards/feeder.json` — mirror the YAML values.
+  Operators tune thresholds in the YAML; if you change a number, update
+  `alerts.yml` and the dashboard to match.
+
+**Enforced — they cannot drift silently.** `src/config/__tests__/threshold-drift.test.ts`
+(run by `npm test`, or on demand with `make check-thresholds`) fails if any
+alert `expr` or Grafana panel threshold diverges from the YAML, if the two
+network YAMLs disagree, or if a dashboard template variable is left dead. So the
+YAML really is the single source of truth — change it there, fix the mirrors, and
+the test confirms they agree.
 
 **Units convention**: balances are **lovelace** (1 ADA = 1 000 000
 lovelace). Time intervals are **seconds** (or `_ms` for milliseconds).
@@ -900,7 +907,7 @@ Price deviation is **percent** (0–100).
 | `AdminWalletLow` | `dia_bridge_cardano_admin_wallet_lovelace` | `admin_wallet_low_lovelace` | `5 000 000` (5 ADA) | Collect protocol revenue into this wallet: `settle` then `payment-hook:withdraw` (the withdraw_address is this wallet). Only if there is no accrued revenue, fund the address in `state/<net>/config-bootstrap.json` externally (Preview: faucet). |
 | `PriceDeviationHigh` | `dia_bridge_price_deviation_percent_bucket` (p95) | `price_deviation_high_percent` | `5` % | Investigate DIA source — possible misreport. |
 | `PriceAgeHigh` | `dia_bridge_price_age_seconds_bucket` (p95) | `price_age_high_seconds` | `600` s | DIA source publishing stale prices. |
-| `ReorgRateHigh` | `dia_bridge_transactions_reorg_total` | (alerts.yml only) | `> 3 / 1 h` | Check provider lag + scanner block-lag panel. |
+| `ReorgRateHigh` | `dia_bridge_transactions_reorg_total` | `reorg_rate_high_per_hour` | `> 3 / 1 h` | Check provider lag + scanner block-lag panel. |
 
 ### Operational wallets at a glance
 

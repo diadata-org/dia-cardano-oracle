@@ -102,7 +102,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Seconds since each pair was last confirmed on-chain. Values above $stale_threshold_seconds trigger the OraclePairStale alert.",
+      "description": "Seconds since each pair was last confirmed on-chain. Values above 3600 s (alerting.oracle_pair_stale_seconds) trigger the OraclePairStale alert.",
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -139,7 +139,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Receiver wallet balance in lovelace. Below $receiver_warn_lovelace triggers the ReceiverBalanceLow alert.",
+      "description": "Receiver prepaid balance in ADA. Below 2 ADA (alerting.receiver_balance_low_lovelace) triggers the ReceiverBalanceLow alert.",
       "fieldConfig": {
         "defaults": {
           "unit": "ADA",
@@ -358,7 +358,7 @@
             "steps": [
               { "color": "green",  "value": null },
               { "color": "yellow", "value": 1 },
-              { "color": "red",    "value": 5 }
+              { "color": "red",    "value": 3 }
             ]
           },
           "custom": {}
@@ -519,45 +519,6 @@
         "query": "prometheus",
         "refresh": 1,
         "type": "datasource"
-      },
-      {
-        "current": { "selected": false, "text": "3600", "value": "3600" },
-        "hide": 0,
-        "label": "Stale threshold (s)",
-        "name": "stale_threshold_seconds",
-        "options": [
-          { "selected": false, "text": "1800", "value": "1800" },
-          { "selected": true,  "text": "3600", "value": "3600" },
-          { "selected": false, "text": "7200", "value": "7200" }
-        ],
-        "query": "1800,3600,7200",
-        "type": "custom"
-      },
-      {
-        "current": { "selected": false, "text": "2000000000", "value": "2000000000" },
-        "hide": 0,
-        "label": "Receiver warn lovelace",
-        "name": "receiver_warn_lovelace",
-        "options": [
-          { "selected": false, "text": "1000000000", "value": "1000000000" },
-          { "selected": true,  "text": "2000000000", "value": "2000000000" },
-          { "selected": false, "text": "5000000000", "value": "5000000000" }
-        ],
-        "query": "1000000000,2000000000,5000000000",
-        "type": "custom"
-      },
-      {
-        "current": { "selected": false, "text": "1000000000", "value": "1000000000" },
-        "hide": 0,
-        "label": "Coordinator warn lovelace",
-        "name": "coordinator_warn_lovelace",
-        "options": [
-          { "selected": false, "text": "500000000",  "value": "500000000"  },
-          { "selected": true,  "text": "1000000000", "value": "1000000000" },
-          { "selected": false, "text": "2000000000", "value": "2000000000" }
-        ],
-        "query": "500000000,1000000000,2000000000",
-        "type": "custom"
       }
     ]
   },

@@ -193,7 +193,8 @@ function validateAlerting(
       "Missing alerting block. Required keys (lovelace unless suffix says otherwise): " +
         "receiver_balance_low_lovelace, settle_overdue_lovelace, " +
         "payment_hook_withdraw_ready_lovelace, admin_wallet_low_lovelace, " +
-        "oracle_pair_stale_seconds, price_deviation_high_percent, price_age_high_seconds.",
+        "oracle_pair_stale_seconds, price_deviation_high_percent, price_age_high_seconds, " +
+        "reorg_rate_high_per_hour.",
     );
     return;
   }
@@ -204,6 +205,7 @@ function validateAlerting(
   validatePositiveInteger("oracle_pair_stale_seconds", alerting.oracle_pair_stale_seconds, c);
   validatePositiveNumber("price_deviation_high_percent", alerting.price_deviation_high_percent, c);
   validatePositiveInteger("price_age_high_seconds", alerting.price_age_high_seconds, c);
+  validatePositiveInteger("reorg_rate_high_per_hour", alerting.reorg_rate_high_per_hour, c);
 
   const required: Array<[string, unknown]> = [
     ["receiver_balance_low_lovelace", alerting.receiver_balance_low_lovelace],
@@ -213,6 +215,7 @@ function validateAlerting(
     ["oracle_pair_stale_seconds", alerting.oracle_pair_stale_seconds],
     ["price_deviation_high_percent", alerting.price_deviation_high_percent],
     ["price_age_high_seconds", alerting.price_age_high_seconds],
+    ["reorg_rate_high_per_hour", alerting.reorg_rate_high_per_hour],
   ];
   for (const [field, value] of required) {
     if (value === undefined) {
