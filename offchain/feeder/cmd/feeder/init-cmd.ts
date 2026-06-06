@@ -7,12 +7,14 @@
 //                    interactive wizard to generate config/routers/<network>/<id>.yaml.
 //
 // Run from offchain/feeder/ (the feeder working directory). The auto-scan
-// looks for CLI state dirs at ../cli/state/ relative to cwd.
+// looks under ../cli/state/ for <network>_run_* dirs, newest first; it uses the
+// only match, prompts when several exist, or takes --from <path> to pick one
+// explicitly.
 //
 // The CLI run id is preserved so the feeder's run dir matches the deployment
 // (state/<network>_run_<id>/), and multiple deployments never clobber each
-// other. The daemon selects the run via the RUN_ID env (or the newest run dir
-// by default) — see cmd/feeder/run-state.ts.
+// other. The daemon then selects the run via the RUN_ID env (or the newest run
+// dir by default) — see cmd/feeder/run-state.ts.
 
 import { access, copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createInterface, type Interface } from "node:readline/promises";
