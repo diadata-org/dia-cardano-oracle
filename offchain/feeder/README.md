@@ -17,6 +17,7 @@ diverges substantively — it builds Cardano txs via the pure builders in
 
 - [Directory guide](#directory-guide)
 - [Service URLs — where to look (once it's running)](#service-urls--where-to-look-once-its-running)
+- [Per-run state (RUN_ID)](#per-run-state-run_id)
 - [Running with Docker](#running-with-docker)
   - [Compose services & profiles](#compose-services--profiles)
   - [Daemon only](#daemon-only)
@@ -26,7 +27,6 @@ diverges substantively — it builds Cardano txs via the pure builders in
   - [Operator setup — pick your scenario](#operator-setup--pick-your-scenario)
   - [Day-2 operations (Docker)](#day-2-operations-docker)
   - [Volume layout](#volume-layout)
-  - [Per-run state (RUN_ID)](#per-run-state-run_id)
 - [Running locally (npm)](#running-locally-npm)
   - [Operator setup — pick your scenario](#operator-setup--pick-your-scenario-1)
   - [Day-2 operations (npm)](#day-2-operations-npm)
@@ -113,6 +113,57 @@ curl -s http://localhost:8080/api/v1/prices | jq   # latest prices
 The full API reference (query params, response shapes) is in
 [§ HTTP API](#http-api) below. Monitoring stack details are in
 [§ Running with Docker](#running-with-docker).
+
+## Per-run state (RUN_ID)
+
+This applies to **both** run modes below (Docker and npm) — it is how the
+feeder decides which state directory to read and write.
+
+Each deployment keeps its DB, logs, and pair state under a **per-run dir**,
+`state/<network>_run_<id>/` — keyed by the **same run id the CLI used**
+(`../cli/state/<network>_run_<id>/`). This is why multiple deployments of one
+network (e.g. two mainnet receivers) never clobber each other's database or
+scanner checkpoint. `init bootstrap` / `init client` import a CLI run into the
+matching feeder run dir, preserving the id.
+
+The commands that **operate on** a run — the daemon, `checkpoint`, `reset`,
+`prune`, and the evidence pack — resolve the active run dir the same way
+([`cmd/feeder/run-state.ts`](./cmd/feeder/run-state.ts)):
+
+| `RUN_ID` | Active run dir |
+| --- | --- |
+| set | `state/<network>_run_<RUN_ID>/` |
+| empty | the **newest** `state/<network>_run_*/` |
+| empty **and** no run dirs exist | the flat `state/<network>/` |
+
+`init bootstrap` / `init client` are the exception: they **create** a run dir by
+importing a specific CLI deployment, so they take the run id from the CLI source
+path being imported (falling back to `RUN_ID` only when the source path carries
+no run id). The id is preserved so the feeder run dir mirrors the CLI one.
+
+`RUN_ID` is an **environment variable**, so it works identically whether you
+drive the feeder with `make` or with `npm`:
+
+```sh
+# Docker — pass it on any make target
+make up RUN_ID=20260517-063917 MONITORING=1
+make checkpoint-latest RUN_ID=20260517-063917
+
+# npm — same env var, set inline (or export it)
+RUN_ID=20260517-063917 npm run feeder:dev -- daemon
+RUN_ID=20260517-063917 npm run feeder:dev -- checkpoint set --from-latest
+```
+
+Or pin one deployment by setting `RUN_ID` in `.env` (read by both modes). The
+lowercase `<network>` comes from `CARDANO_NETWORK`.
+
+**Migrating a flat `state/<network>/` deployment.** A feeder first set up under
+the older flat layout (no run id, e.g. `state/preview/`) keeps working untouched:
+with `RUN_ID` empty and no `state/preview_run_*` present, the resolver falls back
+to `state/preview/`. To move it onto the per-run layout, re-run `init bootstrap` /
+`init client` against the CLI run — that writes a fresh `state/<network>_run_<id>/`;
+then start that run with `RUN_ID=<id>`. Remove the old flat dir once you've
+confirmed the run dir is in use.
 
 ## Running with Docker
 
@@ -271,7 +322,7 @@ All commands run from `offchain/`. Pick the one that matches your machine.
 First do the full on-chain setup by following the CLI runbook:
 [**Wallet Setup → Protocol Deployment → Client Deployment**](../cli/README.md#wallet-setup)
 in `offchain/cli/README.md`. That produces the CLI state under
-`offchain/cli/state/<network>/`. Then continue with Scenario B.
+`offchain/cli/state/<network>_run_<id>/`. Then continue with Scenario B.
 
 **Scenario B — CLI state already exists, feeder never started.**
 First set the target network in `offchain/feeder/.env`: `CARDANO_NETWORK=Preview`
@@ -288,11 +339,9 @@ make up RUN_ID=<id> MONITORING=1        # start the daemon on that run
 ```
 
 `<id>` is the run id `init-bootstrap` prints (the same id as the CLI run,
-e.g. `20260517-063917`). It selects the per-run state dir
-`state/<network>_run_<id>/` (DB, logs, pair state) so multiple deployments never
-clobber each other. Omit `RUN_ID` to use the **newest** `state/<network>_run_*`
-dir. A feeder set up under the older flat `state/<network>/` layout (no run dir)
-keeps working until you re-run `init` to migrate it to a run dir.
+e.g. `20260517-063917`). It selects the per-run state dir — see
+[Per-run state (RUN_ID)](#per-run-state-run_id) for the full selection rule,
+the flat-layout fallback, and migration.
 
 **Scenario C — everything set up, just want clean logs + DB.**
 The CLI state and router YAML already exist; you only want a fresh runtime:
@@ -336,36 +385,6 @@ These targets run the **feeder** binary as one-off containers (not `dia-cli`):
 | `prometheus-data` | `/prometheus` | prometheus | Prometheus TSDB (metric retention) |
 | `grafana-data` | `/var/lib/grafana` | grafana | Dashboard and alert state |
 
-### Per-run state (RUN_ID)
-
-Each deployment keeps its DB, logs, and pair state under a **per-run dir**,
-`state/<network>_run_<id>/` — keyed by the **same run id the CLI used**
-(`../cli/state/<network>_run_<id>/`). This is why multiple deployments of one
-network (e.g. two mainnet receivers) never clobber each other's database or
-scanner checkpoint. `make init-bootstrap` / `init-client` import a CLI run into
-the matching feeder run dir, preserving the id.
-
-Every feeder command resolves the active run dir the same way:
-
-| `RUN_ID` | Active run dir |
-| --- | --- |
-| set — `make up RUN_ID=20260517-063917` | `state/<network>_run_20260517-063917/` |
-| empty | the **newest** `state/<network>_run_*/` |
-| empty **and** no run dirs exist | the flat `state/<network>/` |
-
-Set it per-invocation on any target (`make up`, `checkpoint-latest`, `reset`,
-`prune`, `make evidence`) — `RUN_ID=…` — or pin one deployment by setting `RUN_ID`
-in `.env`. The lowercase `<network>` comes from `CARDANO_NETWORK`. Locally (npm),
-the same env var works: `RUN_ID=20260517-063917 npm run feeder:dev -- daemon`.
-
-**Migrating a flat `state/<network>/` deployment.** A feeder first set up under
-the older flat layout (no run id, e.g. `state/preview/`) keeps working untouched:
-with `RUN_ID` empty and no `state/preview_run_*` present, the resolver falls back
-to `state/preview/`. To move it onto the per-run layout, re-run
-`make init-bootstrap` / `init-client` against the CLI run — that writes a fresh
-`state/<network>_run_<id>/`; then start with `make up RUN_ID=<id>`. Remove the old
-flat dir once you've confirmed the run dir is in use.
-
 ## Running locally (npm)
 
 Run the feeder directly on your machine, without Docker. Requires
@@ -386,18 +405,24 @@ cp .env.example .env   # fill in secrets from offchain/cli/.env
 First do the full on-chain setup by following the CLI runbook:
 [**Wallet Setup → Protocol Deployment → Client Deployment**](../cli/README.md#wallet-setup)
 (run locally with `npm run cli -- ...` from `offchain/cli/`). That produces
-the CLI state under `offchain/cli/state/<network>/`. Then continue with
+the CLI state under `offchain/cli/state/<network>_run_<id>/`. Then continue with
 Scenario B.
 
 **Scenario B — CLI state already exists, feeder never started.**
-Import the CLI state into the feeder and start:
+First set the target network in `.env`: `CARDANO_NETWORK=Preview` or `Mainnet`
+(plus that network's secrets). Then import the CLI deployment and start. `init`
+derives the run id from the CLI source and prints it; pass it as `RUN_ID` to the
+commands that operate on the run (see [Per-run state (RUN_ID)](#per-run-state-run_id)):
 
 ```sh
-npm run feeder:dev -- init bootstrap              # import config-bootstrap.json
-npm run feeder:dev -- init client                 # import client JSON + router YAML
-npm run feeder:dev -- checkpoint set --from-latest  # seed scanner to chain tip
-npm run feeder:dev                                # start the daemon
+npm run feeder:dev -- init bootstrap                # import config-bootstrap.json (prints RUN_ID)
+npm run feeder:dev -- init client                   # import client JSON + router YAML
+RUN_ID=<id> npm run feeder:dev -- checkpoint set --from-latest  # seed scanner to chain tip
+RUN_ID=<id> npm run feeder:dev                      # start the daemon on that run
 ```
+
+`<id>` is the run id `init bootstrap` prints (the same id as the CLI run). Omit
+`RUN_ID` to use the newest `state/<network>_run_*` dir.
 
 **Scenario C — everything set up, just want clean logs + DB.**
 One command wipes the runtime state, reseeds the checkpoint, and starts:
@@ -410,8 +435,8 @@ The feeder needs two bootstrap files from the CLI; `init` copies them in:
 
 | Artifact | Produced by CLI command |
 | --- | --- |
-| `state/<network>/config-bootstrap.json` | `config:bootstrap` |
-| `state/<network>/clients/<id>.json` | `receiver:bootstrap` |
+| `state/<network>_run_<id>/config-bootstrap.json` | `config:bootstrap` |
+| `state/<network>_run_<id>/clients/<id>.json` | `receiver:bootstrap` |
 
 `init` auto-scans `../cli/state/` for the latest matching network run; use
 `--from <path>` to point at a specific run, and `--force` to overwrite
