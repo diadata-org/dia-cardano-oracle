@@ -162,4 +162,21 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
       "remove unused template vars or wire them to a panel",
     );
   });
+
+  it("count panels show counts (increase), not per-second rates, and keep the symbol label", () => {
+    const { panels } = loadDashboard();
+    const exprOf = (title: string): string => {
+      const p = panels.find((x) => x.title === title) as Panel & {
+        targets?: Array<{ expr?: string }>;
+      };
+      assert.ok(p, `panel not found: "${title}"`);
+      return p.targets?.[0]?.expr ?? "";
+    };
+    for (const title of ["Tx confirmed (5m count)", "Tx failed (5m count)", "Intents filtered (5m count)"]) {
+      const expr = exprOf(title);
+      assert.match(expr, /increase\(/, `"${title}" should use increase() (a count), not rate()`);
+      assert.doesNotMatch(expr, /\brate\(/, `"${title}" should not use rate() (per-second average)`);
+      assert.match(expr, /\bsymbol\b/, `"${title}" should keep the symbol label in sum by(...)`);
+    }
+  });
 });

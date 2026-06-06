@@ -296,10 +296,10 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Rate of confirmed Cardano oracle update transactions (5-minute window) per symbol.",
+      "description": "Confirmed Cardano oracle update transactions in each 5-minute window, per symbol (a count, not a per-second rate).",
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
+          "unit": "short",
           "custom": { "lineWidth": 2 }
         },
         "overrides": []
@@ -309,20 +309,20 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "expr": "sum by (symbol) (rate(dia_bridge_transactions_confirmed_total[5m]))",
+          "expr": "sum by (symbol) (increase(dia_bridge_transactions_confirmed_total[5m]))",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
       ],
-      "title": "Tx confirmed rate (5m)",
+      "title": "Tx confirmed (5m count)",
       "type": "timeseries"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Rate of failed Cardano oracle update transactions (5-minute window) grouped by error code.",
+      "description": "Failed Cardano oracle update transactions in each 5-minute window, by symbol and error code (a count, not a per-second rate).",
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
+          "unit": "short",
           "custom": { "lineWidth": 2 }
         },
         "overrides": []
@@ -332,12 +332,12 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "expr": "sum by (error_code) (rate(dia_bridge_transactions_failed_total[5m]))",
-          "legendFormat": "{{error_code}}",
+          "expr": "sum by (symbol, error_code) (increase(dia_bridge_transactions_failed_total[5m]))",
+          "legendFormat": "{{symbol}} · {{error_code}}",
           "refId": "A"
         }
       ],
-      "title": "Tx failed rate (5m)",
+      "title": "Tx failed (5m count)",
       "type": "timeseries"
     },
     {
@@ -409,10 +409,10 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Rate of intents filtered before routing (5-minute window), grouped by filter reason.",
+      "description": "Intents filtered before routing in each 5-minute window, by symbol and filter reason (a count, not a per-second rate).",
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
+          "unit": "short",
           "custom": { "lineWidth": 2 }
         },
         "overrides": []
@@ -422,12 +422,12 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
-          "expr": "sum by (reason) (rate(dia_bridge_intents_filtered_total[5m]))",
-          "legendFormat": "{{reason}}",
+          "expr": "sum by (symbol, reason) (increase(dia_bridge_intents_filtered_total[5m]))",
+          "legendFormat": "{{symbol}} · {{reason}}",
           "refId": "A"
         }
       ],
-      "title": "Intents filtered by reason",
+      "title": "Intents filtered (5m count)",
       "type": "timeseries"
     },
     {
