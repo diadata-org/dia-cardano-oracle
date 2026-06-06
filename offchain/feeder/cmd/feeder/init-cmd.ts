@@ -82,7 +82,7 @@ async function runInitBootstrap(options: InitCmdOptions): Promise<number> {
         sourcePath = candidates[0];
         out(`  Found: ${candidates[0]}`);
       } else {
-        sourcePath = await selectOne(rl, "Multiple CLI state dirs found — select one:", candidates);
+        sourcePath = await selectOne(rl, "Multiple CLI runs found (newest first) — Enter takes the newest, or pick a number:", candidates);
       }
     }
 
@@ -147,7 +147,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
         sourcePath = candidates[0];
         out(`  Found: ${candidates[0]}`);
       } else {
-        sourcePath = await selectOne(rl, "Multiple client JSONs found — select one:", candidates);
+        sourcePath = await selectOne(rl, "Multiple client JSONs found (newest first) — Enter takes the newest, or pick a number:", candidates);
       }
     }
 
