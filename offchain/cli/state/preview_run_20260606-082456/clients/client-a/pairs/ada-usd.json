@@ -1,0 +1,49 @@
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+  },
+  "pair": {
+    "tokenName": "04e5366fb69cdc906d0e8841d641628f09a50f7618e944de5cdb7a26b95e32b4",
+    "pairId": "4144412f555344",
+    "pairUnit": "9f80dd966e4a06cce7efd25f6267b15da7a5dc4cc3157e78928fe28804e5366fb69cdc906d0e8841d641628f09a50f7618e944de5cdb7a26b95e32b4",
+    "pairValidatorAddress": "addr_test1wz0cphvkde9qdn88alf97cn8k9w60fwufnp32lncj2879zqy0nw7v"
+  },
+  "pairState": {
+    "pairId": "4144412f555344",
+    "price": "751000000",
+    "timestamp": "1780738479",
+    "nonce": "1780738479000",
+    "intentHash": "b02e5d187edd76dff804d9bfb6b5d601cfe15a8961a84b23b4e514d33d3b25c1",
+    "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+    "minUtxoLovelace": "5000000",
+    "intent": {
+      "intentType": "OracleUpdate",
+      "version": "1.0",
+      "chainId": "10050",
+      "nonce": "1780738479000",
+      "expiry": "1780742079",
+      "symbol": "ADA/USD",
+      "price": "751000000",
+      "timestamp": "1780738479",
+      "source": "DIA Oracle",
+      "signature": "5f2677a8ad9481cde43da9ee0699c590fe1c42f81e88483345651cf658cc3d2b1ff4e17d33262977fed159c9b4d91eb636ae917e9e04837eedc66330b7acfc241b",
+      "signer": "2b1c7eff297766569966b630a6862947a8e5285a"
+    }
+  },
+  "datum": {
+    "pairCbor": "d8799f474144412f5553441a2cc359c01a6a23e9af1b0000019e9c48d3985820b02e5d187edd76dff804d9bfb6b5d601cfe15a8961a84b23b4e514d33d3b25c1542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+  },
+  "transactions": [
+    {
+      "step": "preview:update",
+      "submittedTxHash": "7731d92b0395d05765bb75a20b6a799d6e15e065abc4b7743f31e1f2bf063fa4",
+      "confirmed": true
+    },
+    {
+      "step": "preview:update:batch",
+      "submittedTxHash": "88d52ff51063b0d0da9f9d51448e762e9198a462e94cd2ee29161bf7d65c83f8",
+      "confirmed": true
+    }
+  ]
+}

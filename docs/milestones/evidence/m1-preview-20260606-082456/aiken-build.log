@@ -1,0 +1,6 @@
+[contracts-tests] running: aiken build
+    Compiling diadata-org/dia-cardano-oracle 0.0.0 (.)
+    Compiling aiken-lang/stdlib v3.0.0 (./build/packages/aiken-lang-stdlib)
+    Compiling aiken-lang/fuzz v2.2.0 (./build/packages/aiken-lang-fuzz)
+   Generating project's blueprint (./plutus.json)
+[contracts-tests] BUILD PASSED

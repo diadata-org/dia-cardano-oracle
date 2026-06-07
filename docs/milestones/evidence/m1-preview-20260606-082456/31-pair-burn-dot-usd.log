@@ -1,0 +1,69 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts pair:burn --protocol-state ./state/preview_run_20260606-082456/config-bootstrap.json --client-state ./state/preview_run_20260606-082456/clients/client-a.json --pair-state ./state/preview_run_20260606-082456/clients/client-a/pairs/dot-usd.json
+
+[1G[0K[pair:burn] Loading protocol, client and pair state
+[pair:burn] Connecting to Preview and selecting the configured wallet
+[pair:burn] Finding Config UTxO
+[pair:burn] Finding Pair UTxO
+[pair:burn] Burning Pair NFT 9f80dd966e4a06cce7efd25f6267b15da7a5dc4cc3157e78928fe288ff3f796230b336b4e5c8d3af0440cbe0346a64cdab5e9cba4a8e2f476152daee and recovering 5000000 lovelace.
+[pair:burn] Tx resources: fee=0.441136 ADA (441136 lovelace), cpu=158664114, mem=513069
+[pair:burn] Output[0] | addr=addr_test1qpgp...quxj3j | lovelace=4.558864 ADA (4558864)
+[pair:burn] Submitted: 59703703c9d5f72f1c9d669e5d12357022310b238192f8a0e844156806423ca6
+[pair:burn] Confirmed by Blockfrost: pair:burn 59703703c9d5f72f1c9d669e5d12357022310b238192f8a0e844156806423ca6.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_run_20260606-082456/clients/client-a/pairs/dot-usd.json
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+  },
+  "pair": {
+    "tokenName": "ff3f796230b336b4e5c8d3af0440cbe0346a64cdab5e9cba4a8e2f476152daee",
+    "pairId": "444f542f555344",
+    "pairUnit": "9f80dd966e4a06cce7efd25f6267b15da7a5dc4cc3157e78928fe288ff3f796230b336b4e5c8d3af0440cbe0346a64cdab5e9cba4a8e2f476152daee",
+    "pairValidatorAddress": "addr_test1wz0cphvkde9qdn88alf97cn8k9w60fwufnp32lncj2879zqy0nw7v"
+  },
+  "pairState": {
+    "pairId": "444f542f555344",
+    "price": "421000000",
+    "timestamp": "1780738479",
+    "nonce": "1780738479000",
+    "intentHash": "9f3caf75b2ddb2cbb97a17db1be4874aa083b576fdee48bbe70318ad552ff822",
+    "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+    "minUtxoLovelace": "5000000",
+    "intent": {
+      "intentType": "OracleUpdate",
+      "version": "1.0",
+      "chainId": "10050",
+      "nonce": "1780738479000",
+      "expiry": "1780742079",
+      "symbol": "DOT/USD",
+      "price": "421000000",
+      "timestamp": "1780738479",
+      "source": "DIA Oracle",
+      "signature": "bbbbc91ec67fa85e089669f955e3fad05ef4a2203cd7378adbca9fc9858d58d24acfe2e606d3dab9bc08218336adf674733de2e0b10e0a570b5defc4e5b890431c",
+      "signer": "2b1c7eff297766569966b630a6862947a8e5285a"
+    }
+  },
+  "datum": {
+    "pairCbor": ""
+  },
+  "transactions": [
+    {
+      "step": "preview:update",
+      "submittedTxHash": "0a14bed1b9b840e437656d12d6fb3da9ad64cbe4454a94663457ee50e3ae8977",
+      "confirmed": true
+    },
+    {
+      "step": "preview:update:batch",
+      "submittedTxHash": "88d52ff51063b0d0da9f9d51448e762e9198a462e94cd2ee29161bf7d65c83f8",
+      "confirmed": true
+    },
+    {
+      "step": "preview:pair:burn",
+      "submittedTxHash": "59703703c9d5f72f1c9d669e5d12357022310b238192f8a0e844156806423ca6",
+      "confirmed": true
+    }
+  ]
+}
+[1G[0K⠙[1G[0K
