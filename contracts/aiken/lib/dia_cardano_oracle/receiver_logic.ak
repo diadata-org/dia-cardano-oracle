@@ -19,6 +19,13 @@ pub type ReceiverRedeemer {
   /// Admin-only update of the min_utxo_lovelace field.
   /// Requires config signer authorization at the validator level.
   UpdateMinUtxo { new_min_utxo_lovelace: Int }
+  /// Admin-only teardown burn of the Receiver NFT on decommission.
+  /// Requires a `config_admins` signature, the Receiver NFT being
+  /// burned in the same tx with no continuation output, AND both
+  /// `balance_lovelace == 0` and `accrued_to_hook_lovelace == 0`
+  /// (forces a withdraw + settle first, so burn can never be a
+  /// backdoor around either drain).
+  Burn
 }
 
 pub fn valid_receiver_state(datum: ReceiverDatum) -> Bool {
@@ -51,21 +58,34 @@ pub fn top_up_transition(
   }
 }
 
-/// Instead of moving the protocol fee to the global PaymentHook
-/// inside the update tx, the fee is debited from `balance_lovelace` and
-/// credited to `accrued_to_hook_lovelace` on the same Receiver UTxO. The
-/// physical lovelace at the UTxO does not change — the obligation moves
-/// from the client's prepaid pool to a per-receiver pending-fees pool,
-/// which is later flushed to the hook by a settle transaction.
+/// The protocol fee is debited from `balance_lovelace` and credited to
+/// `accrued_to_hook_lovelace` on the same Receiver UTxO (the obligation moves
+/// from the client's prepaid pool to a per-receiver pending-fees pool, later
+/// flushed to the hook by a settle tx).
+///
+/// `added` is any lovelace the Receiver UTxO physically gains in the same tx
+/// (e.g. swept side-deposits). When `added == 0` this is a plain update and
+/// the physical lovelace is unchanged — identical to the original behaviour.
+/// When `added > 0` the surplus lands entirely in `balance_lovelace`, so one
+/// tx can update AND top up. `accrued_to_hook_lovelace` is pinned to exactly
+/// `+ fee_lovelace`, so the added lovelace can ONLY reach balance — it can
+/// never be diverted into the hook-bound accrual.
 pub fn accrue_fee_transition(
+  previous_output: Output,
+  next_output: Output,
   previous: ReceiverDatum,
   next: ReceiverDatum,
   fee_lovelace: Int,
 ) -> Bool {
+  let added =
+    assets.lovelace_of(next_output.value) - assets.lovelace_of(
+      previous_output.value,
+    )
   and {
     fee_lovelace >= 0,
-    fee_lovelace <= previous.balance_lovelace,
-    next.balance_lovelace == previous.balance_lovelace - fee_lovelace,
+    added >= 0,
+    fee_lovelace <= previous.balance_lovelace + added,
+    next.balance_lovelace == previous.balance_lovelace - fee_lovelace + added,
     next.accrued_to_hook_lovelace == previous.accrued_to_hook_lovelace + fee_lovelace,
     next.min_utxo_lovelace == previous.min_utxo_lovelace,
   }
@@ -265,6 +285,7 @@ test top_up_transition_rejects_accrued_mutation() {
 }
 
 test accrue_fee_transition_moves_fee_from_balance_to_accrued() {
+  // Plain update (added == 0): physical lovelace unchanged.
   let previous = sample_receiver()
   let next =
     ReceiverDatum {
@@ -273,10 +294,17 @@ test accrue_fee_transition_moves_fee_from_balance_to_accrued() {
       accrued_to_hook_lovelace: previous.accrued_to_hook_lovelace + 2_000_000,
     }
 
-  accrue_fee_transition(previous, next, 2_000_000)
+  accrue_fee_transition(
+    sample_output_for(previous),
+    sample_output_for(next),
+    previous,
+    next,
+    2_000_000,
+  )
 }
 
 test accrue_fee_transition_rejects_fee_above_balance() {
+  // No added lovelace, so the fee cannot exceed the prepaid balance.
   let previous = sample_receiver()
   let next =
     ReceiverDatum {
@@ -285,7 +313,13 @@ test accrue_fee_transition_rejects_fee_above_balance() {
       accrued_to_hook_lovelace: previous.accrued_to_hook_lovelace + previous.balance_lovelace + 1,
     }
 
-  !accrue_fee_transition(previous, next, previous.balance_lovelace + 1)
+  !accrue_fee_transition(
+    sample_output_for(previous),
+    sample_output_for(previous),
+    previous,
+    next,
+    previous.balance_lovelace + 1,
+  )
 }
 
 test accrue_fee_transition_rejects_balance_underflow() {
@@ -298,7 +332,13 @@ test accrue_fee_transition_rejects_balance_underflow() {
       accrued_to_hook_lovelace: previous.accrued_to_hook_lovelace + 1_500_000,
     }
 
-  !accrue_fee_transition(previous, next, 2_000_000)
+  !accrue_fee_transition(
+    sample_output_for(previous),
+    sample_output_for(previous),
+    previous,
+    next,
+    2_000_000,
+  )
 }
 
 test accrue_fee_transition_rejects_min_utxo_change() {
@@ -310,7 +350,75 @@ test accrue_fee_transition_rejects_min_utxo_change() {
       min_utxo_lovelace: previous.min_utxo_lovelace + 1,
     }
 
-  !accrue_fee_transition(previous, next, 2_000_000)
+  !accrue_fee_transition(
+    sample_output_for(previous),
+    sample_output_for(previous),
+    previous,
+    next,
+    2_000_000,
+  )
+}
+
+test accrue_fee_transition_absorbs_added_into_balance() {
+  // Update + top-up: the tx gains 5 ADA (a swept deposit). The fee still
+  // moves balance -> accrued; the 5 ADA lands entirely in balance.
+  let previous = sample_receiver()
+  let next =
+    ReceiverDatum {
+      ..previous,
+      balance_lovelace: previous.balance_lovelace - 2_000_000 + 5_000_000,
+      accrued_to_hook_lovelace: previous.accrued_to_hook_lovelace + 2_000_000,
+    }
+
+  accrue_fee_transition(
+    sample_output_for(previous),
+    sample_output_for(next),
+    previous,
+    next,
+    2_000_000,
+  )
+}
+
+test accrue_fee_transition_rejects_physical_decrease() {
+  // Vector 4: the Receiver's physical lovelace must never DROP via AccrueFee
+  // (added < 0). Here next is internally consistent for added = -1 ADA, so the
+  // only failing guard is `added >= 0`.
+  let previous = sample_receiver()
+  let next =
+    ReceiverDatum {
+      ..previous,
+      balance_lovelace: previous.balance_lovelace - 2_000_000 - 1_000_000,
+      accrued_to_hook_lovelace: previous.accrued_to_hook_lovelace + 2_000_000,
+    }
+
+  !accrue_fee_transition(
+    sample_output_for(previous),
+    sample_output_for(next),
+    previous,
+    next,
+    2_000_000,
+  )
+}
+
+test accrue_fee_transition_rejects_added_diverted_to_accrued() {
+  // Vector 2: a 5 ADA deposit (added) must NOT be routable into accrued (the
+  // hook-bound pool). accrued is pinned to `+ fee`; crediting it `+ fee + 5`
+  // is rejected even though the physical lovelace rose by exactly 5.
+  let previous = sample_receiver()
+  let next =
+    ReceiverDatum {
+      ..previous,
+      balance_lovelace: previous.balance_lovelace - 2_000_000,
+      accrued_to_hook_lovelace: previous.accrued_to_hook_lovelace + 2_000_000 + 5_000_000,
+    }
+
+  !accrue_fee_transition(
+    sample_output_for(previous),
+    sample_output_for(next),
+    previous,
+    next,
+    2_000_000,
+  )
 }
 
 test settle_transition_drains_accrued_to_zero() {

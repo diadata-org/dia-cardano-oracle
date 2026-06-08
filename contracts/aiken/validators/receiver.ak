@@ -4,8 +4,8 @@ use aiken/fuzz
 use cardano/address.{Script}
 use cardano/assets.{AssetName, PolicyId}
 use cardano/transaction.{
-  InlineDatum, Input, Output, OutputReference, Redeemer, Transaction, Withdraw,
-  placeholder,
+  InlineDatum, Input, NoDatum, Output, OutputReference, Redeemer, Transaction,
+  Withdraw, placeholder,
 }
 use dia_cardano_oracle/config_logic
 use dia_cardano_oracle/coordinator_logic.{
@@ -17,6 +17,13 @@ use dia_cardano_oracle/receiver_logic
 
 pub type ReceiverMintAction {
   Bootstrap
+  /// Teardown burn of the Receiver NFT on decommission. Admin-gated.
+  /// Requires the policy's own token quantity in `self.mint` to be
+  /// exactly `-1` for `expected_asset_name`. The Config UTxO is located
+  /// via the same visible-config helper the spend uses (input or
+  /// reference input). The Receiver UTxO is spent in the same tx under
+  /// the `Burn` spend redeemer; the admin recovers the locked min-ADA.
+  Burn
 }
 
 validator receiver(
@@ -26,31 +33,39 @@ validator receiver(
   config_asset_name: AssetName,
 ) {
   mint(action: ReceiverMintAction, policy_id: PolicyId, self: Transaction) {
-    let Bootstrap = action
-
     expect [Pair(asset_name, quantity)] =
       self.mint
         |> assets.tokens(policy_id)
         |> dict.to_pairs()
-
-    let consumes_bootstrap_input =
-      list.any(
-        self.inputs,
-        fn(input) { input.output_reference == bootstrap_ref },
-      )
 
     expect Some(config_input) =
       find_visible_config_input(self, config_policy_id, config_asset_name)
     expect InlineDatum(config_datum_data) = config_input.output.datum
     expect config_datum: config_logic.ConfigDatum = config_datum_data
 
-    and {
-      consumes_bootstrap_input,
-      asset_name == expected_asset_name,
-      quantity == 1,
-      config_logic.valid_config_state(config_datum),
-      config_logic.has_config_signer(config_datum, self),
-      has_valid_receiver_output(self.outputs, policy_id, expected_asset_name),
+    when action is {
+      Bootstrap -> {
+        let consumes_bootstrap_input =
+          list.any(
+            self.inputs,
+            fn(input) { input.output_reference == bootstrap_ref },
+          )
+
+        and {
+          consumes_bootstrap_input,
+          asset_name == expected_asset_name,
+          quantity == 1,
+          config_logic.valid_config_state(config_datum),
+          config_logic.has_config_signer(config_datum, self),
+          has_valid_receiver_output(self.outputs, policy_id, expected_asset_name),
+        }
+      }
+
+      Burn -> and {
+          asset_name == expected_asset_name,
+          quantity == -1,
+          config_logic.has_config_signer(config_datum, self),
+        }
     }
   }
 
@@ -65,32 +80,68 @@ validator receiver(
       list.find(self.inputs, fn(input) { input.output_reference == own_ref })
     expect Script(own_policy_id) = own_input.output.address.payment_credential
 
-    expect Some(next_output) =
-      list.find(
-        self.outputs,
-        fn(output) {
-          assets.quantity_of(output.value, own_policy_id, expected_asset_name) == 1
-        },
-      )
+    when redeemer is {
+      receiver_logic.Burn -> {
+        // Admin-gated teardown burn. The Config UTxO is located via the
+        // SAME visible-config helper the other admin paths use (input
+        // or reference input).
+        expect Some(config_input) =
+          find_visible_config_input(self, config_policy_id, config_asset_name)
+        expect InlineDatum(config_datum_data) = config_input.output.datum
+        expect config_datum: config_logic.ConfigDatum = config_datum_data
 
-    expect InlineDatum(next_output_datum) = next_output.datum
-    expect next_datum: receiver_logic.ReceiverDatum = next_output_datum
+        and {
+          config_logic.valid_config_state(config_datum),
+          config_logic.has_config_signer(config_datum, self),
+          // The Receiver NFT carried by this very UTxO MUST be burned in
+          // the same tx (quantity `-1`); both the mint policy's `Burn`
+          // and this spend duplicate the admin-signer check, so neither
+          // side can be invoked alone.
+          assets.quantity_of(self.mint, own_policy_id, expected_asset_name) == -1,
+          // No continuation output may carry the NFT: the UTxO is
+          // destroyed and its locked min-ADA flows to the admin's other
+          // outputs.
+          !list.any(
+            self.outputs,
+            fn(output) {
+              assets.quantity_of(output.value, own_policy_id, expected_asset_name) == 1
+            },
+          ),
+          // Burn can NEVER be a backdoor around the proper drains: the
+          // client balance must be withdrawn AND pending fees settled
+          // first, so no value beyond the min-ADA is at risk.
+          current_datum.balance_lovelace == 0,
+          current_datum.accrued_to_hook_lovelace == 0,
+        }
+      }
 
-    and {
-      receiver_logic.valid_receiver_state(current_datum),
-      receiver_logic.valid_receiver_state(next_datum),
-      own_policy_id == expected_receiver_hash(own_input.output),
-      assets.quantity_of(
-        own_input.output.value,
-        own_policy_id,
-        expected_asset_name,
-      ) == 1,
-      assets.quantity_of(next_output.value, own_policy_id, expected_asset_name) == 1,
-      next_output.address.payment_credential == Script(own_policy_id),
-      receiver_logic.exact_locked_lovelace(own_input.output, current_datum),
-      receiver_logic.exact_locked_lovelace(next_output, next_datum),
-      when redeemer is {
-        receiver_logic.TopUp ->
+      _ -> {
+        expect Some(next_output) =
+          list.find(
+            self.outputs,
+            fn(output) {
+              assets.quantity_of(output.value, own_policy_id, expected_asset_name) == 1
+            },
+          )
+
+        expect InlineDatum(next_output_datum) = next_output.datum
+        expect next_datum: receiver_logic.ReceiverDatum = next_output_datum
+
+        and {
+          receiver_logic.valid_receiver_state(current_datum),
+          receiver_logic.valid_receiver_state(next_datum),
+          own_policy_id == expected_receiver_hash(own_input.output),
+          assets.quantity_of(
+            own_input.output.value,
+            own_policy_id,
+            expected_asset_name,
+          ) == 1,
+          assets.quantity_of(next_output.value, own_policy_id, expected_asset_name) == 1,
+          next_output.address.payment_credential == Script(own_policy_id),
+          receiver_logic.exact_locked_lovelace(own_input.output, current_datum),
+          receiver_logic.exact_locked_lovelace(next_output, next_datum),
+          when redeemer is {
+            receiver_logic.TopUp ->
           receiver_logic.top_up_transition(
             own_input.output,
             next_output,
@@ -121,9 +172,11 @@ validator receiver(
               },
             ),
             receiver_logic.accrue_fee_transition(
+              own_input.output,
+              next_output,
               current_datum,
               next_datum,
-              current_datum.balance_lovelace - next_datum.balance_lovelace,
+              next_datum.accrued_to_hook_lovelace - current_datum.accrued_to_hook_lovelace,
             ),
           }
         }
@@ -186,7 +239,12 @@ validator receiver(
             ),
           }
         }
-      },
+
+            // Unreachable: the outer `when` already handled `Burn`.
+            receiver_logic.Burn -> False
+          },
+        }
+      }
     }
   }
 
@@ -529,5 +587,298 @@ bench receiver_spend_settle_scans_manifest(
     receiver_logic.Settle,
     bench_case.own_ref,
     bench_case.tx,
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Teardown-burn tests
+//
+// On decommission the Receiver NFT is burned and its min-ADA recovered by the
+// admin. Both the mint policy's `Burn` action and the spend `Burn` redeemer
+// require a `config_admins` signature AND the NFT being burned (`-1`) in the
+// same tx; the spend additionally forbids any continuation output carrying
+// the NFT AND requires both `balance_lovelace == 0` and
+// `accrued_to_hook_lovelace == 0` so burn can never be a backdoor around the
+// client withdraw or the fee settle. These mirror `pair_state`'s `BurnPairs`
+// / `BurnPair` tests.
+
+const burn_admin_vkh: ByteArray =
+  #"11111111111111111111111111111111111111111111111111111111"
+
+const burn_other_vkh: ByteArray =
+  #"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+fn burn_receiver_datum_zeroed() -> receiver_logic.ReceiverDatum {
+  receiver_logic.ReceiverDatum {
+    balance_lovelace: 0,
+    accrued_to_hook_lovelace: 0,
+    min_utxo_lovelace: 2_000_000,
+  }
+}
+
+fn burn_admin_output() -> Output {
+  Output {
+    address: address.from_verification_key(burn_admin_vkh),
+    value: assets.from_lovelace(burn_receiver_datum_zeroed().min_utxo_lovelace),
+    datum: NoDatum,
+    reference_script: None,
+  }
+}
+
+// MINT: a well-formed burn (-1 + admin signer) is accepted.
+test receiver_burn_mint_accepts_with_admin_and_minus_one() {
+  let tx =
+    Transaction {
+      ..placeholder,
+      reference_inputs: [bench_config_input()],
+      mint: assets.from_asset(bench_receiver_policy, bench_receiver_asset, -1),
+      extra_signatories: [burn_admin_vkh],
+    }
+  receiver.mint(
+    bench_bootstrap_ref,
+    bench_receiver_asset,
+    bench_config_policy,
+    bench_config_asset,
+    Burn,
+    bench_receiver_policy,
+    tx,
+  )
+}
+
+// MINT: a burn without an admin signer is rejected.
+test receiver_burn_mint_rejects_without_admin_signer() {
+  let tx =
+    Transaction {
+      ..placeholder,
+      reference_inputs: [bench_config_input()],
+      mint: assets.from_asset(bench_receiver_policy, bench_receiver_asset, -1),
+      extra_signatories: [],
+    }
+  !receiver.mint(
+    bench_bootstrap_ref,
+    bench_receiver_asset,
+    bench_config_policy,
+    bench_config_asset,
+    Burn,
+    bench_receiver_policy,
+    tx,
+  )
+}
+
+// MINT: a non-admin signer is rejected even though a signature is present.
+test receiver_burn_mint_rejects_non_admin_signer() {
+  let tx =
+    Transaction {
+      ..placeholder,
+      reference_inputs: [bench_config_input()],
+      mint: assets.from_asset(bench_receiver_policy, bench_receiver_asset, -1),
+      extra_signatories: [burn_other_vkh],
+    }
+  !receiver.mint(
+    bench_bootstrap_ref,
+    bench_receiver_asset,
+    bench_config_policy,
+    bench_config_asset,
+    Burn,
+    bench_receiver_policy,
+    tx,
+  )
+}
+
+// MINT: a positive quantity under the Burn action is rejected (not a burn).
+test receiver_burn_mint_rejects_positive_quantity() {
+  let tx =
+    Transaction {
+      ..placeholder,
+      reference_inputs: [bench_config_input()],
+      mint: assets.from_asset(bench_receiver_policy, bench_receiver_asset, 1),
+      extra_signatories: [burn_admin_vkh],
+    }
+  !receiver.mint(
+    bench_bootstrap_ref,
+    bench_receiver_asset,
+    bench_config_policy,
+    bench_config_asset,
+    Burn,
+    bench_receiver_policy,
+    tx,
+  )
+}
+
+// SPEND: a well-formed burn (admin signer + NFT burned + no continuation
+// output + zeroed value fields) is accepted; the min-ADA flows to the admin.
+test receiver_burn_spend_accepts_with_admin_and_burn() {
+  let current = burn_receiver_datum_zeroed()
+  let tx =
+    Transaction {
+      ..placeholder,
+      inputs: [bench_receiver_input(bench_receiver_ref, current)],
+      reference_inputs: [bench_config_input()],
+      mint: assets.from_asset(bench_receiver_policy, bench_receiver_asset, -1),
+      extra_signatories: [burn_admin_vkh],
+      outputs: [burn_admin_output()],
+    }
+  receiver.spend(
+    bench_bootstrap_ref,
+    bench_receiver_asset,
+    bench_config_policy,
+    bench_config_asset,
+    Some(current),
+    receiver_logic.Burn,
+    bench_receiver_ref,
+    tx,
+  )
+}
+
+// SPEND: a burn without an admin signer is rejected.
+test receiver_burn_spend_rejects_without_admin_signer() {
+  let current = burn_receiver_datum_zeroed()
+  let tx =
+    Transaction {
+      ..placeholder,
+      inputs: [bench_receiver_input(bench_receiver_ref, current)],
+      reference_inputs: [bench_config_input()],
+      mint: assets.from_asset(bench_receiver_policy, bench_receiver_asset, -1),
+      extra_signatories: [],
+      outputs: [burn_admin_output()],
+    }
+  !receiver.spend(
+    bench_bootstrap_ref,
+    bench_receiver_asset,
+    bench_config_policy,
+    bench_config_asset,
+    Some(current),
+    receiver_logic.Burn,
+    bench_receiver_ref,
+    tx,
+  )
+}
+
+// SPEND: if the NFT is NOT burned in this tx (no `-1` entry), the spend
+// fails even with an admin signature.
+test receiver_burn_spend_rejects_without_matching_burn() {
+  let current = burn_receiver_datum_zeroed()
+  let tx =
+    Transaction {
+      ..placeholder,
+      inputs: [bench_receiver_input(bench_receiver_ref, current)],
+      reference_inputs: [bench_config_input()],
+      mint: assets.zero,
+      extra_signatories: [burn_admin_vkh],
+      outputs: [burn_admin_output()],
+    }
+  !receiver.spend(
+    bench_bootstrap_ref,
+    bench_receiver_asset,
+    bench_config_policy,
+    bench_config_asset,
+    Some(current),
+    receiver_logic.Burn,
+    bench_receiver_ref,
+    tx,
+  )
+}
+
+// SPEND: if a continuation output still carries the NFT, the burn is
+// rejected (the UTxO must be destroyed, not preserved).
+test receiver_burn_spend_rejects_continuation_output_with_nft() {
+  let current = burn_receiver_datum_zeroed()
+  let tx =
+    Transaction {
+      ..placeholder,
+      inputs: [bench_receiver_input(bench_receiver_ref, current)],
+      reference_inputs: [bench_config_input()],
+      mint: assets.from_asset(bench_receiver_policy, bench_receiver_asset, -1),
+      extra_signatories: [burn_admin_vkh],
+      outputs: [bench_receiver_output(current)],
+    }
+  !receiver.spend(
+    bench_bootstrap_ref,
+    bench_receiver_asset,
+    bench_config_policy,
+    bench_config_asset,
+    Some(current),
+    receiver_logic.Burn,
+    bench_receiver_ref,
+    tx,
+  )
+}
+
+// SPEND: if `balance_lovelace != 0`, the burn is rejected — the admin must
+// run withdraw first, so burn can never drain the client balance.
+test receiver_burn_spend_rejects_nonzero_balance() {
+  let current =
+    receiver_logic.ReceiverDatum {
+      balance_lovelace: 5_000_000,
+      accrued_to_hook_lovelace: 0,
+      min_utxo_lovelace: 2_000_000,
+    }
+  let tx =
+    Transaction {
+      ..placeholder,
+      inputs: [bench_receiver_input(bench_receiver_ref, current)],
+      reference_inputs: [bench_config_input()],
+      mint: assets.from_asset(bench_receiver_policy, bench_receiver_asset, -1),
+      extra_signatories: [burn_admin_vkh],
+      outputs: [
+        Output {
+          address: address.from_verification_key(burn_admin_vkh),
+          value: assets.from_lovelace(
+            current.min_utxo_lovelace + current.balance_lovelace,
+          ),
+          datum: NoDatum,
+          reference_script: None,
+        },
+      ],
+    }
+  !receiver.spend(
+    bench_bootstrap_ref,
+    bench_receiver_asset,
+    bench_config_policy,
+    bench_config_asset,
+    Some(current),
+    receiver_logic.Burn,
+    bench_receiver_ref,
+    tx,
+  )
+}
+
+// SPEND: if `accrued_to_hook_lovelace != 0`, the burn is rejected — the
+// admin must settle pending protocol fees first, so burn can never drain
+// the hook-bound accrual.
+test receiver_burn_spend_rejects_nonzero_accrued() {
+  let current =
+    receiver_logic.ReceiverDatum {
+      balance_lovelace: 0,
+      accrued_to_hook_lovelace: 3_000_000,
+      min_utxo_lovelace: 2_000_000,
+    }
+  let tx =
+    Transaction {
+      ..placeholder,
+      inputs: [bench_receiver_input(bench_receiver_ref, current)],
+      reference_inputs: [bench_config_input()],
+      mint: assets.from_asset(bench_receiver_policy, bench_receiver_asset, -1),
+      extra_signatories: [burn_admin_vkh],
+      outputs: [
+        Output {
+          address: address.from_verification_key(burn_admin_vkh),
+          value: assets.from_lovelace(
+            current.min_utxo_lovelace + current.accrued_to_hook_lovelace,
+          ),
+          datum: NoDatum,
+          reference_script: None,
+        },
+      ],
+    }
+  !receiver.spend(
+    bench_bootstrap_ref,
+    bench_receiver_asset,
+    bench_config_policy,
+    bench_config_asset,
+    Some(current),
+    receiver_logic.Burn,
+    bench_receiver_ref,
+    tx,
   )
 }

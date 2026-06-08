@@ -13,9 +13,11 @@
 // this deposit address. The Receiver's own `TopUp` spend then credits
 // `balance_lovelace` by exactly that delta. Consequences:
 //   * A deposit can only ever credit the client's own Receiver — never stolen.
-//   * AccrueFee / Settle / Withdraw cannot spend a deposit: none of them raise
-//     the Receiver's lovelace (AccrueFee keeps it equal, Settle/Withdraw lower
-//     it), so the `delta >= swept` guard fails.
+//   * The Receiver must GAIN at least `swept`: a `TopUp`, or an update whose
+//     `AccrueFee` absorbs the deposit (raising the Receiver's lovelace into
+//     `balance_lovelace`), both satisfy this. Settle/Withdraw lower the
+//     Receiver's lovelace, so they can never co-spend a deposit — the
+//     `delta >= swept` guard fails.
 //   * ANTI-SKIM: every deposit input at this address runs the SAME validator
 //     instance with the SAME `swept` (the sum over all inputs at the address),
 //     so a tx that sweeps N deposits but credits only one would fail every
@@ -189,7 +191,7 @@ test collect_deposit_ok_rejects_skim_partial_credit() {
 }
 
 test collect_deposit_ok_rejects_receiver_not_credited() {
-  // Receiver lovelace unchanged (e.g. an AccrueFee-shaped tx) → deposit cannot move.
+  // Receiver lovelace unchanged (e.g. a pure update that absorbs nothing) → deposit cannot move.
   let tx =
     tx_with(
       [receiver_input(12_000_000), deposit_input(#"01", 5_000_000)],
@@ -223,6 +225,52 @@ test collect_deposit_ok_rejects_no_receiver_in_tx() {
       ],
     )
   !collect_deposit_ok(tx, deposit_address(), receiver_policy, receiver_asset)
+}
+
+test collect_deposit_ok_rejects_zero_swept_no_deposit_input() {
+  // ANTI-SKIM degenerate case: the Receiver is consumed and even gains lovelace,
+  // but NO input sits at the deposit address (swept == 0). The `swept > 0` guard
+  // must reject — a CollectDeposit spend with nothing to collect is meaningless
+  // and must never authorise on the back of an unrelated Receiver top-up.
+  let tx =
+    tx_with(
+      [receiver_input(12_000_000)],
+      [receiver_output(20_000_000)],
+    )
+  !collect_deposit_ok(tx, deposit_address(), receiver_policy, receiver_asset)
+}
+
+test collect_deposit_ok_credits_full_ada_of_token_wrapped_deposit() {
+  // A deposit input that also carries a native token still contributes its full
+  // lovelace to `swept` (lovelace_of ignores the token). The Receiver must be
+  // credited that full ADA, proving a griefer cannot wrap ADA in a token to
+  // skim part of a sweep: the spend only passes when the FULL ADA reaches the
+  // Receiver.
+  let token_deposit =
+    Input {
+      output_reference: OutputReference { transaction_id: #"07", output_index: 0 },
+      output: Output {
+        address: deposit_address(),
+        value: assets.add(
+          assets.from_lovelace(5_000_000),
+          other_hash,
+          #"4a554e4b",
+          1,
+        ),
+        datum: NoDatum,
+        reference_script: None,
+      },
+    }
+  // Receiver rises by the full 5 ADA → accepted.
+  let ok_tx =
+    tx_with([receiver_input(12_000_000), token_deposit], [receiver_output(17_000_000)])
+  // Receiver rises by only 4 ADA (token counted as if it offset the credit) → rejected.
+  let skim_tx =
+    tx_with([receiver_input(12_000_000), token_deposit], [receiver_output(16_000_000)])
+  and {
+    collect_deposit_ok(ok_tx, deposit_address(), receiver_policy, receiver_asset),
+    !collect_deposit_ok(skim_tx, deposit_address(), receiver_policy, receiver_asset),
+  }
 }
 
 test total_swept_only_counts_inputs_at_the_deposit_address() {

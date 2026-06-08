@@ -47,6 +47,11 @@ pub type ConfigDatum {
 
 pub type ConfigRedeemer {
   AdminUpdate
+  /// Admin-only teardown burn of the Config NFT on decommission.
+  /// Requires a `config_admins` signature AND the Config NFT being
+  /// burned in the same tx, with no continuation output. Recovers the
+  /// locked min-ADA to the admin.
+  Burn
 }
 
 pub fn has_config_signer(datum: ConfigDatum, tx: Transaction) -> Bool {

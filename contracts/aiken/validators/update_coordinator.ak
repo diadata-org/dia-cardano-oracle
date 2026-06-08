@@ -128,6 +128,8 @@ fn valid_receiver_accrue_fee(
     ),
     receiver_logic.exact_locked_lovelace(receiver_output, next_receiver),
     receiver_logic.accrue_fee_transition(
+      receiver_input.output,
+      receiver_output,
       previous_receiver,
       next_receiver,
       fee_lovelace,

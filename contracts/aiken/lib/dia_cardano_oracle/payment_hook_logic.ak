@@ -17,6 +17,12 @@ pub type PaymentHookRedeemer {
   ApplySettle
   AdminUpdate
   Withdraw { amount: Int }
+  /// Admin-only teardown burn of the PaymentHook NFT on decommission.
+  /// Requires a `config_admins` signature, the PaymentHook NFT being
+  /// burned in the same tx with no continuation output, AND
+  /// `accrued_fees_lovelace == 0` (forces a payment-hook withdraw
+  /// first, so burn can never be a backdoor around the fee drain).
+  Burn
 }
 
 pub fn valid_payment_hook_state(datum: PaymentHookDatum) -> Bool {
