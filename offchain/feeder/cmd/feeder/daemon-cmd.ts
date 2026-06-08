@@ -96,7 +96,7 @@ import {
 import type { OracleIntentBridge } from "../../src/lib-bridge/index.js";
 import { createRealOracleIntentBridge } from "../../src/lib-bridge/index.js";
 import { reconcileAllDestinations } from "../../src/lib-bridge/reconcile.js";
-import { resolveRunStateDir, STATE_ROOT } from "./run-state.js";
+import { resolveRunStateDir, STATE_ROOT } from "@diadata-org/dia-cardano-oracle-cli/core/run-state";
 import { createCardanoWriteClient } from "../../src/submitter/cardano-write-client.js";
 import {
   createApiServer,
@@ -142,6 +142,7 @@ import {
   METRICS_NAMESPACE,
   DEFAULT_WASM_FATAL_CONSECUTIVE_FAILURES,
   WASM_FATAL_EXIT_CODE,
+  CARDANO_NETWORK_MAGIC,
 } from "../../src/config/constants.js";
 
 // ---------------------------------------------------------------------------
@@ -531,11 +532,13 @@ type PersistedPairStateFile = {
   pairState?: {
     price?: string;
     timestamp?: string;
+    nonce?: string;
     intentHash?: string;
     intent?: {
       symbol?: string;
       price?: string;
       timestamp?: string;
+      nonce?: string;
     };
   };
   transactions?: Array<{ submittedTxHash?: string; confirmed?: boolean }>;
@@ -590,6 +593,7 @@ async function hydratePriceCacheFromPairStateFiles(args: {
 
           const priceRaw = pairState.price ?? pairState.intent?.price;
           const timestampRaw = pairState.timestamp ?? pairState.intent?.timestamp;
+          const nonceRaw = pairState.nonce ?? pairState.intent?.nonce;
           const intentHashRaw = pairState.intentHash;
           if (!priceRaw || !timestampRaw || !intentHashRaw) continue;
 
@@ -605,6 +609,7 @@ async function hydratePriceCacheFromPairStateFiles(args: {
               symbol,
               price: BigInt(priceRaw),
               timestamp: BigInt(timestampRaw),
+              nonce: nonceRaw !== undefined && nonceRaw !== null ? BigInt(nonceRaw) : undefined,
               intentHash,
               cardanoTxHash: lastConfirmedTx?.submittedTxHash,
               confirmedAtDepth: confirmationDepth,
@@ -763,6 +768,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           destination_chain: "cardano",
           network,
           source_chain_id: String(source.chainId),
+          // Active per-run state dir basename (e.g. "preview_run_20260608-040304").
+          // A registry default label, so EVERY metric carries it and alert
+          // remediation commands can template the full state path via
+          // {{ $labels.run_dir }} instead of a manual <id> placeholder.
+          run_dir: path.basename(resolveRunStateDir(network)),
         },
       })
     : noopMetrics;
@@ -1112,6 +1122,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
             symbol,
             price,
             timestamp,
+            nonce: enriched.fullIntent.nonce,
             intentHash: result.intentHash,
             cardanoTxHash: result.cardanoTxHash,
             confirmedAtDepth: cardanoConfirmationDepth,
@@ -1135,7 +1146,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         const postState = result.postState;
         if (postState?.receiverBalanceLovelace !== undefined) {
           metrics.cardanoReceiverBalanceLovelace.set(
-            { client_id: clientId, receiver_address: postState.receiverAddress ?? "" },
+            {
+              client_id: clientId,
+              receiver_address: postState.receiverAddress ?? "",
+              deposit_address: postState.depositAddress ?? "",
+            },
             Number(postState.receiverBalanceLovelace),
           );
           if (postState.receiverBalanceLovelace < receiverBalanceLowLovelace) {
@@ -1177,6 +1192,34 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
               `intentHash=${sanitizeLogLine(result.intentHash)} — ${sanitizeLogLine((err as Error).message)}`,
             );
           });
+
+        // Per-(client, symbol) rollup: the latest confirmed value on the
+        // client's pair contract. `contract_address` = the client's pair
+        // validator address (the Cardano destination-contract analogue);
+        // `last_nonce` lets a restart rehydrate the cron's nonce baseline.
+        if (result.pairValidatorAddress) {
+          await db
+            .upsertContractSymbolUpdate({
+              chainId: CARDANO_NETWORK_MAGIC[network],
+              contractAddress: result.pairValidatorAddress,
+              symbol,
+              lastIntentHash: result.intentHash,
+              lastCardanoTxHash: result.cardanoTxHash,
+              lastPrice: price.toString(),
+              lastNonce: enriched.fullIntent.nonce.toString(),
+              lastTimestamp: Number(timestamp),
+              lastUpdateMs: nowMs,
+              lastConfirmedAtDepth: cardanoConfirmationDepth,
+              updateCount: 1,
+              totalFeePaidLovelace: result.feePaidLovelace,
+            })
+            .catch((err: unknown) => {
+              report(
+                `[error] daemon: contract_symbol_updates upsert failed for ` +
+                `symbol=${sanitizeLogLine(symbol)} — ${sanitizeLogLine((err as Error).message)}`,
+              );
+            });
+        }
         if (result.batch && result.batch.size > 1) {
           await fileLogger.logIntentStep({
             ts: new Date().toISOString(),
@@ -1249,6 +1292,8 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
             price: req.enriched.fullIntent.price.toString(),
             timestamp: Number(req.enriched.fullIntent.timestamp),
             status: "failed",
+            errorCode: result.code,
+            errorMessage: result.error.message,
             failedAtMs: Date.now(),
             createdAtMs: Date.now(),
           })
@@ -1569,7 +1614,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         }
         if (b.receiverBalanceLovelace !== undefined) {
           metrics.cardanoReceiverBalanceLovelace.set(
-            { client_id: clientId, receiver_address: b.receiverAddress ?? "" },
+            {
+              client_id: clientId,
+              receiver_address: b.receiverAddress ?? "",
+              deposit_address: b.depositAddress ?? "",
+            },
             Number(b.receiverBalanceLovelace),
           );
         }

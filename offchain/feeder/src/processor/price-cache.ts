@@ -27,6 +27,11 @@ export type PriceCacheEntry = {
   price: bigint;
   /** Intent timestamp (unix seconds, as bigint). */
   timestamp: bigint;
+  /** DIA OracleIntent nonce of the last confirmed update (bigint). Lets the
+   *  cron skip resubmitting an intent whose nonce cannot beat the on-chain one
+   *  (the contract requires strictly greater). Optional: absent on entries that
+   *  predate nonce tracking. */
+  nonce?: bigint;
   /** EVM intent hash (`0x…`) for correlation in logs and `/api/v1/prices`. */
   intentHash: string;
   /** Cardano tx hash once confirmed; `undefined` until then. */

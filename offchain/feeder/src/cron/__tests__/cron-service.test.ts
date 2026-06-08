@@ -165,6 +165,36 @@ describe("runOneTick", () => {
     assert.equal(cronCalls[0]!.outcome, "skipped_already_fresh");
   });
 
+  it("emits skipped_superseded when the cached intent's nonce does not beat the confirmed nonce", async () => {
+    const router = makeRouter("BTC/USD", true, "30s");
+    const now = 1_700_000_000_000;
+    const priceCache = createPriceCache({ now: () => now - 60_000 });
+    // Confirmed on-chain nonce = 5; a fresh-HASH intent below carries nonce 1
+    // (FAKE_ENRICHED) — a different hash (so not "already_fresh") that still
+    // cannot beat the on-chain nonce, so the cron must skip it as superseded.
+    priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, nonce: 5n, intentHash: "0xconfirmed", cardanoTxHash: "tx", updatedAtMs: now - 60_000 },
+    );
+    const latestIntents = createLatestIntentCache({ now: () => now });
+    latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnewer" },
+    );
+
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      now: () => now,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 0);
+    assert.equal(cronCalls[0]!.outcome, "skipped_superseded");
+  });
+
   it("submits when time_threshold elapsed and a newer cached intent exists", async () => {
     const router = makeRouter("BTC/USD", true, "30s");
     const now = 1_700_000_000_000;

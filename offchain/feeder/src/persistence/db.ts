@@ -138,6 +138,9 @@ export type ContractSymbolUpdateRow = {
   lastIntentHash?: string;
   lastCardanoTxHash?: string;
   lastPrice: string;
+  /** DIA OracleIntent nonce of the last confirmed update (stringified bigint).
+   *  Lets a restart rehydrate the cron's nonce baseline from the DB. */
+  lastNonce?: string;
   lastTimestamp: number;
   lastUpdateMs: number;
   lastConfirmedAtDepth?: number;
@@ -323,6 +326,7 @@ CREATE TABLE IF NOT EXISTS contract_symbol_updates (
   last_intent_hash            TEXT,
   last_cardano_tx_hash        TEXT,
   last_price                  TEXT    NOT NULL,
+  last_nonce                  TEXT,
   last_timestamp              INTEGER NOT NULL,
   last_update_ms              INTEGER NOT NULL,
   last_confirmed_at_depth     INTEGER,
@@ -425,6 +429,7 @@ CREATE TABLE IF NOT EXISTS contract_symbol_updates (
   last_intent_hash            TEXT,
   last_cardano_tx_hash        TEXT,
   last_price                  TEXT    NOT NULL,
+  last_nonce                  TEXT,
   last_timestamp              BIGINT  NOT NULL,
   last_update_ms              BIGINT  NOT NULL,
   last_confirmed_at_depth     INTEGER,
@@ -725,14 +730,15 @@ async function createSqliteDb(filePath: string): Promise<Db> {
       db.prepare(`
         INSERT INTO contract_symbol_updates
           (chain_id, contract_address, symbol, last_intent_hash, last_cardano_tx_hash,
-           last_price, last_timestamp, last_update_ms, last_confirmed_at_depth,
+           last_price, last_nonce, last_timestamp, last_update_ms, last_confirmed_at_depth,
            update_count, total_fee_paid_lovelace)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(chain_id, contract_address, symbol)
         DO UPDATE SET
           last_intent_hash        = excluded.last_intent_hash,
           last_cardano_tx_hash    = excluded.last_cardano_tx_hash,
           last_price              = excluded.last_price,
+          last_nonce              = excluded.last_nonce,
           last_timestamp          = excluded.last_timestamp,
           last_update_ms          = excluded.last_update_ms,
           last_confirmed_at_depth = excluded.last_confirmed_at_depth,
@@ -741,7 +747,7 @@ async function createSqliteDb(filePath: string): Promise<Db> {
       `).run(
         row.chainId, row.contractAddress, row.symbol,
         row.lastIntentHash ?? null, row.lastCardanoTxHash ?? null,
-        row.lastPrice, row.lastTimestamp, row.lastUpdateMs,
+        row.lastPrice, row.lastNonce ?? null, row.lastTimestamp, row.lastUpdateMs,
         row.lastConfirmedAtDepth ?? null, row.updateCount,
         row.totalFeePaidLovelace ?? null,
       );
@@ -1149,14 +1155,15 @@ async function createPostgresDb(dsn: string): Promise<Db> {
       await pool.query(
         `INSERT INTO contract_symbol_updates
            (chain_id, contract_address, symbol, last_intent_hash, last_cardano_tx_hash,
-            last_price, last_timestamp, last_update_ms, last_confirmed_at_depth,
+            last_price, last_nonce, last_timestamp, last_update_ms, last_confirmed_at_depth,
             update_count, total_fee_paid_lovelace)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
          ON CONFLICT(chain_id, contract_address, symbol)
          DO UPDATE SET
            last_intent_hash        = EXCLUDED.last_intent_hash,
            last_cardano_tx_hash    = EXCLUDED.last_cardano_tx_hash,
            last_price              = EXCLUDED.last_price,
+           last_nonce              = EXCLUDED.last_nonce,
            last_timestamp          = EXCLUDED.last_timestamp,
            last_update_ms          = EXCLUDED.last_update_ms,
            last_confirmed_at_depth = EXCLUDED.last_confirmed_at_depth,
@@ -1165,7 +1172,7 @@ async function createPostgresDb(dsn: string): Promise<Db> {
         [
           row.chainId, row.contractAddress, row.symbol,
           row.lastIntentHash ?? null, row.lastCardanoTxHash ?? null,
-          row.lastPrice, row.lastTimestamp, row.lastUpdateMs,
+          row.lastPrice, row.lastNonce ?? null, row.lastTimestamp, row.lastUpdateMs,
           row.lastConfirmedAtDepth ?? null, row.updateCount,
           row.totalFeePaidLovelace ?? null,
         ],
@@ -1340,7 +1347,7 @@ export async function createDb(config: DbConfig): Promise<Db> {
  * Reject sqlite paths that escape the feeder's working directory. The check
  * resolves the path against process.cwd() and requires the result to stay
  * inside `cwd/state/`. Operators can override the base via the
- * FEEDER_STATE_ROOT env var (useful in Docker where /app/state is the root).
+ * FEEDER_STATE_ROOT env var (useful in Docker where /app/offchain/state is the root).
  *
  * Rejecting an escape early prevents an operator typo or hostile env var
  * (e.g. `DATABASE_PATH_TESTNET=../../etc/feeder.sqlite`) from writing the
@@ -1482,6 +1489,7 @@ type SqliteContractSymbolUpdateRow = {
   last_intent_hash: string | null;
   last_cardano_tx_hash: string | null;
   last_price: string;
+  last_nonce: string | null;
   last_timestamp: number;
   last_update_ms: number;
   last_confirmed_at_depth: number | null;
@@ -1498,6 +1506,7 @@ function fromSqliteContractSymbolUpdateRow(r: SqliteContractSymbolUpdateRow): Co
     lastIntentHash: r.last_intent_hash ?? undefined,
     lastCardanoTxHash: r.last_cardano_tx_hash ?? undefined,
     lastPrice: r.last_price,
+    lastNonce: r.last_nonce ?? undefined,
     lastTimestamp: r.last_timestamp,
     lastUpdateMs: r.last_update_ms,
     lastConfirmedAtDepth: r.last_confirmed_at_depth ?? undefined,
@@ -1670,6 +1679,7 @@ type PgContractSymbolUpdateRow = {
   last_intent_hash: string | null;
   last_cardano_tx_hash: string | null;
   last_price: string;
+  last_nonce: string | null;
   last_timestamp: string;
   last_update_ms: string;
   last_confirmed_at_depth: number | null;
@@ -1686,6 +1696,7 @@ function fromPgContractSymbolUpdateRow(r: PgContractSymbolUpdateRow): ContractSy
     lastIntentHash: r.last_intent_hash ?? undefined,
     lastCardanoTxHash: r.last_cardano_tx_hash ?? undefined,
     lastPrice: r.last_price,
+    lastNonce: r.last_nonce ?? undefined,
     lastTimestamp: Number(r.last_timestamp),
     lastUpdateMs: Number(r.last_update_ms),
     lastConfirmedAtDepth: r.last_confirmed_at_depth ?? undefined,

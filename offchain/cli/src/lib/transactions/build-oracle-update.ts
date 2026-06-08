@@ -13,12 +13,14 @@ import { completeWithRetry } from "../../core/tx-build.js";
 import {
   buildPairDatumCbor,
   buildReceiverDatumCbor,
+  decodePairDatum,
   decodeReceiverDatum,
   requireInlineDatum,
   splitUnit,
   updateWitnessData,
 } from "../../core/chain-helpers.js";
 import { buildPairApplyUpdateRedeemer } from "../../core/redeemers.js";
+import { assertOracleIntentTimestampAndNonceMonotonic } from "../../preflight/oracle-update.js";
 import type {
   ConfigStateArtifact,
   ClientStateArtifact,
@@ -91,6 +93,23 @@ export async function buildOracleUpdateTx(
   lucid: LucidEvolution,
   ctx: OracleUpdateContext,
 ): Promise<OracleUpdateResult> {
+  // Validate the intent against the LIVE on-chain pair datum (the ground
+  // truth), not the caller's local pair-state file which can drift behind the
+  // chain. The pair UTxO we are about to spend carries the authoritative
+  // (timestamp, nonce); a tx that does not strictly beat it would be rejected
+  // by the pair_state validator on submit, wasting the fee. Building it is
+  // refused here so the off-chain only ever assembles txs the chain will accept.
+  if (!ctx.isCreate && ctx.currentPairUtxo) {
+    const onChainPair = decodePairDatum(requireInlineDatum(ctx.currentPairUtxo, "pair"));
+    assertOracleIntentTimestampAndNonceMonotonic({
+      isCreate: false,
+      intentTimestamp: ctx.intent.timestamp,
+      intentNonce: ctx.intent.nonce,
+      pairStateTimestamp: onChainPair.timestamp,
+      pairStateNonce: onChainPair.nonce,
+    });
+  }
+
   const currentReceiverState = decodeReceiverDatum(
     requireInlineDatum(ctx.currentReceiverUtxo, "receiver"),
   );

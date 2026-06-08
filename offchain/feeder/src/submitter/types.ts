@@ -72,6 +72,9 @@ export type SubmitResultOk = {
   receiverUnit: string;
   /** Pair NFT unit (`policyId + assetName`) updated by this tx. */
   pairUnit: string;
+  /** Per-client pair validator address holding this symbol's pair UTxO. Keys
+   *  `contract_symbol_updates` (the Cardano destination-contract analogue). */
+  pairValidatorAddress?: string;
   /** Whether the pair was minted for the first time or updated in place. */
   pairAction?: "mint" | "update";
   /** Tx fee deducted from the signer wallet, as a lovelace string. */
@@ -88,6 +91,7 @@ export type SubmitResultOk = {
     paymentHookAccruedLovelace?: bigint;
     adminWalletLovelace?: bigint;
     receiverAddress?: string;
+    depositAddress?: string;
   };
 };
 

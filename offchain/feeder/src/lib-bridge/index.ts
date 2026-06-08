@@ -1,23 +1,92 @@
 // Bridge module — typed facade over the CLI's Cardano tx builders.
 //
 // `OracleIntentBridge` is the interface the submitter depends on.
-// `createRealOracleIntentBridge` wires `buildOracleUpdateTx` from
-// `offchain/cli/src/lib/` and handles the full Lucid lifecycle:
+// `createRealOracleIntentBridge` wires `buildOracleUpdateTx` and handles the
+// full Lucid lifecycle:
 //   load state → build tx → sign → submit → await confirmation.
 //
-// CLI modules are loaded via dynamic `import()` so the feeder can
-// typecheck without `@lucid-evolution/lucid` present; at runtime the
-// optional dependency must be installed (npm optionalDependencies).
+// CLI modules are imported statically from the `@diadata-org/dia-cardano-
+// oracle-cli` package (the CLI exposes them as subpath library exports). The
+// `@lucid-evolution/lucid` runtime dependency the CLI pulls in must be
+// installed for submission to work.
 //
 // Tests inject a `FakeOracleIntentBridge` instead.
 
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
+import { readClientContext } from "@diadata-org/dia-cardano-oracle-cli/core/artifact-context";
+import {
+  decodePairDatum,
+  decodePaymentHookDatum,
+  decodeReceiverDatum,
+  findSingleUtxoAtUnit,
+  requireInlineDatum,
+  waitForUnitUtxoReplacement,
+  waitForWalletSettlement,
+} from "@diadata-org/dia-cardano-oracle-cli/core/chain-helpers";
+import { getCliConfig } from "@diadata-org/dia-cardano-oracle-cli/core/config";
+import {
+  mintingPolicyFromCompiledScript,
+  policyIdFromMintingPolicy,
+  scriptAddressFromValidator,
+  scriptHashFromValidator,
+  spendingValidatorFromCompiledScript,
+} from "@diadata-org/dia-cardano-oracle-cli/core/contracts";
+import {
+  assertDiaOracleIntentNotExpired,
+  diaIntentToState,
+  diaIntentTokenNameFromSymbol,
+  diaPairIdHex,
+  normalizeDiaEip712Domain,
+  normalizeDiaOracleIntent,
+  normalizeHex,
+  recoverDiaOracleIntentWitness,
+} from "@diadata-org/dia-cardano-oracle-cli/core/dia-intent";
+import { pairSlugFromSymbol } from "@diadata-org/dia-cardano-oracle-cli/core/intent-paths";
+import { makeConfiguredLucidWithConfig, selectConfiguredWalletWithConfig } from "@diadata-org/dia-cardano-oracle-cli/core/lucid";
+import { getNetworkNow } from "@diadata-org/dia-cardano-oracle-cli/core/network-time";
+import { appendTransactionRecord, readOptionalPairState } from "@diadata-org/dia-cardano-oracle-cli/core/state";
+import { awaitTxConfirmation } from "@diadata-org/dia-cardano-oracle-cli/core/tx-confirmation";
+import { assertTxStillOnChain } from "@diadata-org/dia-cardano-oracle-cli/core/tx-onchain-check";
+import { buildBatchOracleUpdateTx } from "@diadata-org/dia-cardano-oracle-cli/lib/transactions/build-batch-oracle-update";
+import { buildOracleUpdateTx } from "@diadata-org/dia-cardano-oracle-cli/lib/transactions/build-oracle-update";
+import {
+  assertOracleUpdateBootstrapRefsResolved,
+  assertPaymentKeyHashIsConfigSigner,
+} from "@diadata-org/dia-cardano-oracle-cli/preflight";
+import { depositMerge, selectDepositsForUpdateFold } from "@diadata-org/dia-cardano-oracle-cli/transactions/deposit";
+import { deriveConfiguredWalletDefaults } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet";
+import type { CliConfig } from "@diadata-org/dia-cardano-oracle-cli/core/config";
+import type { DiaOracleIntent } from "@diadata-org/dia-cardano-oracle-cli/core/dia-intent";
+import type {
+  ClientStateArtifact,
+  ConfigStateArtifact,
+  PairStateArtifact,
+  ReferenceScriptsState,
+  ResolvedCompiledScripts,
+  ResolvedDeploymentScripts,
+} from "@diadata-org/dia-cardano-oracle-cli/core/state";
 import type { EnrichedIntent } from "../source/types.js";
 import type { RouterSigner } from "../submitter/types.js";
 import { DEFAULT_CONFIRMATION_DEPTH } from "../config/constants.js";
+
+// The Lucid `UTxO` shape, derived from a CLI helper so the feeder does not
+// import `@lucid-evolution/lucid` directly.
+type UTxO = Awaited<ReturnType<typeof findSingleUtxoAtUnit>>;
+
+// The combined state object the CLI's update builders consume. It is a
+// `PairStateArtifact` (wallet/pair/pairState/datum/transactions) merged with
+// the protocol + client deployment scripts, compiled scripts, reference
+// scripts, config state, and the resolved receiver. `buildState` assembles it
+// from the typed client + protocol artifacts the same way `cli/update.ts` does.
+type CombinedUpdateState = PairStateArtifact & {
+  scripts: ResolvedDeploymentScripts;
+  compiledScripts: ResolvedCompiledScripts;
+  referenceScripts: ReferenceScriptsState;
+  configState: ConfigStateArtifact["configState"];
+  receiver: NonNullable<ClientStateArtifact["receiver"]>;
+};
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -80,14 +149,14 @@ export type PostConfirmChainState = {
   paymentHookAccruedLovelace?: bigint;
   adminWalletLovelace?: bigint;
   /** The client's on-chain Receiver script address — surfaced as a metric
-   *  label so the ReceiverBalanceLow alert can name the exact Receiver. */
+   *  label together with `depositAddress` so ReceiverBalanceLow can show
+   *  both the locked UTxO and the address operators should fund. */
   receiverAddress?: string;
   /** Sum of clean, un-merged ADA deposits (>= 1 ADA, no native tokens /
    *  datum / dust) sitting at the client's side-deposit address, awaiting a
    *  `deposit:merge` into the Receiver balance. Populated only by the
-   *  read-only `snapshotBalances` probe (the post-confirm capture does not
-   *  query the deposit address). Undefined when the query failed or the
-   *  client state carries no `receiver.depositValidatorAddress`. */
+   *  read-only `snapshotBalances` probe. Undefined when the query failed or
+   *  the client state carries no `receiver.depositValidatorAddress`. */
   depositPendingLovelace?: bigint;
   /** The client's side-deposit script address
    *  (`receiver.depositValidatorAddress`) — surfaced as a metric label and
@@ -104,6 +173,10 @@ export type OracleUpdateResult = {
   receiverUnit: string;
   /** Pair NFT unit (`policyId + assetName`) updated by this tx. */
   pairUnit: string;
+  /** Per-client pair validator address holding this symbol's pair UTxO. The
+   *  Cardano analogue of a Spectra destination contract (one per client, holds
+   *  all that client's symbols) — used to key `contract_symbol_updates`. */
+  pairValidatorAddress?: string;
   /** True if this tx minted the pair NFT (first update for this symbol). */
   isCreate: boolean;
   /** Tx fee paid from the signer wallet, as a lovelace string.
@@ -119,11 +192,18 @@ export type OracleBatchUpdateResult = {
   txHash: string;
   /** Receiver NFT unit touched by the batch update. */
   receiverUnit: string;
-  /** Per-entry batch outcome in the same order as the request input. */
+  /** Per-entry batch outcome. Built entries (`skipped: false`) were included in
+   *  the submitted tx; `skipped: true` entries were dropped before building
+   *  because their intent was already superseded on chain (benign, no tx). */
   entries: Array<{
     intentHash: string;
     pairUnit: string;
+    /** Per-client pair validator address (keys `contract_symbol_updates`). */
+    pairValidatorAddress?: string;
     isCreate: boolean;
+    /** True when the entry was dropped before building (superseded on chain);
+     *  absent/false means it was built into the submitted tx. */
+    skipped?: boolean;
   }>;
   /** On-chain balance snapshot shared by all entries in the batch (the
    *  receiver and admin wallet are the same for every entry of one batch). */
@@ -174,14 +254,6 @@ export type OracleIntentBridge = {
 export type RealBridgeOptions = {
   /** Progress lines are forwarded to this sink (default: process.stderr). */
   log?: (line: string) => void;
-  /**
-   * Absolute path to the feeder's `offchain/cli/src` root so dynamic
-   * imports resolve correctly when the feeder is installed in a different
-   * working directory.
-   * Defaults to `../../../cli/src` relative to this file's location,
-   * which is correct for the monorepo layout.
-   */
-  cliSrcRoot?: string;
   /**
    * Number of Cardano blocks the bridge waits past inclusion before
    * declaring the tx confirmed.
@@ -260,10 +332,10 @@ export function selectFoldUtxos<T extends { assets?: Record<string, bigint | str
  * fallback semantics are unit-tested in isolation.
  */
 export async function runWithFoldFallback<
-  F extends { utxos: unknown[] } | undefined,
+  F extends { utxos: unknown[] },
   R,
 >(args: {
-  fold: F;
+  fold: F | undefined;
   attempt: (fold: F | undefined) => Promise<R>;
   onFallback?: (err: Error) => void;
 }): Promise<R & { foldedDeposits: number }> {
@@ -320,22 +392,6 @@ export function createRealOracleIntentBridge(
   // 0/absent disables the fold (always pure updates). Not a feeder-YAML key.
   const depositMaxPerUpdateFold = options.depositMaxPerUpdateFold ?? 0;
 
-  // Resolve CLI src root once — avoids re-computing on every call.
-  // Resolution priority (highest to lowest):
-  //   1. explicit options.cliSrcRoot (programmatic override, tests)
-  //   2. env CARDANO_FEEDER_CLI_DIST_ROOT
-  //      (set by Docker image to /app/cli/dist; documented in .env.example)
-  //   3. fallback: ../../../cli/src relative to this module (dev mode under tsx)
-  const cliSrcRoot = options.cliSrcRoot
-    ? path.resolve(options.cliSrcRoot)
-    : process.env.CARDANO_FEEDER_CLI_DIST_ROOT
-      ? path.resolve(process.env.CARDANO_FEEDER_CLI_DIST_ROOT)
-      : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../cli/src");
-
-  function cliPath(rel: string): string {
-    return `${cliSrcRoot}/${rel}`;
-  }
-
   /**
    * Apply a per-router signer override on top of the env-derived CLI config.
    * Returns a new config object (never mutates the input) with exactly one
@@ -344,15 +400,15 @@ export function createRealOracleIntentBridge(
    * is undefined the env-derived config passes through unchanged (single
    * global wallet — the common single-client case).
    */
-  function applySigner<T extends { cardanoWalletSeed?: string; cardanoPrivateKey?: string }>(
-    cliConfig: T,
+  function applySigner(
+    cliConfig: CliConfig,
     signer: RouterSigner | undefined,
-  ): T {
+  ): CliConfig {
     if (!signer) return cliConfig;
     if (signer.kind === "seed") {
-      return { ...cliConfig, cardanoWalletSeed: signer.value, cardanoPrivateKey: undefined };
+      return { ...cliConfig, cardanoWalletSeed: signer.value, cardanoPrivateKey: null };
     }
-    return { ...cliConfig, cardanoPrivateKey: signer.value, cardanoWalletSeed: undefined };
+    return { ...cliConfig, cardanoPrivateKey: signer.value, cardanoWalletSeed: null };
   }
 
   const bridge: OracleIntentBridge = {
@@ -361,87 +417,6 @@ export function createRealOracleIntentBridge(
       const { fullIntent } = enriched;
 
       log(`submitOracleUpdate: intentHash=${intentHash} symbol=${fullIntent.symbol}`);
-
-      // ------------------------------------------------------------------
-      // Dynamic imports — keeps the feeder's static dependency graph free
-      // of @lucid-evolution/lucid at typecheck time.
-      // ------------------------------------------------------------------
-      const configMod = cliPath("core/config.js");
-      const lucidMod = cliPath("core/lucid.js");
-      const stateContextMod = cliPath("core/artifact-context.js");
-      const diaIntentMod = cliPath("core/dia-intent.js");
-      const networkTimeMod = cliPath("core/network-time.js");
-      const chainHelpersMod = cliPath("core/chain-helpers.js");
-      const onChainCheckMod = cliPath("core/tx-onchain-check.js");
-      const confirmMod = cliPath("core/tx-confirmation.js");
-      const buildMod = cliPath("lib/transactions/build-oracle-update.js");
-      const stateMod = cliPath("core/state.js");
-      const walletMod = cliPath("wallet/wallet.js");
-      const contractsMod = cliPath("core/contracts.js");
-      const preflightMod = cliPath("preflight/index.js");
-      const intentPathsMod = cliPath("core/intent-paths.js");
-      const depositMod = cliPath("transactions/deposit.js");
-
-      const [
-        { getCliConfig },
-        { makeConfiguredLucidWithConfig, selectConfiguredWalletWithConfig },
-        { readClientContext },
-        {
-          normalizeDiaOracleIntent,
-          recoverDiaOracleIntentWitness,
-          normalizeDiaEip712Domain,
-          diaIntentTokenNameFromSymbol,
-          diaPairIdHex,
-          diaIntentToState,
-          normalizeHex,
-          assertDiaOracleIntentNotExpired,
-        },
-        { getNetworkNow },
-        {
-          findSingleUtxoAtUnit,
-          waitForWalletSettlement,
-          waitForUnitUtxoReplacement,
-          decodePairDatum,
-          decodeReceiverDatum,
-          decodePaymentHookDatum,
-          requireInlineDatum,
-        },
-        { assertTxStillOnChain },
-        { awaitTxConfirmation },
-        { buildOracleUpdateTx },
-        { readOptionalPairState, appendTransactionRecord },
-        { deriveConfiguredWalletDefaults },
-        {
-          mintingPolicyFromCompiledScript,
-          policyIdFromMintingPolicy,
-          spendingValidatorFromCompiledScript,
-          scriptHashFromValidator,
-          scriptAddressFromValidator,
-        },
-        {
-          assertOracleIntentTimestampAndNonceMonotonic,
-          assertOracleUpdateBootstrapRefsResolved,
-          assertPaymentKeyHashIsConfigSigner,
-        },
-        { pairSlugFromSymbol },
-        { selectDepositsForUpdateFold },
-      ] = await Promise.all([
-        import(configMod),
-        import(lucidMod),
-        import(stateContextMod),
-        import(diaIntentMod),
-        import(networkTimeMod),
-        import(chainHelpersMod),
-        import(onChainCheckMod),
-        import(confirmMod),
-        import(buildMod),
-        import(stateMod),
-        import(walletMod),
-        import(contractsMod),
-        import(preflightMod),
-        import(intentPathsMod),
-        import(depositMod),
-      ]);
 
       // ------------------------------------------------------------------
       // 1. Load client + protocol state.
@@ -592,7 +567,7 @@ export function createRealOracleIntentBridge(
 
       const minUtxoLovelace = existingPair?.pairState.minUtxoLovelace ?? protocol.configState.minUtxoLovelace;
 
-      const rawState = buildState({
+      const state = buildState({
         client,
         protocol,
         existingPair,
@@ -603,34 +578,17 @@ export function createRealOracleIntentBridge(
         pairUnit,
         pairValidatorAddress,
         minUtxoLovelace,
-        diaIntentToState,
       });
-      // Cast through a minimal typed view so property access below typechecks.
-      // All fields come from the CLI's JSON state files; the actual shape is
-      // validated at runtime by the CLI helpers themselves.
-      const state = rawState as {
-        scripts: Record<string, string>;
-        pair: Record<string, string>;
-        receiver: Record<string, string>;
-        pairState: Record<string, unknown>;
-        configState: Record<string, unknown>;
-        compiledScripts: Record<string, unknown>;
-        referenceScripts: Record<string, unknown>;
-        transactions?: unknown[];
-      };
       if (pairValidatorHash !== state.scripts.pairValidatorHash) {
         throw new Error("Bridge: pair validator hash does not match the current blueprint.");
       }
       if (normalizeHex(state.pair.pairId, "pair.pairId") !== normalizeHex(pairId, "intent.symbol")) {
         throw new Error(`Bridge: intent symbol ${intent.symbol} does not match pair id ${state.pair.pairId}.`);
       }
-      assertOracleIntentTimestampAndNonceMonotonic({
-        isCreate,
-        intentTimestamp: intent.timestamp,
-        intentNonce: intent.nonce,
-        pairStateTimestamp: state.pairState.timestamp,
-        pairStateNonce: state.pairState.nonce,
-      });
+      // Monotonicity is validated by `buildOracleUpdateTx` against the LIVE
+      // on-chain pair datum (the single source of truth) — not the local
+      // pair-state file. A superseded intent makes the builder throw before any
+      // tx is built; the submitter classifies it as a benign NonMonotonicNonce.
 
       const currentConfigUtxo = await findSingleUtxoAtUnit(
         lucid,
@@ -861,15 +819,10 @@ export function createRealOracleIntentBridge(
         lucid,
         wallet,
         receiverValidatorAddress: state.receiver.receiverValidatorAddress as string,
+        depositValidatorAddress: state.receiver.depositValidatorAddress as string | undefined,
         receiverUnit: state.receiver.receiverUnit as string,
         paymentHookValidatorAddress: state.scripts.paymentHookValidatorAddress,
         paymentHookUnit: state.scripts.paymentHookUnit,
-        helpers: {
-          findSingleUtxoAtUnit,
-          decodeReceiverDatum,
-          decodePaymentHookDatum,
-          requireInlineDatum,
-        },
         log,
       });
 
@@ -877,6 +830,7 @@ export function createRealOracleIntentBridge(
         txHash,
         receiverUnit: state.receiver.receiverUnit as string,
         pairUnit,
+        pairValidatorAddress: state.pair.pairValidatorAddress,
         isCreate,
         feePaidLovelace,
         postState,
@@ -907,7 +861,9 @@ export function createRealOracleIntentBridge(
           entries: [{
             intentHash: single!.intentHash,
             pairUnit: result.pairUnit,
+            pairValidatorAddress: result.pairValidatorAddress,
             isCreate: result.isCreate,
+            skipped: false,
           }],
           postState: result.postState,
         };
@@ -916,80 +872,6 @@ export function createRealOracleIntentBridge(
       log(
         `submitOracleUpdateBatch: intents=${updates.length} symbols=${updates.map((update) => update.enriched.fullIntent.symbol).join(", ")}`,
       );
-
-      const configMod = cliPath("core/config.js");
-      const lucidMod = cliPath("core/lucid.js");
-      const stateContextMod = cliPath("core/artifact-context.js");
-      const diaIntentMod = cliPath("core/dia-intent.js");
-      const networkTimeMod = cliPath("core/network-time.js");
-      const chainHelpersMod = cliPath("core/chain-helpers.js");
-      const onChainCheckMod = cliPath("core/tx-onchain-check.js");
-      const confirmMod = cliPath("core/tx-confirmation.js");
-      const buildMod = cliPath("lib/transactions/build-batch-oracle-update.js");
-      const stateMod = cliPath("core/state.js");
-      const walletMod = cliPath("wallet/wallet.js");
-      const contractsMod = cliPath("core/contracts.js");
-      const preflightMod = cliPath("preflight/index.js");
-      const intentPathsMod = cliPath("core/intent-paths.js");
-
-      const [
-        { getCliConfig },
-        { makeConfiguredLucidWithConfig, selectConfiguredWalletWithConfig },
-        { readClientContext },
-        {
-          normalizeDiaOracleIntent,
-          recoverDiaOracleIntentWitness,
-          normalizeDiaEip712Domain,
-          diaIntentTokenNameFromSymbol,
-          diaPairIdHex,
-          diaIntentToState,
-          normalizeHex,
-          assertDiaOracleIntentNotExpired,
-        },
-        { getNetworkNow },
-        {
-          findSingleUtxoAtUnit,
-          waitForWalletSettlement,
-          waitForUnitUtxoReplacement,
-          decodePairDatum,
-          decodeReceiverDatum,
-          decodePaymentHookDatum,
-          requireInlineDatum,
-        },
-        { assertTxStillOnChain },
-        { awaitTxConfirmation },
-        { buildBatchOracleUpdateTx },
-        { readOptionalPairState, appendTransactionRecord },
-        { deriveConfiguredWalletDefaults },
-        {
-          mintingPolicyFromCompiledScript,
-          policyIdFromMintingPolicy,
-          spendingValidatorFromCompiledScript,
-          scriptHashFromValidator,
-          scriptAddressFromValidator,
-        },
-        {
-          assertOracleIntentTimestampAndNonceMonotonic,
-          assertOracleUpdateBootstrapRefsResolved,
-          assertPaymentKeyHashIsConfigSigner,
-        },
-        { pairSlugFromSymbol },
-      ] = await Promise.all([
-        import(configMod),
-        import(lucidMod),
-        import(stateContextMod),
-        import(diaIntentMod),
-        import(networkTimeMod),
-        import(chainHelpersMod),
-        import(onChainCheckMod),
-        import(confirmMod),
-        import(buildMod),
-        import(stateMod),
-        import(walletMod),
-        import(contractsMod),
-        import(preflightMod),
-        import(intentPathsMod),
-      ]);
 
       const { client, protocol } = await readClientContext({
         clientStatePath: path.resolve(clientStatePath),
@@ -1029,23 +911,19 @@ export function createRealOracleIntentBridge(
 
       const preparedEntries: Array<{
         update: OracleIntentBatchSubmitParams["updates"][number];
-        state: {
-          scripts: Record<string, string>;
-          pair: Record<string, string>;
-          receiver: Record<string, string>;
-          pairState: Record<string, unknown>;
-          configState: Record<string, unknown>;
-          compiledScripts: Record<string, unknown>;
-          referenceScripts: Record<string, unknown>;
-          transactions?: unknown[];
-        };
+        state: CombinedUpdateState;
         pairStatePath: string;
         pairUnit: string;
         isCreate: boolean;
-        currentPairUtxo: { txHash: string; outputIndex: number; datum?: string } | null;
+        currentPairUtxo: UTxO | null;
         intent: Awaited<ReturnType<typeof normalizeDiaOracleIntent>>;
         witness: Awaited<ReturnType<typeof recoverDiaOracleIntentWitness>>;
       }> = [];
+
+      // Candidates dropped because their intent does not strictly beat the
+      // live on-chain pair datum — already superseded on chain. Reported
+      // benignly (not failed): no tx, no fee, retried on the next DIA intent.
+      const skippedEntries: Array<{ intentHash: string; pairUnit: string; pairValidatorAddress: string }> = [];
 
       let requiresConfigSigner = false;
 
@@ -1131,7 +1009,7 @@ export function createRealOracleIntentBridge(
         const minUtxoLovelace =
           existingPair?.pairState.minUtxoLovelace ?? protocol.configState.minUtxoLovelace;
 
-        const rawState = buildState({
+        const state = buildState({
           client,
           protocol,
           existingPair,
@@ -1142,18 +1020,7 @@ export function createRealOracleIntentBridge(
           pairUnit,
           pairValidatorAddress,
           minUtxoLovelace,
-          diaIntentToState,
         });
-        const state = rawState as {
-          scripts: Record<string, string>;
-          pair: Record<string, string>;
-          receiver: Record<string, string>;
-          pairState: Record<string, unknown>;
-          configState: Record<string, unknown>;
-          compiledScripts: Record<string, unknown>;
-          referenceScripts: Record<string, unknown>;
-          transactions?: unknown[];
-        };
 
         if (pairValidatorHash !== state.scripts.pairValidatorHash) {
           throw new Error("Bridge: pair validator hash does not match the current blueprint.");
@@ -1161,13 +1028,27 @@ export function createRealOracleIntentBridge(
         if (normalizeHex(state.pair.pairId, "pair.pairId") !== normalizeHex(pairId, "intent.symbol")) {
           throw new Error(`Bridge: intent symbol ${intent.symbol} does not match pair id ${state.pair.pairId}.`);
         }
-        assertOracleIntentTimestampAndNonceMonotonic({
-          isCreate,
-          intentTimestamp: intent.timestamp,
-          intentNonce: intent.nonce,
-          pairStateTimestamp: state.pairState.timestamp,
-          pairStateNonce: state.pairState.nonce,
-        });
+        // Validate against the LIVE on-chain pair datum — the single source of
+        // truth — not the local pair-state file (which can drift behind chain).
+        // A non-create intent that does not strictly beat the on-chain
+        // (timestamp, nonce) is already superseded on chain: skip it so it never
+        // poisons the atomic batch (one stale pair would revert the whole tx and
+        // waste the fee). It is reported benignly and retried on the next DIA
+        // intent. The builder re-asserts this as a final guard.
+        if (!isCreate && currentPairUtxo?.datum) {
+          const onChain = decodePairDatum(currentPairUtxo.datum);
+          const beatsOnChain =
+            intent.timestamp > BigInt(onChain.timestamp) && intent.nonce > BigInt(onChain.nonce);
+          if (!beatsOnChain) {
+            log(
+              `submitOracleUpdateBatch: skipping ${fullIntent.symbol} — intent ` +
+                `(ts=${intent.timestamp}, nonce=${intent.nonce}) does not beat on-chain ` +
+                `(ts=${onChain.timestamp}, nonce=${onChain.nonce}); superseded.`,
+            );
+            skippedEntries.push({ intentHash: update.intentHash, pairUnit, pairValidatorAddress });
+            continue;
+          }
+        }
 
         preparedEntries.push({
           update,
@@ -1194,6 +1075,25 @@ export function createRealOracleIntentBridge(
 
       const [firstEntry] = preparedEntries;
       if (!firstEntry) {
+        // Every candidate was superseded on chain — nothing to build or submit.
+        // Report all as benign skips: no tx, no fee. The submitter maps each to
+        // a NonMonotonicNonce-equivalent (benign) result.
+        if (skippedEntries.length > 0) {
+          log(
+            `submitOracleUpdateBatch: all ${skippedEntries.length} candidate(s) superseded on chain; no tx submitted.`,
+          );
+          return {
+            txHash: "",
+            receiverUnit: "",
+            entries: skippedEntries.map((e) => ({
+              intentHash: e.intentHash,
+              pairUnit: e.pairUnit,
+              pairValidatorAddress: e.pairValidatorAddress,
+              isCreate: false,
+              skipped: true,
+            })),
+          };
+        }
         throw new Error("Bridge: batch submission requires at least one prepared entry.");
       }
 
@@ -1209,11 +1109,12 @@ export function createRealOracleIntentBridge(
         firstEntry.state.receiver.receiverUnit,
         "receiver",
       );
-      const currentPairUtxoByUnit = new Map(
-        preparedEntries
-          .filter((entry) => !entry.isCreate && entry.currentPairUtxo)
-          .map((entry) => [entry.pairUnit, entry.currentPairUtxo]),
-      );
+      const currentPairUtxoByUnit = new Map<string, UTxO>();
+      for (const entry of preparedEntries) {
+        if (!entry.isCreate && entry.currentPairUtxo) {
+          currentPairUtxoByUnit.set(entry.pairUnit, entry.currentPairUtxo);
+        }
+      }
 
       emitBatchStep(updates, "building");
       const { txSignBuilder, updatedPairStates } = await buildBatchOracleUpdateTx(lucid, {
@@ -1327,26 +1228,32 @@ export function createRealOracleIntentBridge(
         lucid,
         wallet,
         receiverValidatorAddress: firstEntry.state.receiver.receiverValidatorAddress as string,
+        depositValidatorAddress: firstEntry.state.receiver.depositValidatorAddress as string | undefined,
         receiverUnit: firstEntry.state.receiver.receiverUnit as string,
         paymentHookValidatorAddress: firstEntry.state.scripts.paymentHookValidatorAddress,
         paymentHookUnit: firstEntry.state.scripts.paymentHookUnit,
-        helpers: {
-          findSingleUtxoAtUnit,
-          decodeReceiverDatum,
-          decodePaymentHookDatum,
-          requireInlineDatum,
-        },
         log,
       });
 
       return {
         txHash,
         receiverUnit: firstEntry.state.receiver.receiverUnit as string,
-        entries: preparedEntries.map((entry) => ({
-          intentHash: entry.update.intentHash,
-          pairUnit: entry.pairUnit,
-          isCreate: entry.isCreate,
-        })),
+        entries: [
+          ...preparedEntries.map((entry) => ({
+            intentHash: entry.update.intentHash,
+            pairUnit: entry.pairUnit,
+            pairValidatorAddress: entry.state.pair.pairValidatorAddress,
+            isCreate: entry.isCreate,
+            skipped: false,
+          })),
+          ...skippedEntries.map((e) => ({
+            intentHash: e.intentHash,
+            pairUnit: e.pairUnit,
+            pairValidatorAddress: e.pairValidatorAddress,
+            isCreate: false,
+            skipped: true,
+          })),
+        ],
         postState,
       };
     },
@@ -1358,23 +1265,6 @@ export function createRealOracleIntentBridge(
       // Read-only balance probe used by the daemon's periodic refresh. Reuses
       // the same on-chain reads as the post-confirm capture, but sets up Lucid
       // with no signer override and never builds or submits a tx.
-      const [
-        { getCliConfig },
-        { makeConfiguredLucidWithConfig, selectConfiguredWalletWithConfig },
-        { readClientContext },
-        {
-          findSingleUtxoAtUnit,
-          decodeReceiverDatum,
-          decodePaymentHookDatum,
-          requireInlineDatum,
-        },
-      ] = await Promise.all([
-        import(cliPath("core/config.js")),
-        import(cliPath("core/lucid.js")),
-        import(cliPath("core/artifact-context.js")),
-        import(cliPath("core/chain-helpers.js")),
-      ]);
-
       const { client, protocol } = await readClientContext({
         clientStatePath: path.resolve(params.clientStatePath),
         protocolStatePath: path.resolve(params.protocolStatePath),
@@ -1400,15 +1290,10 @@ export function createRealOracleIntentBridge(
         lucid,
         wallet,
         receiverValidatorAddress: receiver.receiverValidatorAddress as string,
+        depositValidatorAddress: receiver.depositValidatorAddress as string | undefined,
         receiverUnit: receiver.receiverUnit as string,
         paymentHookValidatorAddress: protocolScripts.paymentHookValidatorAddress as string,
         paymentHookUnit: protocolScripts.paymentHookUnit as string,
-        helpers: {
-          findSingleUtxoAtUnit,
-          decodeReceiverDatum,
-          decodePaymentHookDatum,
-          requireInlineDatum,
-        },
         log,
       });
 
@@ -1462,15 +1347,13 @@ export function createRealOracleIntentBridge(
       clientStatePath: string;
       protocolStatePath: string;
     }): Promise<{ txHash: string | null; confirmed: boolean }> {
-      // Delegate to the CLI's `depositMerge` tx builder via the same dynamic-
-      // import pattern the update path uses, so the feeder keeps a single
-      // source of truth for the merge tx shape (TopUp redeemer + deposit
+      // Delegate to the CLI's `depositMerge` tx builder so the feeder keeps a
+      // single source of truth for the merge tx shape (TopUp redeemer + deposit
       // UTxOs). build-only is false: this submits and awaits confirmation.
       // Serialization against the update lane is the CALLER's responsibility
       // (the daemon holds the lane lock around this call) — `depositMerge`
       // itself spends the live Receiver UTxO with no awareness of in-flight
       // updates.
-      const { depositMerge } = await import(cliPath("transactions/deposit.js"));
       log(`mergeDeposits: client=${params.clientStatePath}`);
       const result = (await depositMerge({
         clientStatePath: path.resolve(params.clientStatePath),
@@ -1509,29 +1392,13 @@ export function createRealOracleIntentBridge(
  * Called once at the tail of every confirmed oracle update (single or batch).
  */
 async function capturePostConfirmState(args: {
-  lucid: unknown;
+  lucid: Parameters<typeof findSingleUtxoAtUnit>[0];
   wallet: { getUtxos(): Promise<Array<{ assets: Record<string, bigint> }>> };
   receiverValidatorAddress: string;
+  depositValidatorAddress?: string;
   receiverUnit: string;
   paymentHookValidatorAddress: string;
   paymentHookUnit: string;
-  helpers: {
-    findSingleUtxoAtUnit: (
-      lucid: unknown,
-      address: string,
-      unit: string,
-      label: string,
-    ) => Promise<{ datum?: string | null }>;
-    decodeReceiverDatum: (raw: string) => {
-      balanceLovelace: string;
-      accruedToHookLovelace: string;
-    };
-    decodePaymentHookDatum: (
-      raw: string,
-      withdrawAddress?: string,
-    ) => { accruedFeesLovelace: string };
-    requireInlineDatum: (utxo: { datum?: string | null }, label: string) => string;
-  };
   log: (line: string) => void;
 }): Promise<{
   receiverBalanceLovelace?: bigint;
@@ -1539,6 +1406,7 @@ async function capturePostConfirmState(args: {
   paymentHookAccruedLovelace?: bigint;
   adminWalletLovelace?: bigint;
   receiverAddress?: string;
+  depositAddress?: string;
 }> {
   const result: {
     receiverBalanceLovelace?: bigint;
@@ -1546,22 +1414,24 @@ async function capturePostConfirmState(args: {
     paymentHookAccruedLovelace?: bigint;
     adminWalletLovelace?: bigint;
     receiverAddress?: string;
+    depositAddress?: string;
   } = {
     // Known from the inputs (not a chain query) — always available so the
-    // ReceiverBalanceLow alert can always name the client's Receiver address.
+    // ReceiverBalanceLow alert can name the Receiver and funding address.
     receiverAddress: args.receiverValidatorAddress,
+    depositAddress: args.depositValidatorAddress,
   };
 
   // 1. Receiver datum — exposes balanceLovelace + accruedToHookLovelace.
   try {
-    const receiverUtxo = await args.helpers.findSingleUtxoAtUnit(
+    const receiverUtxo = await findSingleUtxoAtUnit(
       args.lucid,
       args.receiverValidatorAddress,
       args.receiverUnit,
       "receiver",
     );
-    const state = args.helpers.decodeReceiverDatum(
-      args.helpers.requireInlineDatum(receiverUtxo, "receiver"),
+    const state = decodeReceiverDatum(
+      requireInlineDatum(receiverUtxo, "receiver"),
     );
     result.receiverBalanceLovelace = BigInt(state.balanceLovelace);
     result.receiverAccruedLovelace = BigInt(state.accruedToHookLovelace);
@@ -1571,14 +1441,17 @@ async function capturePostConfirmState(args: {
 
   // 2. PaymentHook datum — exposes accruedFeesLovelace.
   try {
-    const hookUtxo = await args.helpers.findSingleUtxoAtUnit(
+    const hookUtxo = await findSingleUtxoAtUnit(
       args.lucid,
       args.paymentHookValidatorAddress,
       args.paymentHookUnit,
       "payment hook",
     );
-    const state = args.helpers.decodePaymentHookDatum(
-      args.helpers.requireInlineDatum(hookUtxo, "payment hook"),
+    // withdrawAddress is only echoed back in the decoded struct; this probe
+    // reads accruedFeesLovelace only, so the value passed here is irrelevant.
+    const state = decodePaymentHookDatum(
+      requireInlineDatum(hookUtxo, "payment hook"),
+      "",
     );
     result.paymentHookAccruedLovelace = BigInt(state.accruedFeesLovelace);
   } catch (error) {
@@ -1636,31 +1509,23 @@ export function isCleanAdaDepositUtxo(
  * merging client + protocol state files the same way `update.ts` does.
  */
 function buildState(args: {
-  client: Record<string, unknown>;
-  protocol: Record<string, unknown>;
-  existingPair: Record<string, unknown> | null;
-  intent: Record<string, unknown>;
+  client: ClientStateArtifact;
+  protocol: ConfigStateArtifact;
+  existingPair: PairStateArtifact | null;
+  intent: DiaOracleIntent;
   walletAddress: string;
   pairTokenName: string;
   pairId: string;
   pairUnit: string;
   pairValidatorAddress: string;
   minUtxoLovelace: string | number | bigint;
-  diaIntentToState: (intent: Record<string, unknown>) => unknown;
-}): Record<string, unknown> {
+}): CombinedUpdateState {
   const { client, protocol, existingPair } = args;
-  const defaultPairState = {
-    pairId: args.pairId,
-    price: "0",
-    timestamp: "0",
-    nonce: "0",
-    intentHash: "00".repeat(32),
-    signer: "00".repeat(20),
-    minUtxoLovelace: args.minUtxoLovelace,
-    intent: args.diaIntentToState(args.intent),
-  };
+  if (!client.receiver) {
+    throw new Error("buildState: client state has no receiver — run receiver:bootstrap first.");
+  }
 
-  const pair = existingPair ?? {
+  const pair: PairStateArtifact = existingPair ?? {
     wallet: { source: "seed", address: args.walletAddress },
     pair: {
       tokenName: args.pairTokenName,
@@ -1668,29 +1533,30 @@ function buildState(args: {
       pairUnit: args.pairUnit,
       pairValidatorAddress: args.pairValidatorAddress,
     },
-    pairState: defaultPairState,
+    pairState: {
+      pairId: args.pairId,
+      price: "0",
+      timestamp: "0",
+      nonce: "0",
+      intentHash: "00".repeat(32),
+      signer: "00".repeat(20),
+      minUtxoLovelace: String(args.minUtxoLovelace),
+      intent: diaIntentToState(args.intent),
+    },
     datum: { pairCbor: "" },
   };
 
   return {
-    ...(pair as object),
-    scripts: {
-      ...(protocol as Record<string, unknown>),
-      ...(client as Record<string, unknown>),
-      ...((protocol as Record<string, Record<string, unknown>>).scripts ?? {}),
-      ...((client as Record<string, Record<string, unknown>>).scripts ?? {}),
-    },
-    configState: (protocol as Record<string, Record<string, unknown>>).configState,
-    compiledScripts: {
-      ...((protocol as Record<string, Record<string, unknown>>).compiledScripts ?? {}),
-      ...((client as Record<string, Record<string, unknown>>).compiledScripts ?? {}),
-    },
-    referenceScripts: {
-      ...((protocol as Record<string, Record<string, unknown>>).referenceScripts ?? {}),
-      ...((client as Record<string, Record<string, unknown>>).referenceScripts ?? {}),
-    },
-    receiver: (client as Record<string, unknown>).receiver,
-    transactions: (pair as Record<string, unknown>).transactions,
+    wallet: pair.wallet,
+    pair: pair.pair,
+    pairState: pair.pairState,
+    datum: pair.datum,
+    transactions: pair.transactions,
+    scripts: { ...protocol.scripts, ...client.scripts },
+    compiledScripts: { ...protocol.compiledScripts, ...client.compiledScripts },
+    referenceScripts: { ...protocol.referenceScripts, ...client.referenceScripts },
+    configState: protocol.configState,
+    receiver: client.receiver,
   };
 }
 

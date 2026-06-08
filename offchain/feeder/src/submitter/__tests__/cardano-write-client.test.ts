@@ -193,6 +193,63 @@ describe("createCardanoWriteClient", () => {
     assert.ok(stepEvents.some((event) => event.intentHash === "intent-2" && event.step === "submitted"));
   });
 
+  it("maps a skipped (superseded) batch entry to a benign NonMonotonicNonce result, keeping the built one confirmed", async () => {
+    const transactions: TransactionLogEntry[] = [];
+    const stepEvents: Array<{ intentHash: string; step: string }> = [];
+
+    const bridge: OracleIntentBridge = {
+      async snapshotBalances() { return {}; },
+      async mergeDeposits() { return { txHash: null, confirmed: false }; },
+      async submitOracleUpdate() {
+        throw new Error("unexpected single call");
+      },
+      async submitOracleUpdateBatch(params) {
+        for (const update of params.updates) {
+          emitStandardSteps(update.onStep, "tx-batch");
+        }
+        return {
+          txHash: "tx-batch",
+          receiverUnit: "receiver-unit",
+          entries: [
+            // intent-1 was built into the tx; intent-2 was superseded on chain
+            // and dropped before building (skipped) — no tx, benign.
+            { intentHash: params.updates[0]!.intentHash, pairUnit: "pair-btc", pairValidatorAddress: "addr-btc", isCreate: false, skipped: false },
+            { intentHash: params.updates[1]!.intentHash, pairUnit: "pair-eth", pairValidatorAddress: "addr-eth", isCreate: false, skipped: true },
+          ],
+        };
+      },
+    };
+
+    const client = createCardanoWriteClient(
+      "state/preview/clients/client-a.json",
+      "state/preview/config-bootstrap.json",
+      {
+        bridge,
+        onStep: (intentHash, _symbol, step) => {
+          stepEvents.push({ intentHash, step });
+        },
+        onTransaction: async (entry) => {
+          transactions.push(entry);
+        },
+      },
+    );
+
+    const results = await client.submitBatch([
+      makeRequest("intent-1", "BTC/USD"),
+      makeRequest("intent-2", "ETH/USD"),
+    ]);
+
+    assert.equal(results.length, 2);
+    // Built entry → confirmed; batch membership counts only the built one.
+    assert.equal(results[0]?.ok, true);
+    assert.equal(results[0] && "batch" in results[0] && results[0].batch?.size, 1);
+    // Skipped entry → benign NonMonotonicNonce, NOT a hard failure, no tx hash.
+    assert.equal(results[1]?.ok, false);
+    assert.equal(results[1] && !results[1].ok && results[1].code, "NonMonotonicNonce");
+    // Exactly one confirmed-tx report (the built tx), none for the skipped one.
+    assert.equal(transactions.filter((t) => t.status === "confirmed").length, 1);
+  });
+
   it("fans out a batch failure to every request with structured errors", async () => {
     const transactions: TransactionLogEntry[] = [];
 

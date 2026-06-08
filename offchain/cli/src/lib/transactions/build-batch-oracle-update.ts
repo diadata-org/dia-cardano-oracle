@@ -12,12 +12,14 @@ import { completeWithRetry } from "../../core/tx-build.js";
 import {
   buildPairDatumCbor,
   buildReceiverDatumCbor,
+  decodePairDatum,
   decodeReceiverDatum,
   requireInlineDatum,
   splitUnit,
   updateWitnessData,
 } from "../../core/chain-helpers.js";
 import { buildPairApplyUpdateRedeemer } from "../../core/redeemers.js";
+import { assertOracleIntentTimestampAndNonceMonotonic } from "../../preflight/oracle-update.js";
 import {
   resolvePairArtifact,
   sortBatchUpdatesByPairTokenName,
@@ -103,6 +105,26 @@ export async function buildBatchOracleUpdateTx(
   );
 
   const preparedUpdates = resolvedEntries.map(({ artifact, intent, witness, isCreate }) => {
+    // Validate each non-create entry against the LIVE on-chain pair datum (the
+    // ground truth), not the local pair-state artifact which can drift behind
+    // the chain. One entry that does not strictly beat its on-chain
+    // (timestamp, nonce) would make the atomic batch revert on submit and waste
+    // the fee, so the builder refuses to assemble it. The feeder pre-filters
+    // such entries out of the batch upstream; the CLI surfaces the throw.
+    if (!isCreate) {
+      const currentPairUtxo = ctx.currentPairUtxoByUnit.get(artifact.pair.pairUnit);
+      if (currentPairUtxo) {
+        const onChainPair = decodePairDatum(requireInlineDatum(currentPairUtxo, "pair"));
+        assertOracleIntentTimestampAndNonceMonotonic({
+          isCreate: false,
+          intentTimestamp: intent.timestamp,
+          intentNonce: intent.nonce,
+          pairStateTimestamp: onChainPair.timestamp,
+          pairStateNonce: onChainPair.nonce,
+          batchStatePath: artifact.pair.pairUnit,
+        });
+      }
+    }
     const nextPairState = {
       ...artifact.pairState,
       price: intent.price.toString(),

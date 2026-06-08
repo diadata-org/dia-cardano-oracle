@@ -195,6 +195,21 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
           continue;
         }
 
+        // Nonce pre-filter: the pair_state contract requires the new intent's
+        // nonce to be STRICTLY greater than the on-chain one. DIA advances the
+        // per-pair nonce slowly, so a cached intent with a fresh HASH can still
+        // carry a nonce that does not beat the last confirmed one. Resubmitting
+        // it would be dropped at build time (superseded) — a wasted pipeline
+        // pass. Skip it here when we know the confirmed nonce. (The bridge's
+        // on-chain datum check remains the authoritative guard.)
+        if (
+          confirmed.nonce !== undefined &&
+          latest.enriched.fullIntent.nonce <= confirmed.nonce
+        ) {
+          options.metrics.cronResubmissions.inc({ ...labels, outcome: "skipped_superseded" });
+          continue;
+        }
+
         const request: SubmitRequest = {
           intentHash: latest.intentHash,
           enriched: latest.enriched,

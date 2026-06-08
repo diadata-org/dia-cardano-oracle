@@ -83,7 +83,13 @@ export async function resolveIntentTimingFromNetwork(args: {
   const nonceBump = args.nonceBump ?? 0n;
   const timestamp = now.unixTimeSec.toString();
   const expiry = (now.unixTimeSec + args.expirySeconds).toString();
-  const nonce = (BigInt(now.unixTimeMs) + nonceBump).toString();
+  // Nonce in NANOSECONDS to share DIA's real OracleIntent nonce scale (DIA
+  // emits ~unix-nanoseconds, e.g. 1.78e18). unixTimeMs has second precision
+  // here (Cardano slots are 1s); ×1e6 lifts it to ns so demo/example intents
+  // live in the same unit as real DIA feeds — a demo-bootstrapped pair can then
+  // be superseded by real DIA intents monotonically. `nonceBump` keeps intents
+  // within the same second strictly increasing.
+  const nonce = (BigInt(now.unixTimeMs) * 1_000_000n + nonceBump).toString();
 
   return { timestamp, expiry, nonce };
 }

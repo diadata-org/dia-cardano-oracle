@@ -142,6 +142,7 @@ export function createCardanoWriteClient(
         intentHash,
         receiverUnit: result.receiverUnit,
         pairUnit: result.pairUnit,
+        pairValidatorAddress: result.pairValidatorAddress,
         pairAction: result.isCreate ? "mint" : "update",
         feePaidLovelace: result.feePaidLovelace,
         postState: result.postState,
@@ -222,15 +223,19 @@ export function createCardanoWriteClient(
         const entryByIntentHash = new Map(
           result.entries.map((entry) => [entry.intentHash, entry]),
         );
+        // Batch membership = the requests the bridge actually built into the
+        // submitted tx, in REQUEST order. `skipped` entries were superseded on
+        // chain and dropped before building (no tx, no fee) — they must not
+        // appear in the confirmed batch membership.
+        const builtRequests = requests.filter((request) => {
+          const entry = entryByIntentHash.get(request.intentHash);
+          return entry !== undefined && !entry.skipped;
+        });
+        const allSkipped = builtRequests.length === 0;
         const batch: BatchSubmissionInfo = {
-          size: requests.length,
-          members: requests.map((request) => {
-            const entry = entryByIntentHash.get(request.intentHash);
-            if (!entry) {
-              throw new Error(
-                `Bridge batch result missing intentHash=${request.intentHash}.`,
-              );
-            }
+          size: builtRequests.length,
+          members: builtRequests.map((request) => {
+            const entry = entryByIntentHash.get(request.intentHash)!;
             return {
               intentHash: request.intentHash,
               symbol: request.enriched.fullIntent.symbol,
@@ -240,7 +245,6 @@ export function createCardanoWriteClient(
           }),
         };
         const total_ms = Date.now() - startMs;
-        const primary = batch.members[0]!;
 
         const results = requests.map<SubmitResult>((request) => {
           const entry = entryByIntentHash.get(request.intentHash);
@@ -249,18 +253,45 @@ export function createCardanoWriteClient(
               `Bridge batch result missing intentHash=${request.intentHash}.`,
             );
           }
+          if (entry.skipped) {
+            // Superseded on chain before building — benign. Reported as the
+            // same NonMonotonicNonce the daemon already remediates (a newer
+            // intent is on chain; retried when DIA emits the next one). No fee.
+            const { code, remediation } = classifyError(
+              new Error("Oracle intent nonce must be greater than the current nonce."),
+            );
+            return {
+              ok: false,
+              intentHash: request.intentHash,
+              error: new Error(
+                `Intent for ${request.enriched.fullIntent.symbol} superseded on chain; not submitted.`,
+              ),
+              code,
+              remediation,
+              batch: allSkipped ? undefined : batch,
+            };
+          }
           return {
             ok: true,
             cardanoTxHash: result.txHash,
             intentHash: request.intentHash,
             receiverUnit: result.receiverUnit,
             pairUnit: entry.pairUnit,
+            pairValidatorAddress: entry.pairValidatorAddress,
             pairAction: entry.isCreate ? "mint" : "update",
             batch,
             postState: result.postState,
           };
         });
 
+        if (allSkipped) {
+          log(
+            `[${label}] batch: all ${requests.length} intent(s) superseded on chain; no tx submitted.`,
+          );
+          return results;
+        }
+
+        const primary = batch.members[0]!;
         await deps.onTransaction?.({
           ts: new Date().toISOString(),
           txHash: result.txHash,
@@ -276,7 +307,7 @@ export function createCardanoWriteClient(
         });
 
         log(
-          `[${label}] batch confirmed: txHash=${result.txHash} intents=${requests.length} receiverUnit=${result.receiverUnit} ` +
+          `[${label}] batch confirmed: txHash=${result.txHash} built=${builtRequests.length} skipped=${requests.length - builtRequests.length} receiverUnit=${result.receiverUnit} ` +
           `members=${batch.members.map((member) => `${member.symbol}:${member.action}`).join(",")}`,
         );
         return results;

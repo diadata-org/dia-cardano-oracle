@@ -220,3 +220,16 @@ export const DEFAULT_INIT_PAIRS = [
   "DOGE/USD", "LTC/USD", "ARB/USD", "SHIB/USD",
   "NEIRO/USD", "XVG/USD",
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Cardano network magic — the canonical numeric identifier of a Cardano
+// network (protocol constant, not a tunable). Used as the `chain_id` key of
+// `contract_symbol_updates` (the Cardano analogue of a Spectra destination
+// chain id), so the per-(client, symbol) rollup is namespaced per network.
+// ---------------------------------------------------------------------------
+
+/** Cardano network magic by network. Preview testnet = 2, Mainnet = 764824073. */
+export const CARDANO_NETWORK_MAGIC: Record<"Preview" | "Mainnet", number> = {
+  Preview: 2,
+  Mainnet: 764824073,
+};
