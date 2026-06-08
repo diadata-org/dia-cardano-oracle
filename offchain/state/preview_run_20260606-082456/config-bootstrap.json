@@ -56,9 +56,9 @@
   },
   "paymentHookState": {
     "withdrawAddress": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
-    "accruedFeesLovelace": "2450000",
+    "accruedFeesLovelace": "0",
     "lifetimeCollectedLovelace": "12450000",
-    "lifetimeWithdrawnLovelace": "10000000",
+    "lifetimeWithdrawnLovelace": "12450000",
     "minUtxoLovelace": "5000000"
   },
   "compiledScripts": {
@@ -84,25 +84,25 @@
   "referenceScripts": {
     "global": {
       "config": {
-        "txHash": "22885dc23a42693f164dbda3fec55e2016a00c2a4ed5601283725d474e22326c",
+        "txHash": "",
         "outputIndex": 0,
-        "scriptHash": "f9b219bf3515a95594ffc977c8c415613d7365c02c151aeb2dbe4834"
+        "scriptHash": ""
       },
       "coordinator": {
-        "txHash": "22885dc23a42693f164dbda3fec55e2016a00c2a4ed5601283725d474e22326c",
-        "outputIndex": 1,
-        "scriptHash": "fdff8d2d4bf3c9c1f041dddffe48d1dd6a07157a2526808f740e95dc"
+        "txHash": "",
+        "outputIndex": 0,
+        "scriptHash": ""
       },
       "paymentHook": {
-        "txHash": "6551697fb379b797d3e3c732a7e0058576e381ff91955e3bd547f11cbe41aebe",
+        "txHash": "",
         "outputIndex": 0,
-        "scriptHash": "41e9911905cce7df4f152a5b2bb918fec13e0856d8072b767a50de3d"
+        "scriptHash": ""
       }
     }
   },
   "datum": {
     "configCbor": "d8799f9f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dff9f582102d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531ffd8799f4a444941204f7261636c6543312e3019274254f8c614a483a0427a13512f52ac72a576678be317ff1a000927c01a0003d090d8799fd8799f581c41e9911905cce7df4f152a5b2bb918fec13e0856d8072b767a50de3d504449415f5041594d454e545f484f4f4bffffd8799fd87a9f581cfdff8d2d4bf3c9c1f041dddffe48d1dd6a07157a2526808f740e95dcffff19012c1a004c4b40ff",
-    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a002562501a00bdf8d01a009896801a004c4b40ff"
+    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff001a00bdf8d01a00bdf8d01a004c4b40ff"
   },
   "transactions": [
     {
@@ -143,6 +143,21 @@
     {
       "step": "preview:payment-hook:reference-script",
       "submittedTxHash": "6551697fb379b797d3e3c732a7e0058576e381ff91955e3bd547f11cbe41aebe",
+      "confirmed": true
+    },
+    {
+      "step": "preview:payment-hook:withdraw",
+      "submittedTxHash": "400966e2e4fe2481af53fe7ed90dd169a9c13b6eb40c7c3724f741e37d88f0ea",
+      "confirmed": true
+    },
+    {
+      "step": "reclaim-reference-script:payment-hook",
+      "submittedTxHash": "8a836348a3d4aae81f0929dc5326e5cb822365f72c48ded1f002dbb15d49bc65",
+      "confirmed": true
+    },
+    {
+      "step": "reclaim-reference-script:config",
+      "submittedTxHash": "c1bb75c598e71045b6d92f5a64182a2f66697c45db255c0b495954f8de784224",
       "confirmed": true
     }
   ]

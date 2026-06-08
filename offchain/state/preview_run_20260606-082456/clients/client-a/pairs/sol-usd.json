@@ -32,7 +32,7 @@
     }
   },
   "datum": {
-    "pairCbor": "d8799f47534f4c2f5553441b000000044f482f801a6a23e9af1b0000019e9c48d3985820ad533ca5fc6c25ce2575918037a8c27075378a6359e2f30b7c905dc10310925e542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+    "pairCbor": ""
   },
   "transactions": [
     {
@@ -44,6 +44,17 @@
       "step": "preview:update:batch",
       "submittedTxHash": "88d52ff51063b0d0da9f9d51448e762e9198a462e94cd2ee29161bf7d65c83f8",
       "confirmed": true
+    },
+    {
+      "step": "preview:pair:burn",
+      "submittedTxHash": "51075464be512b61a9515b7f1306ff9188cb81b1368bc52198a1108c8aae0ebe",
+      "confirmed": true
     }
-  ]
+  ],
+  "teardown": {
+    "status": "orphaned",
+    "orphaned": true,
+    "reason": "pair NFT not present at client pair address at teardown time",
+    "recordedAt": "2026-06-08T03:23:22.995Z"
+  }
 }

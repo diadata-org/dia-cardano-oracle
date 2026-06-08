@@ -22,19 +22,19 @@
   "referenceScripts": {
     "client": {
       "receiver": {
-        "txHash": "14cd07f4fbbab3e8639833c7eb424e0b8ceb755e67f72989ec31ac2c5403db07",
+        "txHash": "",
         "outputIndex": 0,
-        "scriptHash": "e9b20749e6425daa670bcffbbc84f494e7e7009ec80560b26f2f0d2b"
+        "scriptHash": ""
       },
       "pair": {
-        "txHash": "14cd07f4fbbab3e8639833c7eb424e0b8ceb755e67f72989ec31ac2c5403db07",
-        "outputIndex": 1,
-        "scriptHash": "9f80dd966e4a06cce7efd25f6267b15da7a5dc4cc3157e78928fe288"
+        "txHash": "",
+        "outputIndex": 0,
+        "scriptHash": ""
       },
       "pairMint": {
-        "txHash": "14cd07f4fbbab3e8639833c7eb424e0b8ceb755e67f72989ec31ac2c5403db07",
-        "outputIndex": 2,
-        "scriptHash": "9f80dd966e4a06cce7efd25f6267b15da7a5dc4cc3157e78928fe288"
+        "txHash": "",
+        "outputIndex": 0,
+        "scriptHash": ""
       }
     }
   },
@@ -97,6 +97,17 @@
       "step": "preview:receiver:withdraw",
       "submittedTxHash": "3c5ba043b2ab22d2b0062609c852ea04c0e5cc1a8c202dda6697d36a6a97293f",
       "confirmed": true
+    },
+    {
+      "step": "reclaim-reference-script:client",
+      "submittedTxHash": "6f89ffb81b618f4520f1ce7a0d17966799ca657d60f658e537e0c9f80eae9a53",
+      "confirmed": true
     }
-  ]
+  ],
+  "teardown": {
+    "status": "orphaned",
+    "orphaned": true,
+    "reason": "no live client reference scripts at teardown time",
+    "recordedAt": "2026-06-08T03:23:35.205Z"
+  }
 }
