@@ -403,8 +403,8 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     ),
     cardanoReceiverBalanceLovelace: gauge(
       "cardano_receiver_balance_lovelace",
-      "Receiver UTxO `balanceLovelace` — ADA available to pay oracle update fees. Below the configured `alerting.receiver_balance_low_lovelace` threshold the feeder also increments `cardano_receiver_topup_warnings_total`. The `receiver_address` label carries the client's on-chain Receiver script address so alerts can name it.",
-      ["client_id", "receiver_address"],
+      "Receiver UTxO `balanceLovelace` — ADA available to pay oracle update fees. Below the configured `alerting.receiver_balance_low_lovelace` threshold the feeder also increments `cardano_receiver_topup_warnings_total`. The `receiver_address` label carries the client's on-chain Receiver script address; `deposit_address` carries the side-deposit address operators should fund.",
+      ["client_id", "receiver_address", "deposit_address"],
     ),
     cardanoReceiverAccruedLovelace: gauge(
       "cardano_receiver_accrued_lovelace",

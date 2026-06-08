@@ -6,7 +6,7 @@
 // Run from offchain/feeder/. The auto-scan looks under ../state/ for
 // <network>_run_* dirs, newest first; it uses the only match, prompts when
 // several exist, or takes --from <path>. The daemon selects the run via RUN_ID
-// (or the newest run dir) — see cmd/feeder/run-state.ts.
+// (or the newest run dir) — see @diadata-org/dia-cardano-oracle-cli/core/run-state.
 
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createInterface, type Interface } from "node:readline/promises";

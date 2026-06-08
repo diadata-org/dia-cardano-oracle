@@ -7,15 +7,18 @@
 # why it matters in the protocol's money flow, and the EXACT commands to fix
 # it — in BOTH forms:
 #   * Docker (recommended; this is how the feeder runs in production):
-#       cd offchain && make cli CMD="<verb> ..."      # state paths are /app/state/...
+#       cd offchain && make cli CMD="<verb> ..."      # state paths are /app/offchain/state/...
 #   * npm (dev / no Docker), run from offchain/cli, pointing at the live
 #     feeder's state tree:
-#       cd offchain/cli && npm run cli -- <verb> ...   # state paths are ../feeder/state/...
+#       cd offchain/cli && npm run cli -- <verb> ...   # state paths are ../state/...
 # Both forms act on the SAME on-chain protocol and the SAME state files.
 #
-# Examples assume the Preview network and client `client-a`. For Mainnet swap
-# `preview` -> `mainnet` in the state paths; for another client swap
-# `client-a` for the id in the alert's `client_id` label.
+# `{{ $labels.run_dir }}` and `{{ $labels.client_id }}` are templated by
+# Prometheus from the firing series' labels: `run_dir` is a registry default
+# label carrying the active per-run state dir basename (e.g.
+# `preview_run_20260608-040304`, or `mainnet_run_…` on Mainnet), so the
+# remediation commands resolve to the real, complete state path — nothing to
+# fill in by hand. `client_id` is the affected client.
 #
 # THE MONEY FLOW (needed to understand AdminWalletLow / SettleOverdue / etc.)
 # --------------------------------------------------------------------------
@@ -86,8 +89,11 @@ groups:
                  cd offchain && make logs
             2. Most common: the Receiver ran out of ADA (see ReceiverBalanceLow).
                Top it up with 5 ADA:
-                 Docker: cd offchain && make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
-                 npm:    cd offchain/cli && npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/{{ $labels.client_id }}.json
+                 Docker: cd offchain && make cli CMD="deposit:address --protocol-state /app/offchain/state/{{ $labels.run_dir }}/config-bootstrap.json --client-state /app/offchain/state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json"
+                 npm:    cd offchain/cli && npm run cli -- deposit:address --protocol-state ../state/{{ $labels.run_dir }}/config-bootstrap.json --client-state ../state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json
+               Then send client ADA to that deposit address. The feeder will
+               merge/fold it into the Receiver automatically; `receiver:top-up`
+               is still available as an operator-only fallback.
             3. Next: the Admin (signer) wallet may be empty — see AdminWalletLow
                for how to replenish it by collecting accrued fees.
             4. If both wallets have ADA and the logs show no submit error, the
@@ -110,6 +116,8 @@ groups:
 
             Client Receiver address (on Preview, view on a testnet explorer):
               {{ $labels.receiver_address }}
+            Client deposit address to fund:
+              {{ $labels.deposit_address }}
 
             WHY / WHOSE MONEY: the Receiver is THE CLIENT'S PREPAID FEE POOL —
             the same model as the EVM side. The client prepays ADA into it and
@@ -123,15 +131,20 @@ groups:
 
             HOW TO FUND IT — IMPORTANT: do NOT send ADA directly to the Receiver
             address above. It is a script UTxO; a plain transfer there does
-            nothing useful and can be stranded. The ONLY correct way to add
-            funds is the `receiver:top-up` transaction, which spends and
-            re-creates the Receiver with the higher balance. The ADA is taken
-            from the wallet that RUNS the command (the client runs it from their
-            own wallet, or the operator runs it from the operator wallet).
-            Amount is in lovelace (5000000 = 5 ADA):
-              Docker: cd offchain && make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
-              npm:    cd offchain/cli && npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/{{ $labels.client_id }}.json
-            The alert clears within ~1 minute after the top-up tx confirms.
+            nothing useful and can be stranded.
+
+            Preferred path: send ADA to the client's deposit address shown above.
+            You can also verify it from the client artifact or print it with:
+              Docker: cd offchain && make cli CMD="deposit:address --protocol-state /app/offchain/state/{{ $labels.run_dir }}/config-bootstrap.json --client-state /app/offchain/state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json"
+              npm:    cd offchain/cli && npm run cli -- deposit:address --protocol-state ../state/{{ $labels.run_dir }}/config-bootstrap.json --client-state ../state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json
+
+            After the client sends ADA there, the feeder automatically folds it
+            into Receiver balance by update-fold or auto-merge. Operator
+            fallback, if you must top up directly from the configured wallet
+            (amount is lovelace; 5000000 = 5 ADA):
+              Docker: cd offchain && make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/offchain/state/{{ $labels.run_dir }}/config-bootstrap.json --client-state /app/offchain/state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json"
+              npm:    cd offchain/cli && npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ../state/{{ $labels.run_dir }}/config-bootstrap.json --client-state ../state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json
+            The alert clears within ~1 minute after funds are merged/top-up confirms.
 
       # ---------------------------------------------------------------------
       - alert: SettleOverdue
@@ -156,8 +169,8 @@ groups:
             spendable balance).
 
             WHAT TO DO — run a settle for this client (sweeps accrued -> PaymentHook):
-              Docker: cd offchain && make cli CMD="settle --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
-              npm:    cd offchain/cli && npm run cli -- settle --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/{{ $labels.client_id }}.json
+              Docker: cd offchain && make cli CMD="settle --protocol-state /app/offchain/state/{{ $labels.run_dir }}/config-bootstrap.json --client-state /app/offchain/state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json"
+              npm:    cd offchain/cli && npm run cli -- settle --protocol-state ../state/{{ $labels.run_dir }}/config-bootstrap.json --client-state ../state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json
             After it confirms, the accrued bucket is 0 and the alert clears. To
             then turn that into spendable revenue, withdraw from the PaymentHook
             (see PaymentHookWithdrawReady).
@@ -186,8 +199,8 @@ groups:
             amount on the Grafana "Admin wallet / PaymentHook / Receiver accrued"
             panel or via the dia_bridge_cardano_payment_hook_accrued_lovelace
             metric, and do not request more than is accrued:
-              Docker: cd offchain && make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --protocol-state /app/state/preview/config-bootstrap.json"
-              npm:    cd offchain/cli && npm run cli -- payment-hook:withdraw --amount-lovelace 50000000 --protocol-state ../feeder/state/preview/config-bootstrap.json
+              Docker: cd offchain && make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --protocol-state /app/offchain/state/{{ $labels.run_dir }}/config-bootstrap.json"
+              npm:    cd offchain/cli && npm run cli -- payment-hook:withdraw --amount-lovelace 50000000 --protocol-state ../state/{{ $labels.run_dir }}/config-bootstrap.json
             TIMING: run this only after the most recent settle is fully confirmed.
             Firing a withdraw a few seconds after a settle can fail with
             "BadInputsUTxO" because the provider has not yet indexed the new
@@ -218,17 +231,17 @@ groups:
             WHAT TO DO:
             1. Sweep each client's accrued fees into the PaymentHook (repeat per
                client id you operate):
-                 Docker: cd offchain && make cli CMD="settle --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/client-a.json"
-                 npm:    cd offchain/cli && npm run cli -- settle --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/client-a.json
+                 Docker: cd offchain && make cli CMD="settle --protocol-state /app/offchain/state/{{ $labels.run_dir }}/config-bootstrap.json --client-state /app/offchain/state/{{ $labels.run_dir }}/clients/client-a.json"
+                 npm:    cd offchain/cli && npm run cli -- settle --protocol-state ../state/{{ $labels.run_dir }}/config-bootstrap.json --client-state ../state/{{ $labels.run_dir }}/clients/client-a.json
             2. Wait ~30 s for the settle to be indexed, then withdraw the
                collected fees from the PaymentHook into this wallet (set the
                amount in lovelace to what the PaymentHook accrued metric shows):
-                 Docker: cd offchain && make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --protocol-state /app/state/preview/config-bootstrap.json"
-                 npm:    cd offchain/cli && npm run cli -- payment-hook:withdraw --amount-lovelace 50000000 --protocol-state ../feeder/state/preview/config-bootstrap.json
+                 Docker: cd offchain && make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --protocol-state /app/offchain/state/{{ $labels.run_dir }}/config-bootstrap.json"
+                 npm:    cd offchain/cli && npm run cli -- payment-hook:withdraw --amount-lovelace 50000000 --protocol-state ../state/{{ $labels.run_dir }}/config-bootstrap.json
             3. FALLBACK ONLY — if there is no accrued revenue to collect (the
                PaymentHook and all Receivers are near zero) and the wallet is
                genuinely empty, fund it from outside. Find its address:
-                 grep -A2 '"wallet"' offchain/state/preview/config-bootstrap.json
+                 grep -A2 '"wallet"' offchain/state/{{ $labels.run_dir }}/config-bootstrap.json
                then on Preview request test ADA from the Cardano faucet
                (https://docs.cardano.org/cardano-testnets/tools/faucet); on
                Mainnet send ADA from the treasury.
@@ -352,7 +365,7 @@ groups:
 
             WHAT TO DO — run a merge for this client (folds deposits ->
             Receiver balance):
-              Docker: cd offchain && make cli CMD="deposit:merge --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
-              npm:    cd offchain/cli && npm run cli -- deposit:merge --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/{{ $labels.client_id }}.json
+              Docker: cd offchain && make cli CMD="deposit:merge --protocol-state /app/offchain/state/{{ $labels.run_dir }}/config-bootstrap.json --client-state /app/offchain/state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json"
+              npm:    cd offchain/cli && npm run cli -- deposit:merge --protocol-state ../state/{{ $labels.run_dir }}/config-bootstrap.json --client-state ../state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json
             After it confirms, the deposit-pending total drops to 0 and the alert
             clears within ~1 minute.

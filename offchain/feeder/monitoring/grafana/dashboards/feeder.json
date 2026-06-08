@@ -139,7 +139,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Receiver prepaid balance in ADA. Below 2 ADA (alerting.receiver_balance_low_lovelace) triggers the ReceiverBalanceLow alert.",
+      "description": "Receiver prepaid balance in ADA. Below 2 ADA (alerting.receiver_balance_low_lovelace) triggers ReceiverBalanceLow. The backing metric labels include receiver_address and deposit_address; fund the deposit address, not the Receiver script address.",
       "fieldConfig": {
         "defaults": {
           "unit": "ADA",
