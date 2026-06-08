@@ -51,7 +51,7 @@ import {
 import path from "node:path";
 import { createDb, type DbConfig } from "../../src/persistence/index.js";
 import { createDbCheckpoint } from "../../src/source/checkpoint-db.js";
-import { resolveRunStateDir } from "./run-state.js";
+import { resolveRunStateDir } from "@diadata-org/dia-cardano-oracle-cli/core/run-state";
 import { createPublicClient, http, type PublicClient } from "viem";
 
 /** What the scan command supports. */

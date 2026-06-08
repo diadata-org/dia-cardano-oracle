@@ -1,6 +1,6 @@
 import "./_test-env.js";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Constr, type Data as PlutusData, type TxSignBuilder, type UTxO } from "@lucid-evolution/lucid";
@@ -77,6 +77,7 @@ import { writeStateJsonFile } from "../core/state.js";
 import { depositFund, isCleanAdaDeposit } from "../transactions/deposit.js";
 import { resolveClientUtxoRefs } from "../transactions/reclaim-reference-script.js";
 import { completeWithRetry } from "../core/tx-build.js";
+import { resolveRunStateDir, latestRunDir } from "../core/run-state.js";
 
 testCardanoWalletCreate();
 testEthereumWalletCreate();
@@ -93,6 +94,7 @@ testProtocolInitAuthorizedKeysFromEnv();
 testClientStateInit();
 await testDepositFundReadsFloorFromConfigState();
 testDepositMergeSelectionFiltersAndCaps();
+await testRunStateResolution();
 
 // --- Datum encoder/decoder regression tests ---------------------------------
 // These exist as a regression net for three real bugs found and fixed in the
@@ -2119,5 +2121,69 @@ async function testEmulatorProtocolFlowConfigBootstrap(): Promise<void> {
       true,
       `step "${step.label}" should succeed; got error: ${"error" in step ? step.error : ""}`,
     );
+  }
+}
+
+// --- Per-run state directory resolution (core/run-state) --------------------
+// resolveRunStateDir + latestRunDir back the shared offchain/state tree both
+// the CLI and the feeder read. Verifies the three-way selection: explicit
+// RUN_ID env → newest <network>_run_* dir → flat <network> fallback.
+async function testRunStateResolution(): Promise<void> {
+  const savedRunId = process.env.RUN_ID;
+  const restoreRunId = (): void => {
+    if (savedRunId === undefined) delete process.env.RUN_ID;
+    else process.env.RUN_ID = savedRunId;
+  };
+
+  // 1. RUN_ID env set → <stateRoot>/<network>_run_<RUN_ID>.
+  process.env.RUN_ID = "20260517-063917";
+  let base = await mkdtemp(path.join(os.tmpdir(), "cli-runstate-"));
+  try {
+    assert.equal(
+      resolveRunStateDir("Mainnet", base),
+      path.join(base, "mainnet_run_20260517-063917"),
+      "RUN_ID env must select the matching per-run dir",
+    );
+  } finally {
+    await rm(base, { recursive: true, force: true });
+    restoreRunId();
+  }
+
+  // 2. RUN_ID unset → newest <network>_run_* dir (lexical == chronological);
+  //    other-network run dirs are ignored.
+  delete process.env.RUN_ID;
+  base = await mkdtemp(path.join(os.tmpdir(), "cli-runstate-"));
+  try {
+    await mkdir(path.join(base, "mainnet_run_20260101-000000"));
+    await mkdir(path.join(base, "mainnet_run_20260517-063917")); // newest
+    await mkdir(path.join(base, "preview_run_20260601-000000")); // other network
+    assert.equal(
+      resolveRunStateDir("Mainnet", base),
+      path.join(base, "mainnet_run_20260517-063917"),
+      "must pick the newest mainnet_run_* dir",
+    );
+    assert.equal(
+      latestRunDir("Mainnet", base),
+      path.join(base, "mainnet_run_20260517-063917"),
+      "latestRunDir must return the newest mainnet_run_* dir",
+    );
+  } finally {
+    await rm(base, { recursive: true, force: true });
+    restoreRunId();
+  }
+
+  // 3. No run dirs → flat <stateRoot>/<network> fallback.
+  delete process.env.RUN_ID;
+  base = await mkdtemp(path.join(os.tmpdir(), "cli-runstate-"));
+  try {
+    assert.equal(
+      resolveRunStateDir("Preview", base),
+      path.join(base, "preview"),
+      "must fall back to the flat <network> dir when no run dirs exist",
+    );
+    assert.equal(latestRunDir("Preview", base), null, "latestRunDir must be null with no run dirs");
+  } finally {
+    await rm(base, { recursive: true, force: true });
+    restoreRunId();
   }
 }

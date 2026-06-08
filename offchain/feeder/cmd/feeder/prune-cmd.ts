@@ -25,7 +25,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { createDb, type DbConfig } from "../../src/persistence/index.js";
-import { resolveRunStateDir } from "./run-state.js";
+import { resolveRunStateDir } from "@diadata-org/dia-cardano-oracle-cli/core/run-state";
 
 // ---------------------------------------------------------------------------
 // Types

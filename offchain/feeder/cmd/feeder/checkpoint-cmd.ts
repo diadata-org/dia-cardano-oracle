@@ -20,7 +20,7 @@ import { createDb, type DbConfig } from "../../src/persistence/index.js";
 import { createDbCheckpoint } from "../../src/source/checkpoint-db.js";
 import type { CardanoNetwork } from "../../src/source/env.js";
 import path from "node:path";
-import { resolveRunStateDir } from "./run-state.js";
+import { resolveRunStateDir } from "@diadata-org/dia-cardano-oracle-cli/core/run-state";
 
 // ---------------------------------------------------------------------------
 // Types

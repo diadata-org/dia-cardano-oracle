@@ -4,6 +4,80 @@
   "private": true,
   "type": "module",
   "description": "TypeScript CLI for Preview and mainnet operations of the DIA Cardano Oracle project",
+  "exports": {
+    "./core/artifact-context": {
+      "types": "./dist/core/artifact-context.d.ts",
+      "default": "./dist/core/artifact-context.js"
+    },
+    "./core/chain-helpers": {
+      "types": "./dist/core/chain-helpers.d.ts",
+      "default": "./dist/core/chain-helpers.js"
+    },
+    "./core/config": {
+      "types": "./dist/core/config.d.ts",
+      "default": "./dist/core/config.js"
+    },
+    "./core/contracts": {
+      "types": "./dist/core/contracts.d.ts",
+      "default": "./dist/core/contracts.js"
+    },
+    "./core/dia-intent": {
+      "types": "./dist/core/dia-intent.d.ts",
+      "default": "./dist/core/dia-intent.js"
+    },
+    "./core/intent-paths": {
+      "types": "./dist/core/intent-paths.d.ts",
+      "default": "./dist/core/intent-paths.js"
+    },
+    "./core/lucid": {
+      "types": "./dist/core/lucid.d.ts",
+      "default": "./dist/core/lucid.js"
+    },
+    "./core/network-time": {
+      "types": "./dist/core/network-time.d.ts",
+      "default": "./dist/core/network-time.js"
+    },
+    "./core/run-state": {
+      "types": "./dist/core/run-state.d.ts",
+      "default": "./dist/core/run-state.js"
+    },
+    "./core/state": {
+      "types": "./dist/core/state.d.ts",
+      "default": "./dist/core/state.js"
+    },
+    "./core/tx-confirmation": {
+      "types": "./dist/core/tx-confirmation.d.ts",
+      "default": "./dist/core/tx-confirmation.js"
+    },
+    "./core/tx-onchain-check": {
+      "types": "./dist/core/tx-onchain-check.d.ts",
+      "default": "./dist/core/tx-onchain-check.js"
+    },
+    "./lib/reconcile/pair-state": {
+      "types": "./dist/lib/reconcile/pair-state.d.ts",
+      "default": "./dist/lib/reconcile/pair-state.js"
+    },
+    "./lib/transactions/build-batch-oracle-update": {
+      "types": "./dist/lib/transactions/build-batch-oracle-update.d.ts",
+      "default": "./dist/lib/transactions/build-batch-oracle-update.js"
+    },
+    "./lib/transactions/build-oracle-update": {
+      "types": "./dist/lib/transactions/build-oracle-update.d.ts",
+      "default": "./dist/lib/transactions/build-oracle-update.js"
+    },
+    "./preflight": {
+      "types": "./dist/preflight/index.d.ts",
+      "default": "./dist/preflight/index.js"
+    },
+    "./transactions/deposit": {
+      "types": "./dist/transactions/deposit.d.ts",
+      "default": "./dist/transactions/deposit.js"
+    },
+    "./wallet/wallet": {
+      "types": "./dist/wallet/wallet.d.ts",
+      "default": "./dist/wallet/wallet.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",

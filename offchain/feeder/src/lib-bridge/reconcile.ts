@@ -4,15 +4,18 @@
 // connects Lucid to the provider, and calls the CLI's `reconcilePairState`
 // helper to sync local pair-state JSON files with the live on-chain state.
 //
-// CLI modules are loaded via dynamic `import()` — same pattern as
-// `lib-bridge/index.ts` — so the feeder can typecheck without
-// `@lucid-evolution/lucid` in its static dependency graph.
+// CLI modules are imported statically from the `@diadata-org/dia-cardano-
+// oracle-cli` package (the same library exports `lib-bridge/index.ts` uses).
 //
 // Errors for an individual destination are logged as warnings, not thrown:
 // a reconcile failure should not prevent the daemon from starting.
 
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+
+import { readClientContext } from "@diadata-org/dia-cardano-oracle-cli/core/artifact-context";
+import { getCliConfig } from "@diadata-org/dia-cardano-oracle-cli/core/config";
+import { makeConfiguredLucidWithConfig, selectConfiguredWalletWithConfig } from "@diadata-org/dia-cardano-oracle-cli/core/lucid";
+import { reconcilePairState } from "@diadata-org/dia-cardano-oracle-cli/lib/reconcile/pair-state";
 
 import type { ModularConfig, CardanoDestinationConfig } from "../config/types.js";
 
@@ -43,20 +46,8 @@ export type ReconcileDestinationResult = {
 export async function reconcileAllDestinations(args: {
   config: ModularConfig;
   log: (line: string) => void;
-  cliSrcRoot?: string;
 }): Promise<ReconcileDestinationResult[]> {
   const { config, log } = args;
-
-  // Resolution priority (highest to lowest):
-  //   1. explicit args.cliSrcRoot (programmatic override, tests)
-  //   2. env CARDANO_FEEDER_CLI_DIST_ROOT
-  //      (set by Docker image to /app/cli/dist; documented in .env.example)
-  //   3. fallback: ../../../cli/src relative to this module (dev mode under tsx)
-  const cliRoot = args.cliSrcRoot
-    ? path.resolve(args.cliSrcRoot)
-    : process.env.CARDANO_FEEDER_CLI_DIST_ROOT
-      ? path.resolve(process.env.CARDANO_FEEDER_CLI_DIST_ROOT)
-      : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../cli/src");
 
   // Collect unique (clientStatePath, protocolStatePath) pairs from all
   // enabled routers.
@@ -85,7 +76,7 @@ export async function reconcileAllDestinations(args: {
   const results: ReconcileDestinationResult[] = [];
   for (const dest of destinations) {
     try {
-      const result = await reconcileOneDestination({ dest, cliRoot, log });
+      const result = await reconcileOneDestination({ dest, log });
       results.push(result);
     } catch (err) {
       log(
@@ -110,26 +101,9 @@ export async function reconcileAllDestinations(args: {
 
 async function reconcileOneDestination(args: {
   dest: CardanoDestinationConfig;
-  cliRoot: string;
   log: (line: string) => void;
 }): Promise<ReconcileDestinationResult> {
-  const { dest, cliRoot, log } = args;
-
-  function cliPath(rel: string): string {
-    return `${cliRoot}/${rel}`;
-  }
-
-  const [
-    { getCliConfig },
-    { makeConfiguredLucidWithConfig, selectConfiguredWalletWithConfig },
-    { readClientContext },
-    { reconcilePairState },
-  ] = await Promise.all([
-    import(cliPath("core/config.js")),
-    import(cliPath("core/lucid.js")),
-    import(cliPath("core/artifact-context.js")),
-    import(cliPath("lib/reconcile/pair-state.js")),
-  ]);
+  const { dest, log } = args;
 
   const cliConfig = getCliConfig();
   const lucid = await makeConfiguredLucidWithConfig(cliConfig);
