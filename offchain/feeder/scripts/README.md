@@ -32,9 +32,6 @@ pack into one dated directory.
 - `scripts/m2-evidence/build-stats.ts` — query DB for transaction/event statistics
 - `scripts/m2-evidence/build-error-counts.ts` — bucket failed transactions by error_code
 
-`make evidence` runs all three into one shared `m2-<network>-<stamp>/` dir
-(the `.sh` for the pack, the two `.ts` for the DB-authoritative stats).
-
 ### Output
 
 Each run writes to `docs/milestones/evidence/m2-<network>-<timestamp>/`:
