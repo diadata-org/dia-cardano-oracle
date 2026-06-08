@@ -47,6 +47,7 @@ import {
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
 import { buildOracleUpdateTx } from "../lib/transactions/build-oracle-update.js";
+import { selectDepositsForUpdateFold } from "./deposit.js";
 
 export async function submitOracleUpdate(args: {
   intentPath: string;
@@ -54,6 +55,10 @@ export async function submitOracleUpdate(args: {
   clientStatePath: string;
   protocolStatePath: string;
   buildOnly: boolean;
+  /** When true, opportunistically fold up to `configState.depositMaxPerUpdateFold`
+   *  clean side-deposits into this update (absorbed into the Receiver balance
+   *  via AccrueFee). Off by default so the pure-update path is unchanged. */
+  foldDeposits?: boolean;
 }): Promise<PairStateArtifact> {
   reportProgress(`Loading signed intent from ${path.resolve(args.intentPath)}`);
   const input = await readSignedIntentInput(path.resolve(args.intentPath));
@@ -217,6 +222,22 @@ export async function submitOracleUpdate(args: {
     state.receiver.receiverUnit,
     "receiver",
   );
+  // Optional opportunistic deposit fold: select up to
+  // `configState.depositMaxPerUpdateFold` clean side-deposits to absorb into the
+  // Receiver balance in this same update. Off unless `foldDeposits` is set; the
+  // pure-update path is otherwise untouched.
+  let depositFold: Awaited<ReturnType<typeof selectDepositsForUpdateFold>> | undefined;
+  if (args.foldDeposits) {
+    depositFold = await selectDepositsForUpdateFold({ lucid, client, protocol });
+    if (depositFold.utxos.length > 0) {
+      reportProgress(
+        `Folding ${depositFold.utxos.length} side-deposit(s) totalling ${depositFold.sweptLovelace} lovelace into this update`,
+      );
+    } else {
+      reportProgress("No eligible side-deposits to fold; building a pure update");
+    }
+  }
+
   reportProgress(`Building ${getCliConfig().cardanoNetwork} oracle update transaction`);
   const { txSignBuilder, nextPairState, nextPairDatumCbor } = await buildOracleUpdateTx(lucid, {
     isCreate,
@@ -234,6 +255,14 @@ export async function submitOracleUpdate(args: {
     pairState: state.pairState,
     pair: state.pair,
     receiver: state.receiver,
+    depositFold:
+      depositFold && depositFold.utxos.length > 0
+        ? {
+            utxos: depositFold.utxos,
+            depositValidator: depositFold.depositValidator,
+            referenceOutRef: depositFold.referenceOutRef,
+          }
+        : undefined,
   });
 
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);

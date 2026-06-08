@@ -54,6 +54,11 @@ type ResolvedConfigBootstrapInput = {
   perPairFeeLovelace: bigint;
   maxBootstrapDriftSeconds: bigint;
   minUtxoLovelace: bigint;
+  // Deposit tx-build params (set at protocol:init); carried through to the
+  // next configState — not part of the on-chain config datum.
+  depositMinLovelace: string;
+  depositMaxPerMerge: string;
+  depositMaxPerUpdateFold: string;
 };
 
 export async function configBootstrap(args: {
@@ -146,6 +151,11 @@ export async function configBootstrap(args: {
     paymentHookRef: null,
     updateCoordinatorCredential: null,
     minUtxoLovelace: resolvedInput.minUtxoLovelace.toString(),
+    // Deposit tx-build params (set at protocol:init); carried through unchanged
+    // — not part of the on-chain config datum.
+    depositMinLovelace: resolvedInput.depositMinLovelace,
+    depositMaxPerMerge: resolvedInput.depositMaxPerMerge,
+    depositMaxPerUpdateFold: resolvedInput.depositMaxPerUpdateFold,
   };
   const configDatumCbor = buildConfigDatumCbor(nextConfigState);
   const mintRedeemer = Data.to(new Constr(0, []));
@@ -281,6 +291,9 @@ function resolveConfigBootstrapInput(
   const perPairFeeLovelace = state?.configState.perPairFeeLovelace;
   const maxBootstrapDriftSeconds = state?.configState.maxBootstrapDriftSeconds ?? "300"; // Default 5 minutes
   const minUtxoLovelace = state?.configState.minUtxoLovelace;
+  const depositMinLovelace = state?.configState.depositMinLovelace;
+  const depositMaxPerMerge = state?.configState.depositMaxPerMerge;
+  const depositMaxPerUpdateFold = state?.configState.depositMaxPerUpdateFold;
   const configAssetName =
     state?.drafts?.configParameterize?.configAssetName ||
     (state?.scripts.configUnit ? splitUnit(state.scripts.configUnit).assetName : undefined);
@@ -291,7 +304,10 @@ function resolveConfigBootstrapInput(
     !domain ||
     !baseFeeLovelace ||
     !perPairFeeLovelace ||
-    !minUtxoLovelace
+    !minUtxoLovelace ||
+    !depositMinLovelace ||
+    !depositMaxPerMerge ||
+    !depositMaxPerUpdateFold
   ) {
     throw new Error(
       "Config bootstrap requires the Config values already stored in the protocol artifact. Run protocol:init and config:parameterize first.",
@@ -318,6 +334,9 @@ function resolveConfigBootstrapInput(
     perPairFeeLovelace: toBigInt(perPairFeeLovelace, "perPairFeeLovelace"),
     maxBootstrapDriftSeconds: toBigInt(maxBootstrapDriftSeconds, "maxBootstrapDriftSeconds"),
     minUtxoLovelace: resolvedMinUtxoLovelace,
+    depositMinLovelace,
+    depositMaxPerMerge,
+    depositMaxPerUpdateFold,
   };
 }
 

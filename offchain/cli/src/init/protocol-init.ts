@@ -1,6 +1,17 @@
 import { input as promptInput } from "@inquirer/prompts";
 
 import { toBigInt } from "../core/chain-helpers.js";
+import {
+  DEFAULT_BASE_FEE_LOVELACE,
+  DEFAULT_CONFIG_ASSET_LABEL,
+  DEFAULT_DEPOSIT_MAX_PER_MERGE,
+  DEFAULT_DEPOSIT_MAX_PER_UPDATE_FOLD,
+  DEFAULT_DEPOSIT_MIN_LOVELACE,
+  DEFAULT_MAX_BOOTSTRAP_DRIFT_SECONDS,
+  DEFAULT_MIN_UTXO_LOVELACE,
+  DEFAULT_PAYMENT_HOOK_ASSET_LABEL,
+  DEFAULT_PER_PAIR_FEE_LOVELACE,
+} from "../core/constants.js";
 import { getCliConfig, requireDiaSourceConfig } from "../core/config.js";
 import {
   deriveCompressedPublicKeyFromPrivateKey,
@@ -21,12 +32,14 @@ import {
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 
-const DEFAULT_BASE_FEE_LOVELACE = "600000"; // 0.6 ADA base fee
-const DEFAULT_PER_PAIR_FEE_LOVELACE = "400000"; // 0.40 ADA per pair
-const DEFAULT_MAX_BOOTSTRAP_DRIFT_SECONDS = "300"; // 5 minutes
-const DEFAULT_MIN_UTXO_LOVELACE = "5000000";
-const DEFAULT_CONFIG_ASSET_LABEL = "DIA_CONFIG";
-const DEFAULT_PAYMENT_HOOK_ASSET_LABEL = "DIA_PAYMENT_HOOK";
+// protocol:init seed defaults live in core/constants.ts. The deposit defaults
+// are re-exported here because `index.ts` reads them off this module when
+// resolving the optional --deposit-* flags.
+export {
+  DEFAULT_DEPOSIT_MAX_PER_MERGE,
+  DEFAULT_DEPOSIT_MAX_PER_UPDATE_FOLD,
+  DEFAULT_DEPOSIT_MIN_LOVELACE,
+};
 
 type ProtocolInitConfigInput = {
   validConfigSigners: string[];
@@ -43,6 +56,10 @@ type ProtocolInitConfigInput = {
   perPairFeeLovelace: string;
   maxBootstrapDriftSeconds: string;
   minUtxoLovelace: string;
+  /// Deposit tx-build params, shared with the feeder via config-bootstrap.json.
+  depositMinLovelace: string;
+  depositMaxPerMerge: string;
+  depositMaxPerUpdateFold: string;
   configAssetLabel: string;
   configAssetName: string;
   paymentHookAssetLabel: string;
@@ -56,10 +73,18 @@ function defaultProtocolConfigInput(
 ): ProtocolInitConfigInput {
   const cliConfig = getCliConfig();
   const dia = requireDiaSourceConfig(cliConfig);
-  const { diaEvmPrivateKey } = cliConfig;
-  const defaultAuthorizedDiaPublicKeys = diaEvmPrivateKey
-    ? [deriveCompressedPublicKeyFromPrivateKey(diaEvmPrivateKey)]
-    : [];
+  const { authorizedDiaPrivateKey } = cliConfig;
+  // Prefer DIA's configured signer keys (DIA_AUTHORIZED_PUBLIC_KEYS_<network>) —
+  // the keys the feeder's real intents recover to. Fall back to deriving the
+  // self-sign key from DIA_AUTHORIZED_PRIVATE_KEY only when no authorized set is
+  // configured (an env-less self-signed demo). run-all merges the self-sign key
+  // explicitly for its Preview demo updates.
+  const defaultAuthorizedDiaPublicKeys =
+    cliConfig.authorizedDiaPublicKeys.length > 0
+      ? cliConfig.authorizedDiaPublicKeys
+      : authorizedDiaPrivateKey
+        ? [deriveCompressedPublicKeyFromPrivateKey(authorizedDiaPrivateKey)]
+        : [];
 
   return {
     validConfigSigners: [defaultSigner],
@@ -77,6 +102,9 @@ function defaultProtocolConfigInput(
     perPairFeeLovelace: DEFAULT_PER_PAIR_FEE_LOVELACE,
     maxBootstrapDriftSeconds: DEFAULT_MAX_BOOTSTRAP_DRIFT_SECONDS,
     minUtxoLovelace: DEFAULT_MIN_UTXO_LOVELACE,
+    depositMinLovelace: DEFAULT_DEPOSIT_MIN_LOVELACE,
+    depositMaxPerMerge: DEFAULT_DEPOSIT_MAX_PER_MERGE,
+    depositMaxPerUpdateFold: DEFAULT_DEPOSIT_MAX_PER_UPDATE_FOLD,
     configAssetLabel: DEFAULT_CONFIG_ASSET_LABEL,
     configAssetName: normalizeHex(utf8ToHex(DEFAULT_CONFIG_ASSET_LABEL), "configAssetName"),
     paymentHookAssetLabel: DEFAULT_PAYMENT_HOOK_ASSET_LABEL,
@@ -126,6 +154,9 @@ export function createProtocolStateArtifact(args: {
     paymentHookRef: null,
     updateCoordinatorCredential: null,
     minUtxoLovelace: configInput.minUtxoLovelace,
+    depositMinLovelace: configInput.depositMinLovelace,
+    depositMaxPerMerge: configInput.depositMaxPerMerge,
+    depositMaxPerUpdateFold: configInput.depositMaxPerUpdateFold,
   };
 
   assertNonEmptyConfigSignerList(configState.validConfigSigners);
@@ -213,7 +244,7 @@ async function promptForProtocolConfigInput(
     defaultValue: defaults.validConfigSigners.join(", "),
   });
   const authorizedDiaPublicKeysRaw = await promptForText({
-    message: "Authorized DIA public keys (comma-separated compressed secp256k1 pubkeys; derived from DIA_EVM_PRIVATE_KEY_<network suffix> or from Step 5 output)",
+    message: "Authorized DIA public keys (comma-separated compressed secp256k1 pubkeys; derived from DIA_AUTHORIZED_PRIVATE_KEY_<network suffix> or from Step 5 output)",
     defaultValue: defaults.authorizedDiaPublicKeys.join(", "),
   });
   const domainName = await promptForText({
@@ -253,6 +284,21 @@ async function promptForProtocolConfigInput(
     defaultValue: defaults.minUtxoLovelace,
     validate: (value) => (/^[1-9]\d*$/.test(value) ? true : "Enter a positive integer."),
   });
+  const depositMinLovelace = await promptForText({
+    message: "Deposit min lovelace (dust floor: a deposit UTxO is swept only if pure ADA at/above this)",
+    defaultValue: defaults.depositMinLovelace,
+    validate: (value) => (/^[1-9]\d*$/.test(value) ? true : "Enter a positive integer."),
+  });
+  const depositMaxPerMerge = await promptForText({
+    message: "Deposit max per merge (max deposit UTxOs folded into one merge tx)",
+    defaultValue: defaults.depositMaxPerMerge,
+    validate: (value) => (/^[1-9]\d*$/.test(value) ? true : "Enter a positive integer."),
+  });
+  const depositMaxPerUpdateFold = await promptForText({
+    message: "Deposit max per update fold (max deposit UTxOs an oracle update may opportunistically fold)",
+    defaultValue: defaults.depositMaxPerUpdateFold,
+    validate: (value) => (/^[1-9]\d*$/.test(value) ? true : "Enter a positive integer."),
+  });
   const configAssetLabel = await promptForText({
     message: "Config asset label",
     defaultValue: defaults.configAssetLabel,
@@ -285,6 +331,9 @@ async function promptForProtocolConfigInput(
     perPairFeeLovelace: toBigInt(perPairFeeLovelace, "perPairFeeLovelace").toString(),
     maxBootstrapDriftSeconds: toBigInt(maxBootstrapDriftSeconds, "maxBootstrapDriftSeconds").toString(),
     minUtxoLovelace: toBigInt(minUtxoLovelace, "minUtxoLovelace").toString(),
+    depositMinLovelace: toBigInt(depositMinLovelace, "depositMinLovelace").toString(),
+    depositMaxPerMerge: toBigInt(depositMaxPerMerge, "depositMaxPerMerge").toString(),
+    depositMaxPerUpdateFold: toBigInt(depositMaxPerUpdateFold, "depositMaxPerUpdateFold").toString(),
     configAssetLabel: configAssetLabel.trim(),
     configAssetName: normalizeHex(utf8ToHex(configAssetLabel.trim()), "configAssetName"),
     paymentHookAssetLabel: paymentHookAssetLabel.trim(),

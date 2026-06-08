@@ -2,6 +2,7 @@ import path from "node:path";
 import { networkTag , getCliConfig} from "../core/config.js";
 
 import {
+  makeDepositValidator,
   makePairStateMintingPolicy,
   makePairStateValidator,
   makeReceiverMintingPolicy,
@@ -90,6 +91,15 @@ export async function parameterizeReceiverScripts(args: {
     configAssetName,
   });
   const receiverValidatorHash = scriptHashFromValidator(receiverValidator);
+  // Per-client side-deposit address: a plain wallet payment here funds the
+  // client's balance (the feeder/CLI later folds it in with a TopUp). Derived
+  // from the Receiver NFT so it is unique per client.
+  const depositValidator = await makeDepositValidator({
+    receiverPolicyId,
+    receiverAssetName,
+  });
+  const depositValidatorHash = scriptHashFromValidator(depositValidator);
+  const depositValidatorAddress = scriptAddressFromValidator(depositValidator);
   const pairMintPolicy = await makePairStateMintingPolicy({
     configPolicyId: protocol.scripts.configPolicyId,
     configAssetName,
@@ -131,6 +141,8 @@ export async function parameterizeReceiverScripts(args: {
       receiverUnit,
       receiverValidatorHash,
       receiverValidatorAddress: scriptAddressFromValidator(receiverValidator),
+      depositValidatorHash,
+      depositValidatorAddress,
       receiverState,
     },
     compiledScripts: {
@@ -139,6 +151,7 @@ export async function parameterizeReceiverScripts(args: {
       receiverValidator: receiverValidator.script,
       pairMintPolicy: pairMintPolicy.script,
       pairValidator: pairValidator.script,
+      depositValidator: depositValidator.script,
     },
     datum: {
       ...state.datum,

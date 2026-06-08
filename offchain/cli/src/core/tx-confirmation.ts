@@ -1,4 +1,12 @@
 import { getCliConfig } from "./config.js";
+import {
+  DEFAULT_TX_CONFIRMATION_BLOCKFROST_ATTEMPTS,
+  DEFAULT_TX_CONFIRMATION_BLOCKFROST_DELAY_MS,
+  DEFAULT_TX_CONFIRMATION_KOIOS_ATTEMPTS,
+  DEFAULT_TX_CONFIRMATION_KOIOS_DELAY_MS,
+  DEFAULT_TX_CONFIRMATION_PRIMARY_TIMEOUT_MS,
+  envNumber,
+} from "./constants.js";
 
 type AwaitTxLike = {
   awaitTx(txHash: string, checkInterval?: number): Promise<boolean>;
@@ -18,31 +26,9 @@ class KoiosServiceDownError extends Error {
   }
 }
 
-// Defaults for the multi-provider confirmation pipeline. Each stage can be
-// independently overridden via env vars when the network is congested:
-//   TX_CONFIRMATION_PRIMARY_TIMEOUT_MS    (default 180_000  = 3 min)
-//   TX_CONFIRMATION_KOIOS_ATTEMPTS        (default 60)
-//   TX_CONFIRMATION_KOIOS_DELAY_MS        (default 3_000)   = 60 × 3 s = 3 min
-//   TX_CONFIRMATION_BLOCKFROST_ATTEMPTS   (default 30)
-//   TX_CONFIRMATION_BLOCKFROST_DELAY_MS   (default 6_000)   = 30 × 6 s = 3 min
-// Total worst-case window with defaults: ~9 minutes across 3 providers.
-const DEFAULT_PRIMARY_TIMEOUT_MS = 180_000;
-const DEFAULT_KOIOS_ATTEMPTS = 60;
-const DEFAULT_KOIOS_DELAY_MS = 3_000;
-const DEFAULT_BLOCKFROST_ATTEMPTS = 30;
-const DEFAULT_BLOCKFROST_DELAY_MS = 6_000;
-
-function envNumber(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(
-      `Invalid ${name}=${raw}: expected a positive number of milliseconds or attempts.`,
-    );
-  }
-  return value;
-}
+// Defaults for the multi-provider confirmation pipeline live in
+// core/constants.ts (TX_CONFIRMATION_* env overrides). See that file for the
+// per-stage budgets and the env-override convention.
 
 export async function awaitTxConfirmation(args: {
   lucid: AwaitTxLike;
@@ -62,7 +48,7 @@ export async function awaitTxConfirmation(args: {
   const reportProgress = args.reportProgress ?? (() => undefined);
   const primaryTimeoutMs =
     args.primaryTimeoutMs ??
-    envNumber("TX_CONFIRMATION_PRIMARY_TIMEOUT_MS", DEFAULT_PRIMARY_TIMEOUT_MS);
+    envNumber("TX_CONFIRMATION_PRIMARY_TIMEOUT_MS", DEFAULT_TX_CONFIRMATION_PRIMARY_TIMEOUT_MS);
   const label = args.label ?? "transaction";
 
   // Wrap lucid.awaitTx so that an internal fetch rejection inside Lucid's
@@ -106,10 +92,10 @@ export async function awaitTxConfirmation(args: {
   const fetchImpl = args.fetchImpl ?? fetch;
   const maxAttempts =
     args.koiosMaxAttempts ??
-    envNumber("TX_CONFIRMATION_KOIOS_ATTEMPTS", DEFAULT_KOIOS_ATTEMPTS);
+    envNumber("TX_CONFIRMATION_KOIOS_ATTEMPTS", DEFAULT_TX_CONFIRMATION_KOIOS_ATTEMPTS);
   const delayMs =
     args.koiosDelayMs ??
-    envNumber("TX_CONFIRMATION_KOIOS_DELAY_MS", DEFAULT_KOIOS_DELAY_MS);
+    envNumber("TX_CONFIRMATION_KOIOS_DELAY_MS", DEFAULT_TX_CONFIRMATION_KOIOS_DELAY_MS);
   let lastError: unknown = null;
   let koiosDownCount = 0;
 
@@ -164,10 +150,10 @@ export async function awaitTxConfirmation(args: {
   const blockfrostProjectId = args.blockfrostProjectId ?? config.blockfrostProjectId;
   const bfRetryAttempts =
     args.blockfrostRetryAttempts ??
-    envNumber("TX_CONFIRMATION_BLOCKFROST_ATTEMPTS", DEFAULT_BLOCKFROST_ATTEMPTS);
+    envNumber("TX_CONFIRMATION_BLOCKFROST_ATTEMPTS", DEFAULT_TX_CONFIRMATION_BLOCKFROST_ATTEMPTS);
   const bfRetryDelayMs =
     args.blockfrostRetryDelayMs ??
-    envNumber("TX_CONFIRMATION_BLOCKFROST_DELAY_MS", DEFAULT_BLOCKFROST_DELAY_MS);
+    envNumber("TX_CONFIRMATION_BLOCKFROST_DELAY_MS", DEFAULT_TX_CONFIRMATION_BLOCKFROST_DELAY_MS);
 
   reportProgress(
     `Retrying confirmation via Blockfrost REST for ${args.txHash} (up to ${bfRetryAttempts} attempts).`,

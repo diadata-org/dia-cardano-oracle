@@ -23,14 +23,18 @@ type SignedPreviewOracleIntent = {
   };
 };
 
+// The LOCAL self-sign key (ours): DIA_AUTHORIZED_PRIVATE_KEY_<network>. The CLI /
+// run-all sign demo OracleIntents with it; its derived public key must be in the
+// deployment's authorized set. DIA's real intents are signed by DIA's own keys —
+// we only authorize their public halves via DIA_AUTHORIZED_PUBLIC_KEYS_<network>.
 function requireIntentSigningPrivateKey(): string {
-  const { diaEvmPrivateKey, networkSuffix } = getCliConfig();
-  if (!diaEvmPrivateKey) {
+  const { authorizedDiaPrivateKey, networkSuffix } = getCliConfig();
+  if (!authorizedDiaPrivateKey) {
     throw new Error(
-      `Missing required environment variable: DIA_EVM_PRIVATE_KEY_${networkSuffix}`,
+      `Missing required environment variable: DIA_AUTHORIZED_PRIVATE_KEY_${networkSuffix}`,
     );
   }
-  return diaEvmPrivateKey;
+  return authorizedDiaPrivateKey;
 }
 
 export function signPreviewOracleIntentFromInput(args: {

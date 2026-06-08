@@ -23,6 +23,7 @@ import {
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
+import { completeWithRetry } from "../core/tx-build.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   buildPaymentHookDatumCbor,
@@ -139,33 +140,39 @@ export async function paymentHookWithdraw(args: {
       reportProgress,
     );
 
-  let txBuilder = lucid
-    .newTx()
-    .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
-    .collectFrom([currentPaymentHookUtxo], withdrawRedeemer)
-    .addSignerKey(walletDefaults.paymentKeyHash)
-    .pay.ToContract(
-      state.scripts.paymentHookValidatorAddress!,
-      { kind: "inline", value: paymentHookDatumCbor },
-      {
-        lovelace:
-          BigInt(nextPaymentHookState.minUtxoLovelace) +
-          BigInt(nextPaymentHookState.accruedFeesLovelace),
-        [state.scripts.paymentHookUnit!]: 1n,
-      },
-    )
-    .pay.ToAddress(currentPaymentHookState.withdrawAddress, {
-      lovelace: amountLovelace,
-    });
-
-  if (isAnyReferenceScriptMissing(missingReferenceScript)) {
+  const referenceScriptMissing = isAnyReferenceScriptMissing(missingReferenceScript);
+  if (referenceScriptMissing) {
     reportProgress(
       "Reference script for payment hook is missing on-chain; attaching the payment hook validator inline.",
     );
-    txBuilder = txBuilder.attach.SpendingValidator(paymentHookValidator);
   }
 
-  const txSignBuilder = await txBuilder.complete();
+  const buildTx = () => {
+    let txBuilder = lucid
+      .newTx()
+      .readFrom([currentConfigUtxo, ...referenceScriptUtxos])
+      .collectFrom([currentPaymentHookUtxo], withdrawRedeemer)
+      .addSignerKey(walletDefaults.paymentKeyHash)
+      .pay.ToContract(
+        state.scripts.paymentHookValidatorAddress!,
+        { kind: "inline", value: paymentHookDatumCbor },
+        {
+          lovelace:
+            BigInt(nextPaymentHookState.minUtxoLovelace) +
+            BigInt(nextPaymentHookState.accruedFeesLovelace),
+          [state.scripts.paymentHookUnit!]: 1n,
+        },
+      )
+      .pay.ToAddress(currentPaymentHookState.withdrawAddress, {
+        lovelace: amountLovelace,
+      });
+    if (referenceScriptMissing) {
+      txBuilder = txBuilder.attach.SpendingValidator(paymentHookValidator);
+    }
+    return txBuilder;
+  };
+
+  const txSignBuilder = await completeWithRetry(buildTx, reportProgress);
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();

@@ -25,6 +25,7 @@ import {
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
+import { completeWithRetry } from "../core/tx-build.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   buildConfigDatumCbor,
@@ -135,25 +136,31 @@ export async function configUpdate(args: {
   };
 
   reportProgress(`Building ${getCliConfig().cardanoNetwork} config update transaction`);
-  let txBuilder = lucid
-    .newTx()
-    .readFrom(referenceScriptUtxos)
-    .collectFrom([currentConfigUtxo], adminUpdateRedeemer)
-    .addSignerKey(walletDefaults.paymentKeyHash)
-    .pay.ToContract(
-      state.scripts.configValidatorAddress,
-      { kind: "inline", value: configDatumCbor },
-      nextConfigAssets,
-    );
-
-  if (isAnyReferenceScriptMissing(missingReferenceScript)) {
+  const referenceScriptMissing = isAnyReferenceScriptMissing(missingReferenceScript);
+  if (referenceScriptMissing) {
     reportProgress(
       "Reference script for config is missing on-chain; attaching the config validator inline.",
     );
-    txBuilder = txBuilder.attach.SpendingValidator(configValidator);
   }
 
-  const txSignBuilder = await txBuilder.complete();
+  const buildTx = () => {
+    let txBuilder = lucid
+      .newTx()
+      .readFrom(referenceScriptUtxos)
+      .collectFrom([currentConfigUtxo], adminUpdateRedeemer)
+      .addSignerKey(walletDefaults.paymentKeyHash)
+      .pay.ToContract(
+        state.scripts.configValidatorAddress,
+        { kind: "inline", value: configDatumCbor },
+        nextConfigAssets,
+      );
+    if (referenceScriptMissing) {
+      txBuilder = txBuilder.attach.SpendingValidator(configValidator);
+    }
+    return txBuilder;
+  };
+
+  const txSignBuilder = await completeWithRetry(buildTx, reportProgress);
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
@@ -297,6 +304,11 @@ function resolveNextConfigState(
       input.minUtxoLovelace === undefined
         ? state.configState.minUtxoLovelace
         : toBigInt(input.minUtxoLovelace, "minUtxoLovelace").toString(),
+    // Deposit tx-build params are not config:update inputs (set once at
+    // protocol:init); carry them through unchanged.
+    depositMinLovelace: state.configState.depositMinLovelace,
+    depositMaxPerMerge: state.configState.depositMaxPerMerge,
+    depositMaxPerUpdateFold: state.configState.depositMaxPerUpdateFold,
   };
 
   assertPositiveMinUtxoLovelace(BigInt(next.minUtxoLovelace), "Config");

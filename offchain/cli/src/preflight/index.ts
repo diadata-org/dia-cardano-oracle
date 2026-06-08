@@ -12,7 +12,7 @@
  * - `receiver-transactions.ts` — receiver top-up / withdraw amounts
  * - `payment-hook.ts` — payment-hook withdraw amounts
  * - `settle-manifest.ts` — coordinator settle manifest list shape
- * - `settle.ts` — settle flow (accrued > 0, single-client manifest match)
+ * - `settle.ts` — settle flow (accrued > 0, multi-client manifest 1:1 match)
  */
 export * from "./bootstrap-pay.js";
 export * from "./config-state.js";

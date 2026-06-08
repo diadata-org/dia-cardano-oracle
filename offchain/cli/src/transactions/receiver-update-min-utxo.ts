@@ -18,6 +18,7 @@ import { isAnyReferenceScriptMissing, loadReferenceScriptUtxos } from "../core/r
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
+import { completeWithRetry } from "../core/tx-build.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   buildReceiverDatumCbor,
@@ -136,30 +137,36 @@ export async function receiverUpdateMinUtxo(args: {
     client.compiledScripts.receiverValidator,
   );
 
-  let txBuilder = lucid
-    .newTx()
-    .readFrom([configUtxo])
-    .collectFrom([currentReceiverUtxo], updateMinUtxoRedeemer)
-    .addSignerKey(walletDefaults.paymentKeyHash)
-    .pay.ToContract(
-      receiverValidatorAddress,
-      { kind: "inline", value: nextReceiverDatumCbor },
-      {
-        lovelace: BigInt(nextReceiverState.minUtxoLovelace) + 
-                 BigInt(nextReceiverState.balanceLovelace) + 
-                 BigInt(nextReceiverState.accruedToHookLovelace),
-        [receiverUnit]: 1n,
-      },
-    );
-
-  if (isAnyReferenceScriptMissing(missingReferenceScript)) {
+  const referenceScriptMissing = isAnyReferenceScriptMissing(missingReferenceScript);
+  if (referenceScriptMissing) {
     reportProgress("Reference script for receiver is missing; attaching inline.");
-    txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
-  } else {
-    txBuilder = txBuilder.readFrom(referenceScriptUtxos);
   }
 
-  const txSignBuilder = await txBuilder.complete();
+  const buildTx = () => {
+    let txBuilder = lucid
+      .newTx()
+      .readFrom([configUtxo])
+      .collectFrom([currentReceiverUtxo], updateMinUtxoRedeemer)
+      .addSignerKey(walletDefaults.paymentKeyHash)
+      .pay.ToContract(
+        receiverValidatorAddress,
+        { kind: "inline", value: nextReceiverDatumCbor },
+        {
+          lovelace: BigInt(nextReceiverState.minUtxoLovelace) +
+                   BigInt(nextReceiverState.balanceLovelace) +
+                   BigInt(nextReceiverState.accruedToHookLovelace),
+          [receiverUnit]: 1n,
+        },
+      );
+    if (referenceScriptMissing) {
+      txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
+    } else {
+      txBuilder = txBuilder.readFrom(referenceScriptUtxos);
+    }
+    return txBuilder;
+  };
+
+  const txSignBuilder = await completeWithRetry(buildTx, reportProgress);
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();

@@ -17,6 +17,7 @@ import {
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
+import { completeWithRetry } from "../core/tx-build.js";
 import { assertPaymentKeyHashIsConfigSigner } from "../preflight/index.js";
 import {
   findSingleUtxoAtUnit,
@@ -29,7 +30,7 @@ import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 // "payment-hook" reclaims global.paymentHook alone.
 export type GlobalReclaimableScript = "config" | "payment-hook";
 
-// "client" reclaims client.receiver + client.pair + client.pairMint together (published in the same tx).
+// "client" reclaims client.receiver + client.pair + client.pairMint + client.deposit together (published in the same tx).
 export type ClientReclaimableScript = "client";
 
 export async function reclaimProtocolReferenceScript(args: {
@@ -225,13 +226,16 @@ async function buildAndSubmit(args: {
   const spendRedeemer = Data.to(new Constr<PlutusData>(0, []));
 
   reportProgress(args.script, `Building reclaim transaction (spending ${args.targetUtxos.length} UTxO(s))`);
-  const txSignBuilder = await args.lucid
-    .newTx()
-    .readFrom([args.currentConfigUtxo])
-    .collectFrom(args.targetUtxos, spendRedeemer)
-    .attach.SpendingValidator(args.referenceHolderValidator)
-    .addSignerKey(args.walletDefaults.paymentKeyHash)
-    .complete();
+  const txSignBuilder = await completeWithRetry(
+    () =>
+      args.lucid
+        .newTx()
+        .readFrom([args.currentConfigUtxo])
+        .collectFrom(args.targetUtxos, spendRedeemer)
+        .attach.SpendingValidator(args.referenceHolderValidator)
+        .addSignerKey(args.walletDefaults.paymentKeyHash),
+    (msg) => reportProgress(args.script, msg),
+  );
 
   reportTxSignBuilderMetrics(txSignBuilder, (msg) => reportProgress(args.script, msg));
   logEffectiveOutputs(txSignBuilder, (msg) => reportProgress(args.script, msg));
@@ -295,14 +299,25 @@ function resolveGlobalUtxoRefs(
   }
 }
 
-function resolveClientUtxoRefs(
+export function resolveClientUtxoRefs(
   clientState: ClientStateArtifact,
 ): Array<{ ref: ReferenceScriptUtxo | undefined; name: string }> {
-  return [
+  const refs: Array<{ ref: ReferenceScriptUtxo | undefined; name: string }> = [
     { ref: clientState.referenceScripts?.client?.receiver, name: "receiver" },
     { ref: clientState.referenceScripts?.client?.pair, name: "pair" },
     { ref: clientState.referenceScripts?.client?.pairMint, name: "pairMint" },
   ];
+  // The deposit reference script is a later addition: a client state from a
+  // deployment that predates it carries only the three reference scripts above
+  // (no deposit entry, or an empty one). Include deposit only when its outRef is
+  // populated, so the teardown of such a deployment still works and the caller's
+  // "not published yet" guard is not tripped for a deposit ref that genuinely
+  // was never published.
+  const deposit = clientState.referenceScripts?.client?.deposit;
+  if (deposit?.txHash) {
+    refs.push({ ref: deposit, name: "deposit" });
+  }
+  return refs;
 }
 
 function clearGlobalEntry(
@@ -337,12 +352,17 @@ function clearClientEntry(
 ): ClientStateArtifact["referenceScripts"] {
   if (!referenceScripts?.client) return referenceScripts;
   const empty = emptyReferenceScriptUtxo();
+  // Clear the deposit entry only when the client actually had one published, so
+  // a deployment that predates the deposit reference script (only three entries)
+  // is left with its original shape rather than gaining an empty deposit field.
+  const hadDeposit = Boolean(referenceScripts.client.deposit?.txHash);
   return {
     ...referenceScripts,
     client: {
       receiver: empty,
       pair: empty,
       pairMint: empty,
+      ...(hadDeposit ? { deposit: empty } : {}),
     },
   };
 }

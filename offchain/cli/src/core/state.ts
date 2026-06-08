@@ -63,6 +63,26 @@ export type ConfigState = {
   paymentHookRef: PaymentHookRefState | null;
   updateCoordinatorCredential: CoordinatorCredentialState | null;
   minUtxoLovelace: string;
+  /// Deposit tx-build params (CLI domain), shared with the feeder via
+  /// config-bootstrap.json. Set at protocol:init.
+  ///
+  /// Dust floor (lovelace, string): a side-deposit UTxO is eligible for a
+  /// `deposit:merge` sweep only if it is pure ADA at or above this. Also the
+  /// minimum a `deposit:fund` payment will accept, and the floor the feeder's
+  /// deposit-pending probe applies. A sibling of `minUtxoLovelace`.
+  depositMinLovelace: string;
+  /// Max deposit UTxOs folded into one `deposit:merge` tx (string; convert
+  /// with Number() at use sites). Caps the tx so it never exceeds the
+  /// tx-size / execution budget; any remainder is swept by the next merge.
+  depositMaxPerMerge: string;
+  /// Max deposit UTxOs an oracle update may opportunistically fold into the
+  /// same tx (string; convert with Number() at use sites). Smaller than
+  /// `depositMaxPerMerge` so the fold stays within the tx budget even when it
+  /// rides alongside a price update (and a batch of pairs). Set at
+  /// protocol:init; read by the update builders and the feeder's opportunistic
+  /// fold. The standalone `deposit:merge` keeps using `depositMaxPerMerge` for
+  /// bulk sweeps.
+  depositMaxPerUpdateFold: string;
 };
 
 export type PaymentHookState = {
@@ -114,6 +134,12 @@ export type ReceiverArtifact = {
   receiverUnit: string;
   receiverValidatorHash: string;
   receiverValidatorAddress: string;
+  /** Per-client side-deposit address. A client funds their balance by sending
+   *  ADA here with an ordinary wallet payment (no CLI); the feeder/CLI later
+   *  folds those deposits into the Receiver balance with a TopUp. Derived from
+   *  the Receiver NFT, so it is unique per client. */
+  depositValidatorHash: string;
+  depositValidatorAddress: string;
   receiverState: ReceiverState;
 };
 
@@ -169,6 +195,10 @@ export type ClientCompiledScripts = {
   receiverValidator: string;
   pairMintPolicy: string;
   pairValidator: string;
+  /** Per-client side-deposit spend validator (parametrised by the Receiver
+   *  NFT). Persisted like the other client scripts so the merge + the
+   *  reference-script publish can load it from state. */
+  depositValidator: string;
 };
 
 export type ResolvedCompiledScripts = ProtocolCompiledScripts &
@@ -229,6 +259,10 @@ export type ClientStateArtifact = {
       receiver: ReferenceScriptUtxo;
       pair: ReferenceScriptUtxo;
       pairMint: ReferenceScriptUtxo;
+      /** On-chain reference script for the deposit validator, so the merge tx
+       *  references it instead of carrying the script bytes inline. Optional:
+       *  absent on client states published before this step / before deposits. */
+      deposit?: ReferenceScriptUtxo;
     };
   };
   receiver?: ReceiverArtifact;
@@ -268,9 +302,11 @@ export type PairStateArtifact = {
 };
 
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
+// Shared state tree at offchain/state/. This module lives at
+// offchain/cli/src/core/, so three levels up (core → src → cli) reaches offchain/.
 const DEFAULT_PREVIEW_CONFIG_STATE_PATH = path.resolve(
   CURRENT_DIR,
-  "../../state/preview/config-bootstrap.json",
+  "../../../state/preview/config-bootstrap.json",
 );
 
 export async function readConfigState(
@@ -316,6 +352,7 @@ export function emptyClientCompiledScripts(): ClientCompiledScripts {
     receiverValidator: "",
     pairMintPolicy: "",
     pairValidator: "",
+    depositValidator: "",
   };
 }
 

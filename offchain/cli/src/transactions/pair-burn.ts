@@ -21,6 +21,7 @@ import { isAnyReferenceScriptMissing, loadReferenceScriptUtxos } from "../core/r
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
+import { completeWithRetry } from "../core/tx-build.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   findSingleUtxoAtUnit,
@@ -95,24 +96,26 @@ export async function burnSpecificPairUtxo(args: {
       (msg) => console.error(`[${label}] ${msg}`),
     );
 
-  let txBuilder = lucid
-    .newTx()
-    .readFrom([configUtxo])
-    .collectFrom([pairUtxo], buildPairBurnRedeemer())
-    .mintAssets({ [pairUnit]: -1n }, buildPairMintBurnRedeemer())
-    .addSignerKey(paymentKeyHash);
-
-  if (isAnyReferenceScriptMissing(missingReferenceScripts)) {
-    if (missingReferenceScripts.pair) {
-      txBuilder = txBuilder.attach.SpendingValidator(pairValidator);
+  const buildTx = () => {
+    let txBuilder = lucid
+      .newTx()
+      .readFrom([configUtxo])
+      .collectFrom([pairUtxo], buildPairBurnRedeemer())
+      .mintAssets({ [pairUnit]: -1n }, buildPairMintBurnRedeemer())
+      .addSignerKey(paymentKeyHash);
+    if (isAnyReferenceScriptMissing(missingReferenceScripts)) {
+      if (missingReferenceScripts.pair) {
+        txBuilder = txBuilder.attach.SpendingValidator(pairValidator);
+      }
+      if (missingReferenceScripts.pairMint) {
+        txBuilder = txBuilder.attach.MintingPolicy(pairMintPolicy);
+      }
     }
-    if (missingReferenceScripts.pairMint) {
-      txBuilder = txBuilder.attach.MintingPolicy(pairMintPolicy);
-    }
-  }
-  txBuilder = txBuilder.readFrom(referenceScriptUtxos);
+    txBuilder = txBuilder.readFrom(referenceScriptUtxos);
+    return txBuilder;
+  };
 
-  const txSignBuilder = await txBuilder.complete();
+  const txSignBuilder = await completeWithRetry(buildTx, reportProgress);
   reportTxSignBuilderMetrics(txSignBuilder, (msg) => console.error(`[${label}] ${msg}`));
   logEffectiveOutputs(txSignBuilder, (msg) => console.error(`[${label}] ${msg}`));
 

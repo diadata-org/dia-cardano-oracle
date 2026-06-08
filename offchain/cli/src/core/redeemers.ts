@@ -39,3 +39,62 @@ export function buildPairMintRedeemer(): string {
 export function buildPairMintBurnRedeemer(): string {
   return Data.to(new Constr<PlutusData>(1, []));
 }
+
+// ---------------------------------------------------------------------------
+// Teardown burns for the singleton / per-client NFT families.
+//
+// Each of config_state / payment_hook / receiver exposes a mint `Burn`
+// action AND a spend `Burn` redeemer. A teardown tx spends the NFT-bearing
+// UTxO with the spend `Burn` redeemer AND mints `-1` of that NFT under the
+// mint `Burn` action in the SAME tx, recovering the locked min-ADA to the
+// admin. Both sides duplicate the config-admin signer check on purpose, so
+// neither can be invoked alone. This is the same shape as `pair:burn`
+// (spend `BurnPair` + mint `BurnPairs` -1).
+//
+// Constructor indices were read directly from the on-chain enums (do NOT
+// guess — see contracts/aiken):
+//   * Spend redeemers
+//     - lib/.../receiver_logic.ak ReceiverRedeemer:
+//         TopUp(0) AccrueFee(1) Settle(2) Withdraw(3) UpdateMinUtxo(4) Burn(5)
+//     - lib/.../payment_hook_logic.ak PaymentHookRedeemer:
+//         ApplySettle(0) AdminUpdate(1) Withdraw(2) Burn(3)
+//     - lib/.../config_logic.ak ConfigRedeemer:
+//         AdminUpdate(0) Burn(1)
+//   * Mint actions (each declared in the matching validator file)
+//     - validators/receiver.ak ReceiverMintAction:       Bootstrap(0) Burn(1)
+//     - validators/payment_hook.ak PaymentHookMintAction: Bootstrap(0) Burn(1)
+//     - validators/config_state.ak ConfigMintAction:      Bootstrap(0) Burn(1)
+//   The Bootstrap(0) index is corroborated by every bootstrap builder using
+//   `new Constr(0, [])` for its mint redeemer (config/payment-hook/receiver
+//   bootstrap), so the teardown `Burn` action is unambiguously index 1.
+
+// `ReceiverRedeemer::Burn` (constructor index 5). Admin-gated teardown of
+// the Receiver UTxO. The validator additionally requires the Receiver NFT
+// burned (`-1`) in the same tx, no continuation output carrying the NFT,
+// and both `balance_lovelace == 0` and `accrued_to_hook_lovelace == 0`.
+export function buildReceiverBurnSpendRedeemer(): string {
+  return Data.to(new Constr<PlutusData>(5, []));
+}
+
+// `PaymentHookRedeemer::Burn` (constructor index 3). Admin-gated teardown
+// of the PaymentHook UTxO. The validator additionally requires the Hook
+// NFT burned (`-1`) in the same tx, no continuation output carrying the
+// NFT, and `accrued_fees_lovelace == 0`.
+export function buildPaymentHookBurnSpendRedeemer(): string {
+  return Data.to(new Constr<PlutusData>(3, []));
+}
+
+// `ConfigRedeemer::Burn` (constructor index 1). Admin-gated teardown of
+// the Config UTxO. The validator additionally requires the Config NFT
+// burned (`-1`) in the same tx and no continuation output carrying the NFT.
+export function buildConfigBurnSpendRedeemer(): string {
+  return Data.to(new Constr<PlutusData>(1, []));
+}
+
+// Mint `Burn` action (constructor index 1) shared by the config_state,
+// payment_hook, and receiver mint policies. Bootstrap is index 0, so the
+// teardown `Burn` action is index 1 in every one of the three MintAction
+// enums.
+export function buildSingletonMintBurnRedeemer(): string {
+  return Data.to(new Constr<PlutusData>(1, []));
+}

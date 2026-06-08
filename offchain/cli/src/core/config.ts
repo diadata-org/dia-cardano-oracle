@@ -29,7 +29,11 @@ export type CliConfig = {
   koiosApiUrl: string;
   cardanoWalletSeed: string | null;
   cardanoPrivateKey: string | null;
-  diaEvmPrivateKey: string | null;
+  authorizedDiaPrivateKey: string | null;
+  // DIA's authorized signer public keys for the active network, from
+  // DIA_AUTHORIZED_PUBLIC_KEYS_<TESTNET|MAINNET> (the keys the feeder's real
+  // intents must recover to). Empty when the env var is unset.
+  authorizedDiaPublicKeys: string[];
   diaWsCredential: string | null;
   dia: DiaSourceConfig | null;
 };
@@ -41,6 +45,17 @@ export type CliConfig = {
 function pickNetworkEnv(suffix: NetworkSuffix, baseName: string): string | null {
   const value = process.env[`${baseName}_${suffix}`]?.trim();
   return value && value.length > 0 ? value : null;
+}
+
+// Parse a comma/space-separated env value into a clean list of lowercase hex
+// strings (drops empties; strips an optional 0x prefix). Used for the
+// DIA_AUTHORIZED_PUBLIC_KEYS_<network> list.
+function parseHexList(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(/[,\s]+/)
+    .map((entry) => entry.trim().replace(/^0x/i, "").toLowerCase())
+    .filter((entry) => entry.length > 0);
 }
 
 function requireNetworkEnv(suffix: NetworkSuffix, baseName: string): string {
@@ -119,7 +134,8 @@ export function getCliConfig(): CliConfig {
     koiosApiUrl: requireNetworkEnv(suffix, "KOIOS_API_URL"),
     cardanoWalletSeed: pickNetworkEnv(suffix, "CARDANO_WALLET_SEED"),
     cardanoPrivateKey: pickNetworkEnv(suffix, "CARDANO_PRIVATE_KEY"),
-    diaEvmPrivateKey: pickNetworkEnv(suffix, "DIA_EVM_PRIVATE_KEY"),
+    authorizedDiaPrivateKey: pickNetworkEnv(suffix, "DIA_AUTHORIZED_PRIVATE_KEY"),
+    authorizedDiaPublicKeys: parseHexList(pickNetworkEnv(suffix, "DIA_AUTHORIZED_PUBLIC_KEYS")),
     diaWsCredential: pickNetworkEnv(suffix, "DIA_WS_CREDENTIAL"),
     dia: resolveOptionalDiaSourceConfig(suffix),
   };
@@ -139,7 +155,7 @@ export function requireDiaSourceConfig(config: CliConfig): DiaSourceConfig {
 // ops tools (e.g. probe-dia-ws.ts) that intentionally exercise BOTH
 // networks in a single run.
 export function getDiaSourceConfigFor(suffix: NetworkSuffix): DiaSourceConfig & {
-  evmPrivateKey: string | null;
+  authorizedPrivateKey: string | null;
   wsCredential: string | null;
 } {
   return {
@@ -150,7 +166,7 @@ export function getDiaSourceConfigFor(suffix: NetworkSuffix): DiaSourceConfig & 
     explorerUrl: pickNetworkEnv(suffix, "DIA_EXPLORER_URL"),
     domainName: process.env.DIA_DOMAIN_NAME?.trim() || "DIA Oracle",
     domainVersion: process.env.DIA_DOMAIN_VERSION?.trim() || "1.0",
-    evmPrivateKey: pickNetworkEnv(suffix, "DIA_EVM_PRIVATE_KEY"),
+    authorizedPrivateKey: pickNetworkEnv(suffix, "DIA_AUTHORIZED_PRIVATE_KEY"),
     wsCredential: pickNetworkEnv(suffix, "DIA_WS_CREDENTIAL"),
   };
 }

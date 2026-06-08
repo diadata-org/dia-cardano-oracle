@@ -34,14 +34,13 @@ import {
 import {
   appendTransactionRecord,
   type ClientStateArtifact,
+  type ConfigStateArtifact,
 } from "../core/state.js";
-import {
-  isAnyReferenceScriptMissing,
-  loadReferenceScriptUtxos,
-} from "../core/reference-scripts.js";
+import { loadReferenceScriptUtxos } from "../core/reference-scripts.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
+import { completeWithRetry } from "../core/tx-build.js";
 import { readClientContext } from "../core/artifact-context.js";
 import {
   buildReceiverDatumCbor,
@@ -52,15 +51,44 @@ import {
   waitForUnitUtxoReplacement,
 } from "../core/chain-helpers.js";
 
-// A deposit UTxO is eligible for a sweep only if it is pure ADA at or above
-// this floor. Dust, native-token "junk", and oversized-datum UTxOs a griefer
-// might park at the address are skipped — they stay harmlessly at the address
-// and never block the Receiver. Sourced here (not the YAML) because it is a
-// CLI ergonomics default; the feeder daemon reads its own configured floor.
-const MIN_DEPOSIT_LOVELACE = 1_000_000n;
-// Cap the deposits swept in a single tx so the merge never grows past the tx
-// size / execution budget. Any remainder is swept by the next merge.
-const MAX_DEPOSITS_PER_MERGE = 20;
+// The deposit floor (a UTxO is eligible for a sweep only if it is pure ADA at
+// or above this) and the per-merge cap (max deposits folded into one tx) are
+// deposit tx-build parameters read from the protocol state's
+// `config-bootstrap.json::configState.depositMinLovelace` /
+// `configState.depositMaxPerMerge` — set at `protocol:init`, alongside
+// `minUtxoLovelace` / `baseFeeLovelace`. This is the SINGLE source shared with
+// the feeder daemon (which loads the same `config-bootstrap.json`); there is no
+// hardcoded copy here. Dust, native-token "junk", and oversized-datum UTxOs a
+// griefer might park at the address are skipped — they stay harmlessly at the
+// address and never block the Receiver.
+
+// Read the side-deposit tx-build params from the protocol state's `configState`
+// with a clear, actionable error when they are absent — e.g. a deployment
+// created before side-deposits existed (its `config-bootstrap.json` has no
+// `depositMinLovelace`). This replaces a raw `BigInt(undefined)` crash with a
+// message that says exactly why a deposit command does not apply.
+function requireDepositConfig(configState: {
+  depositMinLovelace?: string;
+  depositMaxPerMerge?: string;
+  depositMaxPerUpdateFold?: string;
+}): { minLovelace: bigint; maxPerMerge: number; maxPerUpdateFold: number } {
+  if (
+    configState.depositMinLovelace == null ||
+    configState.depositMaxPerMerge == null
+  ) {
+    throw new Error(
+      "Side-deposit config not found in config-bootstrap.json::configState " +
+        "(depositMinLovelace / depositMaxPerMerge). This deployment predates " +
+        "side-deposits — deposit:address / deposit:fund / deposit:merge and the " +
+        "update deposit-fold are not available for it.",
+    );
+  }
+  return {
+    minLovelace: BigInt(configState.depositMinLovelace),
+    maxPerMerge: Number(configState.depositMaxPerMerge),
+    maxPerUpdateFold: Number(configState.depositMaxPerUpdateFold ?? "0"),
+  };
+}
 
 type DepositArgs = {
   clientStatePath: string;
@@ -69,9 +97,10 @@ type DepositArgs = {
 
 async function loadDepositAddress(args: DepositArgs): Promise<{
   state: ClientStateArtifact;
+  protocol: ConfigStateArtifact;
   depositValidatorAddress: string;
 }> {
-  const { client: state } = await readClientContext({
+  const { client: state, protocol } = await readClientContext({
     clientStatePath: args.clientStatePath,
     protocolStatePath: args.protocolStatePath,
   });
@@ -86,6 +115,7 @@ async function loadDepositAddress(args: DepositArgs): Promise<{
   });
   return {
     state,
+    protocol,
     depositValidatorAddress: scriptAddressFromValidator(depositValidator),
   };
 }
@@ -110,12 +140,15 @@ export async function depositFund(args: DepositArgs & {
   buildOnly: boolean;
 }): Promise<{ depositValidatorAddress: string; submittedTxHash: string | null; confirmed: boolean }> {
   const amountLovelace = toBigInt(args.amountLovelace, "amountLovelace");
-  if (amountLovelace < MIN_DEPOSIT_LOVELACE) {
+  const { protocol, depositValidatorAddress } = await loadDepositAddress(args);
+  // Floor from config-bootstrap.json::configState (set at protocol:init), the
+  // single source shared with the feeder daemon.
+  const { minLovelace } = requireDepositConfig(protocol.configState);
+  if (amountLovelace < minLovelace) {
     throw new Error(
-      `deposit:fund amount ${amountLovelace} is below the ${MIN_DEPOSIT_LOVELACE} lovelace minimum a sweep will accept.`,
+      `deposit:fund amount ${amountLovelace} is below the ${minLovelace} lovelace minimum a sweep will accept.`,
     );
   }
-  const { depositValidatorAddress } = await loadDepositAddress(args);
 
   reportProgress(`Connecting to ${getCliConfig().cardanoNetwork} and selecting the configured wallet`);
   const lucid = await makeConfiguredLucid();
@@ -125,10 +158,13 @@ export async function depositFund(args: DepositArgs & {
 
   reportProgress(`Paying ${amountLovelace} lovelace to deposit address ${depositValidatorAddress}`);
   // A plain output, NO datum — exactly how an ordinary client wallet would pay.
-  const txSignBuilder = await lucid
-    .newTx()
-    .pay.ToAddress(depositValidatorAddress, { lovelace: amountLovelace })
-    .complete();
+  const txSignBuilder = await completeWithRetry(
+    () =>
+      lucid
+        .newTx()
+        .pay.ToAddress(depositValidatorAddress, { lovelace: amountLovelace }),
+    reportProgress,
+  );
 
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   let submittedTxHash: string | null = null;
@@ -160,7 +196,7 @@ export async function depositFund(args: DepositArgs & {
 export async function depositMerge(args: DepositArgs & {
   buildOnly: boolean;
 }): Promise<ClientStateArtifact> {
-  const { client: state } = await readClientContext({
+  const { client: state, protocol } = await readClientContext({
     clientStatePath: args.clientStatePath,
     protocolStatePath: args.protocolStatePath,
   });
@@ -193,16 +229,21 @@ export async function depositMerge(args: DepositArgs & {
     "receiver",
   );
 
+  // Deposit floor + per-merge cap come from config-bootstrap.json::configState
+  // (set at protocol:init, the single source shared with the feeder) — never
+  // hardcoded here.
+  const { minLovelace, maxPerMerge } = requireDepositConfig(protocol.configState);
+
   // Select clean, ADA-only deposits above the floor; skip dust / token junk /
   // datum-bearing UTxOs (a griefer cannot block the sweep — they stay put).
   const allDepositUtxos = await lucid.utxosAt(depositValidatorAddress);
   const eligible = allDepositUtxos
-    .filter((u) => isCleanAdaDeposit(u))
-    .slice(0, MAX_DEPOSITS_PER_MERGE);
+    .filter((u) => isCleanAdaDeposit(u, minLovelace))
+    .slice(0, maxPerMerge);
   const skipped = allDepositUtxos.length - eligible.length;
   if (eligible.length === 0) {
     throw new Error(
-      `No eligible deposits to merge at ${depositValidatorAddress} (found ${allDepositUtxos.length} UTxO(s); none were clean ADA >= ${MIN_DEPOSIT_LOVELACE} lovelace).`,
+      `No eligible deposits to merge at ${depositValidatorAddress} (found ${allDepositUtxos.length} UTxO(s); none were clean ADA >= ${minLovelace} lovelace).`,
     );
   }
   const sweptLovelace = eligible.reduce((acc, u) => acc + (u.assets.lovelace ?? 0n), 0n);
@@ -238,34 +279,57 @@ export async function depositMerge(args: DepositArgs & {
               }
             : null,
         },
+        {
+          key: "deposit",
+          label: "deposit",
+          outRef: state.referenceScripts?.client?.deposit
+            ? {
+                txHash: state.referenceScripts.client.deposit.txHash,
+                outputIndex: state.referenceScripts.client.deposit.outputIndex,
+              }
+            : null,
+        },
       ] as const,
       reportProgress,
     );
 
-  let txBuilder = lucid
-    .newTx()
-    .readFrom(referenceScriptUtxos)
-    .collectFrom([currentReceiverUtxo], topUpRedeemer)
-    .collectFrom(eligible, collectDepositRedeemer)
-    .attach.SpendingValidator(depositValidator)
-    .pay.ToContract(
-      state.receiver.receiverValidatorAddress,
-      { kind: "inline", value: receiverDatumCbor },
-      {
-        lovelace:
-          BigInt(nextReceiverState.minUtxoLovelace) +
-          BigInt(nextReceiverState.balanceLovelace) +
-          BigInt(nextReceiverState.accruedToHookLovelace),
-        [state.receiver.receiverUnit]: 1n,
-      },
-    );
-
-  if (isAnyReferenceScriptMissing(missingReferenceScript)) {
+  // Attach inline only the scripts whose reference UTxO is missing on-chain
+  // (e.g. on a state published before the deposit ref-script existed).
+  if (missingReferenceScript.receiver) {
     reportProgress("Receiver reference script missing on-chain; attaching the receiver validator inline.");
-    txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
+  }
+  if (missingReferenceScript.deposit) {
+    reportProgress("Deposit reference script missing on-chain; attaching the deposit validator inline.");
   }
 
-  const txSignBuilder = await txBuilder.complete();
+  const receiver = state.receiver;
+  const buildTx = () => {
+    let txBuilder = lucid
+      .newTx()
+      .readFrom(referenceScriptUtxos)
+      .collectFrom([currentReceiverUtxo], topUpRedeemer)
+      .collectFrom(eligible, collectDepositRedeemer)
+      .pay.ToContract(
+        receiver.receiverValidatorAddress,
+        { kind: "inline", value: receiverDatumCbor },
+        {
+          lovelace:
+            BigInt(nextReceiverState.minUtxoLovelace) +
+            BigInt(nextReceiverState.balanceLovelace) +
+            BigInt(nextReceiverState.accruedToHookLovelace),
+          [receiver.receiverUnit]: 1n,
+        },
+      );
+    if (missingReferenceScript.receiver) {
+      txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
+    }
+    if (missingReferenceScript.deposit) {
+      txBuilder = txBuilder.attach.SpendingValidator(depositValidator);
+    }
+    return txBuilder;
+  };
+
+  const txSignBuilder = await completeWithRetry(buildTx, reportProgress);
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   let submittedTxHash: string | null = null;
@@ -312,12 +376,69 @@ export async function depositMerge(args: DepositArgs & {
   };
 }
 
-/** A clean, sweepable deposit: pure ADA (only `lovelace`), at or above the floor. */
-function isCleanAdaDeposit(utxo: UTxO): boolean {
+/** A clean, sweepable deposit: pure ADA (only `lovelace`), at or above the
+ *  floor. `minLovelace` is the configured floor from
+ *  `config-bootstrap.json::configState.depositMinLovelace` (set at
+ *  protocol:init). Exported for unit testing the selection predicate. */
+export function isCleanAdaDeposit(utxo: UTxO, minLovelace: bigint): boolean {
   const assetKeys = Object.keys(utxo.assets);
   const onlyAda = assetKeys.length === 1 && assetKeys[0] === "lovelace";
   const lovelace = utxo.assets.lovelace ?? 0n;
-  return onlyAda && lovelace >= MIN_DEPOSIT_LOVELACE;
+  return onlyAda && lovelace >= minLovelace;
+}
+
+/**
+ * Resolve the clean side-deposit UTxOs an oracle update may opportunistically
+ * fold into its Receiver output. Reuses the EXACT selection the standalone
+ * `deposit:merge` applies (`isCleanAdaDeposit`, ≥ floor) but caps the count at
+ * `configState.depositMaxPerUpdateFold` (smaller than the merge cap, so the
+ * fold stays within the tx budget alongside a price update). Both the floor
+ * and the fold cap come from the protocol state's `configState` (set at the
+ * CLI's protocol:init) — no hardcoded values.
+ *
+ * Returns the selected UTxOs plus the deposit validator + its on-chain
+ * reference outRef, ready to hand to `buildOracleUpdateTx`'s `depositFold`.
+ * When there are no eligible deposits, `utxos` is empty and the caller builds
+ * the pure-update tx unchanged.
+ */
+export async function selectDepositsForUpdateFold(args: {
+  lucid: import("@lucid-evolution/lucid").LucidEvolution;
+  client: ClientStateArtifact;
+  protocol: ConfigStateArtifact;
+}): Promise<{
+  utxos: UTxO[];
+  depositValidator: import("@lucid-evolution/lucid").SpendingValidator;
+  depositValidatorAddress: string;
+  referenceOutRef: { txHash: string; outputIndex: number; scriptHash: string } | null;
+  sweptLovelace: bigint;
+}> {
+  const { lucid, client, protocol } = args;
+  if (!client.receiver) {
+    throw new Error("selectDepositsForUpdateFold requires a client state after receiver bootstrap.");
+  }
+  const depositValidator = await makeDepositValidator({
+    receiverPolicyId: client.receiver.receiverPolicyId,
+    receiverAssetName: client.receiver.receiverAssetName,
+  });
+  const depositValidatorAddress = scriptAddressFromValidator(depositValidator);
+  // Floor + fold cap come from configState (protocol:init), never hardcoded.
+  const { minLovelace, maxPerUpdateFold: maxPerFold } = requireDepositConfig(
+    protocol.configState,
+  );
+
+  const allDepositUtxos = await lucid.utxosAt(depositValidatorAddress);
+  const utxos = allDepositUtxos
+    .filter((u) => isCleanAdaDeposit(u, minLovelace))
+    .slice(0, maxPerFold);
+  const sweptLovelace = utxos.reduce((acc, u) => acc + (u.assets.lovelace ?? 0n), 0n);
+
+  return {
+    utxos,
+    depositValidator,
+    depositValidatorAddress,
+    referenceOutRef: client.referenceScripts?.client?.deposit ?? null,
+    sweptLovelace,
+  };
 }
 
 function reportProgress(message: string): void {

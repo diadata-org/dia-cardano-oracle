@@ -119,6 +119,13 @@ export async function receiverBootstrap(args: {
   const receiverValidatorHash = scriptHashFromValidator(receiverValidator);
   const receiverValidatorAddress = scriptAddressFromValidator(receiverValidator);
 
+  if (!state.compiledScripts?.depositValidator) {
+    throw new Error("depositValidator compiled script not found. Run receiver:parameterize first.");
+  }
+  const depositValidator = spendingValidatorFromCompiledScript(state.compiledScripts.depositValidator);
+  const depositValidatorHash = scriptHashFromValidator(depositValidator);
+  const depositValidatorAddress = scriptAddressFromValidator(depositValidator);
+
   if (!state.compiledScripts?.pairMintPolicy) {
     throw new Error("pairMintPolicy compiled script not found. Run receiver:parameterize first.");
   }
@@ -224,6 +231,8 @@ export async function receiverBootstrap(args: {
       receiverUnit,
       receiverValidatorHash,
       receiverValidatorAddress,
+      depositValidatorHash,
+      depositValidatorAddress,
       receiverState,
     },
     datum: {

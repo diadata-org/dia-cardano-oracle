@@ -409,10 +409,10 @@ function normalizeSignatureHex(value: string, label: string): string {
 }
 
 function normalizePrivateKey(value: string): string {
-  const normalized = normalizeHex(value, "DIA_EVM_PRIVATE_KEY");
+  const normalized = normalizeHex(value, "DIA_AUTHORIZED_PRIVATE_KEY");
 
   if (normalized.length !== 64) {
-    throw new Error("Expected DIA_EVM_PRIVATE_KEY to be a 32-byte Ethereum private key.");
+    throw new Error("Expected DIA_AUTHORIZED_PRIVATE_KEY to be a 32-byte Ethereum private key.");
   }
 
   return normalized;

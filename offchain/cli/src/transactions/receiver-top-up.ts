@@ -21,6 +21,7 @@ import {
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
+import { completeWithRetry } from "../core/tx-build.js";
 import { readClientContext } from "../core/artifact-context.js";
 import {
   buildReceiverDatumCbor,
@@ -103,30 +104,37 @@ export async function receiverTopUp(args: {
       reportProgress,
     );
 
-  let txBuilder = lucid
-    .newTx()
-    .readFrom(referenceScriptUtxos)
-    .collectFrom([currentReceiverUtxo], topUpRedeemer)
-    .pay.ToContract(
-      state.receiver.receiverValidatorAddress,
-      { kind: "inline", value: receiverDatumCbor },
-      {
-        lovelace:
-          BigInt(nextReceiverState.minUtxoLovelace) +
-          BigInt(nextReceiverState.balanceLovelace) +
-          BigInt(nextReceiverState.accruedToHookLovelace),
-        [state.receiver.receiverUnit]: 1n,
-      },
-    );
-
-  if (isAnyReferenceScriptMissing(missingReferenceScript)) {
+  const referenceScriptMissing = isAnyReferenceScriptMissing(missingReferenceScript);
+  if (referenceScriptMissing) {
     reportProgress(
       "Reference script for receiver is missing on-chain; attaching the receiver validator inline.",
     );
-    txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
   }
 
-  const txSignBuilder = await txBuilder.complete();
+  const receiver = state.receiver;
+  const buildTx = () => {
+    let txBuilder = lucid
+      .newTx()
+      .readFrom(referenceScriptUtxos)
+      .collectFrom([currentReceiverUtxo], topUpRedeemer)
+      .pay.ToContract(
+        receiver.receiverValidatorAddress,
+        { kind: "inline", value: receiverDatumCbor },
+        {
+          lovelace:
+            BigInt(nextReceiverState.minUtxoLovelace) +
+            BigInt(nextReceiverState.balanceLovelace) +
+            BigInt(nextReceiverState.accruedToHookLovelace),
+          [receiver.receiverUnit]: 1n,
+        },
+      );
+    if (referenceScriptMissing) {
+      txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
+    }
+    return txBuilder;
+  };
+
+  const txSignBuilder = await completeWithRetry(buildTx, reportProgress);
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();

@@ -73,8 +73,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if ! [[ "$FROM_STEP" =~ ^[0-9]+$ ]] || (( FROM_STEP < 1 || FROM_STEP > 35 )); then
-  echo "--from-step must be an integer between 1 and 35" >&2
+if ! [[ "$FROM_STEP" =~ ^[0-9]+$ ]] || (( FROM_STEP < 1 || FROM_STEP > 37 )); then
+  echo "--from-step must be an integer between 1 and 37" >&2
   exit 1
 fi
 
@@ -106,8 +106,8 @@ fi
 
 RUN_ID="${EXPLICIT_RUN_ID:-$(date -u +%Y%m%d-%H%M%S)}"
 STATE_NAME="${NETWORK_TAG}_run_${RUN_ID}"
-STATE_REL="./state/${STATE_NAME}"
-STATE_ROOT="$CLI_DIR/state/${STATE_NAME}"
+STATE_REL="../state/${STATE_NAME}"
+STATE_ROOT="$REPO/offchain/state/${STATE_NAME}"
 EVIDENCE_NAME="m1-${NETWORK_TAG}-${RUN_ID}"
 EVIDENCE_ROOT="$REPO/docs/milestones/evidence/${EVIDENCE_NAME}"
 CARDANO_PROVIDER="${CARDANO_PROVIDER:-Blockfrost}"
@@ -146,12 +146,12 @@ DOMAIN_VERSION="${DIA_DOMAIN_VERSION:-1.0}"
 
 DOMAIN_SOURCE_CHAIN_ID_VAR="DIA_SOURCE_CHAIN_ID_${NETWORK_SUFFIX}"
 DOMAIN_VERIFYING_CONTRACT_VAR="DIA_REGISTRY_ADDRESS_${NETWORK_SUFFIX}"
-DIA_EVM_PRIVATE_KEY_VAR="DIA_EVM_PRIVATE_KEY_${NETWORK_SUFFIX}"
+DIA_AUTHORIZED_PRIVATE_KEY_VAR="DIA_AUTHORIZED_PRIVATE_KEY_${NETWORK_SUFFIX}"
 
 DOMAIN_SOURCE_CHAIN_ID="${!DOMAIN_SOURCE_CHAIN_ID_VAR:-}"
 DOMAIN_VERIFYING_CONTRACT="${!DOMAIN_VERIFYING_CONTRACT_VAR:-}"
-DIA_EVM_PRIVATE_KEY="${!DIA_EVM_PRIVATE_KEY_VAR:-}"
-export DIA_EVM_PRIVATE_KEY
+DIA_AUTHORIZED_PRIVATE_KEY="${!DIA_AUTHORIZED_PRIVATE_KEY_VAR:-}"
+export DIA_AUTHORIZED_PRIVATE_KEY
 
 if [[ -z "$DOMAIN_SOURCE_CHAIN_ID" || -z "$DOMAIN_VERIFYING_CONTRACT" ]]; then
   echo "[run] $DOMAIN_SOURCE_CHAIN_ID_VAR and $DOMAIN_VERIFYING_CONTRACT_VAR must be set in .env" >&2
@@ -250,13 +250,13 @@ batch_price() {
   esac
 }
 
-mkdir -p "$CLI_DIR/state" "$REPO/docs/milestones/evidence"
+mkdir -p "$REPO/offchain/state" "$REPO/docs/milestones/evidence"
 
 cleanup_previous_runs() {
   local dir_name
   shopt -s nullglob
 
-  for dir_path in "$CLI_DIR"/state/"${NETWORK_TAG}"_run_*; do
+  for dir_path in "$REPO"/offchain/state/"${NETWORK_TAG}"_run_*; do
     dir_name="$(basename "$dir_path")"
     case " ${PROTECTED_STATE_DIRS[*]} " in
       *" $dir_name "*) continue ;;
@@ -299,8 +299,8 @@ cd "$CLI_DIR"
 export CARDANO_NETWORK
 export CARDANO_PROVIDER
 
-if [[ -z "${DIA_EVM_PRIVATE_KEY:-}" ]]; then
-  echo "[run] $DIA_EVM_PRIVATE_KEY_VAR is required for explicit non-interactive intent signing" >&2
+if [[ -z "${DIA_AUTHORIZED_PRIVATE_KEY:-}" ]]; then
+  echo "[run] $DIA_AUTHORIZED_PRIVATE_KEY_VAR is required for explicit non-interactive intent signing" >&2
   exit 1
 fi
 
@@ -346,8 +346,42 @@ append_cli_log() {
   pty_exec $cli_cmd | tee -a "$EVIDENCE_ROOT/$log_name"
 }
 
+# Extra STEP-level build retries (fresh PROCESS = fresh WASM module). The CLI's
+# completeWithRetry already retries the transient lucid WASM detached-ArrayBuffer
+# IN-PROCESS at build time; this is the belt-and-suspenders for the rare case the
+# in-process rebuild does not clear it. SAFE: a step is re-run ONLY if it failed
+# BEFORE submitting a tx (its log has no "Submitted transaction hash"). A step
+# that already submitted is NEVER blind-retried (would risk a double-submit) — it
+# aborts for manual --from-step handling.
+TX_STEP_BUILD_RETRIES="${TX_STEP_BUILD_RETRIES:-2}"
+
 run_tx_logged() {
-  run_cli_logged "$@"
+  local log_name="$1"
+  shift
+  local cli_cmd="$*"
+  local max_attempts=$(( TX_STEP_BUILD_RETRIES + 1 ))
+  local attempt=1
+  local rc=0
+  while true; do
+    echo "[run] $cli_cmd"
+    set +e
+    pty_exec $cli_cmd | tee "$EVIDENCE_ROOT/$log_name"
+    rc=${PIPESTATUS[0]}
+    set -e
+    if [[ "$rc" -eq 0 ]]; then
+      break
+    fi
+    if grep -q "Submitted transaction hash" "$EVIDENCE_ROOT/$log_name"; then
+      echo "[run] step '$log_name' FAILED after submitting a tx — NOT retrying (double-submit risk). Resume with --from-step after checking the chain." >&2
+      exit "$rc"
+    fi
+    if (( attempt >= max_attempts )); then
+      echo "[run] step '$log_name' failed before submit after ${attempt} attempt(s); aborting." >&2
+      exit "$rc"
+    fi
+    echo "[run] step '$log_name' failed before submit (attempt ${attempt}/${max_attempts}); re-running in a fresh process..." >&2
+    attempt=$(( attempt + 1 ))
+  done
   if [[ "$POST_TX_DELAY_SECONDS" -gt 0 ]]; then
     sleep "$POST_TX_DELAY_SECONDS"
   fi
@@ -454,18 +488,33 @@ CONFIG_SIGNER_PKH="$(read_json_field "$WALLET_DEFAULTS_JSON_PATH" "defaults.paym
 PAYMENT_HOOK_WITHDRAW_ADDRESS="$(read_json_field "$WALLET_DEFAULTS_JSON_PATH" "address")"
 
 AUTHORIZED_DIA_PUBLIC_KEY="$(
-  DIA_EVM_PRIVATE_KEY="$DIA_EVM_PRIVATE_KEY" \
-  DIA_EVM_PRIVATE_KEY_VAR="$DIA_EVM_PRIVATE_KEY_VAR" \
+  DIA_AUTHORIZED_PRIVATE_KEY="$DIA_AUTHORIZED_PRIVATE_KEY" \
+  DIA_AUTHORIZED_PRIVATE_KEY_VAR="$DIA_AUTHORIZED_PRIVATE_KEY_VAR" \
   node --input-type=module -e '
     import { SigningKey } from "ethers";
-    const privateKey = process.env.DIA_EVM_PRIVATE_KEY?.trim();
+    const privateKey = process.env.DIA_AUTHORIZED_PRIVATE_KEY?.trim();
     if (!privateKey) {
-      throw new Error(`Missing ${process.env.DIA_EVM_PRIVATE_KEY_VAR}.`);
+      throw new Error(`Missing ${process.env.DIA_AUTHORIZED_PRIVATE_KEY_VAR}.`);
     }
     process.stdout.write(
       new SigningKey(privateKey).compressedPublicKey.replace(/^0x/i, "").toLowerCase(),
     );
   '
+)"
+
+# Authorized DIA signer set for protocol:init = the self-sign key above (so the
+# run-all demo updates pass) PLUS DIA's real signer keys for this network from
+# DIA_AUTHORIZED_PUBLIC_KEYS_<network> (so the SAME deployment also accepts the
+# feeder's real DIA intents). Comma/space-separated env; deduped (the contract
+# requires a unique set). On Mainnet, leave DIA_AUTHORIZED_PRIVATE_KEY unset there to
+# authorize ONLY DIA's keys (never a key we hold).
+DIA_AUTHORIZED_PUBLIC_KEYS_VAR="DIA_AUTHORIZED_PUBLIC_KEYS_${NETWORK_SUFFIX}"
+DIA_AUTHORIZED_PUBLIC_KEYS_ENV="${!DIA_AUTHORIZED_PUBLIC_KEYS_VAR:-}"
+AUTHORIZED_DIA_PUBLIC_KEYS="$(
+  printf '%s\n' "$AUTHORIZED_DIA_PUBLIC_KEY" ${DIA_AUTHORIZED_PUBLIC_KEYS_ENV//,/ } \
+    | sed -E 's/^0[xX]//' \
+    | awk 'NF && !seen[tolower($0)]++' \
+    | paste -sd, -
 )"
 
 CLIENT_ID="$CLIENT_ID" \
@@ -537,7 +586,7 @@ fi
 
 if should_run_step 1; then
   run_cli_logged "01-protocol-init.log" \
-    "protocol:init --valid-config-signers $CONFIG_SIGNER_PKH --authorized-dia-public-keys $AUTHORIZED_DIA_PUBLIC_KEY --domain-name \"$DOMAIN_NAME\" --domain-version $DOMAIN_VERSION --domain-source-chain-id $DOMAIN_SOURCE_CHAIN_ID --domain-verifying-contract $DOMAIN_VERIFYING_CONTRACT --base-fee-lovelace $BASE_FEE_LOVELACE --per-pair-fee-lovelace $PER_PAIR_FEE_LOVELACE --max-bootstrap-drift-seconds $MAX_BOOTSTRAP_DRIFT_SECONDS --min-utxo-lovelace $CONFIG_MIN_UTXO_LOVELACE --config-asset-label $CONFIG_ASSET_LABEL --payment-hook-asset-label $PAYMENT_HOOK_ASSET_LABEL --payment-hook-withdraw-address $PAYMENT_HOOK_WITHDRAW_ADDRESS --out $STATE_REL/config-bootstrap.json"
+    "protocol:init --valid-config-signers $CONFIG_SIGNER_PKH --authorized-dia-public-keys $AUTHORIZED_DIA_PUBLIC_KEYS --domain-name \"$DOMAIN_NAME\" --domain-version $DOMAIN_VERSION --domain-source-chain-id $DOMAIN_SOURCE_CHAIN_ID --domain-verifying-contract $DOMAIN_VERIFYING_CONTRACT --base-fee-lovelace $BASE_FEE_LOVELACE --per-pair-fee-lovelace $PER_PAIR_FEE_LOVELACE --max-bootstrap-drift-seconds $MAX_BOOTSTRAP_DRIFT_SECONDS --min-utxo-lovelace $CONFIG_MIN_UTXO_LOVELACE --config-asset-label $CONFIG_ASSET_LABEL --payment-hook-asset-label $PAYMENT_HOOK_ASSET_LABEL --payment-hook-withdraw-address $PAYMENT_HOOK_WITHDRAW_ADDRESS --out $STATE_REL/config-bootstrap.json"
 fi
 
 if should_run_step 2; then
@@ -828,6 +877,21 @@ if should_run_step 35; then
     "deposit:merge --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/${CLIENT_ID}.json"
 fi
 
+# Steps 36–37: deposit fold riding on an update. Step 35's merge already swept
+# the earlier deposits, so fund a FRESH pending deposit (step 36), then run an
+# `update --fold-deposits` on an already-bootstrapped pair (step 37). The update
+# absorbs that clean pending deposit into the Receiver balance in the same tx
+# (reusing the Receiver AccrueFee path), proving the opportunistic fold.
+if should_run_step 36; then
+  run_tx_logged "36-deposit-fund-fold.log" \
+    "deposit:fund --amount-lovelace $DEPOSIT_FUND_LOVELACE --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/${CLIENT_ID}.json"
+fi
+if should_run_step 37; then
+  generate_signed_intent_now "37a-generate-usdc-usd-fold-intent.log" "usdc-usd" "-fold" "$(bootstrap_price "usdc-usd")"
+  run_tx_logged "37-update-usdc-fold-deposits.log" \
+    "update --fold-deposits --intent $STATE_REL/intents/usdc-usd-fold.signed.json --protocol-state $STATE_REL/config-bootstrap.json --client-state $STATE_REL/clients/${CLIENT_ID}.json --pair-state $STATE_REL/clients/${CLIENT_ID}/pairs/usdc-usd.json"
+fi
+
 STATE_ROOT="$STATE_ROOT" EVIDENCE_ROOT="$EVIDENCE_ROOT" SUCCESS_BATCH_SIZE="$SUCCESS_BATCH_SIZE" CLIENT_ID="$CLIENT_ID" BURN_PAIR_SLUG="$BURN_PAIR_SLUG" node --input-type=module <<'NODE' > "$EVIDENCE_ROOT/30-summary-build.log" 2>&1
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -1036,6 +1100,8 @@ const STEPS = [
         tx:    true,
       }]
     : []),
+  { log: "36-deposit-fund-fold.log",                    label: "`deposit:fund` (fresh deposit for fold)",     tx: true },
+  { log: "37-update-usdc-fold-deposits.log",            label: "`update --fold-deposits` — USDC/USD fold",    tx: true },
 ];
 
 // Batch attempts that were not submitted
@@ -1323,6 +1389,18 @@ ${(() => {
   const tail = ["26-settle.log","27-receiver-withdraw.log","28-payment-hook-withdraw.log","29-reclaim-payment-hook-reference-script.log","30-republish-payment-hook-reference-script.log"];
   if (burnPairSlug) tail.push(`31-pair-burn-${burnPairSlug}.log`);
   return stepData.filter(s => tail.includes(s.log)).map((s, i) => txRow(`${i + 26} | ${s.label}`, s.txHash, s.feeAda, s.log)).join("\n");
+})()}
+
+### Side-deposit fold riding on an update
+
+A fresh side deposit is funded, then absorbed into the Receiver balance by an
+\`update --fold-deposits\` on an already-bootstrapped pair (same tx).
+
+| Step | Operation | Tx hash | Fee | Log |
+| --- | --- | --- | --- | --- |
+${(() => {
+  const fold = ["36-deposit-fund-fold.log","37-update-usdc-fold-deposits.log"];
+  return stepData.filter(s => fold.includes(s.log)).map((s, i) => txRow(`${i + 36} | ${s.label}`, s.txHash, s.feeAda, s.log)).join("\n");
 })()}
 
 ## ADA flow summary

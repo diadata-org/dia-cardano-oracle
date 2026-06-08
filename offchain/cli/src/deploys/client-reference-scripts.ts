@@ -78,6 +78,10 @@ export async function publishClientReferenceScripts(args: {
     throw new Error("pairMintPolicy compiled script not found. Run receiver:parameterize first.");
   }
   const pairMintPolicy = mintingPolicyFromCompiledScript(state.compiledScripts.pairMintPolicy);
+  if (!state.compiledScripts?.depositValidator) {
+    throw new Error("depositValidator compiled script not found. Run receiver:parameterize first.");
+  }
+  const depositValidator = spendingValidatorFromCompiledScript(state.compiledScripts.depositValidator);
 
   const coinsPerUtxoByte = lucid.config().protocolParameters?.coinsPerUtxoByte;
   if (!coinsPerUtxoByte) {
@@ -98,8 +102,13 @@ export async function publishClientReferenceScripts(args: {
     address: referenceAddress,
     scriptRef: pairMintPolicy,
   });
+  const depositMinLovelace = computeMinUtxoForScriptOutput({
+    coinsPerUtxoByte,
+    address: referenceAddress,
+    scriptRef: depositValidator,
+  });
   reportProgress(
-    `Computed min lovelace for reference-script outputs: receiverValidator=${receiverMinLovelace}, pairValidator=${pairMinLovelace}, pairMintPolicy=${pairMintMinLovelace}`,
+    `Computed min lovelace for reference-script outputs: receiverValidator=${receiverMinLovelace}, pairValidator=${pairMinLovelace}, pairMintPolicy=${pairMintMinLovelace}, depositValidator=${depositMinLovelace}`,
   );
 
   reportProgress(`Building ${getCliConfig().cardanoNetwork} client reference-script publish transaction`);
@@ -107,7 +116,8 @@ export async function publishClientReferenceScripts(args: {
     .newTx()
     .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: receiverMinLovelace }, receiverValidator)
     .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: pairMinLovelace }, pairValidator)
-    .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: pairMintMinLovelace }, pairMintPolicy);
+    .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: pairMintMinLovelace }, pairMintPolicy)
+    .pay.ToAddressWithData(referenceAddress, undefined, { lovelace: depositMinLovelace }, depositValidator);
 
   const txSignBuilder = await txBuilder.complete();
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
@@ -156,6 +166,11 @@ export async function publishClientReferenceScripts(args: {
         outRef: { txHash: submittedTxHash!, outputIndex: 2 },
         label: "pair-mint reference-script",
       }),
+      waitForOutRefAvailable({
+        lucid,
+        outRef: { txHash: submittedTxHash!, outputIndex: 3 },
+        label: "deposit reference-script",
+      }),
     ]);
   }
 
@@ -190,6 +205,11 @@ export async function publishClientReferenceScripts(args: {
           outputIndex: 2,
           scriptHash: policyIdFromMintingPolicy(pairMintPolicy),
         },
+        deposit: {
+          txHash: submittedTxHash ?? "",
+          outputIndex: 3,
+          scriptHash: scriptHashFromValidator(depositValidator),
+        },
       },
     },
     receiver: {
@@ -200,6 +220,8 @@ export async function publishClientReferenceScripts(args: {
       receiverUnit: receiver.receiverUnit,
       receiverValidatorHash: receiver.receiverValidatorHash,
       receiverValidatorAddress: receiver.receiverValidatorAddress,
+      depositValidatorHash: receiver.depositValidatorHash,
+      depositValidatorAddress: receiver.depositValidatorAddress,
       receiverState: receiver.receiverState,
     },
     datum: {

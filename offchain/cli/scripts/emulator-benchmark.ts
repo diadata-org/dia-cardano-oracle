@@ -20,7 +20,7 @@
 // report under `docs/milestones/evidence/m1-emulator-benchmark-<run-id>/`.
 //
 // Prerequisites:
-//   - `DIA_EVM_PRIVATE_KEY_<TESTNET|MAINNET>` set in `.env` (same env block as the bash
+//   - `DIA_AUTHORIZED_PRIVATE_KEY_<TESTNET|MAINNET>` set in `.env` (same env block as the bash
 //     script — used both to sign intents and to derive the authorized
 //     DIA signer public key for the Config datum).
 //
@@ -98,7 +98,7 @@ Options:
                          failed run. Default: cleaned up.
 
 Prereq:
-  DIA_EVM_PRIVATE_KEY_<TESTNET|MAINNET> (matching CARDANO_NETWORK) must
+  DIA_AUTHORIZED_PRIVATE_KEY_<TESTNET|MAINNET> (matching CARDANO_NETWORK) must
   be set in offchain/cli/.env. The benchmark reads the same env block
   that run-all-cli.sh uses, so an env that runs the bash benchmark on
   Preview also runs this one.
@@ -106,10 +106,10 @@ Prereq:
 }
 
 async function main(): Promise<void> {
-  const { diaEvmPrivateKey, networkSuffix } = getCliConfig();
-  if (!diaEvmPrivateKey) {
+  const { authorizedDiaPrivateKey, networkSuffix } = getCliConfig();
+  if (!authorizedDiaPrivateKey) {
     console.error(
-      `[benchmark:emulator] DIA_EVM_PRIVATE_KEY_${networkSuffix} is required (set it in offchain/cli/.env).`,
+      `[benchmark:emulator] DIA_AUTHORIZED_PRIVATE_KEY_${networkSuffix} is required (set it in offchain/cli/.env).`,
     );
     process.exit(1);
   }

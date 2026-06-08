@@ -1,5 +1,8 @@
 import "./_test-env.js";
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { Constr, type Data as PlutusData, type TxSignBuilder, type UTxO } from "@lucid-evolution/lucid";
 import { Data } from "@lucid-evolution/plutus";
 import {
@@ -53,7 +56,7 @@ import {
   assertReceiverTopUpAmountPositive,
   assertReceiverWithdrawAmountPositive,
   assertReceiverWithdrawAmountValid,
-  assertSettleManifestMatchesSingleClientReceiver,
+  assertSettleManifestMatchesClientReceivers,
   assertSettleManifestReceiversNonEmptyAndUnique,
   assertSettleReceiverAccruedPositive,
 } from "../preflight/index.js";
@@ -70,6 +73,10 @@ import {
 import { isAnyReferenceScriptMissing } from "../core/reference-scripts.js";
 import { collectTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { buildPairApplyUpdateRedeemer } from "../core/redeemers.js";
+import { writeStateJsonFile } from "../core/state.js";
+import { depositFund, isCleanAdaDeposit } from "../transactions/deposit.js";
+import { resolveClientUtxoRefs } from "../transactions/reclaim-reference-script.js";
+import { completeWithRetry } from "../core/tx-build.js";
 
 testCardanoWalletCreate();
 testEthereumWalletCreate();
@@ -82,7 +89,10 @@ testBatchUpdatesSortMatchesBytewiseCompare();
 testBatchUpdatesSortRejectsNonNormalizedTokenName();
 testPairApplyUpdateRedeemerHasNoFields();
 testProtocolStateInit();
+testProtocolInitAuthorizedKeysFromEnv();
 testClientStateInit();
+await testDepositFundReadsFloorFromConfigState();
+testDepositMergeSelectionFiltersAndCaps();
 
 // --- Datum encoder/decoder regression tests ---------------------------------
 // These exist as a regression net for three real bugs found and fixed in the
@@ -107,17 +117,28 @@ testAddressToPlutusDataKeyAndStake();
 // --- Pure invariant tests (withdraw, settle, batch guards) -----------------
 testReceiverWithdrawDoesNotTouchAccrued();
 testSettleDeltaInvariant();
+testMultiClientSettleSumAccrued();
 testBatchRejectsDuplicatePair();
 testBatchRejectsForeignReceiver();
 testSettleManifestPreChecks();
 testHookCoordinatorConsistencyPure();
 testReferenceScriptMissingHelper();
+testClientReclaimUtxoRefsIncludesDeposit();
+testClientReclaimUtxoRefsSkipsDepositWhenAbsent();
 testWithdrawAmountPreflightHelpers();
 testReceiverTransactionPreflightGuards();
 testConfigUpdateAndInitArtifactPreflight();
 testBootstrapNftPayPreflight();
 testSettleAndPaymentHookPreflight();
 testOracleUpdatePreflightPureGuards();
+
+// --- completeWithRetry rebuilds a fresh tx per attempt ----------------------
+// lucid's TxBuilder is stateful and `.complete()` is NOT idempotent: retrying
+// the SAME builder duplicates outputs. completeWithRetry must REBUILD via the
+// factory on each attempt. These guard both the retry path and the
+// rethrow-real-errors path.
+await testCompleteWithRetryRebuildsFreshBuilderOnRetry();
+await testCompleteWithRetryRethrowsRealErrorImmediately();
 
 // --- Wallet settlement wait (provider lag / stale-UTxO regression) ----------
 await testWalletSettlementWaitsForSpentInputs();
@@ -134,6 +155,75 @@ console.log("CLI tests passed");
 // drops it; the wait must poll until it is gone and never return while it is
 // still visible. The tx also carries a script input (not a wallet UTxO) which
 // must be ignored.
+// Test A — rebuild-on-retry: the factory must be invoked once per attempt so a
+// FRESH builder is constructed each time (proving the helper rebuilds rather
+// than re-completing the same stateful builder). The first builder's
+// `.complete()` throws the transient WASM detached-ArrayBuffer error; the
+// second builder's resolves to a sentinel, which must be returned.
+async function testCompleteWithRetryRebuildsFreshBuilderOnRetry(): Promise<void> {
+  const previousDelay = process.env.TX_BUILD_RETRY_DELAY_MS;
+  // 1ms — the smallest value envNumber accepts (it rejects 0); keeps the test fast.
+  process.env.TX_BUILD_RETRY_DELAY_MS = "1";
+  try {
+    const sentinel = { __sentinel: "second-build" } as unknown as TxSignBuilder;
+    let factoryCalls = 0;
+    const buildTx = () => {
+      factoryCalls += 1;
+      const callIndex = factoryCalls;
+      return {
+        complete: async (): Promise<TxSignBuilder> => {
+          if (callIndex === 1) {
+            throw new TypeError(
+              "Cannot perform %TypedArray%.prototype.set on a detached ArrayBuffer",
+            );
+          }
+          return sentinel;
+        },
+      };
+    };
+
+    const result = await completeWithRetry(buildTx, () => {});
+
+    assert.equal(
+      factoryCalls,
+      2,
+      "factory must be called twice — a fresh builder per attempt (rebuild, not re-complete)",
+    );
+    assert.equal(result, sentinel, "must return the tx from the second (successful) build");
+  } finally {
+    if (previousDelay === undefined) {
+      delete process.env.TX_BUILD_RETRY_DELAY_MS;
+    } else {
+      process.env.TX_BUILD_RETRY_DELAY_MS = previousDelay;
+    }
+  }
+}
+
+// Test B — real errors rethrow immediately: a non-WASM error must surface on the
+// FIRST attempt with no retry, so genuine failures are never masked.
+async function testCompleteWithRetryRethrowsRealErrorImmediately(): Promise<void> {
+  let factoryCalls = 0;
+  const buildTx = () => {
+    factoryCalls += 1;
+    return {
+      complete: async (): Promise<TxSignBuilder> => {
+        throw new Error("amount exceeds balance");
+      },
+    };
+  };
+
+  await assert.rejects(
+    () => completeWithRetry(buildTx, () => {}),
+    /amount exceeds balance/,
+    "real (non-WASM) build errors must rethrow",
+  );
+  assert.equal(
+    factoryCalls,
+    1,
+    "real errors must not retry — the factory is called exactly once",
+  );
+}
+
 async function testWalletSettlementWaitsForSpentInputs(): Promise<void> {
   const spentTxHash = "ab".repeat(32);
   const scriptTxHash = "cd".repeat(32);
@@ -226,16 +316,16 @@ function testCardanoWalletCreate(): void {
 function testEthereumWalletCreate(): void {
   const originalNetwork = process.env.CARDANO_NETWORK;
   try {
-    for (const [network, evmKeyVar] of [
-      ["Preview", "DIA_EVM_PRIVATE_KEY_TESTNET"],
-      ["Mainnet", "DIA_EVM_PRIVATE_KEY_MAINNET"],
+    for (const [network, privateKeyVar] of [
+      ["Preview", "DIA_AUTHORIZED_PRIVATE_KEY_TESTNET"],
+      ["Mainnet", "DIA_AUTHORIZED_PRIVATE_KEY_MAINNET"],
     ] as const) {
       process.env.CARDANO_NETWORK = network;
       const wallet = createEthereumWallet();
       assertHexString(wallet.privateKey);
       assertHexString(wallet.publicKey);
       assert.equal(wallet.publicKey.length, 66);
-      assert.equal(wallet.env[evmKeyVar], wallet.privateKey);
+      assert.equal(wallet.env[privateKeyVar], wallet.privateKey);
       assert(wallet.address.startsWith("0x"));
     }
   } finally {
@@ -457,6 +547,36 @@ function testPairApplyUpdateRedeemerHasNoFields(): void {
   );
 }
 
+// With DIA_AUTHORIZED_PUBLIC_KEYS_<network> set, protocol:init authorizes exactly
+// those keys (DIA's real signers); with it unset it derives the self-sign key from
+// DIA_AUTHORIZED_PRIVATE_KEY. Hermetic — manages the env var itself.
+function testProtocolInitAuthorizedKeysFromEnv(): void {
+  const saved = process.env.DIA_AUTHORIZED_PUBLIC_KEYS_TESTNET;
+  const walletAddress =
+    "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j";
+  try {
+    process.env.DIA_AUTHORIZED_PUBLIC_KEYS_TESTNET =
+      "03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807,03c7d448ea95104a628945f43745f177f1e9895c6d4c8e43614d7b1c0395469b2d";
+    const configured = createProtocolStateArtifact({ source: "seed", walletAddress });
+    assert.deepEqual(configured.configState.authorizedDiaPublicKeys, [
+      "03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807",
+      "03c7d448ea95104a628945f43745f177f1e9895c6d4c8e43614d7b1c0395469b2d",
+    ]);
+
+    delete process.env.DIA_AUTHORIZED_PUBLIC_KEYS_TESTNET;
+    const fallback = createProtocolStateArtifact({ source: "seed", walletAddress });
+    const authorizedDiaPrivateKey = getCliConfig().authorizedDiaPrivateKey;
+    if (authorizedDiaPrivateKey) {
+      assert.deepEqual(fallback.configState.authorizedDiaPublicKeys, [
+        deriveCompressedPublicKeyFromPrivateKey(authorizedDiaPrivateKey),
+      ]);
+    }
+  } finally {
+    if (saved === undefined) delete process.env.DIA_AUTHORIZED_PUBLIC_KEYS_TESTNET;
+    else process.env.DIA_AUTHORIZED_PUBLIC_KEYS_TESTNET = saved;
+  }
+}
+
 function testProtocolStateInit(): void {
   const state = createProtocolStateArtifact({
     source: "seed",
@@ -467,14 +587,25 @@ function testProtocolStateInit(): void {
   assert.equal(state.bootstrapRefs.config.txHash, "");
   assert.equal(state.referenceScripts?.global?.config.txHash, "");
   assert.equal(state.configState.validConfigSigners.length, 1);
-  const diaEvmPrivateKey = getCliConfig().diaEvmPrivateKey;
-  const expectedAuthorizedDiaPublicKey = diaEvmPrivateKey
-    ? deriveCompressedPublicKeyFromPrivateKey(diaEvmPrivateKey)
-    : "03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807";
+  // Precedence (see defaultProtocolConfigInput): DIA_AUTHORIZED_PUBLIC_KEYS_<network>
+  // wins; otherwise the self-sign key derived from DIA_AUTHORIZED_PRIVATE_KEY; otherwise a
+  // fixture. testProtocolInitAuthorizedKeysFromEnv covers both paths hermetically.
+  const cliConfig = getCliConfig();
+  const expectedAuthorizedDiaPublicKey =
+    cliConfig.authorizedDiaPublicKeys.length > 0
+      ? cliConfig.authorizedDiaPublicKeys[0]
+      : cliConfig.authorizedDiaPrivateKey
+        ? deriveCompressedPublicKeyFromPrivateKey(cliConfig.authorizedDiaPrivateKey)
+        : "03aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807";
   assert.equal(state.configState.authorizedDiaPublicKeys[0], expectedAuthorizedDiaPublicKey);
   assert.equal(state.configState.domain.name, "DIA Oracle");
   assert.equal(state.configState.baseFeeLovelace, "600000");
   assert.equal(state.configState.perPairFeeLovelace, "400000");
+  // Deposit tx-build params seeded at protocol:init (shared with the feeder via
+  // config-bootstrap.json::configState; read by deposit:fund/merge).
+  assert.equal(state.configState.depositMinLovelace, "1000000");
+  assert.equal(state.configState.depositMaxPerMerge, "20");
+  assert.equal(state.configState.depositMaxPerUpdateFold, "3");
   assert.equal(state.datum.configCbor, "");
   assert.equal(state.datum.paymentHookCbor, "");
   assert.equal(
@@ -488,6 +619,103 @@ function testProtocolStateInit(): void {
   assert.equal(
     state.drafts?.paymentHookParameterize?.minUtxoLovelace,
     state.configState.minUtxoLovelace,
+  );
+}
+
+// deposit:fund sources its dust floor from
+// config-bootstrap.json::configState.depositMinLovelace (set at protocol:init),
+// NOT from a hardcoded constant or the feeder YAML. We write protocol + client
+// state files with a known floor, then assert depositFund rejects an amount
+// below that floor with a message citing it — proving the floor is read from
+// configState. (depositMerge reads the same floor + depositMaxPerMerge cap from
+// configState; the emulator protocol-flow exercises the full fund/merge path.)
+async function testDepositFundReadsFloorFromConfigState(): Promise<void> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "dia-deposit-test-"));
+  try {
+    const protocolStatePath = path.join(dir, "config-bootstrap.json");
+    const clientStatePath = path.join(dir, "client.json");
+    const protocol = sampleConfigArtifact();
+    protocol.configState.depositMinLovelace = "2000000"; // 2 ADA floor
+    protocol.configState.depositMaxPerMerge = "7";
+    await writeStateJsonFile(protocolStatePath, protocol);
+    await writeStateJsonFile(clientStatePath, sampleClientArtifact());
+
+    await assert.rejects(
+      depositFund({
+        amountLovelace: "1500000", // below the 2 ADA configState floor
+        clientStatePath,
+        protocolStatePath,
+        buildOnly: true,
+      }),
+      /1500000 is below the 2000000 lovelace minimum/,
+      "depositFund must read the floor from configState.depositMinLovelace",
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// deposit:merge selects which deposit UTxOs to sweep with `isCleanAdaDeposit`
+// (the floor + pure-ADA + no-datum predicate) and then caps the sweep at
+// `configState.depositMaxPerMerge`. The emulator (protocol-flow.ts) only drives
+// the happy path of two clean deposits; this isolates the SELECTION logic so the
+// dust/token/datum filtering AND the per-merge cap are covered at the unit level
+// (anti-skim itself is the deposit validator's job — see deposit_logic.ak tests).
+function testDepositMergeSelectionFiltersAndCaps(): void {
+  const FLOOR = 1_000_000n;
+  const TOKEN_UNIT = `${"aa".repeat(28)}4449415f5245434549564552`;
+  const mkUtxo = (overrides: Partial<UTxO>): UTxO => ({
+    txHash: "ab".repeat(32),
+    outputIndex: 0,
+    address: "addr_test1qpgtest",
+    assets: { lovelace: 5_000_000n },
+    ...overrides,
+  });
+
+  // --- Classification predicate (mirrors the feeder's deposit-pending probe).
+  assert.equal(isCleanAdaDeposit(mkUtxo({ assets: { lovelace: FLOOR } }), FLOOR), true,
+    "pure ADA at the floor is eligible");
+  assert.equal(isCleanAdaDeposit(mkUtxo({ assets: { lovelace: FLOOR - 1n } }), FLOOR), false,
+    "dust below the floor is skipped");
+  assert.equal(
+    isCleanAdaDeposit(mkUtxo({ assets: { lovelace: 5_000_000n, [TOKEN_UNIT]: 1n } }), FLOOR),
+    false,
+    "a native-token UTxO is skipped (a griefer cannot block the sweep)");
+
+  // --- Selection = filter(isCleanAdaDeposit) then slice(0, maxPerMerge): the
+  // exact expression depositMerge uses. We assert dust/token UTxOs drop out AND
+  // the cap bounds how many clean deposits are swept in one tx.
+  const select = (utxos: UTxO[], floor: bigint, cap: number): UTxO[] =>
+    utxos.filter((u) => isCleanAdaDeposit(u, floor)).slice(0, cap);
+
+  const mixed = [
+    mkUtxo({ txHash: "01".repeat(32), assets: { lovelace: 2_000_000n } }),       // clean
+    mkUtxo({ txHash: "02".repeat(32), assets: { lovelace: 500_000n } }),         // dust
+    mkUtxo({ txHash: "03".repeat(32), assets: { lovelace: 4_000_000n, [TOKEN_UNIT]: 1n } }), // token junk
+    mkUtxo({ txHash: "04".repeat(32), assets: { lovelace: 3_000_000n } }),       // clean
+  ];
+  const eligible = select(mixed, FLOOR, 20);
+  assert.deepEqual(
+    eligible.map((u) => u.txHash),
+    ["01".repeat(32), "04".repeat(32)],
+    "only clean ADA >= floor is selected; dust and token-junk are dropped",
+  );
+  const swept = eligible.reduce((acc, u) => acc + (u.assets.lovelace ?? 0n), 0n);
+  assert.equal(swept, 5_000_000n, "swept total is the sum of the eligible deposits only");
+
+  // Cap: with 5 clean deposits and a cap of 3, exactly 3 are swept.
+  const fiveClean = Array.from({ length: 5 }, (_unused, i) =>
+    mkUtxo({ txHash: `${i.toString().padStart(2, "0")}`.repeat(32).slice(0, 64), assets: { lovelace: 2_000_000n } }),
+  );
+  assert.equal(select(fiveClean, FLOOR, 3).length, 3, "the per-merge cap bounds the sweep at depositMaxPerMerge");
+  assert.equal(select(fiveClean, FLOOR, 20).length, 5, "a cap above the count sweeps all clean deposits");
+
+  // No eligible deposits (all dust / all token-junk) → empty selection, which is
+  // exactly the condition depositMerge turns into the "no eligible deposits" throw.
+  assert.equal(
+    select([mkUtxo({ assets: { lovelace: 500_000n } }), mkUtxo({ assets: { lovelace: 9n, [TOKEN_UNIT]: 1n } })], FLOOR, 20).length,
+    0,
+    "all-dust / all-token-junk yields no eligible deposits",
   );
 }
 
@@ -584,6 +812,9 @@ function sampleConfigStateDatum() {
     },
     minUtxoLovelace: "5000000",
     maxBootstrapDriftSeconds: "300",
+    depositMinLovelace: "1000000",
+    depositMaxPerMerge: "20",
+    depositMaxPerUpdateFold: "3",
   };
 }
 
@@ -1007,44 +1238,118 @@ function testSettlePreflightGuards(): void {
     assertSettleReceiverAccruedPositive(1n, "1", "recv_unit"),
   );
 
-  const client = { receiverPolicyId: "aa", receiverAssetName: "bb" };
+  testSettleManifestMatchesClientReceivers();
+}
+
+// Multi-client settle manifest guard: non-empty + unique + 1:1 match with the
+// loaded client receivers. Generalises the previous single-client check to
+// any N >= 1 receivers settled in one transaction.
+function testSettleManifestMatchesClientReceivers(): void {
+  const clientA = { receiverPolicyId: "aa", receiverAssetName: "bb" };
+  const clientB = { receiverPolicyId: "11", receiverAssetName: "22" };
+
+  // Empty manifest is rejected.
   assert.throws(
-    () => assertSettleManifestMatchesSingleClientReceiver([], client),
+    () => assertSettleManifestMatchesClientReceivers([], [clientA]),
     /at least one receiver/,
   );
+
+  // Duplicate manifest entry is rejected (mirrors on-chain uniqueness).
   assert.throws(
     () =>
-      assertSettleManifestMatchesSingleClientReceiver(
-        [
-          { receiverPolicyId: "aa", receiverAssetName: "bb" },
-          { receiverPolicyId: "aa", receiverAssetName: "bb" },
-        ],
-        client,
+      assertSettleManifestMatchesClientReceivers(
+        [{ ...clientA }, { ...clientA }],
+        [clientA, clientB],
       ),
     /Duplicate settle receiver/,
   );
+
+  // Length mismatch (manifest has fewer/more rows than loaded clients).
+  assert.throws(
+    () => assertSettleManifestMatchesClientReceivers([{ ...clientA }], [clientA, clientB]),
+    /does not match the number of loaded client receivers/,
+  );
+
+  // A loaded client missing from the manifest is rejected.
   assert.throws(
     () =>
-      assertSettleManifestMatchesSingleClientReceiver(
-        [
-          { receiverPolicyId: "11", receiverAssetName: "bb" },
-          { receiverPolicyId: "22", receiverAssetName: "bb" },
-        ],
-        client,
+      assertSettleManifestMatchesClientReceivers(
+        [{ ...clientA }, { receiverPolicyId: "xx", receiverAssetName: "yy" }],
+        [clientA, clientB],
       ),
-    /exactly one receiver/,
+    /is missing from the settle manifest|does not match any loaded client receiver/,
   );
-  assert.throws(
-    () =>
-      assertSettleManifestMatchesSingleClientReceiver(
-        [{ receiverPolicyId: "xx", receiverAssetName: "yy" }],
-        client,
-      ),
-    /does not match the loaded client receiver/,
-  );
+
+  // Single-client (N=1) still works.
   assert.doesNotThrow(() =>
-    assertSettleManifestMatchesSingleClientReceiver([{ ...client }], client),
+    assertSettleManifestMatchesClientReceivers([{ ...clientA }], [clientA]),
   );
+
+  // Two clients, 1:1 match — order-independent.
+  assert.doesNotThrow(() =>
+    assertSettleManifestMatchesClientReceivers(
+      [{ ...clientB }, { ...clientA }],
+      [clientA, clientB],
+    ),
+  );
+}
+
+// Σ-accrued invariant for a multi-client settle: the payment hook is credited
+// the sum of every receiver's drained accrued, and each receiver ends at 0.
+// Mirrors what the on-chain coordinator enforces (Σ-drained == hook delta).
+function testMultiClientSettleSumAccrued(): void {
+  const receivers = [
+    sampleReceiverState({ balanceLovelace: "10000000", accruedToHookLovelace: "1000000" }),
+    sampleReceiverState({ balanceLovelace: "20000000", accruedToHookLovelace: "2500000" }),
+    sampleReceiverState({ balanceLovelace: "30000000", accruedToHookLovelace: "750000" }),
+  ];
+  const hookBefore = samplePaymentHookStateDatum();
+
+  const total = receivers.reduce(
+    (sum, r) => sum + BigInt(r.accruedToHookLovelace),
+    0n,
+  );
+  assert.equal(total, 4_250_000n, "Σ accrued across receivers");
+
+  const receiversAfter = receivers.map((r) => ({
+    ...r,
+    accruedToHookLovelace: "0",
+  }));
+  const hookAfter = {
+    ...hookBefore,
+    accruedFeesLovelace: (BigInt(hookBefore.accruedFeesLovelace) + total).toString(),
+    lifetimeCollectedLovelace: (
+      BigInt(hookBefore.lifetimeCollectedLovelace) + total
+    ).toString(),
+  };
+
+  // Total accrued is conserved: every receiver drained into the hook.
+  const totalBefore =
+    receivers.reduce((sum, r) => sum + BigInt(r.accruedToHookLovelace), 0n) +
+    BigInt(hookBefore.accruedFeesLovelace);
+  const totalAfter =
+    receiversAfter.reduce((sum, r) => sum + BigInt(r.accruedToHookLovelace), 0n) +
+    BigInt(hookAfter.accruedFeesLovelace);
+  assert.equal(totalAfter, totalBefore, "multi-client settle must conserve total accrued");
+
+  for (const r of receiversAfter) {
+    assert.equal(r.accruedToHookLovelace, "0", "every receiver accrued cleared");
+  }
+  assert.equal(
+    BigInt(hookAfter.accruedFeesLovelace) - BigInt(hookBefore.accruedFeesLovelace),
+    total,
+    "hook accrued grows by exactly Σ",
+  );
+  assert.equal(
+    BigInt(hookAfter.lifetimeCollectedLovelace) -
+      BigInt(hookBefore.lifetimeCollectedLovelace),
+    total,
+    "hook lifetime_collected grows by exactly Σ",
+  );
+  // Balances unchanged by settle.
+  for (let i = 0; i < receivers.length; i += 1) {
+    assert.equal(receiversAfter[i].balanceLovelace, receivers[i].balanceLovelace);
+  }
 }
 
 function testPaymentHookWithdrawPreflightGuards(): void {
@@ -1377,6 +1682,78 @@ function testReferenceScriptMissingHelper(): void {
   );
 }
 
+function sampleReceiverDefaults() {
+  return {
+    clientId: "client-a",
+    receiverAssetLabel: "DIA_RECEIVER_CLIENT_A",
+    receiverAssetName: "4449415f52454345495645525f434c49454e545f41",
+    minUtxoLovelace: "3000000",
+  };
+}
+
+// reclaim-reference-script --script client must recover all four per-client
+// reference scripts (receiver / pair / pairMint / deposit), reversing the single
+// publish-client transaction that created them together.
+function testClientReclaimUtxoRefsIncludesDeposit(): void {
+  const client = createClientStateArtifact("client-a", sampleReceiverDefaults());
+  client.referenceScripts = {
+    client: {
+      receiver: { txHash: "aa".repeat(32), outputIndex: 0, scriptHash: "r1" },
+      pair: { txHash: "aa".repeat(32), outputIndex: 1, scriptHash: "p1" },
+      pairMint: { txHash: "aa".repeat(32), outputIndex: 2, scriptHash: "pm1" },
+      deposit: { txHash: "aa".repeat(32), outputIndex: 3, scriptHash: "d1" },
+    },
+  };
+
+  const refs = resolveClientUtxoRefs(client);
+  assert.deepEqual(
+    refs.map((r) => r.name),
+    ["receiver", "pair", "pairMint", "deposit"],
+    "client reclaim must include all four per-client reference-script outRefs",
+  );
+  const deposit = refs.find((r) => r.name === "deposit");
+  assert.equal(deposit?.ref?.outputIndex, 3, "deposit ref must carry its published outRef");
+}
+
+// A client state from a deployment that predates the deposit reference script
+// carries only receiver/pair/pairMint. resolveClientUtxoRefs must skip the
+// absent (or empty) deposit entry — not throw, not emit an unpublished outRef
+// that the caller's "not published yet" guard would reject — so the teardown of
+// such a deployment still works.
+function testClientReclaimUtxoRefsSkipsDepositWhenAbsent(): void {
+  // Absent entirely (three-entry state shape).
+  const threeEntry = createClientStateArtifact("client-a", sampleReceiverDefaults());
+  threeEntry.referenceScripts = {
+    client: {
+      receiver: { txHash: "aa".repeat(32), outputIndex: 0, scriptHash: "r1" },
+      pair: { txHash: "aa".repeat(32), outputIndex: 1, scriptHash: "p1" },
+      pairMint: { txHash: "aa".repeat(32), outputIndex: 2, scriptHash: "pm1" },
+    },
+  };
+  assert.deepEqual(
+    resolveClientUtxoRefs(threeEntry).map((r) => r.name),
+    ["receiver", "pair", "pairMint"],
+    "absent deposit ref must be skipped, not surfaced",
+  );
+
+  // Present but empty (txHash === "") must also be skipped so the caller's
+  // unpublished-ref guard does not fire.
+  const emptyDeposit = createClientStateArtifact("client-a", sampleReceiverDefaults());
+  emptyDeposit.referenceScripts = {
+    client: {
+      receiver: { txHash: "aa".repeat(32), outputIndex: 0, scriptHash: "r1" },
+      pair: { txHash: "aa".repeat(32), outputIndex: 1, scriptHash: "p1" },
+      pairMint: { txHash: "aa".repeat(32), outputIndex: 2, scriptHash: "pm1" },
+      deposit: { txHash: "", outputIndex: 0, scriptHash: "" },
+    },
+  };
+  assert.deepEqual(
+    resolveClientUtxoRefs(emptyDeposit).map((r) => r.name),
+    ["receiver", "pair", "pairMint"],
+    "empty deposit ref must be skipped, not surfaced",
+  );
+}
+
 function assertHexString(value: unknown): void {
   if (typeof value !== "string") {
     assert.fail("value must be a string");
@@ -1453,6 +1830,7 @@ function sampleClientArtifact(): ClientStateArtifact {
       receiverValidator: "11",
       pairMintPolicy: "22",
       pairValidator: "33",
+      depositValidator: "44",
     },
     referenceScripts: {
       client: {
@@ -1492,6 +1870,8 @@ function sampleReceiverArtifact() {
     receiverUnit: `${"22".repeat(28)}4449415f5245434549564552`,
     receiverValidatorHash: "55".repeat(28),
     receiverValidatorAddress: "addr_test1receiver",
+    depositValidatorHash: "66".repeat(28),
+    depositValidatorAddress: "addr_test1deposit",
     receiverState: {
       balanceLovelace: "10000000",
       accruedToHookLovelace: "0",
@@ -1584,6 +1964,9 @@ function sampleConfigState(): ConfigStateArtifact["configState"] {
     },
     minUtxoLovelace: "5000000",
     maxBootstrapDriftSeconds: "300",
+    depositMinLovelace: "1000000",
+    depositMaxPerMerge: "20",
+    depositMaxPerUpdateFold: "3",
   };
 }
 
@@ -1682,15 +2065,15 @@ async function testInstallEmulatorLucidRedirectsCliHelpers(): Promise<void> {
 // Preview — `preview:protocol:init`, `preview:config:parameterize`,
 // `preview:config:bootstrap` — but against the in-memory Lucid Emulator,
 // reusing every CLI builder verbatim through the lucid-injection bridge.
-// Skipped silently when `DIA_EVM_PRIVATE_KEY` is not configured, because
+// Skipped silently when `DIA_AUTHORIZED_PRIVATE_KEY` is not configured, because
 // the bootstrap step derives the authorized DIA signer from that env
 // var exactly like the bash script. This keeps the test optional in
 // environments without the secret but exercises the real wiring when
 // it is present.
 async function testEmulatorProtocolFlowConfigBootstrap(): Promise<void> {
-  if (!process.env.DIA_EVM_PRIVATE_KEY?.trim()) {
+  if (!process.env.DIA_AUTHORIZED_PRIVATE_KEY?.trim()) {
     console.log(
-      "[skip] testEmulatorProtocolFlowConfigBootstrap: set DIA_EVM_PRIVATE_KEY to run",
+      "[skip] testEmulatorProtocolFlowConfigBootstrap: set DIA_AUTHORIZED_PRIVATE_KEY to run",
     );
     return;
   }
@@ -1715,6 +2098,20 @@ async function testEmulatorProtocolFlowConfigBootstrap(): Promise<void> {
     report.steps.find((s) => s.label === "config:bootstrap")?.ok,
     true,
     "config:bootstrap should succeed in the emulator",
+  );
+  // The combined "update + absorb side-deposit" step must have run and passed
+  // its in-step assertions (price updated, balance rose by swept net of fee,
+  // accrued rose by exactly the fee, deposit consumed). Its presence proves the
+  // AccrueFee absorption path is exercised on real Plutus, not just typechecked.
+  const absorbStep = report.steps.find((s) => s.label.startsWith("update:absorb-deposit:"));
+  assert.ok(
+    absorbStep,
+    "emulator flow should include an update:absorb-deposit step that folds a side-deposit",
+  );
+  assert.equal(
+    absorbStep!.ok,
+    true,
+    `update:absorb-deposit should succeed; got error: ${"error" in absorbStep! ? absorbStep!.error : ""}`,
   );
   for (const step of report.steps) {
     assert.equal(

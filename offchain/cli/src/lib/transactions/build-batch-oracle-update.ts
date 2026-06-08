@@ -1,4 +1,4 @@
-import { Constr, type LucidEvolution, type TxSignBuilder, type UTxO } from "@lucid-evolution/lucid";
+import { Constr, type LucidEvolution, type SpendingValidator, type TxSignBuilder, type UTxO } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
 import {
@@ -8,6 +8,7 @@ import {
 } from "../../core/contracts.js";
 import { slotBackoffUnixTimeMs } from "../../core/network-time.js";
 import { loadReferenceScriptUtxos } from "../../core/reference-scripts.js";
+import { completeWithRetry } from "../../core/tx-build.js";
 import {
   buildPairDatumCbor,
   buildReceiverDatumCbor,
@@ -27,8 +28,17 @@ import type {
   ClientStateArtifact,
   PairStateArtifact,
   ReferenceScriptsState,
+  ReferenceScriptUtxo,
 } from "../../core/state.js";
 import type { DiaOracleIntent } from "../../core/dia-intent.js";
+
+/** Optional side-deposit fold for a batch update — same semantics as the
+ *  single-update `OracleUpdateDepositFold`. Selected + capped by the caller. */
+export type BatchDepositFold = {
+  utxos: UTxO[];
+  depositValidator: SpendingValidator;
+  referenceOutRef?: ReferenceScriptUtxo | null;
+};
 
 export type BatchUpdateEntry = {
   intent: DiaOracleIntent;
@@ -50,6 +60,8 @@ export type BatchOracleUpdateContext = {
   walletPaymentKeyHash: string;
   protocolState: ConfigStateArtifact;
   clientState: ClientStateArtifact;
+  /** Optional opportunistic side-deposit fold (see BatchDepositFold). */
+  depositFold?: BatchDepositFold;
 };
 
 export type BatchOracleUpdateResult = {
@@ -61,6 +73,8 @@ export type BatchOracleUpdateResult = {
     nextPairState: PairStateArtifact["pairState"];
     nextPairDatumCbor: string;
   }>;
+  /** Lovelace absorbed from folded side-deposits (0 when none were folded). */
+  foldedDepositLovelace: bigint;
 };
 
 export async function buildBatchOracleUpdateTx(
@@ -118,10 +132,20 @@ export async function buildBatchOracleUpdateTx(
   const totalFee =
     BigInt(state.configState.baseFeeLovelace) +
     BigInt(state.configState.perPairFeeLovelace) * BigInt(preparedUpdates.length);
+
+  // Optional side-deposit fold: absorb the (already-selected, clean) deposits
+  // into the Receiver balance in the same batch tx via the AccrueFee `added`
+  // term. Empty when no fold was requested → unchanged pure-batch behaviour.
+  const foldDeposits = ctx.depositFold?.utxos ?? [];
+  const foldedDepositLovelace = foldDeposits.reduce(
+    (acc, utxo) => acc + (utxo.assets.lovelace ?? 0n),
+    0n,
+  );
+
   const nextReceiverState = {
     ...currentReceiverState,
     balanceLovelace: (
-      BigInt(currentReceiverState.balanceLovelace) - totalFee
+      BigInt(currentReceiverState.balanceLovelace) - totalFee + foldedDepositLovelace
     ).toString(),
     accruedToHookLovelace: (
       BigInt(currentReceiverState.accruedToHookLovelace) + totalFee
@@ -164,7 +188,30 @@ export async function buildBatchOracleUpdateTx(
       () => {},
     );
 
+  // Deposit reference script — loaded only when folding deposits, so the
+  // pure-batch path never touches it.
+  const { utxos: depositReferenceUtxos, missing: missingDepositReference } =
+    foldDeposits.length > 0
+      ? await loadReferenceScriptUtxos(
+          [
+            {
+              key: "deposit",
+              label: "deposit",
+              outRef: ctx.depositFold?.referenceOutRef
+                ? {
+                    txHash: ctx.depositFold.referenceOutRef.txHash,
+                    outputIndex: ctx.depositFold.referenceOutRef.outputIndex,
+                  }
+                : null,
+            },
+          ] as const,
+          () => {},
+        )
+      : { utxos: [], missing: { deposit: false } };
+
   const receiverRedeemer = Data.to(new Constr(1, []));
+  // deposit_logic CollectDeposit — single-constructor case at index 0.
+  const collectDepositRedeemer = Data.to(new Constr(0, []));
   const coordinatorRedeemer = Data.to(
     new Constr<PlutusData>(1, [
       preparedUpdates.map(({ intent, witness, artifact }) =>
@@ -190,73 +237,87 @@ export async function buildBatchOracleUpdateTx(
     Number(earliestExpirySec) * 1000 - 60_000,
   );
 
-  let txBuilder = lucid
-    .newTx()
-    .validFrom(txValidFromMs)
-    .validTo(txValidToMs)
-    .readFrom([ctx.currentConfigUtxo, ...referenceScriptUtxos])
-    .collectFrom([ctx.currentReceiverUtxo], receiverRedeemer)
-    .withdraw(state.scripts.coordinatorRewardAddress, 0n, coordinatorRedeemer);
+  const buildTx = () => {
+    let txBuilder = lucid
+      .newTx()
+      .validFrom(txValidFromMs)
+      .validTo(txValidToMs)
+      .readFrom([ctx.currentConfigUtxo, ...referenceScriptUtxos, ...depositReferenceUtxos])
+      .collectFrom([ctx.currentReceiverUtxo], receiverRedeemer)
+      .withdraw(state.scripts.coordinatorRewardAddress, 0n, coordinatorRedeemer);
 
-  for (const { artifact, isCreate } of preparedUpdates) {
-    if (!isCreate) {
-      const currentPairUtxo = ctx.currentPairUtxoByUnit.get(artifact.pair.pairUnit);
-      if (!currentPairUtxo) {
-        throw new Error(`Missing current UTxO for pair ${artifact.pair.pairUnit}`);
+    // Fold the selected side-deposits with CollectDeposit. The Receiver output
+    // below already carries `+ foldedDepositLovelace`, so the Receiver's physical
+    // lovelace rises by exactly the swept total. No-op when nothing is folded.
+    if (foldDeposits.length > 0) {
+      txBuilder = txBuilder.collectFrom(foldDeposits, collectDepositRedeemer);
+      if (missingDepositReference.deposit && ctx.depositFold) {
+        txBuilder = txBuilder.attach.SpendingValidator(ctx.depositFold.depositValidator);
       }
-      txBuilder = txBuilder.collectFrom([currentPairUtxo], buildPairApplyUpdateRedeemer());
     }
-  }
 
-  if (missingReferenceScripts.receiver) {
-    txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
-  }
-  if (missingReferenceScripts.coordinator) {
-    txBuilder = txBuilder.attach.WithdrawalValidator(coordinatorValidator);
-  }
-  if (missingReferenceScripts.pair) {
-    txBuilder = txBuilder.attach.SpendingValidator(pairValidator);
-  }
-
-  const mintAssets: Record<string, bigint> = {};
-  for (const { artifact, isCreate } of preparedUpdates) {
-    if (isCreate) {
-      mintAssets[artifact.pair.pairUnit] = 1n;
+    for (const { artifact, isCreate } of preparedUpdates) {
+      if (!isCreate) {
+        const currentPairUtxo = ctx.currentPairUtxoByUnit.get(artifact.pair.pairUnit);
+        if (!currentPairUtxo) {
+          throw new Error(`Missing current UTxO for pair ${artifact.pair.pairUnit}`);
+        }
+        txBuilder = txBuilder.collectFrom([currentPairUtxo], buildPairApplyUpdateRedeemer());
+      }
     }
-  }
-  if (Object.keys(mintAssets).length > 0) {
-    txBuilder = txBuilder
-      .mintAssets(mintAssets, Data.to(new Constr<PlutusData>(0, [])))
-      .addSignerKey(ctx.walletPaymentKeyHash);
-    if (missingReferenceScripts.pairMint) {
-      txBuilder = txBuilder.attach.MintingPolicy(pairMintPolicy);
-    }
-  }
 
-  for (const { artifact, nextPairState } of preparedUpdates) {
+    if (missingReferenceScripts.receiver) {
+      txBuilder = txBuilder.attach.SpendingValidator(receiverValidator);
+    }
+    if (missingReferenceScripts.coordinator) {
+      txBuilder = txBuilder.attach.WithdrawalValidator(coordinatorValidator);
+    }
+    if (missingReferenceScripts.pair) {
+      txBuilder = txBuilder.attach.SpendingValidator(pairValidator);
+    }
+
+    const mintAssets: Record<string, bigint> = {};
+    for (const { artifact, isCreate } of preparedUpdates) {
+      if (isCreate) {
+        mintAssets[artifact.pair.pairUnit] = 1n;
+      }
+    }
+    if (Object.keys(mintAssets).length > 0) {
+      txBuilder = txBuilder
+        .mintAssets(mintAssets, Data.to(new Constr<PlutusData>(0, [])))
+        .addSignerKey(ctx.walletPaymentKeyHash);
+      if (missingReferenceScripts.pairMint) {
+        txBuilder = txBuilder.attach.MintingPolicy(pairMintPolicy);
+      }
+    }
+
+    for (const { artifact, nextPairState } of preparedUpdates) {
+      txBuilder = txBuilder.pay.ToContract(
+        artifact.pair.pairValidatorAddress,
+        { kind: "inline", value: buildPairDatumCbor(nextPairState) },
+        {
+          lovelace: BigInt(nextPairState.minUtxoLovelace),
+          [artifact.pair.pairUnit]: 1n,
+        },
+      );
+    }
+
     txBuilder = txBuilder.pay.ToContract(
-      artifact.pair.pairValidatorAddress,
-      { kind: "inline", value: buildPairDatumCbor(nextPairState) },
+      state.receiver.receiverValidatorAddress,
+      { kind: "inline", value: nextReceiverDatumCbor },
       {
-        lovelace: BigInt(nextPairState.minUtxoLovelace),
-        [artifact.pair.pairUnit]: 1n,
+        lovelace:
+          BigInt(nextReceiverState.minUtxoLovelace) +
+          BigInt(nextReceiverState.balanceLovelace) +
+          BigInt(nextReceiverState.accruedToHookLovelace),
+        [state.receiver.receiverUnit]: 1n,
       },
     );
-  }
 
-  txBuilder = txBuilder.pay.ToContract(
-    state.receiver.receiverValidatorAddress,
-    { kind: "inline", value: nextReceiverDatumCbor },
-    {
-      lovelace:
-        BigInt(nextReceiverState.minUtxoLovelace) +
-        BigInt(nextReceiverState.balanceLovelace) +
-        BigInt(nextReceiverState.accruedToHookLovelace),
-      [state.receiver.receiverUnit]: 1n,
-    },
-  );
+    return txBuilder;
+  };
 
-  const txSignBuilder = await txBuilder.complete();
+  const txSignBuilder = await completeWithRetry(buildTx);
 
   return {
     txSignBuilder,
@@ -267,5 +328,6 @@ export async function buildBatchOracleUpdateTx(
       nextPairState,
       nextPairDatumCbor: buildPairDatumCbor(nextPairState),
     })),
+    foldedDepositLovelace,
   };
 }

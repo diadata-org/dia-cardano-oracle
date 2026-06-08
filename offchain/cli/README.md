@@ -9,6 +9,11 @@ or alternate command set are needed to target a different network. Set
 `CARDANO_NETWORK` and the matching Blockfrost project id in `.env`, generate or
 fund the right wallet, and re-run.
 
+This page documents running the CLI on the host (npm). The same commands also
+run in the self-contained Docker image — see
+[`offchain/feeder/README.md`](../feeder/README.md#running-with-docker)
+(`make wallet`, `make run-all`, `make cli CMD="…"`).
+
 ## Contents
 
 - [Overview](#overview)
@@ -47,6 +52,7 @@ fund the right wallet, and re-run.
   - [24. Create a batch manifest](#24-create-a-batch-manifest)
   - [25. Submit a batch update](#25-submit-a-batch-update)
   - [25b. Settle accrued fees](#25b-settle-accrued-fees)
+  - [25c. Side-deposit funding](#25c-side-deposit-funding)
 - [Maintenance Transactions](#maintenance-transactions)
   - [26. Withdraw from the Receiver](#26-withdraw-from-the-receiver)
   - [27. Withdraw protocol fees from PaymentHook](#27-withdraw-protocol-fees-from-paymenthook)
@@ -54,6 +60,9 @@ fund the right wallet, and re-run.
   - [29. Update min UTxO for Pair (admin only)](#29-update-min-utxo-for-pair-admin-only)
   - [29b. Burn a Pair (admin only)](#29b-burn-a-pair-admin-only)
   - [29c. Deduplicate Pair UTxOs (admin only)](#29c-deduplicate-pair-utxos-admin-only)
+  - [29d. Burn the Receiver (admin only)](#29d-burn-the-receiver-admin-only)
+  - [29e. Burn the PaymentHook (admin only)](#29e-burn-the-paymenthook-admin-only)
+  - [29f. Burn the Config (admin only)](#29f-burn-the-config-admin-only)
   - [30. Update min UTxO for Config (admin only)](#30-update-min-utxo-for-config-admin-only)
   - [31. Update min UTxO for PaymentHook (admin only)](#31-update-min-utxo-for-paymenthook-admin-only)
   - [32. Reclaim reference-script UTxOs](#32-reclaim-reference-script-utxos)
@@ -62,16 +71,13 @@ fund the right wallet, and re-run.
 
 ## Overview
 
-The CLI uses three kinds of inputs and outputs:
-
-- **state artifacts**: persistent protocol, client, and pair state files —
-  one source of truth per artifact.
-- **generated payloads**: ephemeral intents, config-update drafts, and batch
-  manifests consumed by transaction commands.
-- **direct CLI flags**: simple ADA values such as `--amount-lovelace`.
-
-Both kinds of files live under `./state/<network>/`, where `<network>` is the
-lowercase value of `CARDANO_NETWORK` (`preview` or `mainnet`).
+The CLI takes three kinds of inputs: **state artifacts** (the persistent
+protocol/client/pair JSON files — one source of truth per artifact),
+**generated payloads** (ephemeral intents, config-update drafts, and batch
+manifests that you generate with a command and then feed to a transaction
+command), and **direct CLI flags** (simple values such as `--amount-lovelace`).
+All files live under `../state/<network>/`, where `<network>` is the lowercase
+value of `CARDANO_NETWORK` (`preview` or `mainnet`).
 
 ### Folder structure
 
@@ -89,19 +95,28 @@ offchain/cli/
 │   └── emulator/           # in-process emulator flow + benchmark
 ├── scripts/
 │   ├── run-all-cli.sh          # full end-to-end runbook (Preview or Mainnet)
+│   ├── run-teardown-cli.sh     # decommission runbook (chain-as-truth teardown)
 │   ├── fee-benchmark.sh        # batch-size capacity benchmark
 │   ├── emulator-benchmark.ts   # in-process emulator throughput benchmark
 │   ├── run-contracts-tests.sh  # Aiken contract test runner
 │   └── run-node-tests.sh       # Node.js integration test runner
-├── .env                    # CARDANO_NETWORK, Blockfrost, wallet seeds
-└── state/<network>/        # all runtime artifacts (see below)
-    ├── config-bootstrap.json                       # protocol artifact (Config + PaymentHook + global ref-scripts)
-    ├── clients/
-    │   ├── <client>.json                           # client artifact (Receiver + client ref-scripts)
-    │   └── <client>/pairs/<pair>.json              # pair artifacts (one per live pair)
-    ├── intents/<pair>.{unsigned,signed}.json       # EIP-712 oracle intents
-    ├── config-updates/config-update.json           # generated Config-update drafts
-    └── update-batches/update-batch.manifest.json   # generated batch manifests
+└── .env                    # CARDANO_NETWORK, Blockfrost, wallet seeds
+```
+
+State lives in the **shared** `offchain/state/` tree — a sibling of `cli/` and
+`feeder/`. The CLI writes the deployment record; the feeder reads it and adds its
+runtime (DB, logs, pair state) to the same run dir:
+
+```text
+offchain/state/<network>_run_<id>/                  # shared per-run state
+├── config-bootstrap.json                       # protocol artifact (Config + PaymentHook + global ref-scripts)
+├── clients/
+│   ├── <client>.json                           # client artifact (Receiver + client ref-scripts)
+│   └── <client>/pairs/<pair>.json              # pair artifacts (one per live pair)
+├── intents/<pair>.{unsigned,signed}.json       # EIP-712 oracle intents
+├── config-updates/config-update.json           # generated Config-update drafts
+├── update-batches/update-batch.manifest.json   # generated batch manifests
+└── logs/ + feeder.sqlite                        # feeder runtime (gitignored)
 ```
 
 Sub-folder docs: [`scripts/README.md`](./scripts/README.md) (developer / CI tooling) and
@@ -117,6 +132,13 @@ The normal flow is:
 6. create and sign intents
 7. submit single or batch oracle updates
 8. run maintenance transactions
+
+**Common flags (used across commands):** `--protocol-state <path>` points at the
+protocol artifact (`config-bootstrap.json`); `--client-state <path>` at the
+client artifact; `--pair-state <path>` at a pair file; `--out <path>` chooses
+where output is written; `--build-only` builds and inspects the transaction
+without submitting (see [Build Only](#build-only)). The examples below show them
+inline; the per-command tables list only the flags specific to that command.
 
 ## Prerequisites
 
@@ -162,12 +184,13 @@ Per-network variables (set BOTH the `_TESTNET` and `_MAINNET` variant of each;
 | `DIA_WS_URL_*` | DIA WebSocket endpoint base |
 | `DIA_REGISTRY_ADDRESS_*` | `OracleIntentRegistry` address |
 | `DIA_EXPLORER_URL_*` | DIA explorer base URL |
-| `DIA_EVM_PRIVATE_KEY_*` | Signs EIP-712 OracleIntents on that network |
+| `DIA_AUTHORIZED_PRIVATE_KEY_*` | **Local** self-sign key (ours, one): signs demo EIP-712 OracleIntents from the CLI / run-all. Its derived public key is authorized automatically. |
+| `DIA_AUTHORIZED_PUBLIC_KEYS_*` | **DIA's** real signer public keys (comma-separated list, verify-only — we hold no private half): authorized at `protocol:init` / `config:update` so the feeder's real DIA intents are accepted. On Mainnet, set ONLY these (never the local private key). |
 | `DIA_WS_CREDENTIAL_*` | Conduit path-style credential for the WS endpoint |
 
 So a fresh setup looks like: `cp .env.example .env`, fill the two
 `BLOCKFROST_PROJECT_ID_*` values + the two `CARDANO_WALLET_SEED_*` values +
-the two `DIA_EVM_PRIVATE_KEY_*` and `DIA_WS_CREDENTIAL_*` values, leave the
+the two `DIA_AUTHORIZED_PRIVATE_KEY_*` and `DIA_WS_CREDENTIAL_*` values, leave the
 rest as-is. Set `CARDANO_NETWORK=Preview` (or `Mainnet`) to choose which side
 the CLI uses today.
 
@@ -182,14 +205,20 @@ npm install
 
 ### 1. Inspect contracts
 
+Lists the compiled blueprints and prints the reference-holder address for a
+parameterized protocol artifact.
+
 ```sh
 npm run cli -- blueprint:list
-npm run cli -- reference-holder --protocol-state ./state/<network>/config-bootstrap.json
+npm run cli -- reference-holder --protocol-state ../state/<network>/config-bootstrap.json
 ```
 
 `reference-holder` requires a parameterized state artifact (run after `config:parameterize`).
 
 ### 2. Inspect network
+
+Prints the resolved network, provider, and protocol parameters for the current
+`.env`.
 
 ```sh
 npm run cli -- protocol
@@ -197,21 +226,29 @@ npm run cli -- protocol
 
 ### 3. Create a Cardano wallet
 
+Generates a new Cardano wallet mnemonic and prints its address and
+`paymentKeyHash`.
+
 ```sh
 npm run cli -- wallet:create
 ```
 
-Set `CARDANO_WALLET_SEED_TESTNET` (or `_MAINNET`, depending on `CARDANO_NETWORK`) in `.env` with the generated mnemonic. The command also prints the derived `paymentKeyHash`, which is the default config-admin signer used later by `protocol:init`.
+Set `CARDANO_WALLET_SEED_TESTNET` (or `_MAINNET`, depending on `CARDANO_NETWORK`) in `.env` with the generated mnemonic. The printed `paymentKeyHash` is the default config-admin signer used later by `protocol:init`.
 
 ### 4. Create an Ethereum wallet
+
+Generates an Ethereum private key and prints its compressed public key.
 
 ```sh
 npm run cli -- ethereum-wallet:create
 ```
 
-Set `DIA_EVM_PRIVATE_KEY_TESTNET` (or `_MAINNET`, depending on `CARDANO_NETWORK`) in `.env` with the generated private key. The printed compressed `publicKey` becomes the default authorized DIA signer used later by `protocol:init`.
+Set `DIA_AUTHORIZED_PRIVATE_KEY_TESTNET` (or `_MAINNET`, depending on `CARDANO_NETWORK`) in `.env` with the generated private key. The printed compressed `publicKey` is the default authorized DIA signer used later by `protocol:init`.
 
 ### 5. Fund and inspect the Cardano wallet
+
+Prints the configured wallet's address, balance, UTxOs, and derived defaults so
+you can confirm where to send funds.
 
 ```sh
 npm run cli -- wallet
@@ -241,83 +278,92 @@ The deployment wallet needs enough pure ADA UTxOs for:
 
 ### 6. Initialize the protocol artifact
 
-Creates `./state/<network>/config-bootstrap.json` with:
-
-- Config defaults
-- Config asset label/name
-- PaymentHook defaults
-- empty compiled scripts
-- empty transaction history
+Creates the protocol artifact `../state/<network>/config-bootstrap.json` with
+Config and PaymentHook defaults, asset labels, deposit tx-build params, and
+empty script/transaction blocks. No transaction is submitted.
 
 ```sh
 npm run cli -- protocol:init
 ```
 
+Key flags (all optional). Each falls back to the single-source CLI default in
+[`src/core/constants.ts`](./src/core/constants.ts) when omitted:
+
+| Flag | What |
+| --- | --- |
+| `--deposit-min-lovelace` | Dust floor a side deposit must hold to be accepted/swept (§25c) |
+| `--deposit-max-per-merge` | Max deposit UTxOs folded into one `deposit:merge` (§25c) |
+| `--deposit-max-per-update-fold` | Max deposits an oracle update folds in (top-up riding on an update) (§25c) |
+
+These are stored in `configState` next to the fee params (`baseFeeLovelace`,
+`perPairFeeLovelace`, `minUtxoLovelace`) and read by both the CLI and the feeder.
+
 ### 7. Parameterize Config scripts
 
-Selects a pure ADA wallet UTxO and derives the Config, Coordinator, and ReferenceHolder scripts offline. Saves compiled scripts and the `referenceHolderAddress` to the artifact.
+Selects a pure ADA wallet UTxO and derives the Config, Coordinator, and
+ReferenceHolder scripts offline, saving them to the artifact. No transaction is
+submitted.
 
 ```sh
 npm run cli -- config:parameterize \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
-
-No transaction is submitted here.
 
 ### 8. Bootstrap Config
 
-Consumes the selected wallet UTxO, mints the Config NFT, and creates the Config UTxO.
+Consumes the selected wallet UTxO, mints the Config NFT, and creates the Config
+UTxO on-chain.
 
 ```sh
 npm run cli -- config:bootstrap \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
 
 ### 9. Publish Config reference scripts
 
-Creates the Config and Coordinator reference scripts at `reference_holder`.
+Publishes the Config and Coordinator reference scripts at the reference-holder
+address.
 
 ```sh
 npm run cli -- config:reference-scripts \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
 
 ### 10. Parameterize PaymentHook scripts
 
-Selects a pure ADA wallet UTxO and derives the PaymentHook scripts offline.
+Selects a pure ADA wallet UTxO and derives the PaymentHook scripts offline. No
+transaction is submitted.
 
 ```sh
 npm run cli -- payment-hook:parameterize \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
-
-No transaction is submitted here.
 
 ### 11. Bootstrap PaymentHook
 
-Consumes the selected wallet UTxO, mints the PaymentHook NFT, updates Config, and registers the Coordinator stake credential.
+Consumes the selected wallet UTxO, mints the PaymentHook NFT, and creates the
+PaymentHook UTxO on-chain.
 
 ```sh
 npm run cli -- payment-hook:bootstrap \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
 
 ### 12. Publish PaymentHook reference script
 
+Publishes the PaymentHook reference script at the reference-holder address.
+
 ```sh
 npm run cli -- payment-hook:reference-script \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
 
 ## Client Deployment
 
 ### 13. Initialize the client artifact
 
-Creates `./state/<network>/clients/client-a.json` and captures:
-
-- `clientId`
-- receiver asset label/name
-- receiver min UTxO
+Creates the client artifact `../state/<network>/clients/client-a.json` with the
+`clientId`, the receiver asset label/name, and the receiver min UTxO.
 
 ```sh
 npm run cli -- client:init
@@ -325,82 +371,96 @@ npm run cli -- client:init
 
 ### 14. Parameterize Receiver and Pair scripts
 
-Selects a pure ADA wallet UTxO and derives Receiver and Pair scripts offline.
+Selects a pure ADA wallet UTxO and derives the Receiver and Pair scripts
+offline. No transaction is submitted.
 
 ```sh
 npm run cli -- receiver:parameterize \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 ```
-
-No transaction is submitted here.
 
 ### 15. Bootstrap the Receiver
 
-Creates the on-chain Receiver UTxO with `balanceLovelace = 0`. The client funds it later with `receiver:top-up` before the first price update.
+Creates the on-chain Receiver UTxO with `balanceLovelace = 0`. Fund it before
+the first price update with `receiver:top-up` (§17) or via side deposits (§25c).
 
 ```sh
 npm run cli -- receiver:bootstrap \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 ```
 
 ### 16. Publish client reference scripts
 
-Publishes the Receiver spend validator, Pair spend validator, and Pair minting policy at `reference_holder` in a single transaction (outputs 0, 1, 2 respectively).
+Publishes the Receiver and Pair validators, the Pair minting policy, and the
+deposit validator (four reference scripts) at the reference-holder address in a
+single transaction.
 
 ```sh
 npm run cli -- reference-scripts:publish-client \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 ```
 
 ### 17. Top up the Receiver
 
-This is the client funding step. The Receiver was bootstrapped with `balanceLovelace = 0`; before any pair create/update transaction, the client must add ADA to pay oracle update fees. On Preview (and in this Mainnet single-wallet runbook) the same configured wallet plays admin, updater, and client roles; in a production multi-tenant deployment the top-up would come from a separate per-client wallet.
+Adds ADA to a Receiver's balance so it can pay oracle update fees. The
+configured wallet credits the supplied `--amount-lovelace` to the Receiver. In
+production, clients fund via side deposits instead (§25c); `receiver:top-up` is
+the direct path used in the single-wallet runbook.
 
 ```sh
 npm run cli -- receiver:top-up \
   --amount-lovelace 100000000 \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 ```
+
+| Flag | What | Default |
+| --- | --- | --- |
+| `--amount-lovelace` | Lovelace to add to the Receiver balance | required |
 
 ## Oracle Intent Flow
 
-Every Pair UTxO is created from a real signed oracle intent. There is no separate Pair bootstrap transaction and no placeholder datum with zero price/timestamp/nonce.
-
-There are three intent commands:
-
-- `intent:create`
-  Generates an unsigned intent file.
-- `intent:sign`
-  Signs an existing unsigned intent file.
-- `intent:create-and-sign`
-  Prompts and immediately signs.
+Every Pair UTxO is created from a real signed oracle intent. There is no
+separate Pair bootstrap transaction and no placeholder datum. There are three
+intent commands: `intent:create` (generate an unsigned intent file),
+`intent:sign` (sign an existing unsigned intent), and `intent:create-and-sign`
+(prompt and immediately sign).
 
 ### 18. Create an unsigned intent
 
+Generates an unsigned EIP-712 oracle intent file.
+
 ```sh
 npm run cli -- intent:create \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --out ./state/<network>/intents/usdc-usd.unsigned.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --out ../state/<network>/intents/usdc-usd.unsigned.json
 ```
 
 ### 19. Sign the intent
 
+Signs an existing unsigned intent with the configured local signer private key (`DIA_AUTHORIZED_PRIVATE_KEY_*`).
+
 ```sh
 npm run cli -- intent:sign \
-  --input ./state/<network>/intents/usdc-usd.unsigned.json \
-  --out ./state/<network>/intents/usdc-usd.signed.json
+  --input ../state/<network>/intents/usdc-usd.unsigned.json \
+  --out ../state/<network>/intents/usdc-usd.signed.json
 ```
+
+| Flag | What | Default |
+| --- | --- | --- |
+| `--input` | Unsigned intent file to sign | required |
 
 ### 20. Create and sign in one step
 
+Prompts for the intent fields and writes a signed intent directly.
+
 ```sh
 npm run cli -- intent:create-and-sign \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --out ./state/<network>/intents/usdt-usd.signed.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --out ../state/<network>/intents/usdt-usd.signed.json
 ```
 
 For every later update, generate a fresh signed intent with a new nonce, timestamp, expiry, and price.
@@ -409,237 +469,343 @@ For every later update, generate a fresh signed intent with a new nonce, timesta
 
 ### 21. Submit one update
 
-`update` is pair-aware:
-
-- If the pair artifact does not exist yet, it mints the Pair NFT and creates the first Pair UTxO. Pair creation is admin-gated — the configured wallet must be a `config_admins` signer.
-- If the pair artifact already exists, it consumes the current Pair UTxO and writes the next datum. Updates are not admin-gated.
-- New Pair UTxOs inherit the current `configState.minUtxoLovelace`; existing Pair UTxOs can later be adjusted with `pair:update-min-utxo`.
+Submits a single oracle update for one pair. If the pair artifact does not exist
+yet, it mints the Pair NFT and creates the first Pair UTxO (this is admin-gated —
+the configured wallet must be a `config_admins` signer); if it already exists,
+it writes the next datum (not admin-gated). New Pair UTxOs inherit the current
+`configState.minUtxoLovelace`. With `--fold-deposits` the update opportunistically
+folds up to `configState.depositMaxPerUpdateFold` clean pending side deposits into
+the Receiver balance in the same tx (§25c,
+[architecture §5.14](../../docs/architecture/cardano-oracle-architecture.md#514-side-deposit-funding--merge-per-client)).
 
 ```sh
 npm run cli -- update \
-  --intent ./state/<network>/intents/usdc-usd.signed.json \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json \
-  --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json
+  --intent ../state/<network>/intents/usdc-usd.signed.json \
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json \
+  --pair-state ../state/<network>/clients/client-a/pairs/usdc-usd.json
 ```
+
+| Flag | What | Default |
+| --- | --- | --- |
+| `--intent` | Signed intent driving the update | required |
+| `--fold-deposits` | Fold pending side deposits into the Receiver balance in this tx (§25c) | off |
 
 ### 22. Create a Config update draft
 
-Generates a structured draft instead of asking you to hand-write JSON.
+Generates a structured Config-update draft instead of asking you to hand-write
+JSON.
 
 ```sh
 npm run cli -- config:update:create \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --out ./state/<network>/config-updates/config-update.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --out ../state/<network>/config-updates/config-update.json
 ```
 
 ### 23. Submit a Config update
 
+Applies a Config-update draft on-chain. Requires a Config signer.
+
 ```sh
 npm run cli -- config:update \
-  --input ./state/<network>/config-updates/config-update.json \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --input ../state/<network>/config-updates/config-update.json \
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
+
+| Flag | What | Default |
+| --- | --- | --- |
+| `--input` | Config-update draft to apply | required |
 
 ### 24. Create a batch manifest
 
-You do not hand-write the batch file. The CLI asks which pair state paths and signed intent files to include. A pair state path may point to an existing pair artifact or to the artifact path that should be created by the batch.
+Generates a batch manifest interactively — the CLI asks which pair state paths
+and signed intent files to include. A pair state path may point to an existing
+pair artifact or to the path the batch should create.
 
 ```sh
 npm run cli -- update:batch:create \
-  --pairs-dir ./state/<network>/clients/client-a/pairs \
-  --intents-dir ./state/<network>/intents \
-  --out ./state/<network>/update-batches/update-batch.manifest.json
+  --pairs-dir ../state/<network>/clients/client-a/pairs \
+  --intents-dir ../state/<network>/intents \
+  --out ../state/<network>/update-batches/update-batch.manifest.json
 ```
 
-The generated manifest stores:
-
-- `statePath`
-- `intentPath`
-
-for each pair update entry.
+| Flag | What | Default |
+| --- | --- | --- |
+| `--pairs-dir` | Directory of pair artifacts to choose from | required |
+| `--intents-dir` | Directory of signed intents to choose from | required |
 
 ### 25. Submit a batch update
 
-`update:batch` can update existing pairs and create missing pairs in the same transaction. New pairs inherit `minUtxoLovelace` from `configState.minUtxoLovelace` automatically. If any pair in the manifest is being created, the configured wallet must be a `config_admins` signer; pure-update batches do not need admin authorisation.
+Updates existing pairs and creates missing pairs in one transaction. New pairs
+inherit `configState.minUtxoLovelace` automatically. If any pair in the manifest
+is being created, the configured wallet must be a `config_admins` signer;
+pure-update batches do not need admin authorisation.
 
 ```sh
 npm run cli -- update:batch \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json \
-  --manifest ./state/<network>/update-batches/update-batch.manifest.json \
-  --out ./state/<network>/update-batches/update-batch.result.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json \
+  --manifest ../state/<network>/update-batches/update-batch.manifest.json \
+  --out ../state/<network>/update-batches/update-batch.result.json
 ```
+
+| Flag | What | Default |
+| --- | --- | --- |
+| `--manifest` | Batch manifest produced by §24 | required |
 
 ### 25b. Settle accrued fees
 
-After price updates accrue fees on the Receiver, use `settle` to drain `accrued_to_hook_lovelace` from the Receiver and credit it to the PaymentHook in a single transaction. This is an admin-initiated operation.
+Drains accrued fees from one or more Receivers and credits them to the
+PaymentHook in a single transaction, clearing each Receiver's accrual. This is
+an admin-initiated operation. `--client-state` is repeatable — pass it once per
+client to settle N receivers in one transaction. See architecture
+[§5.11 Settle accrued fees](../../docs/architecture/cardano-oracle-architecture.md#511-settle-accrued-fees)
+for how it is validated on-chain.
 
 ```sh
+# Single client:
 npm run cli -- settle \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
+
+# Multiple clients in one tx (repeat --client-state):
+npm run cli -- settle \
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json \
+  --client-state ../state/<network>/clients/client-b.json
 ```
 
-This moves all accrued fees from the Receiver to the PaymentHook and updates both state artifacts.
+### 25c. Side-deposit funding
 
-### 25c. Side-deposit funding (Option A)
+How a client funds their Receiver balance without running the CLI: each client
+has a per-client deposit address, the client sends an ordinary ADA payment to
+it, and DIA later folds the accumulated deposits into the Receiver balance.
+Besides the standalone `deposit:merge` (a bulk sweep), an ordinary `update`
+automatically folds a bounded number of pending deposits into the Receiver it is
+already touching. The deposit floor, per-merge cap, and per-update fold cap come
+from `protocol:init` (§6, `depositMinLovelace` / `depositMaxPerMerge` /
+`depositMaxPerUpdateFold`). See architecture
+[§5.14 Side-deposit funding & merge](../../docs/architecture/cardano-oracle-architecture.md#514-side-deposit-funding--merge-per-client)
+for how it works on-chain.
 
-So a client can fund their Receiver balance with an **ordinary wallet payment**
-(no CLI, no datum), each client has a **deposit script address**. The feeder/CLI
-later sweeps the accumulated deposits into the Receiver balance in one tx,
-reusing the Receiver `TopUp` redeemer — see
-[`contracts/aiken/validators/deposit.ak`](../../contracts/aiken/validators/deposit.ak)
-and the [2026-06-05 audit](../../docs/audit/20260605-receiver-concurrency-and-griefing.md).
-The deposit can only ever credit *that* client's Receiver (a CollectDeposit
-spend is valid only when the tx raises the Receiver's lovelace by ≥ the full
-swept total), so funds are never at risk.
+Three commands:
+
+- `deposit:address` — print the address a client funds (give this to the client).
+- `deposit:fund` — send an ADA payment to that address (what a client does from
+  any wallet; provided here for the runbook / tests).
+- `deposit:merge` — fold accumulated deposits into the Receiver balance
+  (DIA-side; the feeder daemon also runs this automatically).
 
 ```sh
-# Print the address a client funds (give this to the client):
+# Print the address a client funds:
 npm run cli -- deposit:address \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 
-# Fund it (a plain ADA payment — what a client does from any wallet):
+# Fund it with a plain ADA payment:
 npm run cli -- deposit:fund --amount-lovelace 5000000 \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 
 # Sweep accumulated deposits into the Receiver balance:
 npm run cli -- deposit:merge \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 ```
 
-`deposit:merge` selects clean ADA-only deposits at or above 1 ADA (dust, native
-tokens, and datum-bearing UTxOs a griefer might park there are skipped, capped
-at 20 per tx) and credits their full total to `balanceLovelace`. The daemon will
-later run this automatically when a Receiver falls below
-`receiver_balance_low_lovelace`; until then, run it manually (or on a timer).
+The three deposit caps are set at `protocol:init` (§6) and default from
+[`src/core/constants.ts`](./src/core/constants.ts):
 
-> **Single-receiver limitation.** The on-chain `update_coordinator.ApplySettle`
-> path supports a `SettleManifest` of multiple receivers in one transaction.
-> The current CLI implementation builds a one-element manifest from the loaded
-> client artifact and the settle preflight rejects any other length. If you
-> need to drain multiple clients in one tx, extend `settle.ts` and the
-> preflight to accept a multi-client manifest; the on-chain validators already
-> handle it.
+| Flag / config knob | What |
+| --- | --- |
+| `--amount-lovelace` (`deposit:fund`) | Lovelace to send to the deposit address (required) |
+| `depositMinLovelace` (`protocol:init` `--deposit-min-lovelace`) | Min lovelace a deposit must hold to be accepted / swept |
+| `depositMaxPerMerge` (`protocol:init` `--deposit-max-per-merge`) | Max deposit UTxOs folded into one `deposit:merge` |
+| `depositMaxPerUpdateFold` (`protocol:init` `--deposit-max-per-update-fold`) | Max deposits an ordinary `update` folds in automatically |
 
 ## Maintenance Transactions
 
 ### 26. Withdraw from the Receiver
 
+Moves lovelace out of a Receiver's balance to a recipient address. If
+`--recipient-address` is omitted, the configured wallet address is used.
+
 ```sh
 npm run cli -- receiver:withdraw \
   --amount-lovelace 2000000 \
   --recipient-address <addr_test...> \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 ```
 
-If `--recipient-address` is omitted, the configured wallet address is used.
+| Flag | What | Default |
+| --- | --- | --- |
+| `--amount-lovelace` | Lovelace to withdraw from the Receiver balance | required |
+| `--recipient-address` | Destination address | configured wallet |
 
 ### 27. Withdraw protocol fees from PaymentHook
+
+Moves settled protocol fees out of the PaymentHook to the admin wallet.
 
 ```sh
 npm run cli -- payment-hook:withdraw \
   --amount-lovelace 2000000 \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
+
+| Flag | What | Default |
+| --- | --- | --- |
+| `--amount-lovelace` | Lovelace to withdraw from the PaymentHook | required |
 
 ### 28. Update min UTxO for Receiver (admin only)
 
-Updates the `min_utxo_lovelace` field on a Receiver UTxO using the dedicated `UpdateMinUtxo` redeemer. Requires the wallet to be a Config signer.
+Sets a new `min_utxo_lovelace` floor on a Receiver UTxO. The Receiver UTxO is
+adjusted to hold the new minimum ADA; `balance` and `accrued` fields are
+unchanged. Requires a Config signer.
 
 ```sh
 npm run cli -- receiver:update-min-utxo \
   --new-min-utxo-lovelace 3000000 \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 ```
 
-The Receiver UTxO must be adjusted to hold the new minimum ADA. The `balance_lovelace` and `accrued_to_hook_lovelace` fields remain unchanged.
+| Flag | What | Default |
+| --- | --- | --- |
+| `--new-min-utxo-lovelace` | New min-UTxO floor for the Receiver | required |
 
 ### 29. Update min UTxO for Pair (admin only)
 
-Updates the `min_utxo_lovelace` field on a Pair UTxO using the dedicated `UpdateMinUtxo` redeemer. Requires the wallet to be a Config signer.
+Sets a new `min_utxo_lovelace` floor on a Pair UTxO. All other Pair datum fields
+are unchanged. Requires a Config signer.
 
 ```sh
 npm run cli -- pair:update-min-utxo \
   --new-min-utxo-lovelace 3000000 \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json \
-  --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json \
+  --pair-state ../state/<network>/clients/client-a/pairs/usdc-usd.json
 ```
 
-All Pair datum fields except `min_utxo_lovelace` remain unchanged.
+| Flag | What | Default |
+| --- | --- | --- |
+| `--new-min-utxo-lovelace` | New min-UTxO floor for the Pair | required |
 
 ### 29b. Burn a Pair (admin only)
 
-Burns the Pair NFT of an existing pair and recovers the locked min-ADA back to the admin wallet. Requires a `config_admins` signer.
+Burns the Pair NFT of an existing pair and returns the locked min-ADA to the
+admin wallet. A later `update` for the same symbol mints a fresh Pair NFT and
+rebuilds pair state. Requires a `config_admins` signer. See architecture
+[§5.13 Pair burn](../../docs/architecture/cardano-oracle-architecture.md#513-pair-burn-admin-only)
+for the on-chain validation.
 
 ```sh
 npm run cli -- pair:burn \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json \
-  --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json \
+  --pair-state ../state/<network>/clients/client-a/pairs/usdc-usd.json
 ```
-
-A subsequent `update` for the same symbol will mint a fresh Pair NFT and rebuild pair state from a new signed intent. See architecture §5.13 for the on-chain validation.
 
 ### 29c. Deduplicate Pair UTxOs (admin only)
 
-Scans the pair validator address for duplicate Pair NFT UTxOs — multiple UTxOs
-carrying the same pair unit (`pairPolicyId + assetName`). This can happen when
-the feeder submits a valid update tx but crashes before writing local state, and
-a subsequent restart incorrectly evaluates `isCreate = true`, minting a second
-Pair NFT for the same symbol.
-
-The command keeps the UTxO with the highest datum nonce (most recent update) and
-burns all others. Idempotent: exits cleanly when no duplicates are found. Requires
-a `config_admins` signer.
+Scans the pair validator address for duplicate Pair NFT UTxOs (multiple UTxOs
+carrying the same pair unit), keeps the one with the highest datum nonce, and
+burns the rest. Idempotent — exits cleanly when no duplicates are found.
+Requires a `config_admins` signer.
 
 ```sh
 npm run cli -- pair:dedup \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 ```
 
-The feeder logs a `WARN [duplicate-pairs]` entry with the exact command to run
-whenever it detects more than one Pair UTxO for the same symbol at startup.
+Duplicates can arise if the feeder submits a valid update but crashes before
+writing local state, then re-creates the pair on restart. The feeder logs a
+`WARN [duplicate-pairs]` entry with the exact command to run when it detects
+this at startup.
+
+### 29d. Burn the Receiver (admin only)
+
+Burns the Receiver NFT and recovers the locked min-UTxO ADA to the admin wallet,
+used when decommissioning a client. Requires a `config_admins` signer. Run
+`receiver:withdraw` (§26) to drain `balance` and `settle` (§25b) to drain accrued
+fees first — the burn rejects a Receiver whose `balance` or `accrued` is non-zero.
+
+```sh
+npm run cli -- receiver:burn \
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
+```
+
+### 29e. Burn the PaymentHook (admin only)
+
+Burns the PaymentHook NFT and recovers the locked min-UTxO ADA to the admin
+wallet, used when decommissioning a deployment. Requires a `config_admins` signer.
+Run `payment-hook:withdraw` (§27) to drain the hook's `accrued_fees` first — the
+burn rejects a hook with non-zero accrued fees.
+
+```sh
+npm run cli -- payment-hook:burn \
+  --protocol-state ../state/<network>/config-bootstrap.json
+```
+
+### 29f. Burn the Config (admin only)
+
+Burns the Config NFT and recovers the locked min-UTxO ADA to the admin wallet, the
+final step of decommissioning a deployment. Requires a `config_admins` signer. Run
+it last: `reclaim-reference-script` (§32) reads the live Config UTxO to authorize
+each reclaim, so the Config UTxO must outlive every reference script.
+
+```sh
+npm run cli -- config:burn \
+  --protocol-state ../state/<network>/config-bootstrap.json
+```
 
 ### 30. Update min UTxO for Config (admin only)
 
-Updates `min_utxo_lovelace` on the Config UTxO through the general `AdminUpdate` flow (no dedicated `UpdateMinUtxo` redeemer; see architecture §5.3 + §5.12). Requires a Config signer.
+Sets a new `min_utxo_lovelace` on the Config UTxO via a Config-update draft (see
+§22). Requires a Config signer. See architecture
+[§5.12 Update min UTxO](../../docs/architecture/cardano-oracle-architecture.md#512-update-min-utxo-admin-only).
 
 ```sh
 npm run cli -- config:update \
-  --input ./state/<network>/config-updates/min-utxo-update.json \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --input ../state/<network>/config-updates/min-utxo-update.json \
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
+
+| Flag | What | Default |
+| --- | --- | --- |
+| `--input` | Config-update draft setting the new min UTxO | required |
 
 ### 31. Update min UTxO for PaymentHook (admin only)
 
-Updates `min_utxo_lovelace` on the PaymentHook UTxO through the general `AdminUpdate` flow (see architecture §5.12). Requires a Config signer.
+Sets a new `min_utxo_lovelace` on the PaymentHook UTxO. The PaymentHook output
+must hold `new_min_utxo + accrued_fees_lovelace` total lovelace. Requires a
+Config signer. See architecture
+[§5.12 Update min UTxO](../../docs/architecture/cardano-oracle-architecture.md#512-update-min-utxo-admin-only).
 
 ```sh
 npm run cli -- payment-hook:update \
-  --input ./state/<network>/hook-updates/min-utxo-update.json \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --input ../state/<network>/hook-updates/min-utxo-update.json \
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
 
-The PaymentHook UTxO output must hold `new_min_utxo + accrued_fees_lovelace` total lovelace.
+| Flag | What | Default |
+| --- | --- | --- |
+| `--input` | Update draft setting the new min UTxO | required |
 
 ### 32. Reclaim reference-script UTxOs
 
-Spends reference-script UTxO(s) at the `reference_holder` address and returns the locked ADA to the admin wallet. Used when upgrading contracts: reclaim, then re-publish the new version.
+Spends reference-script UTxO(s) at the reference-holder address and returns the
+locked ADA to the admin wallet. Used when upgrading contracts: reclaim, then
+re-publish the new version. Requires a Config signer.
 
-`--script` maps 1:1 to publish commands — if a publish command put N UTxOs on-chain, its reclaim name spends exactly those same N UTxOs in one transaction. Cleared entries are reset to `{ txHash: "", outputIndex: 0, scriptHash: "" }` in the artifact.
+`--script` maps 1:1 to publish commands — if a publish command put N UTxOs
+on-chain, its reclaim name spends exactly those same N UTxOs in one transaction.
+Cleared entries are reset to `{ txHash: "", outputIndex: 0, scriptHash: "" }` in
+the artifact.
 
-Requires a Config signer wallet. Uses the live Config UTxO as a reference input.
-
-There are 6 reference-script UTxOs in total:
+There are 7 reference-script UTxOs in total (3 global + 4 per client):
 
 | UTxO | What's stored there | Published by | Output index |
 | --- | --- | --- | --- |
@@ -649,8 +815,9 @@ There are 6 reference-script UTxOs in total:
 | `client.receiver` | `receiver` spend validator (per client) | `reference-scripts:publish-client` | 0 |
 | `client.pair` | `pair_state` spend validator (per client) | `reference-scripts:publish-client` | 1 |
 | `client.pairMint` | `pair_state` minting policy (per client) | `reference-scripts:publish-client` | 2 |
+| `client.deposit` | `deposit` spend validator (per client) | `reference-scripts:publish-client` | 3 |
 
-Minting policies (`config_state` mint, `payment_hook` mint, `receiver` mint) are one-shot bootstrap scripts — they are NOT stored at `reference_holder`.
+Minting policies (`config_state` mint, `payment_hook` mint, `receiver` mint) are one-shot bootstrap scripts — they are NOT stored at the reference-holder address.
 
 Reclaim `--script` values and what each reclaims in one transaction:
 
@@ -658,7 +825,7 @@ Reclaim `--script` values and what each reclaims in one transaction:
 | --- | --- |
 | `config` | global.config + global.coordinator (2 UTxOs — same as publish) |
 | `payment-hook` | global.paymentHook (1 UTxO) |
-| `client` | client.receiver + client.pair + client.pairMint (3 UTxOs — same as publish) |
+| `client` | client.receiver + client.pair + client.pairMint + client.deposit (4 UTxOs — same as publish) |
 
 **Global scripts:**
 
@@ -666,22 +833,22 @@ Reclaim `--script` values and what each reclaims in one transaction:
 # Reclaims config + coordinator together (they were published in the same tx):
 npm run cli -- reclaim-reference-script \
   --script config \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 
 # Reclaims payment-hook alone:
 npm run cli -- reclaim-reference-script \
   --script payment-hook \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 ```
 
 **Client scripts:**
 
 ```sh
-# Reclaims receiver + pair + pairMint together (they were published in the same tx):
+# Reclaims receiver + pair + pairMint + deposit together (they were published in the same tx):
 npm run cli -- reclaim-reference-script \
   --script client \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 ```
 
 After reclaiming, re-publish with the standard publish command:
@@ -689,39 +856,35 @@ After reclaiming, re-publish with the standard publish command:
 ```sh
 # After reclaiming config (republishes config + coordinator in one tx):
 npm run cli -- config:reference-scripts \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 
 # After reclaiming payment-hook:
 npm run cli -- payment-hook:reference-script \
-  --protocol-state ./state/<network>/config-bootstrap.json
+  --protocol-state ../state/<network>/config-bootstrap.json
 
-# After reclaiming client (republishes receiver + pair + pairMint in one tx):
+# After reclaiming client (republishes receiver + pair + pairMint + deposit in one tx):
 npm run cli -- reference-scripts:publish-client \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json
 ```
 
 ## Build Only
 
 Every transaction-submitting command supports `--build-only`. In this mode the
-CLI builds the transaction, runs all validators locally, and prints the
-result, but **does not submit it to the network**. The state file (`--state`)
-is **not** overwritten in this mode, since the result is a build artifact and
-not the new on-chain state.
-
-Use it for inspection, offline auditing, or signing flows where the build,
-the signing, and the submission happen on different machines.
-
-If you want to capture the build output to a file, redirect stdout:
+CLI builds the transaction, runs all validators locally, and prints the result,
+but **does not submit it to the network**, and the state file is **not**
+overwritten. Use it for inspection, offline auditing, or signing flows where the
+build, the signing, and the submission happen on different machines. Redirect
+stdout to capture the build output:
 
 ```sh
 npm run cli -- update \
-  --intent ./state/<network>/intents/usdc-usd.signed.json \
-  --protocol-state ./state/<network>/config-bootstrap.json \
-  --client-state ./state/<network>/clients/client-a.json \
-  --pair-state ./state/<network>/clients/client-a/pairs/usdc-usd.json \
+  --intent ../state/<network>/intents/usdc-usd.signed.json \
+  --protocol-state ../state/<network>/config-bootstrap.json \
+  --client-state ../state/<network>/clients/client-a.json \
+  --pair-state ../state/<network>/clients/client-a/pairs/usdc-usd.json \
   --build-only \
-  > ./state/<network>/builds/update.build-only.json
+  > ../state/<network>/builds/update.build-only.json
 ```
 
 Parameterization commands are offline by design and never submit transactions,
@@ -744,16 +907,10 @@ CLI reads or writes. The operational rules that govern how those files compose:
   they are consumed; they live under `state/<network>/` next to the artifacts
   that produce or consume them.
 
-Every artifact keeps the same shape per level:
-
-- `bootstrapRefs` — selected wallet UTxOs used at bootstrap.
-- `scripts` — derived ids, addresses, hashes.
-- `compiledScripts` — serialized scripts (protocol artifact stores
-  Config/Coordinator/ReferenceHolder/PaymentHook; client artifact stores only
-  Receiver/Pair).
-- `datum` — current datum CBOR.
-- `referenceScripts` — pointers to published reference-script UTxOs.
-- `transactions` — append-only tx history with network-tagged step IDs
-  (`preview:foo` on Preview, `mainnet:foo` on Mainnet).
-
 Child artifacts never embed parent paths; the parent path is always a CLI flag.
+
+For the exact field-by-field shape of each artifact (`scripts`,
+`compiledScripts`, `referenceScripts`, `datum`, `transactions`, and the Receiver
+state fields), see [`state/README.md`](./state/README.md).
+</content>
+</invoke>

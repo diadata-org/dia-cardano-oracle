@@ -24,6 +24,10 @@ import path from "node:path";
 import { Constr, getAddressDetails, type TxSignBuilder, type UTxO } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
+import {
+  BOOTSTRAP_REF_MIN_LOVELACE,
+  ROLLBACK_CHECK_INTERVAL,
+} from "./constants.js";
 import { type DiaOracleIntent } from "./dia-intent.js";
 import { assertTxStillOnChain } from "./tx-onchain-check.js";
 import { normalizeHex } from "./primitives.js";
@@ -45,7 +49,9 @@ export { splitUnit, toBigInt } from "./primitives.js";
 // import everything they need from this one module.
 export { TxDroppedFromChainError } from "./tx-onchain-check.js";
 
-export const BOOTSTRAP_REF_MIN_LOVELACE = 1_000_000n;
+// Defined in core/constants.ts; re-exported here so existing importers of the
+// chain-helpers surface keep working.
+export { BOOTSTRAP_REF_MIN_LOVELACE };
 
 // ---------------------------------------------------------------------------
 // Wait helpers — three flavors for the three things we ever wait on.
@@ -91,10 +97,6 @@ export const BOOTSTRAP_REF_MIN_LOVELACE = 1_000_000n;
 //   absent, `TxDroppedFromChainError` is thrown immediately so the caller
 //   fails fast instead of waiting out the full 20-min ceiling.
 // ---------------------------------------------------------------------------
-
-// Interval at which the wait-3 helpers check for rollback (in loop iterations).
-// 60 × 1_500 ms default delay ≈ 90 s between checks.
-const ROLLBACK_CHECK_INTERVAL = 60;
 
 /**
  * Resolve the single on-chain UTxO at `address` that carries `unit`.

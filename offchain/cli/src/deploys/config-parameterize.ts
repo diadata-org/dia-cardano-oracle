@@ -115,6 +115,11 @@ export async function parameterizeConfigScripts(args: {
     updateCoordinatorCredential: null,
     minUtxoLovelace: minUtxoLovelace.toString(),
     maxBootstrapDriftSeconds: previousState?.configState.maxBootstrapDriftSeconds ?? "300",
+    // Deposit tx-build params (set at protocol:init); carried through unchanged
+    // — not part of the on-chain config datum.
+    depositMinLovelace: resolvedInput.depositMinLovelace,
+    depositMaxPerMerge: resolvedInput.depositMaxPerMerge,
+    depositMaxPerUpdateFold: resolvedInput.depositMaxPerUpdateFold,
   };
 
   return {
@@ -184,6 +189,9 @@ function resolveConfigParameterizeInput(
   baseFeeLovelace: string;
   perPairFeeLovelace: string;
   minUtxoLovelace: string;
+  depositMinLovelace: string;
+  depositMaxPerMerge: string;
+  depositMaxPerUpdateFold: string;
 } {
   const configDefaults: ConfigParameterizeDefaults | undefined = state?.drafts?.configParameterize;
   const configState = state?.configState;
@@ -197,6 +205,9 @@ function resolveConfigParameterizeInput(
   const baseFeeLovelace = configState?.baseFeeLovelace;
   const perPairFeeLovelace = configState?.perPairFeeLovelace;
   const minUtxoLovelace = configState?.minUtxoLovelace;
+  const depositMinLovelace = configState?.depositMinLovelace;
+  const depositMaxPerMerge = configState?.depositMaxPerMerge;
+  const depositMaxPerUpdateFold = configState?.depositMaxPerUpdateFold;
 
   if (
     !configAssetName ||
@@ -204,7 +215,10 @@ function resolveConfigParameterizeInput(
     !domain ||
     !baseFeeLovelace ||
     !perPairFeeLovelace ||
-    !minUtxoLovelace
+    !minUtxoLovelace ||
+    !depositMinLovelace ||
+    !depositMaxPerMerge ||
+    !depositMaxPerUpdateFold
   ) {
     throw new Error(
       "Config parameterization requires configAssetName and Config state values in the protocol artifact. Run protocol:init first.",
@@ -219,5 +233,8 @@ function resolveConfigParameterizeInput(
     baseFeeLovelace,
     perPairFeeLovelace,
     minUtxoLovelace,
+    depositMinLovelace,
+    depositMaxPerMerge,
+    depositMaxPerUpdateFold,
   };
 }

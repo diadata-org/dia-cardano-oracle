@@ -10,7 +10,6 @@ import {
   hasCompletedStep,
   readConfigState,
   type ConfigStateArtifact,
-  type ClientStateArtifact,
 } from "../core/state.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { logEffectiveOutputs } from "../core/output-logging.js";
@@ -21,17 +20,22 @@ import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   buildPaymentHookDatumCbor,
   buildReceiverDatumCbor,
+  decodeReceiverDatum,
   findSingleUtxoAtUnit,
+  requireInlineDatum,
   waitForWalletSettlement,
   waitForUnitUtxoReplacement,
   writeJsonFile,
 } from "../core/chain-helpers.js";
 import {
   assertPaymentKeyHashIsConfigSigner,
-  assertSettleManifestMatchesSingleClientReceiver,
+  assertSettleManifestMatchesClientReceivers,
   assertSettleReceiverAccruedPositive,
 } from "../preflight/index.js";
-import { buildSettleTx } from "../lib/transactions/build-settle.js";
+import {
+  buildSettleTx,
+  type SettleClientInput,
+} from "../lib/transactions/build-settle.js";
 
 type SettleResult = {
   wallet: {
@@ -47,13 +51,34 @@ type SettleResult = {
   transactions?: ConfigStateArtifact["transactions"];
 };
 
+/**
+ * Drain the accrued fees of one or more client Receivers into the shared
+ * payment hook in a single transaction.
+ *
+ * `clientStatePaths` lists every client whose Receiver is settled in this tx
+ * (>= 1). The on-chain coordinator validates the resulting `SettleManifest`
+ * for non-empty + unique receivers whose drained sum equals the payment-hook
+ * accrued delta; this off-chain path mirrors that by loading each client,
+ * fetching its Receiver UTxO, summing the accrued, and building one
+ * multi-receiver transaction. Each settled client state is persisted with its
+ * accrued cleared, and the protocol state is persisted with the hook credited
+ * the total.
+ */
 export async function settleAccruedFees(args: {
   protocolStatePath: string;
-  clientStatePath: string;
+  clientStatePaths: string[];
   buildOnly: boolean;
 }): Promise<SettleResult> {
   const protocolStatePath = path.resolve(args.protocolStatePath);
-  const clientStatePath = path.resolve(args.clientStatePath);
+  const clientStatePaths = args.clientStatePaths.map((p) => path.resolve(p));
+
+  if (clientStatePaths.length === 0) {
+    throw new Error("Settle requires at least one --client-state.");
+  }
+  const uniquePaths = new Set(clientStatePaths);
+  if (uniquePaths.size !== clientStatePaths.length) {
+    throw new Error("Settle received the same --client-state more than once.");
+  }
 
   reportProgress(`Loading protocol state from ${protocolStatePath}`);
   const protocolState = await readConfigState(protocolStatePath);
@@ -66,15 +91,26 @@ export async function settleAccruedFees(args: {
     throw new Error("Settle requires protocol state after PaymentHook bootstrap.");
   }
 
-  reportProgress(`Loading client state from ${clientStatePath}`);
-  const { client: clientState, protocol } = await readClientContext({
-    clientStatePath,
-    protocolStatePath,
-  });
-
-  if (!clientState.receiver) {
-    throw new Error("Settle requires client state after Receiver bootstrap.");
-  }
+  reportProgress(
+    `Loading ${clientStatePaths.length} client state${clientStatePaths.length === 1 ? "" : "s"}`,
+  );
+  const clientContexts = await Promise.all(
+    clientStatePaths.map(async (clientStatePath) => {
+      const { client: clientState, protocol } = await readClientContext({
+        clientStatePath,
+        protocolStatePath,
+      });
+      if (!clientState.receiver) {
+        throw new Error(
+          `Settle requires client state after Receiver bootstrap (${clientStatePath}).`,
+        );
+      }
+      return { clientStatePath, clientState, protocol };
+    }),
+  );
+  // Every client is validated against the same protocol state file; use the
+  // first one's resolved protocol view for shared scripts / config.
+  const protocol = clientContexts[0]!.protocol;
 
   reportProgress(`Connecting to ${getCliConfig().cardanoNetwork} and selecting the configured wallet`);
   const lucid = await makeConfiguredLucid();
@@ -95,72 +131,94 @@ export async function settleAccruedFees(args: {
     },
   );
 
-  // Fetch on-chain UTxOs
-  const [currentConfigUtxo, currentReceiverUtxo, currentPaymentHookUtxo] =
-    await Promise.all([
-      findSingleUtxoAtUnit(
-        lucid,
-        protocol.scripts.configValidatorAddress,
-        protocol.scripts.configUnit,
-        "config",
-      ),
-      findSingleUtxoAtUnit(
-        lucid,
-        clientState.receiver.receiverValidatorAddress,
-        clientState.receiver.receiverUnit,
-        "receiver",
-      ),
-      findSingleUtxoAtUnit(
-        lucid,
-        protocol.scripts.paymentHookValidatorAddress!,
-        protocol.scripts.paymentHookUnit!,
-        "payment hook",
-      ),
-    ]);
+  // Fetch on-chain UTxOs: the shared config + payment hook once, and each
+  // client's Receiver UTxO.
+  const [currentConfigUtxo, currentPaymentHookUtxo] = await Promise.all([
+    findSingleUtxoAtUnit(
+      lucid,
+      protocol.scripts.configValidatorAddress,
+      protocol.scripts.configUnit,
+      "config",
+    ),
+    findSingleUtxoAtUnit(
+      lucid,
+      protocol.scripts.paymentHookValidatorAddress!,
+      protocol.scripts.paymentHookUnit!,
+      "payment hook",
+    ),
+  ]);
 
-  // Pre-flight: check accrued balance before handing off to the builder
-  // (the builder also checks, but we want the CLI-specific error message here)
-  const preflightAccrued = BigInt(
-    clientState.receiver.receiverState?.accruedToHookLovelace ?? "0",
-  );
-  assertSettleReceiverAccruedPositive(
-    preflightAccrued,
-    clientState.receiver.receiverState?.accruedToHookLovelace ?? "0",
-    clientState.receiver.receiverUnit,
+  const settleClients: Array<
+    SettleClientInput & { clientStatePath: string }
+  > = await Promise.all(
+    clientContexts.map(async ({ clientStatePath, clientState }) => {
+      const currentReceiverUtxo = await findSingleUtxoAtUnit(
+        lucid,
+        clientState.receiver!.receiverValidatorAddress,
+        clientState.receiver!.receiverUnit,
+        `receiver ${clientState.clientId}`,
+      );
+      return { clientStatePath, clientState, currentReceiverUtxo };
+    }),
   );
 
-  assertSettleManifestMatchesSingleClientReceiver(
-    [
-      {
-        receiverPolicyId: clientState.receiver.receiverPolicyId,
-        receiverAssetName: clientState.receiver.receiverAssetName,
-      },
-    ],
-    {
-      receiverPolicyId: clientState.receiver.receiverPolicyId,
-      receiverAssetName: clientState.receiver.receiverAssetName,
-    },
+  // Pre-flight: each receiver must have accrued > 0 (the builder also checks,
+  // but we want the CLI-specific error message here), and the total must be
+  // positive across all receivers. Accrued is read from the on-chain Receiver
+  // datum (the authoritative value) rather than the client state file, which
+  // can lag after a single oracle update that does not rewrite the client
+  // receiver state.
+  let totalAccruedPreflight = 0n;
+  for (const { clientState, currentReceiverUtxo } of settleClients) {
+    const onChainReceiverState = decodeReceiverDatum(
+      requireInlineDatum(currentReceiverUtxo, `receiver ${clientState.clientId}`),
+    );
+    const accrued = BigInt(onChainReceiverState.accruedToHookLovelace);
+    assertSettleReceiverAccruedPositive(
+      accrued,
+      onChainReceiverState.accruedToHookLovelace,
+      clientState.receiver!.receiverUnit,
+    );
+    totalAccruedPreflight += accrued;
+  }
+  if (totalAccruedPreflight <= 0n) {
+    throw new Error("Nothing to settle: total accrued across receivers is zero.");
+  }
+
+  // Pre-flight: the coordinator manifest we are about to build must be
+  // non-empty, unique, and 1:1 with the loaded client receivers.
+  assertSettleManifestMatchesClientReceivers(
+    settleClients.map(({ clientState }) => ({
+      receiverPolicyId: clientState.receiver!.receiverPolicyId,
+      receiverAssetName: clientState.receiver!.receiverAssetName,
+    })),
+    settleClients.map(({ clientState }) => ({
+      receiverPolicyId: clientState.receiver!.receiverPolicyId,
+      receiverAssetName: clientState.receiver!.receiverAssetName,
+    })),
   );
 
   reportProgress(`Building ${getCliConfig().cardanoNetwork} settle transaction`);
   const networkNow = await getNetworkNow(lucid);
 
-  const {
-    txSignBuilder,
-    accruedLovelace,
-    nextReceiverState,
-    nextPaymentHookState,
-  } = await buildSettleTx(lucid, {
-    networkNow,
-    currentConfigUtxo,
-    currentReceiverUtxo,
-    currentPaymentHookUtxo,
-    walletPaymentKeyHash: walletDefaults.paymentKeyHash,
-    protocolState: protocol,
-    clientState,
-  });
+  const { txSignBuilder, totalAccruedLovelace, receivers, nextPaymentHookState } =
+    await buildSettleTx(lucid, {
+      networkNow,
+      currentConfigUtxo,
+      currentPaymentHookUtxo,
+      walletPaymentKeyHash: walletDefaults.paymentKeyHash,
+      protocolState: protocol,
+      clients: settleClients.map(({ clientState, currentReceiverUtxo }) => ({
+        clientState,
+        currentReceiverUtxo,
+      })),
+    });
 
-  reportProgress(`Settling ${accruedLovelace} lovelace from receiver to payment hook`);
+  reportProgress(
+    `Settling ${totalAccruedLovelace} lovelace from ${receivers.length} receiver${
+      receivers.length === 1 ? "" : "s"
+    } to payment hook`,
+  );
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
@@ -192,16 +250,18 @@ export async function settleAccruedFees(args: {
     });
   }
 
-  // --- Wait for UTxO replacement ---
+  // --- Wait for UTxO replacement (each receiver + the hook) ---
   if (!args.buildOnly && confirmed) {
     await Promise.all([
-      waitForUnitUtxoReplacement({
-        lucid,
-        address: clientState.receiver.receiverValidatorAddress,
-        unit: clientState.receiver.receiverUnit,
-        label: "receiver",
-        previousOutRef: currentReceiverUtxo,
-      }),
+      ...settleClients.map(({ clientState, currentReceiverUtxo }) =>
+        waitForUnitUtxoReplacement({
+          lucid,
+          address: clientState.receiver!.receiverValidatorAddress,
+          unit: clientState.receiver!.receiverUnit,
+          label: `receiver ${clientState.clientId}`,
+          previousOutRef: currentReceiverUtxo,
+        }),
+      ),
       waitForUnitUtxoReplacement({
         lucid,
         address: protocol.scripts.paymentHookValidatorAddress!,
@@ -212,7 +272,7 @@ export async function settleAccruedFees(args: {
     ]);
   }
 
-  // --- Persist updated state files ---
+  // --- Persist updated state files (protocol + each client) ---
   if (!args.buildOnly && confirmed) {
     await writeJsonFile(protocolStatePath, {
       ...protocolState,
@@ -229,35 +289,38 @@ export async function settleAccruedFees(args: {
       }),
     });
 
-      await writeJsonFile(clientStatePath, {
-        ...clientState,
-        wallet: { source, address: walletAddress },
-        receiver: {
-          ...clientState.receiver,
-          receiverState: nextReceiverState,
-        },
-        datum: {
-          ...clientState.datum,
-        receiverCbor: buildReceiverDatumCbor(nextReceiverState),
-      },
-      transactions: appendTransactionRecord(clientState.transactions, {
-        step: stepId("settle"),
-        submittedTxHash,
-        confirmed,
+    await Promise.all(
+      receivers.map((entry, index) => {
+        const { clientStatePath, clientState } = settleClients[index]!;
+        return writeJsonFile(clientStatePath, {
+          ...clientState,
+          wallet: { source, address: walletAddress },
+          receiver: {
+            ...clientState.receiver!,
+            receiverState: entry.nextReceiverState,
+          },
+          datum: {
+            ...clientState.datum,
+            receiverCbor: buildReceiverDatumCbor(entry.nextReceiverState),
+          },
+          transactions: appendTransactionRecord(clientState.transactions, {
+            step: stepId("settle"),
+            submittedTxHash,
+            confirmed,
+          }),
+        });
       }),
-    });
+    );
   }
 
   return {
     wallet: { source, address: walletAddress },
-    settledReceivers: [
-      {
-        clientId: clientState.clientId,
-        receiverUnit: clientState.receiver.receiverUnit,
-        drainedLovelace: accruedLovelace.toString(),
-      },
-    ],
-    totalSettledLovelace: accruedLovelace.toString(),
+    settledReceivers: receivers.map((entry) => ({
+      clientId: entry.clientState.clientId,
+      receiverUnit: entry.receiver.receiverUnit,
+      drainedLovelace: entry.accruedLovelace.toString(),
+    })),
+    totalSettledLovelace: totalAccruedLovelace.toString(),
     transactions: appendTransactionRecord(undefined, {
       step: stepId("settle"),
       submittedTxHash,

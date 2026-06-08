@@ -10,7 +10,7 @@
 #           pattern (1 single update + batch-1..batch-MAX) CYCLES times.
 #           Requires --max-batch N (use the value probe wrote earlier).
 #   both  — run probe first, then immediately run cycles with the discovered
-#           MAX_BATCH. This is the legacy behaviour.
+#           MAX_BATCH.
 #
 # The setup is identical across modes (config UTxO discovery, top-up of the
 # receiver, pre-seed of the pair UTxOs the chosen mode needs). Only the work
@@ -65,7 +65,7 @@ examples:
   # Use the value the probe wrote (cat discovered-max-batch.txt) and run cycles.
   fee-benchmark.sh --run-id 20260511-135140 --mode bench --max-batch 12
 
-  # Do everything in one go (legacy behaviour).
+  # Do everything in one go (probe + cycles).
   fee-benchmark.sh --run-id 20260511-135140 --mode both --cycles 3
 EOF
 }
@@ -125,8 +125,8 @@ if ! [[ "$PROBE_MAX_HARD" =~ ^[0-9]+$ ]] || (( PROBE_MAX_HARD < PROBE_START )); 
 fi
 
 STATE_NAME="${NETWORK_TAG:-preview}_run_${EXISTING_RUN_ID}"
-STATE_REL="./state/${STATE_NAME}"
-STATE_ROOT="$CLI_DIR/state/${STATE_NAME}"
+STATE_REL="../state/${STATE_NAME}"
+STATE_ROOT="$REPO/offchain/state/${STATE_NAME}"
 # Bench artifacts (intents, manifests, results) live in their own subfolder
 # inside the base state so they don't pollute the original run's directories.
 BENCH_STATE_REL="$STATE_REL/bench-${BENCH_RUN_ID}"
@@ -157,12 +157,12 @@ case "${CARDANO_NETWORK:-Preview}" in
   Mainnet) BENCH_NETWORK_SUFFIX="MAINNET" ;;
   *) echo "[bench] unsupported CARDANO_NETWORK=${CARDANO_NETWORK}" >&2; exit 1 ;;
 esac
-BENCH_DIA_EVM_KEY_VAR="DIA_EVM_PRIVATE_KEY_${BENCH_NETWORK_SUFFIX}"
-DIA_EVM_PRIVATE_KEY="${!BENCH_DIA_EVM_KEY_VAR:-}"
-export DIA_EVM_PRIVATE_KEY
+BENCH_DIA_PRIVATE_KEY_VAR="DIA_AUTHORIZED_PRIVATE_KEY_${BENCH_NETWORK_SUFFIX}"
+DIA_AUTHORIZED_PRIVATE_KEY="${!BENCH_DIA_PRIVATE_KEY_VAR:-}"
+export DIA_AUTHORIZED_PRIVATE_KEY
 
-[[ -n "${DIA_EVM_PRIVATE_KEY:-}" ]] \
-  || { echo "[bench] ${BENCH_DIA_EVM_KEY_VAR} is required" >&2; exit 1; }
+[[ -n "${DIA_AUTHORIZED_PRIVATE_KEY:-}" ]] \
+  || { echo "[bench] ${BENCH_DIA_PRIVATE_KEY_VAR} is required" >&2; exit 1; }
 
 echo "[bench] bench run id : $BENCH_RUN_ID"
 echo "[bench] mode         : $MODE"
