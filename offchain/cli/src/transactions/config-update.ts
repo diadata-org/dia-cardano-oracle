@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { stepId, networkTag , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig} from "../core/config.js";
 import path from "node:path";
 import { Constr } from "@lucid-evolution/lucid";
 import { Data } from "@lucid-evolution/plutus";
@@ -15,6 +15,7 @@ import {
 } from "../core/lucid.js";
 import {
   appendTransactionRecord,
+  getDefaultConfigStatePath,
   readConfigState,
   type ConfigStateArtifact,
 } from "../core/state.js";
@@ -72,7 +73,7 @@ export async function configUpdate(args: {
 }): Promise<ConfigStateArtifact> {
   reportProgress(`Loading config update input from ${path.resolve(args.inputPath)}`);
   const input = await readConfigUpdateInput(path.resolve(args.inputPath));
-  const statePath = path.resolve(args.statePath ?? `state/${networkTag()}/config-bootstrap.json`);
+  const statePath = path.resolve(args.statePath ?? getDefaultConfigStatePath());
   reportProgress(`Loading config state from ${statePath}`);
   const state = await readConfigState(statePath);
 

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { stepId, networkTag , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig} from "../core/config.js";
 import { Constr, type UTxO } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
@@ -12,6 +12,7 @@ import {
 } from "../core/lucid.js";
 import {
   appendTransactionRecord,
+  getDefaultClientStatePath,
   type ClientStateArtifact,
 } from "../core/state.js";
 import {
@@ -49,7 +50,7 @@ export async function receiverWithdraw(args: {
   buildOnly: boolean;
 }): Promise<ClientStateArtifact> {
   reportProgress(`Using amountLovelace=${args.amountLovelace} for receiver withdraw`);
-  const statePath = path.resolve(args.statePath ?? `state/${networkTag()}/clients/client-a.json`);
+  const statePath = path.resolve(args.statePath ?? getDefaultClientStatePath());
   reportProgress(`Loading client state from ${statePath}`);
   const { client: state, protocol } = await readClientContext({
     clientStatePath: statePath,

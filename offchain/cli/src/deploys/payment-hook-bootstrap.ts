@@ -1,5 +1,5 @@
 import path from "node:path";
-import { stepId, networkTag , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig} from "../core/config.js";
 import { Constr, type OutRef } from "@lucid-evolution/lucid";
 import { Data } from "@lucid-evolution/plutus";
 
@@ -16,6 +16,7 @@ import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import {
   appendTransactionRecord,
   emptyProtocolCompiledScripts,
+  getDefaultConfigStatePath,
   hasCompletedStep,
   readConfigState,
   type ConfigStateArtifact,
@@ -43,7 +44,7 @@ export async function paymentHookBootstrap(args: {
 }): Promise<ConfigStateArtifact> {
   reportProgress("Using PaymentHook values from the protocol artifact");
 
-  const statePath = path.resolve(args.statePath ?? `state/${networkTag()}/config-bootstrap.json`);
+  const statePath = path.resolve(args.statePath ?? getDefaultConfigStatePath());
   reportProgress(`Loading config state from ${statePath}`);
   const state = await readConfigState(statePath);
 

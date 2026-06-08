@@ -1,11 +1,10 @@
 import path from "node:path";
 
-import { networkTag } from "./config.js";
+import { getDefaultIntentsDir } from "./state.js";
 
-// Intents live in the shared state tree: ../state/<network>/intents/ (relative
-// to the CLI cwd offchain/cli → offchain/state). Network from CARDANO_NETWORK.
+// Intents live in the active shared state run dir.
 function intentsDir(): string {
-  return `../state/${networkTag()}/intents`;
+  return getDefaultIntentsDir();
 }
 
 export function pairSlugFromSymbol(symbol: string): string {

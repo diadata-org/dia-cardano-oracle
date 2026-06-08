@@ -1,5 +1,5 @@
 import path from "node:path";
-import { networkTag , getCliConfig} from "../core/config.js";
+import { getCliConfig} from "../core/config.js";
 
 import {
   makeDepositValidator,
@@ -13,6 +13,7 @@ import {
 } from "../core/contracts.js";
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import {
+  getDefaultClientStatePath,
   type ClientStateArtifact,
   type ReceiverParameterizeDefaults,
 } from "../core/state.js";
@@ -32,7 +33,7 @@ export async function parameterizeReceiverScripts(args: {
   protocolStatePath: string;
 }): Promise<ClientStateArtifact> {
   const { client: state, protocol } = await readClientContext({
-    clientStatePath: path.resolve(args.statePath ?? `state/${networkTag()}/clients/client-a.json`),
+    clientStatePath: path.resolve(args.statePath ?? getDefaultClientStatePath()),
     protocolStatePath: args.protocolStatePath,
   });
   reportProgress("Using receiver values from the client artifact");

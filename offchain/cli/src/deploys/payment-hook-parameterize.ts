@@ -1,5 +1,5 @@
 import path from "node:path";
-import { networkTag , getCliConfig} from "../core/config.js";
+import { getCliConfig} from "../core/config.js";
 
 import {
   makePaymentHookMintingPolicy,
@@ -11,6 +11,7 @@ import {
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import {
   emptyProtocolCompiledScripts,
+  getDefaultConfigStatePath,
   type PaymentHookParameterizeDefaults,
   readConfigState,
   type ConfigStateArtifact,
@@ -29,7 +30,7 @@ export async function parameterizePaymentHookScripts(args: {
   statePath?: string;
 }): Promise<ConfigStateArtifact> {
   reportProgress("Using PaymentHook values from the protocol artifact");
-  const state = await readConfigState(path.resolve(args.statePath ?? `state/${networkTag()}/config-bootstrap.json`));
+  const state = await readConfigState(path.resolve(args.statePath ?? getDefaultConfigStatePath()));
 
   reportProgress(`Connecting to ${getCliConfig().cardanoNetwork} and selecting the configured wallet`);
   const lucid = await makeConfiguredLucid();

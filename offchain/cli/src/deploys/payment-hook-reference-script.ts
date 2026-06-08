@@ -1,5 +1,5 @@
 import path from "node:path";
-import { stepId, networkTag , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig} from "../core/config.js";
 
 import {
   scriptHashFromValidator,
@@ -8,6 +8,7 @@ import {
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import {
   appendTransactionRecord,
+  getDefaultConfigStatePath,
   readConfigState,
   type ConfigStateArtifact,
 } from "../core/state.js";
@@ -26,7 +27,7 @@ export async function publishPaymentHookReferenceScript(args: {
   statePath?: string;
   buildOnly: boolean;
 }): Promise<ConfigStateArtifact> {
-  const state = await readConfigState(path.resolve(args.statePath ?? `state/${networkTag()}/config-bootstrap.json`));
+  const state = await readConfigState(path.resolve(args.statePath ?? getDefaultConfigStatePath()));
 
   if (!state.bootstrapRefs.paymentHook || !state.scripts.paymentHookUnit) {
     throw new Error("PaymentHook reference-script publish requires the selected PaymentHook bootstrap reference.");

@@ -14,10 +14,10 @@ infrastructure:
   # database
   # --------------------------------------------------------------------------
   database:
-    # Overrideable via DATABASE_DRIVER env var.
+    # sqlite file is derived from the active per-run state dir
+    # (../state/mainnet_run_<id>/feeder.sqlite); DATABASE_PATH_MAINNET env
+    # overrides. driver overrideable via DATABASE_DRIVER env var.
     driver: sqlite
-    # Overrideable via DATABASE_PATH_MAINNET env var.
-    path: state/mainnet/feeder.sqlite
 
   # --------------------------------------------------------------------------
   # source — DIA Mainnet (chain_id 1050).

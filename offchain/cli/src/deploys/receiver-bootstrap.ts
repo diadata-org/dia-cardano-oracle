@@ -1,5 +1,5 @@
 import path from "node:path";
-import { stepId, networkTag , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig} from "../core/config.js";
 import { Constr, type OutRef } from "@lucid-evolution/lucid";
 import { Data } from "@lucid-evolution/plutus";
 
@@ -13,6 +13,7 @@ import {
 import { normalizeHex } from "../core/dia-intent.js";
 import {
   appendTransactionRecord,
+  getDefaultClientStatePath,
   hasCompletedStep,
   type ClientStateArtifact,
 } from "../core/state.js";
@@ -40,7 +41,7 @@ export async function receiverBootstrap(args: {
 }): Promise<ClientStateArtifact> {
   reportProgress("Using Receiver values from the client artifact");
 
-  const statePath = path.resolve(args.statePath ?? `state/${networkTag()}/clients/client-a.json`);
+  const statePath = path.resolve(args.statePath ?? getDefaultClientStatePath());
   reportProgress(`Loading config state from ${statePath}`);
   const { client: state, protocol } = await readClientContext({
     clientStatePath: statePath,

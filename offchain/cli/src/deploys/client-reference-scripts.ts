@@ -1,5 +1,5 @@
 import path from "node:path";
-import { stepId, networkTag , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig} from "../core/config.js";
 
 import {
   mintingPolicyFromCompiledScript,
@@ -11,6 +11,7 @@ import {
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import {
   appendTransactionRecord,
+  getDefaultClientStatePath,
   type ClientStateArtifact,
   type ReceiverArtifact,
 } from "../core/state.js";
@@ -32,7 +33,7 @@ export async function publishClientReferenceScripts(args: {
   protocolStatePath: string;
   buildOnly: boolean;
 }): Promise<ClientStateArtifact> {
-  const statePath = path.resolve(args.statePath ?? `state/${networkTag()}/clients/client-a.json`);
+  const statePath = path.resolve(args.statePath ?? getDefaultClientStatePath());
   reportProgress(`Loading client state from ${statePath}`);
   const { client: state, protocol } = await readClientContext({
     clientStatePath: statePath,

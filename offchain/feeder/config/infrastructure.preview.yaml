@@ -12,13 +12,12 @@ infrastructure:
   # --------------------------------------------------------------------------
   database:
     # driver: "sqlite" (default) or "postgres".
-    #   sqlite  → uses the local file at `path`.
+    #   sqlite  → the daemon derives the file from the active per-run state
+    #             dir: ../state/preview_run_<id>/feeder.sqlite (DATABASE_PATH_TESTNET
+    #             env overrides). No path is set here.
     #   postgres → requires DATABASE_DSN_TESTNET env var (DSN string).
     # Overrideable via DATABASE_DRIVER env var.
     driver: sqlite
-    # path: SQLite file path, relative to the feeder working directory.
-    # Overrideable via DATABASE_PATH_TESTNET env var.
-    path: state/preview/feeder.sqlite
 
   # --------------------------------------------------------------------------
   # source — the EVM chain the feeder scans for OracleIntent events.

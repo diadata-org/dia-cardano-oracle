@@ -1,7 +1,10 @@
+import { existsSync } from "node:fs";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { networkTag } from "./config.js";
 import type { DiaOracleIntentInput } from "./dia-intent.js";
+import { resolveRunStateDir } from "./run-state.js";
 
 // JSON serializer for state artifacts. Handles `bigint` by emitting the
 // decimal representation; matches the format the CLI's `writeJsonOutput`
@@ -304,13 +307,38 @@ export type PairStateArtifact = {
 const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
 // Shared state tree at offchain/state/. This module lives at
 // offchain/cli/src/core/, so three levels up (core → src → cli) reaches offchain/.
-const DEFAULT_PREVIEW_CONFIG_STATE_PATH = path.resolve(
-  CURRENT_DIR,
-  "../../../state/preview/config-bootstrap.json",
-);
+const SHARED_STATE_ROOT = path.resolve(CURRENT_DIR, "../../../state");
+
+export function getDefaultStateDir(): string {
+  return resolveRunStateDir(networkTag(), SHARED_STATE_ROOT);
+}
+
+export function getDefaultConfigStatePath(): string {
+  const runPath = path.join(getDefaultStateDir(), "config-bootstrap.json");
+  if (existsSync(runPath)) {
+    return runPath;
+  }
+  return path.join(SHARED_STATE_ROOT, networkTag(), "config-bootstrap.json");
+}
+
+export function getDefaultClientStatePath(clientId = "client-a"): string {
+  const runPath = path.join(getDefaultStateDir(), "clients", `${clientId}.json`);
+  if (existsSync(runPath)) {
+    return runPath;
+  }
+  return path.join(SHARED_STATE_ROOT, networkTag(), "clients", `${clientId}.json`);
+}
+
+export function getDefaultIntentsDir(): string {
+  return path.join(getDefaultStateDir(), "intents");
+}
+
+export function getDefaultPairsDir(clientId = "client-a"): string {
+  return path.join(getDefaultStateDir(), "clients", clientId, "pairs");
+}
 
 export async function readConfigState(
-  statePath: string = DEFAULT_PREVIEW_CONFIG_STATE_PATH,
+  statePath: string = getDefaultConfigStatePath(),
 ): Promise<ConfigStateArtifact> {
   const raw = await readFile(path.resolve(statePath), "utf8");
   return JSON.parse(raw) as ConfigStateArtifact;
@@ -321,10 +349,6 @@ export async function readClientState(
 ): Promise<ClientStateArtifact> {
   const raw = await readFile(path.resolve(statePath), "utf8");
   return JSON.parse(raw) as ClientStateArtifact;
-}
-
-export function getDefaultConfigStatePath(): string {
-  return DEFAULT_PREVIEW_CONFIG_STATE_PATH;
 }
 
 export function emptyProtocolCompiledScripts(): ProtocolCompiledScripts {

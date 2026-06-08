@@ -1,5 +1,5 @@
 import path from "node:path";
-import { stepId, networkTag , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig} from "../core/config.js";
 import { Constr } from "@lucid-evolution/lucid";
 import { Data, type Data as PlutusData } from "@lucid-evolution/plutus";
 
@@ -12,6 +12,7 @@ import {
 } from "../core/lucid.js";
 import {
   appendTransactionRecord,
+  getDefaultConfigStatePath,
   hasCompletedStep,
   readConfigState,
   type ConfigStateArtifact,
@@ -47,7 +48,7 @@ export async function paymentHookWithdraw(args: {
   buildOnly: boolean;
 }): Promise<ConfigStateArtifact> {
   reportProgress(`Using amountLovelace=${args.amountLovelace} for payment-hook withdraw`);
-  const statePath = path.resolve(args.statePath ?? `state/${networkTag()}/config-bootstrap.json`);
+  const statePath = path.resolve(args.statePath ?? getDefaultConfigStatePath());
   reportProgress(`Loading config state from ${statePath}`);
   const state = await readConfigState(statePath);
 

@@ -106,12 +106,9 @@ function validateDatabase(db: InfrastructureConfig["database"], c: IssueCollecto
       }
       return;
     case "sqlite":
-      if (!db.path && !db.path_env) {
-        c.error(
-          "",
-          "database.path is required. Set it in infrastructure.yaml or via DATABASE_PATH env var.",
-        );
-      }
+      // No path needed in YAML: the daemon derives the sqlite file from the
+      // active per-run state dir (<run>/feeder.sqlite); DATABASE_PATH_<network>
+      // env overrides it.
       return;
   }
 }

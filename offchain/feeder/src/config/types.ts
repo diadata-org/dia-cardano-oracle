@@ -75,16 +75,19 @@ export type InfrastructureConfig = {
 };
 
 /**
- * Persistence backend. Spectra is Postgres-only; the Cardano feeder
- * extends with a SQLite driver (`driver: sqlite` + `path` or `path_env`)
- * for low-friction local and CI deployments.
+ * Persistence backend. Spectra is Postgres-only; the Cardano feeder extends
+ * with a SQLite driver for low-friction local and CI deployments. For sqlite
+ * the database file lives in the active per-run state dir
+ * (`<run>/feeder.sqlite`); the daemon derives that path at startup and carries
+ * it on `path`. `DATABASE_PATH_<network>` env overrides it.
  */
 export type DatabaseConfig = {
   driver: "sqlite" | "postgres";
   dsn?: string;
   dsn_env?: string;
+  /** Resolved sqlite file path. Set by the daemon (run-scoped default or the
+   *  `DATABASE_PATH_<network>` env override), not read from the YAML. */
   path?: string;
-  path_env?: string;
 };
 
 /** The source chain the feeder scans (always DIA Lasernet). */

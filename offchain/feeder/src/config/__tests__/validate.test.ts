@@ -49,7 +49,7 @@ function makeConfig(includeTxMode = false): ModularConfig {
 
   return {
     infrastructure: {
-      database: { driver: "sqlite", path: "state/preview/feeder.sqlite" },
+      database: { driver: "sqlite" },
       source: {
         chain_id: 10050,
         name: "DIA Testnet",

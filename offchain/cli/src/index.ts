@@ -48,46 +48,47 @@ function printUsage(): void {
   npm run cli -- wallet:utxos
   npm run cli -- wallet:defaults
   npm run cli -- ethereum-wallet:create
-  npm run cli -- protocol:init [--valid-config-signers <pkh[,pkh...]> --authorized-dia-public-keys <pubkey[,pubkey...]> --domain-name <name> --domain-version <ver> --domain-source-chain-id <id> --domain-verifying-contract <addr> --base-fee-lovelace 600000 --per-pair-fee-lovelace 400000 --max-bootstrap-drift-seconds 300 --min-utxo-lovelace 5000000 --deposit-min-lovelace 1000000 --deposit-max-per-merge 20 --deposit-max-per-update-fold 3 --config-asset-label DIA_CONFIG --payment-hook-asset-label DIA_PAYMENT_HOOK --payment-hook-withdraw-address <addr>] [--out ../state/<network>/config-bootstrap.json]
+  Paths use ../state/<network>_run_<id>/...; when omitted, commands use RUN_ID or the newest run dir.
+  npm run cli -- protocol:init [--valid-config-signers <pkh[,pkh...]> --authorized-dia-public-keys <pubkey[,pubkey...]> --domain-name <name> --domain-version <ver> --domain-source-chain-id <id> --domain-verifying-contract <addr> --base-fee-lovelace 600000 --per-pair-fee-lovelace 400000 --max-bootstrap-drift-seconds 300 --min-utxo-lovelace 5000000 --deposit-min-lovelace 1000000 --deposit-max-per-merge 20 --deposit-max-per-update-fold 3 --config-asset-label DIA_CONFIG --payment-hook-asset-label DIA_PAYMENT_HOOK --payment-hook-withdraw-address <addr>] [--out ../state/<network>_run_<id>/config-bootstrap.json]
         (DIA domain / chain id / registry default to the *_TESTNET or *_MAINNET block in .env based on CARDANO_NETWORK.)
-  npm run cli -- client:init [--protocol-state ../state/<network>/config-bootstrap.json] [--client-id client-a --receiver-asset-label DIA_RECEIVER_CLIENT_A] [--out ../state/<network>/clients/client-a.json]
-  npm run cli -- intent:create [--protocol-state ../state/<network>/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ../state/<network>/intents/usdc-usd.unsigned.json]
-  npm run cli -- intent:sign [--input ../state/<network>/intents/usdc-usd.unsigned.json] [--out ../state/<network>/intents/usdc-usd.signed.json]
-  npm run cli -- intent:create-and-sign [--protocol-state ../state/<network>/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ../state/<network>/intents/usdc-usd.signed.json]
-  npm run cli -- config:update:create [--protocol-state ../state/<network>/config-bootstrap.json] [--out ../state/<network>/config-updates/config-update.json]
-  npm run cli -- config:parameterize --protocol-state ../state/<network>/config-bootstrap.json
-  npm run cli -- config:reference-scripts --protocol-state ../state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- config:bootstrap --protocol-state ../state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- payment-hook:parameterize --protocol-state ../state/<network>/config-bootstrap.json
-  npm run cli -- payment-hook:reference-script --protocol-state ../state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- payment-hook:bootstrap --protocol-state ../state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- payment-hook:update --input ../state/<network>/hook-updates/payment-hook-update.json --protocol-state ../state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- receiver:parameterize --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json
-  npm run cli -- reference-scripts:publish-client --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- receiver:bootstrap --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- update --intent ../state/<network>/intents/usdc-usd.signed.json --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json --pair-state ../state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only] [--fold-deposits]
-  npm run cli -- config:update --input ../state/<network>/config-updates/config-update.json --protocol-state ../state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- update:batch:create [--pairs-dir ../state/<network>/clients/client-a/pairs] [--intents-dir ../state/<network>/intents] [--out ../state/<network>/update-batches/update-batch.manifest.json]
-  npm run cli -- update:batch --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json --manifest ../state/<network>/update-batches/update-batch.manifest.json [--build-only] [--out ../state/<network>/update-batches/update-batch.result.json]
-  npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- receiver:withdraw --amount-lovelace 2000000 [--recipient-address <addr>] --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- receiver:update-min-utxo --new-min-utxo-lovelace 3000000 --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- pair:update-min-utxo --new-min-utxo-lovelace 3000000 --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json --pair-state ../state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
-  npm run cli -- pair:burn --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json --pair-state ../state/<network>/clients/client-a/pairs/usdc-usd.json [--build-only]
-  npm run cli -- pair:dedup --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- settle --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--client-state ../state/<network>/clients/client-b.json ...] [--build-only]
-  npm run cli -- deposit:address --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json
-  npm run cli -- deposit:fund --amount-lovelace 5000000 --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- deposit:merge --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--build-only]
-  npm run cli -- payment-hook:withdraw --amount-lovelace 2000000 --protocol-state ../state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- receiver:burn --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--build-only]
+  npm run cli -- client:init [--protocol-state ../state/<network>_run_<id>/config-bootstrap.json] [--client-id client-a --receiver-asset-label DIA_RECEIVER_CLIENT_A] [--out ../state/<network>_run_<id>/clients/client-a.json]
+  npm run cli -- intent:create [--protocol-state ../state/<network>_run_<id>/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ../state/<network>_run_<id>/intents/usdc-usd.unsigned.json]
+  npm run cli -- intent:sign [--input ../state/<network>_run_<id>/intents/usdc-usd.unsigned.json] [--out ../state/<network>_run_<id>/intents/usdc-usd.signed.json]
+  npm run cli -- intent:create-and-sign [--protocol-state ../state/<network>_run_<id>/config-bootstrap.json] [--symbol USDC/USD] [--price 100045678] [--timestamp 1777274653] [--nonce 1777274633040] [--expiry 1777278253] [--out ../state/<network>_run_<id>/intents/usdc-usd.signed.json]
+  npm run cli -- config:update:create [--protocol-state ../state/<network>_run_<id>/config-bootstrap.json] [--out ../state/<network>_run_<id>/config-updates/config-update.json]
+  npm run cli -- config:parameterize --protocol-state ../state/<network>_run_<id>/config-bootstrap.json
+  npm run cli -- config:reference-scripts --protocol-state ../state/<network>_run_<id>/config-bootstrap.json [--build-only]
+  npm run cli -- config:bootstrap --protocol-state ../state/<network>_run_<id>/config-bootstrap.json [--build-only]
+  npm run cli -- payment-hook:parameterize --protocol-state ../state/<network>_run_<id>/config-bootstrap.json
+  npm run cli -- payment-hook:reference-script --protocol-state ../state/<network>_run_<id>/config-bootstrap.json [--build-only]
+  npm run cli -- payment-hook:bootstrap --protocol-state ../state/<network>_run_<id>/config-bootstrap.json [--build-only]
+  npm run cli -- payment-hook:update --input ../state/<network>_run_<id>/hook-updates/payment-hook-update.json --protocol-state ../state/<network>_run_<id>/config-bootstrap.json [--build-only]
+  npm run cli -- receiver:parameterize --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json
+  npm run cli -- reference-scripts:publish-client --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--build-only]
+  npm run cli -- receiver:bootstrap --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--build-only]
+  npm run cli -- update --intent ../state/<network>_run_<id>/intents/usdc-usd.signed.json --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json --pair-state ../state/<network>_run_<id>/clients/client-a/pairs/usdc-usd.json [--build-only] [--fold-deposits]
+  npm run cli -- config:update --input ../state/<network>_run_<id>/config-updates/config-update.json --protocol-state ../state/<network>_run_<id>/config-bootstrap.json [--build-only]
+  npm run cli -- update:batch:create [--pairs-dir ../state/<network>_run_<id>/clients/client-a/pairs] [--intents-dir ../state/<network>_run_<id>/intents] [--out ../state/<network>_run_<id>/update-batches/update-batch.manifest.json]
+  npm run cli -- update:batch --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json --manifest ../state/<network>_run_<id>/update-batches/update-batch.manifest.json [--build-only] [--out ../state/<network>_run_<id>/update-batches/update-batch.result.json]
+  npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--build-only]
+  npm run cli -- receiver:withdraw --amount-lovelace 2000000 [--recipient-address <addr>] --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--build-only]
+  npm run cli -- receiver:update-min-utxo --new-min-utxo-lovelace 3000000 --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--build-only]
+  npm run cli -- pair:update-min-utxo --new-min-utxo-lovelace 3000000 --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json --pair-state ../state/<network>_run_<id>/clients/client-a/pairs/usdc-usd.json [--build-only]
+  npm run cli -- pair:burn --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json --pair-state ../state/<network>_run_<id>/clients/client-a/pairs/usdc-usd.json [--build-only]
+  npm run cli -- pair:dedup --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--build-only]
+  npm run cli -- settle --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--client-state ../state/<network>_run_<id>/clients/client-b.json ...] [--build-only]
+  npm run cli -- deposit:address --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json
+  npm run cli -- deposit:fund --amount-lovelace 5000000 --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--build-only]
+  npm run cli -- deposit:merge --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--build-only]
+  npm run cli -- payment-hook:withdraw --amount-lovelace 2000000 --protocol-state ../state/<network>_run_<id>/config-bootstrap.json [--build-only]
+  npm run cli -- receiver:burn --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--build-only]
         (teardown: requires receiver balance == 0 AND accrued == 0 — run receiver:withdraw then settle first)
-  npm run cli -- payment-hook:burn --protocol-state ../state/<network>/config-bootstrap.json [--build-only]
+  npm run cli -- payment-hook:burn --protocol-state ../state/<network>_run_<id>/config-bootstrap.json [--build-only]
         (teardown: requires hook accrued_fees == 0 — run payment-hook:withdraw first)
-  npm run cli -- config:burn --protocol-state ../state/<network>/config-bootstrap.json [--build-only]
+  npm run cli -- config:burn --protocol-state ../state/<network>_run_<id>/config-bootstrap.json [--build-only]
         (teardown: final step — burns the singleton Config NFT, no value precondition)
-  npm run cli -- reclaim-reference-script --script <config|payment-hook> --protocol-state ../state/<network>/config-bootstrap.json [--build-only]
-  npm run cli -- reclaim-reference-script --script client --protocol-state ../state/<network>/config-bootstrap.json --client-state ../state/<network>/clients/client-a.json [--build-only]`);
+  npm run cli -- reclaim-reference-script --script <config|payment-hook> --protocol-state ../state/<network>_run_<id>/config-bootstrap.json [--build-only]
+  npm run cli -- reclaim-reference-script --script client --protocol-state ../state/<network>_run_<id>/config-bootstrap.json --client-state ../state/<network>_run_<id>/clients/client-a.json [--build-only]`);
 }
 
 function requireInputPath(): string {
@@ -220,9 +221,9 @@ async function run(): Promise<void> {
     }
 
     case "reference-holder": {
-      const { readConfigState } = await import("./core/state.js");
+      const { getDefaultConfigStatePath, readConfigState } = await import("./core/state.js");
       const statePath =
-        optionalFlagValue("--protocol-state") ?? `../state/${networkTag()}/config-bootstrap.json`;
+        optionalFlagValue("--protocol-state") ?? getDefaultConfigStatePath();
       const state = await readConfigState(path.resolve(statePath));
       if (!state.scripts.referenceHolderAddress || !state.scripts.referenceHolderValidatorHash) {
         throw new Error("ReferenceHolder address not found. Run config:parameterize first.");

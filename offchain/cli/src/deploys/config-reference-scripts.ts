@@ -1,5 +1,5 @@
 import path from "node:path";
-import { stepId, networkTag , getCliConfig} from "../core/config.js";
+import { stepId, getCliConfig} from "../core/config.js";
 
 import {
   scriptHashFromValidator,
@@ -9,6 +9,7 @@ import {
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import {
   appendTransactionRecord,
+  getDefaultConfigStatePath,
   readConfigState,
   type ConfigStateArtifact,
 } from "../core/state.js";
@@ -27,7 +28,7 @@ export async function publishConfigReferenceScripts(args: {
   statePath?: string;
   buildOnly: boolean;
 }): Promise<ConfigStateArtifact> {
-  const state = await readConfigState(path.resolve(args.statePath ?? `state/${networkTag()}/config-bootstrap.json`));
+  const state = await readConfigState(path.resolve(args.statePath ?? getDefaultConfigStatePath()));
 
   if (!state.scripts.referenceHolderAddress) {
     throw new Error("Config reference-scripts publish requires config parameterization first (run config:parameterize).");
