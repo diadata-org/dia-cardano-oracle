@@ -680,9 +680,9 @@ run dir under `<run>/clients/*/pairs/*.json`. On startup the daemon reconciles
 those pair-state files with live Cardano UTxOs, hydrates `priceCache` and
 last-confirmed metrics from them, and only then starts cron.
 
-The DB path is set by `database.path` in `infrastructure.<network>.yaml` or
-overridden by the `DATABASE_PATH_<NETWORK>` env var. For Postgres set
-`database.driver: postgres` and supply `DATABASE_DSN_<NETWORK>`.
+The sqlite DB path is derived from the active per-run state dir
+(`<run>/feeder.sqlite`); the `DATABASE_PATH_<NETWORK>` env var overrides it. For
+Postgres set `database.driver: postgres` and supply `DATABASE_DSN_<NETWORK>`.
 
 ### Schema — 6 tables
 
@@ -691,7 +691,7 @@ overridden by the `DATABASE_PATH_<NETWORK>` env var. For Postgres set
 | `processed_events` | Dedup and pipeline audit for source-chain events. Prevents reprocessing the same `intentHash` after a reconnect or restart. |
 | `chain_state` | Scanner position (`last_scan_block`) and health flags. Updated after every confirmed scan range. |
 | `transaction_log` | Full pending → submitted → confirmed → failed lifecycle for every Cardano tx, including `txHash`, error codes, and latency breakdowns. |
-| `contract_symbol_updates` | Historical last-confirmed price rows written on confirmation. Runtime cold-start hydration uses reconciled pair-state files so the cron service and router policy gate see the same Cardano state operators inspect on disk. |
+| `contract_symbol_updates` | Latest confirmed value per `(chain, contract, symbol)`, upserted on every confirmation — for Cardano: `chain` = network magic, `contract` = the client's pair validator address, `symbol` = the pair. Stores `last_price`, `last_timestamp`, `last_nonce`, intent/tx hash, `update_count`, and fee. Runtime cold-start hydration of the price cache uses the reconciled pair-state files (so the cron and policy gate see the same on-disk Cardano state); `last_nonce` is the persistent backing for the cron's monotonic-nonce baseline. |
 | `performance_metrics` | Persistent counters (event totals, confirmed tx counts, latencies) that survive restarts. Used by the evidence-pack scripts to produce aggregate statistics. |
 | `alert_log` | Alert firing history written by the in-process alert evaluator. Includes `acknowledged` and `resolved` state. Queryable via `GET /api/v1/alerts`. |
 
@@ -894,7 +894,7 @@ Price deviation is **percent** (0–100).
 | Alert | Metric | YAML key | Default | Action |
 | --- | --- | --- | --- | --- |
 | `OraclePairStale` | `dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds` | `oracle_pair_stale_seconds` | `3600` s | Check `make logs`; usually a low Receiver or Admin wallet. |
-| `ReceiverBalanceLow` | `dia_bridge_cardano_receiver_balance_lovelace` | `receiver_balance_low_lovelace` | `2 000 000` (2 ADA) | `make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json --client-state /app/offchain/state/preview_run_<id>/clients/<client>.json"` |
+| `ReceiverBalanceLow` | `dia_bridge_cardano_receiver_balance_lovelace` | `receiver_balance_low_lovelace` | `2 000 000` (2 ADA) | Send ADA to the alert's `deposit_address`; the feeder folds it into Receiver balance automatically. Operator fallback: `receiver:top-up`. |
 | `SettleOverdue` | `dia_bridge_cardano_receiver_accrued_lovelace` | `settle_overdue_lovelace` | `10 000 000` (10 ADA) | `make cli CMD="settle --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json --client-state /app/offchain/state/preview_run_<id>/clients/<client>.json"` |
 | `PaymentHookWithdrawReady` | `dia_bridge_cardano_payment_hook_accrued_lovelace` | `payment_hook_withdraw_ready_lovelace` | `50 000 000` (50 ADA) | `make cli CMD="payment-hook:withdraw --amount-lovelace <lovelace> --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json"` |
 | `AdminWalletLow` | `dia_bridge_cardano_admin_wallet_lovelace` | `admin_wallet_low_lovelace` | `5 000 000` (5 ADA) | Collect protocol revenue into this wallet: `settle` then `payment-hook:withdraw` (the withdraw_address is this wallet). Only if there is no accrued revenue, fund the address in `state/<net>_run_<id>/config-bootstrap.json` externally (Preview: faucet). |
@@ -909,7 +909,7 @@ in the oracle update flow:
 
 | Gauge | Wallet | Behaviour |
 | --- | --- | --- |
-| `dia_bridge_cardano_receiver_balance_lovelace{client_id}` | Per-client Receiver UTxO `balanceLovelace` | Drains by `protocolFee` per oracle update. Top-up needed when low. |
+| `dia_bridge_cardano_receiver_balance_lovelace{client_id,receiver_address,deposit_address}` | Per-client Receiver UTxO `balanceLovelace` | Drains by `protocolFee` per oracle update. Fund the labelled `deposit_address` when low; the feeder auto-merges/folds it into the Receiver. |
 | `dia_bridge_cardano_receiver_accrued_lovelace{client_id}` | Per-client Receiver UTxO `accruedToHookLovelace` | Grows by `protocolFee` per oracle update. Settle drains it to the PaymentHook. |
 | `dia_bridge_cardano_payment_hook_accrued_lovelace` | Singleton PaymentHook `accruedFeesLovelace` (DIA-managed) | Grows on each `settle`. DIA withdraws via `payment-hook:withdraw`. |
 | `dia_bridge_cardano_admin_wallet_lovelace` | Operator/signer wallet (off-chain) | Pays Cardano tx fees for every oracle update. Receives PaymentHook withdrawals. |

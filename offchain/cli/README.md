@@ -463,7 +463,7 @@ npm run cli -- intent:create-and-sign \
   --out ../state/<network>/intents/usdt-usd.signed.json
 ```
 
-For every later update, generate a fresh signed intent with a new nonce, timestamp, expiry, and price.
+For every later update, generate a fresh signed intent with a new nonce, timestamp, expiry, and price. The nonce is minted in **nanoseconds** (`unixTimeMs × 1e6`) to share the scale of real DIA OracleIntent nonces, so a demo-bootstrapped pair can be superseded monotonically by real DIA feeds.
 
 ## Live Updates
 

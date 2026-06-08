@@ -305,6 +305,23 @@ A **lane = (client, receiver UTxO)**. Parallelism across clients comes from havi
 > the next, because EUTxO does not allow two simultaneous writes against the same
 > UTxO."*
 
+### Always build a valid tx (validate against the live on-chain datum)
+
+Before building, the bridge decodes the **live on-chain pair datum** of each Pair UTxO
+it is about to spend and validates the intent's `(timestamp, nonce)` against it — the
+ground truth, not the local pair-state file (which can drift behind chain). The
+`pair_state` validator requires a strictly greater `(timestamp, nonce)`; DIA advances
+the per-pair nonce slowly, so a fresh-hash intent can still carry a nonce that does not
+beat the on-chain one.
+
+- **Single update:** the builder refuses to assemble a tx that would not beat the chain
+  (classified as a benign `NonMonotonicNonce` — a newer update is already on chain — with
+  **no tx and no fee**).
+- **Batch:** a pair whose intent does not beat its on-chain datum is **dropped from the
+  batch** (reported benignly as superseded), so one stale pair never poisons the atomic
+  tx and reverts the whole batch. The remaining valid pairs still go out together —
+  batching stays the main path. The builder re-asserts the same check as a final guard.
+
 ### Where does the client come in? (both stages are per-client)
 
 A common confusion: *which* stage knows the client? **Both do**, and they use the
@@ -414,7 +431,7 @@ snapshot used to warm the hot cache.
 | Cache | Holds | Used by | On restart |
 | --- | --- | --- | --- |
 | **dedup cache** | seen intent hashes (LRU, TTL 1h) | the hot-path dedup check | empty; the checkpoint skips already-scanned blocks |
-| **priceCache** | the **last confirmed price** per (router, dest, symbol) | the policy gate (OR-gate) + the cron | empty; **re-seeded after startup reconcile from `<run>/clients/*/pairs/*.json`** |
+| **priceCache** | the **last confirmed price** (and `nonce`) per (router, dest, symbol) | the policy gate (OR-gate) + the cron (the `nonce` lets the cron skip resubmits that cannot beat on-chain) | empty; **re-seeded after startup reconcile from `<run>/clients/*/pairs/*.json`** |
 | **latestIntentCache** | the **last intent seen** (confirmed or not) | the cron (to know *what* to resubmit) | empty; refills within seconds from live events |
 
 ### The price cache, specifically
@@ -454,7 +471,7 @@ confirmed pair-state files before cron/alerting can read it.
 | `processed_events` | Audit log of every `IntentRegistered` + persistent dedup |
 | `chain_state` | **The checkpoint**: up to which block we've scanned — where the scanner resumes |
 | `transaction_log` | In-flight and confirmed Cardano txs (pending→submitted→confirmed/failed) |
-| `contract_symbol_updates` | Last confirmed price per (chain, contract, symbol) |
+| `contract_symbol_updates` | Latest confirmed value per `(chain, contract, symbol)`, upserted on confirm. Cardano keying: `chain` = network magic, `contract` = the client's pair validator address, `symbol` = the pair. Stores `last_price`/`last_timestamp`/`last_nonce`/intent hash/tx hash/`update_count`/fee; `last_nonce` rehydrates the cron's nonce baseline on restart |
 | `performance_metrics` | Time-series of metrics (feeds `/api/v1/performance`) |
 | `alert_log` | Alerts fired / resolved |
 
@@ -501,10 +518,15 @@ Every **30s** it walks each destination with `cron: true`, and per symbol:
    the same coalescer path** as the event-driven flow.
 4. If the last intent equals what's already on-chain → skip (`skipped_already_fresh`);
    the contract would reject it with `NonMonotonicNonce`.
+5. If the last intent's `nonce` does **not** exceed the last confirmed nonce → skip
+   (`skipped_superseded`): the `pair_state` validator requires a strictly greater
+   `(timestamp, nonce)`, so the resubmission would be rejected on chain. DIA advances the
+   per-pair nonce slowly, so this is common — skipping it here avoids a wasted pipeline
+   pass and fee (the build-time on-chain datum check is the final guard).
 
-> ⚠️ Today `client-a.preview.yaml` has **no `cron: true`** on its destination. The
-> service is globally enabled but is **opt-in per destination**. Without it, the
-> feeder only updates on events. Confirm whether to show the cron active.
+> The cron service is globally enabled (`cron_service.enabled`) and **opt-in per
+> destination** via `cron: true` in the router YAML. `client-a` sets `cron: true`, so its
+> pairs get the liveness heartbeat; a destination without it updates only on events.
 
 ---
 
@@ -599,7 +621,7 @@ That's exactly why it's a later milestone.
 
 | Block | Purpose |
 | --- | --- |
-| `database` | local sqlite (`state/preview/feeder.sqlite`); postgres supported for prod |
+| `database` | local sqlite (run-scoped `<run>/feeder.sqlite`); postgres supported for prod |
 | `source` | the EVM chain it scans: `chain_id 10050`, RPC + WS, `start_block` |
 | `block_scanner` | HTTP poller knobs (10s, 500 blocks, 6 confirmations, backfill 5000) |
 | `event_processor` | `dedup_cache_ttl 1h`, `coalesce_window 2s`, `max_batch_size 10`, `max_intent_age 15m`, **`enable_parallel_mode: false`** |
@@ -799,7 +821,7 @@ show **WHERE** latency lives:
 
 | Metric | What it measures |
 | --- | --- |
-| `dia_bridge_cron_resubmissions_total{router_id,symbol,client_id,outcome}` | Cron decisions by outcome: `submitted`, `skipped_already_fresh`, `skipped_no_intent`, `skipped_uninitialised`. Shows whether the cron is working and why it skips. |
+| `dia_bridge_cron_resubmissions_total{router_id,symbol,client_id,outcome}` | Cron decisions by outcome: `submitted`, `skipped_already_fresh`, `skipped_superseded`, `skipped_no_intent`, `skipped_uninitialised`. Shows whether the cron is working and why it skips. |
 
 **HTTP API** (today none shown):
 

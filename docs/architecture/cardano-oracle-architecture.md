@@ -1289,7 +1289,7 @@ truth, and which scripts are parameterized by what.
 
 | Identifier | Bound to script | Stored on-chain in | Stored off-chain in | Read by (on-chain) |
 |---|---|---|---|---|
-| `config_policy_id` | `validators/config_state.ak` (mint) | NFT bytes on the Config UTxO | `state.scripts.configPolicyId` (`offchain/state/preview/config-bootstrap.json`) | Hardcoded as a compile-time parameter on `payment_hook`, `receiver`, `pair_state`, `update_coordinator` (`validators/{payment_hook,receiver,pair_state,update_coordinator}.ak` headers); also re-checked at runtime via `find_visible_config_input` |
+| `config_policy_id` | `validators/config_state.ak` (mint) | NFT bytes on the Config UTxO | `state.scripts.configPolicyId` (`offchain/state/preview_run_<id>/config-bootstrap.json`) | Hardcoded as a compile-time parameter on `payment_hook`, `receiver`, `pair_state`, `update_coordinator` (`validators/{payment_hook,receiver,pair_state,update_coordinator}.ak` headers); also re-checked at runtime via `find_visible_config_input` |
 | `config_asset_name` | same | NFT bytes on the Config UTxO | `state.scripts.configUnit.assetName` | Same compile-time parameters as above |
 | `payment_hook_policy_id` | `validators/payment_hook.ak` (mint) | NFT bytes on the Hook UTxO; **also recorded inside `ConfigDatum.payment_hook_ref`** | `state.scripts.paymentHookPolicyId` and `state.scripts.paymentHookValidator{Hash,Address}` | Read by `update_coordinator` `valid_settle` (`update_coordinator.ak:175-205`) and re-asserted by hook's `has_expected_hook_ref` (`payment_hook.ak:243-253`) |
 | `payment_hook_asset_name` | same | NFT bytes; `ConfigDatum.payment_hook_ref.asset_name` | `state.scripts.paymentHookUnit` | Same as above |
@@ -1360,7 +1360,7 @@ source used to rebuild the in-memory price cache.
 | `chain_state` | One row per `(chainId, contractId)`. Tracks `last_processed_block` (checkpoint) and `last_scan_block` (head). |
 | `processed_events` | One row per decoded `IntentRegistered` log. Dedup check + audit trail. Status: `processed \| filtered \| duplicate \| error`. |
 | `transaction_log` | One row per Cardano submission attempt. Full lifecycle: `pending → submitted → confirmed \| failed`. Stores `fee_paid_lovelace`, `confirmed_at_depth`, error codes. |
-| `contract_symbol_updates` | Latest confirmed price per `(chainId, contract, symbol)`. Updated by the queue manager on confirmation. |
+| `contract_symbol_updates` | One row per `(chainId, contract, symbol)`, upserted on every confirmation. For Cardano: `chainId` = network magic (Preview 2, Mainnet 764824073), `contract` = the client's pair validator address (the Spectra destination-contract analogue — one per client, holds all its symbols), `symbol` = the pair. Stores the latest confirmed `price`, `timestamp`, `nonce` (`last_nonce`), intent hash, tx hash, `update_count`, and fee. `last_nonce` lets a restart rehydrate the cron's monotonic-nonce baseline. |
 | `performance_metrics` | Time-series metric samples for the 6-phase latency histogram. Queried by `/api/v1/performance`. |
 | `alert_log` | Fired / resolved alert events written by the alert evaluator. Queried by `/api/v1/alerts`. |
 
@@ -1444,13 +1444,18 @@ older than `time_threshold`, the cron service re-submits the latest known intent
 in the `LatestIntentCache`) through the same coalescer submission path as live events.
 
 The cron service skips re-submission when the latest intent hash already matches the
-on-chain confirmed hash (`outcome = "skipped_already_fresh"`), ensuring idempotency.
+on-chain confirmed hash (`outcome = "skipped_already_fresh"`), ensuring idempotency. It
+also skips when the latest cached intent's `nonce` does not exceed the last confirmed
+nonce (`outcome = "skipped_superseded"`): the `pair_state` validator requires a strictly
+greater `(timestamp, nonce)`, so such a re-submission would be rejected on chain — the
+cron drops it instead of wasting a pipeline pass and a fee.
 
 ### 9.4 Alert evaluator and `alert_log`
 
 The alert evaluator is an in-process periodic loop started alongside the feeder daemon.
-It reads `contract_symbol_updates` to find pairs whose `last_confirmed_at_ms` is older
-than `alerting.oracle_pair_stale_seconds` and writes an `OraclePairStale` event to
+It reads the in-memory `priceCache` (refreshed on every confirm, hydrated from the
+reconciled pair-state files at startup) to find pairs whose last confirmed entry is
+older than `alerting.oracle_pair_stale_seconds` and writes an `OraclePairStale` event to
 `alert_log`. It also monitors for `PriceDeviationHigh` and `ReceiverBalanceLow`
 conditions using the thresholds from `alerting.*` in the YAML.
 
