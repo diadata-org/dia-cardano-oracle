@@ -10,6 +10,7 @@
 ## Contents
 
 - [Overview: what it is, and how it maps to Spectra](#overview-what-it-is-and-how-it-maps-to-spectra)
+- [Client funding: side-deposit address + merge](#client-funding-side-deposit-address--merge)
 - [1. What the feeder is (high level)](#1-what-the-feeder-is-high-level)
 - [2. End-to-end flow (from an intent to a Cardano tx)](#2-end-to-end-flow-from-an-intent-to-a-cardano-tx)
 - [3. Ingestion: HTTP and WebSocket in parallel](#3-ingestion-http-and-websocket-in-parallel)
@@ -29,6 +30,7 @@
 - [17. State: implemented / M2 / deferred to M3](#17-state-implemented--m2--deferred-to-m3)
 - [18. Current limitations](#18-current-limitations)
 - [19. Metrics that exist but are NOT in Grafana](#19-metrics-that-exist-but-are-not-in-grafana)
+- [20. lucid WASM build resilience (submission/finality hardening)](#20-lucid-wasm-build-resilience-submissionfinality-hardening)
 - [Where to find everything (documentation map)](#where-to-find-everything-documentation-map)
 - [Open questions & constraints to verify](#open-questions--constraints-to-verify)
 
@@ -54,8 +56,88 @@ is in §15.
 | **Cardano-only (no Spectra equivalent)** | — | `confirmation_depth` (Ouroboros finality), the `lib-bridge` Cardano tx builder, and the whole **fee flow** (receiver top-up → settle → payment-hook withdraw) |
 | **Deliberately left out (for now)** | HA failover monitor (`replica.*`), dedicated head-tracker/gap loops, EVM-destination subsystems | typed in config so a Spectra-shaped YAML still loads, but **not wired** — reserved for M3 (see §17) |
 
-The rest of this document walks the pipeline in order. §15 and the feeder README hold the
+The rest of this document walks the pipeline in order. §15 holds the
 full Spectra-parity table; §17 lists exactly what is implemented vs. deferred.
+
+---
+
+## Client funding: side-deposit address + merge
+
+> This is the feeder-operational view of side-deposit funding (who triggers the merge,
+> with what params and thresholds, and how it serialises against oracle updates). The
+> on-chain view — the deposit validator, the anti-skim rule, and the merge transaction
+> shape — is in
+> [`cardano-oracle-architecture.md` §5.14](./cardano-oracle-architecture.md#514-side-deposit-funding--merge-per-client).
+
+A client's prepaid balance lives in their **Receiver** UTxO. To add balance you must
+**spend and recreate that Receiver** (the `TopUp` operation) — which requires the script,
+the datum, and protocol-aware tooling (the CLI). **A client cannot do that from an
+ordinary wallet.** So `receiver:top-up` is, in practice, an **internal DIA / operator**
+operation — not something a client runs. (A client *could* run their own top-up with the
+full tooling, but they won't.)
+
+To let a client fund with nothing but an ordinary wallet payment, each client has a
+**per-client deposit address** — a separate script
+(`contracts/aiken/validators/deposit.ak`). The flow:
+
+1. **Client deposits.** The client sends ADA to their deposit address with a normal wallet
+   payment — no CLI, no datum. In Plutus V3 a datum-less script UTxO is spendable, so the
+   payment lands as a usable deposit (unlike sending to the Receiver address, whose
+   validator does `expect Some(datum)` and would strand the funds).
+2. **DIA/feeder credits the balance.** Later, the feeder/CLI folds the accumulated
+   deposits into the Receiver's `balance_lovelace`, in either of two forms (both run the
+   deposit's anti-skim rule — see
+   [`cardano-oracle-architecture.md` §5.14](./cardano-oracle-architecture.md#514-side-deposit-funding--merge-per-client)):
+   - **Standalone merge** — spends the Receiver under the `TopUp` redeemer together with
+     the selected clean deposit UTxOs in one tx, recreating the Receiver with the higher
+     balance. Used for bulk sweeps.
+   - **Fold into an update** — the feeder absorbs up to `depositMaxPerUpdateFold` confirmed
+     clean deposits into an oracle-update tx it is already submitting, so one tx updates
+     the price AND tops up the balance.
+
+**Security (the deposit validator).** The deposit validator is parametrised per client by
+the Receiver NFT `(policy_id, asset_name)`, so the deposit address is unique per client. A
+deposit may only be spent in a tx that **consumes that client's canonical Receiver and
+raises its `balance_lovelace` by at least the total swept** from the address (the
+"anti-skim" rule — see `lib/dia_cardano_oracle/deposit_logic.ak`). Consequences: a deposit
+can only ever credit *its own* client's balance (it can't be stolen, and a sweep of N
+deposits must credit all N); and `Settle`/`Withdraw` can never spend a deposit because
+they lower the Receiver's lovelace. The credit runs either as a standalone `TopUp` merge
+or as an `AccrueFee` update that absorbs the deposit — both raise `balance_lovelace`.
+
+**Who does what:** the **client** only deposits (plain payment); **DIA/the feeder** credits
+the balance (and the daemon does it automatically when a Receiver runs low — see §10). The
+CLI verbs are `deposit:address` (print the address to hand to a client), `deposit:fund` (a
+plain payment, for testing/operator use), and `deposit:merge` (the standalone sweep).
+
+**Folding deposits into an update (best-effort).** Beyond the standalone merge, the feeder
+opportunistically folds up to `depositMaxPerUpdateFold` confirmed clean deposits into the
+oracle-update tx it is already submitting, so a single tx both updates the price and tops
+up `balance_lovelace`. It is **best-effort**: the feeder tries the combined tx first, and
+if that build/sign/submit fails it retries a pure update (at most one fallback), so a
+bad or contended deposit never blocks a price update (`runWithFoldFallback` in
+`src/lib-bridge/index.ts`). The standalone `deposit:merge` remains for bulk sweeps that
+should not wait for an update to ride along.
+
+**Params vs triggers — HOW vs WHEN.** Both forms select clean ADA-only deposits at or
+above a dust floor (`depositMinLovelace`). The standalone merge is capped per tx
+(`depositMaxPerMerge`); the update-fold uses the smaller `depositMaxPerUpdateFold` so the
+absorbed deposits fit within the tx budget alongside a price update. Those three are
+**tx-build params**: they are set at the CLI's `protocol:init` and stored in
+`config-bootstrap.json::configState`, siblings of `minUtxoLovelace`. Both the CLI and the
+daemon read them from that SAME protocol state — the daemon via `readDepositMinLovelace`,
+passing the floor to the bridge so the deposit-pending probe counts exactly what the sweep
+would. They are **not** feeder-YAML keys. Separately, **when** the daemon auto-merges is
+governed by the feeder `infrastructure.<network>.yaml::alerting.*` thresholds
+(`receiver_balance_low_lovelace`, `deposit_pending_merge_lovelace`) — timing only, never
+tx shape.
+
+**Concurrency — hard exclusion.** The auto-merge is enqueued as a first-class task on the
+SAME per-lane submission queue as oracle updates (`enqueueLaneTask`, keyed by `laneKey`).
+The lane queue runs one entry at a time, so an update and a merge on the same Receiver are
+mutually exclusive **by construction** — they can never spend the Receiver UTxO at once. A
+per-lane dedup guard stops the daemon stacking a fresh merge each refresh tick while one is
+already queued/running; it is a dedup, not a safety lock (the lane queue is the lock).
 
 ---
 
@@ -93,7 +175,7 @@ Queue Manager ── ONE serial queue per lane = (client, receiver UTxO)
    ▼
 Cardano Write Client (lib-bridge) ── load state → build tx → sign → submit → await confirm
    ▼
-Result Handler ── writes DB (transaction_log + contract_symbol_updates) + priceCache + metrics
+Result Handler ── writes DB + pair-state files + priceCache + metrics
 ```
 
 ---
@@ -324,13 +406,15 @@ DIA slow to register (phase 1)? RPC slow (phase 2)? Cardano congested (phase 5)?
 
 ## 7. Caches & the price cache
 
-**Principle: the DB is the source of truth for anything that must survive a restart.**
-The in-memory caches are just the fast path.
+**Principle: persisted state is the source of truth for anything that must
+survive a restart.** The in-memory caches are just the fast path. DB tables keep
+scanner/tx history; Cardano pair-state files keep the confirmed on-chain pair
+snapshot used to warm the hot cache.
 
 | Cache | Holds | Used by | On restart |
 | --- | --- | --- | --- |
 | **dedup cache** | seen intent hashes (LRU, TTL 1h) | the hot-path dedup check | empty; the checkpoint skips already-scanned blocks |
-| **priceCache** | the **last confirmed price** per (router, dest, symbol) | the policy gate (OR-gate) + the cron | empty; **re-seeded from `contract_symbol_updates`** in the DB |
+| **priceCache** | the **last confirmed price** per (router, dest, symbol) | the policy gate (OR-gate) + the cron | empty; **re-seeded after startup reconcile from `<run>/clients/*/pairs/*.json`** |
 | **latestIntentCache** | the **last intent seen** (confirmed or not) | the cron (to know *what* to resubmit) | empty; refills within seconds from live events |
 
 ### The price cache, specifically
@@ -346,9 +430,10 @@ Two consumers:
 2. **The cron service.** To know whether a pair is stale (last confirmed older than
    `time_threshold`), it reads the age from the price cache.
 
-**Why RAM and not the DB every time:** it's the hot path — queried on every intent,
-thousands of times. RAM is instant. On restart it's re-seeded from the DB, so the DB
-stays the source of truth and the cache is the fast copy.
+**Why RAM and not disk every time:** it's the hot path — queried on every intent,
+thousands of times. RAM is instant. On restart the daemon first reconciles local
+pair-state files with live Cardano UTxOs, then hydrates `priceCache` from those
+confirmed pair-state files before cron/alerting can read it.
 
 > Don't confuse it with **latestIntentCache**: that one holds the last intent *seen*
 > (used by the cron to know *what* to resubmit). The price cache holds the last
@@ -381,8 +466,11 @@ stays the source of truth and the cache is the fast copy.
    `NonMonotonicNonce` if it was already on-chain.
 3. Read the **checkpoint** from `chain_state` and resume scanning from there (old
    blocks are not re-processed).
-4. Caches start empty; priceCache is re-seeded from the DB. The event-driven flow (or
-   the cron) re-pushes whatever is needed.
+4. Reconcile Cardano pair-state files against live UTxOs.
+5. Hydrate `priceCache`, last-confirmed metrics, and readiness state from the
+   reconciled `<run>/clients/*/pairs/*.json` files.
+6. Start cron/alerting only after that warm-up, so a restart does not emit false
+   `skipped_uninitialised` decisions.
 
 ---
 
@@ -410,7 +498,7 @@ Every **30s** it walks each destination with `cron: true`, and per symbol:
 1. Look at the last **confirmed** (priceCache). Never confirmed → skip (`skipped_uninitialised`).
 2. Fresher than `time_threshold` → nothing to do.
 3. Stale → take the last known intent (latestIntentCache) and **resubmit it through
-   the same queue** as the event-driven flow.
+   the same coalescer path** as the event-driven flow.
 4. If the last intent equals what's already on-chain → skip (`skipped_already_fresh`);
    the contract would reject it with `NonMonotonicNonce`.
 
@@ -441,6 +529,10 @@ extra safety raises it. The actual depth waited is exposed in `/api/v1/prices` a
 > **One-liner:** *"Confirmation depth is how many Cardano blocks we wait before
 > trusting a transaction. We run at depth 1 — effectively final for an oracle — and
 > can raise it to ride out short rollbacks at the cost of a little latency."*
+
+The **build** step that precedes submission (lucid's `.complete()`) has its own
+resilience story — it intermittently throws a transient WASM error that the feeder
+recovers from across three layers without ever risking a double-submit. See §20.
 
 ---
 
@@ -543,7 +635,7 @@ it and where Spectra config fields are dead (declared but never read in Spectra 
 | In-flight lock timeout (`worker_pool.inflight_timeout_ms`) | Not present. | **Required**. Cardano-specific because the lane lock is held while a tx is in-flight. Default 15 min. | Reflects the wall-clock ceiling on Cardano submit+confirm. |
 | Parallel event processor (`event_processor.enable_parallel_mode`, `parallel_*`) | Active — parallel enrichment + gas-est pipeline. | **Active** — wired in parallel mode when `enable_parallel_mode: true`. Sequential (default) when the key is absent or false. | Sequential mode is sufficient for current throughput; parallel mode is available for high-volume deployments. |
 | Block scanner gap recovery (`block_scanner.backward_sync`, `max_block_gap`, `head_tracker_interval`, `gap_detection_interval`) | Active — backfill in 5000-block chunks when the gap exceeds `max_block_gap`. | **Active**: when `backward_sync: true`, the scanner switches to 5000-block chunks (vs `block_range` default 500) and skips `scan_interval` between chunks until caught up. Emits `dia_bridge_scanner_backfill_*` counters. | Chain-agnostic; reuses Spectra's design. |
-| Cron service (`cron_service.*` + per-destination `cron: true`) | Active — per-router cron timer re-pushes the latest cached intent when `time_threshold` elapsed. | **Active**: ticks every `cron_service.tick_interval`, re-submits via the same queue as the event-driven flow. Outcome partitioned in `dia_bridge_cron_resubmissions_total{outcome}`. | Ensures uptime and accuracy guarantees when the deviation filter suppresses every incoming event during low-volatility windows. |
+| Cron service (`cron_service.*` + per-destination `cron: true`) | Active — per-router cron timer re-pushes the latest cached intent when `time_threshold` elapsed. | **Active**: ticks every `cron_service.tick_interval`, re-submits via the same coalescer path as the event-driven flow. Outcome partitioned in `dia_bridge_cron_resubmissions_total{outcome}`. | Ensures uptime and accuracy guarantees when the deviation filter suppresses every incoming event during low-volatility windows. |
 | `health_check.max_processing_lag` | Declared but never read in Spectra. | **Active** — drives the `registry` check in `/health/ready`. | Cardano-feeder extension. |
 | `health_check.timeout`, `max_queue_size`, `recovery.*`, `event_processor.batch_size`, `validation_timeout` | Declared but never read in Spectra. | **Removed** from our types + YAMLs (cruft in both repos). | Reduces operator confusion. |
 | `replica.*` | Active — HA failover monitor. | **Typed, not yet wired** — fields parse cleanly from YAML; failover logic is reserved for a future implementation. | Operational HA requires multi-instance coordination not yet implemented. |
@@ -641,8 +733,8 @@ prerequisites, env vars, and the full output description.
 5. **API has no auth** (rate-limited only). Don't expose it publicly as-is.
 6. **`confirmation_depth: 1`** — practically final, but a Cardano rollback is
    theoretically possible (low risk; raise the depth to harden — §11).
-7. **In-memory caches lost on restart** — re-seeded from the DB, but there's a brief
-   "warm-up" window.
+7. **In-memory caches lost on restart** — rebuilt from reconciled pair-state files
+   before cron starts, but the latest-intent cache still refills from live DIA events.
 
 ---
 
@@ -762,6 +854,103 @@ panel they'd read 0/empty. Don't add them until they're wired:
 
 ---
 
+## 20. lucid WASM build resilience (submission/finality hardening)
+
+Every Cardano tx the feeder (and the CLI) submits is assembled by
+`@lucid-evolution/lucid` and finalised by `.complete()`, which runs inside a CML
+WASM module. That `.complete()` step is the one place in the submission path with a
+known transient failure mode, and the feeder hardens it in three layers — none of
+which can cause a double-submit.
+
+### Root cause
+
+`@lucid-evolution/lucid ^0.4.29` (with CML WASM 6.0.2-3) intermittently throws, from
+inside `.complete()`:
+
+```text
+TypeError: Cannot perform %TypedArray%.prototype.set on a detached ArrayBuffer
+```
+
+This is the classic WASM `memory.grow` → detached-ArrayBuffer pattern: lucid holds a
+JS `TypedArray` view onto the WASM linear memory; when the build grows that linear
+memory mid-`.complete()`, the old `ArrayBuffer` is detached and the held view is
+invalidated, so the next `.set(...)` throws. **The build inputs are valid** — the
+identical build, retried, succeeds. It is non-deterministic: a full Preview run hit it
+at `payment-hook:withdraw` immediately after the byte-identical `receiver:withdraw`
+builder had completed cleanly.
+
+### Why we did NOT upgrade lucid
+
+We investigated the obvious "just bump the dependency" route and rejected it:
+
+- **0.4.30–0.4.34** keep the **same** CML WASM (6.0.2-3) → no fix.
+- **0.5.2** bumps CML to 6.2.0-1, but **0.5.0 is a breaking release** (pluggable
+  evaluator), and the detach fix in that line is undocumented/unconfirmed.
+
+Migrating across a breaking major for an *uncertain* fix is not worth it, so we
+mitigate **without changing lucid or the WASM** — the mitigation is entirely on our
+side of the boundary.
+
+### The three mitigation layers
+
+Each layer targets a different process lifetime. The key safety rule throughout: a
+retry only ever re-runs the **build**, never a submit, so a transient build failure
+can never produce two on-chain txs.
+
+**Layer 1 — `completeWithRetry` (in-process build rebuild).**
+`offchain/cli/src/core/tx-build.ts`. Wraps `.complete()`. On the WASM signature **only**
+(`detached ArrayBuffer` / `%TypedArray%` / `detached`) it REBUILDS a **fresh** tx from
+the supplied build factory and re-`.complete()`s it; any non-WASM error (validation,
+fee, balancing, "amount exceeds…") rethrows immediately so real failures are never
+masked. It rebuilds — it does **not** re-`.complete()` the stale builder — because
+lucid's `TxBuilder` is stateful and `.complete()` is not idempotent: re-completing the
+same builder DUPLICATES the outputs and produces a corrupt tx (a live Preview run hit
+exactly this — a tx with both outputs twice, rejected by the node with a deserialise
+size mismatch). The retry happens entirely **before** submit, so there is no
+double-submit. This wrapper is in the shared CLI library used by all tx builders,
+**including the feeder** via the `lib-bridge` builders, so the feeder's update/merge
+builds inherit it for free. Env: `TX_BUILD_ATTEMPTS` (default 3),
+`TX_BUILD_RETRY_DELAY_MS` (default 300 ms).
+
+**Layer 2 — CLI runbook fresh-process retry (`run-all-cli.sh`).**
+A long CLI sequence runs each step as its own process. If a step fails **before
+submitting** — detected by the absence of `Submitted transaction hash` in that step's
+log — it is re-run in a **fresh process** (hence a fresh WASM module) up to
+`TX_STEP_BUILD_RETRIES` (default 2). A step whose log shows it **already submitted** is
+**never** blindly retried — that is the double-submit guard at the runbook layer.
+
+**Layer 3 — feeder daemon self-exit + supervisor (`WASM_FATAL_CONSECUTIVE_FAILURES`).**
+The daemon is long-running, so it holds **one** WASM module for its entire life.
+Re-creating a `Lucid` object inside the process does **not** re-initialise the WASM
+(the module is a per-process singleton) — only a **fresh process** gets a fresh WASM
+module. So the daemon layers on top of Layer 1:
+
+1. Layer 1 rebuilds in-process.
+2. The submission worker pool retries the lane task (`worker_pool.max_retries`).
+3. If a WASM-signature build failure still persists *after* the pool retries are
+   exhausted, the daemon counts it as a **consecutive** WASM failure (the counter
+   resets to 0 on any successful submission — see `src/submitter/wasm-failure-guard.ts`,
+   kept pure for unit testing). Once the count reaches
+   `WASM_FATAL_CONSECUTIVE_FAILURES` (default **5**), the daemon logs FATAL and calls
+   `process.exit(WASM_FATAL_EXIT_CODE)` — exit code **17**, distinct so a supervisor can
+   recognise it.
+
+A **supervisor** then restarts the process with a fresh WASM module, and state resumes
+from persisted DB + pair-state files (§7–§8): Docker Compose uses
+`restart: unless-stopped`; bare-metal/npm uses `feeder:supervised`
+(`scripts/run-feeder-supervised.sh`, a restart-loop with backoff). The defaults live in
+`src/config/constants.ts` (`DEFAULT_WASM_FATAL_CONSECUTIVE_FAILURES`,
+`WASM_FATAL_EXIT_CODE`); `WASM_FATAL_CONSECUTIVE_FAILURES` is the env override.
+
+> **One-liner:** *"lucid's WASM occasionally throws a transient detached-ArrayBuffer
+> error while building a tx. We retry the build in-process (rebuilding, never
+> re-completing); the CLI re-runs a pre-submit step in a fresh process; and the
+> long-running feeder self-exits after 5 consecutive WASM build failures so a
+> supervisor hands it a fresh WASM module — all without ever re-submitting an
+> already-submitted tx."*
+
+---
+
 ## Where to find everything (documentation map)
 
 The feeder is one part of a larger repository. Every document worth reading, grouped by
@@ -795,7 +984,7 @@ purpose, so it is clear where to look.
 
 - [`contracts/aiken/README.md`](../../contracts/aiken/README.md) — map of the on-chain
   Aiken validators (the contracts, design highlights, build/bench commands).
-- [`offchain/cli/state/README.md`](../../offchain/cli/state/README.md) — the generated
+- [`offchain/state/README.md`](../../offchain/state/README.md) — the generated
   state-artifact tree (what each field in the bootstrap/client JSON files means).
 
 ### Requirements & scope (the contract)

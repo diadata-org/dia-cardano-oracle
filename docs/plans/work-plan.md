@@ -50,6 +50,7 @@ Target contract set, per the architecture:
 - `receiver` — multivalidator (mint + spend), 1 per client.
 - `pair_state` — multivalidator (mint + spend), 1 per client.
 - `reference_holder` — spend validator, 1 global address for reference-script UTxOs.
+- `deposit` — spend validator, 1 per client. The per-client **side-deposit address**: a client funds their balance with an ordinary wallet payment (no CLI, datum-less — spendable in Plutus V3), and the feeder/CLI later folds the deposits into the Receiver balance by reusing the Receiver `TopUp` redeemer (the standalone `deposit:merge`) or, since A2, by absorbing them into an `AccrueFee` update in the same tx (`update --fold-deposits`). The `deposit` validator's source is itself additive (no edit to it), but its per-client address re-derives because A2 + the teardown burns DO edit `receiver` / `config_state` / `payment_hook` / `update_coordinator` (changing their hashes) — an accepted pre-launch re-bootstrap (see [`docs/audit/20260607-contract-teardown-ada-recovery.md`](../audit/20260607-contract-teardown-ada-recovery.md)). The earlier "purely additive — no deployed-hash change" property held for A1 alone.
 
 Tasks:
 
@@ -64,6 +65,9 @@ Tasks:
 - [x] Finalize pair-NFT asset-name derivation as `blake2b_256(pair_id)`.
 - [x] Finalize batch-update fee unit as Config-defined `base_fee_lovelace + n × per_pair_fee_lovelace` (two-component fee model).
 - [x] Admin-gated Pair NFT creation and burn paths in `pair_state` (see architecture §5.13 and `docs/security/security-notes.md`).
+- [x] Per-client `deposit` validator + `deposit_logic` for side-deposit funding (architecture §5.14): a `CollectDeposit` spend is authorised only when the tx consumes the canonical Receiver (found by its NFT) and raises the Receiver UTxO's lovelace by ≥ the **full** swept total at the deposit address. The anti-skim invariant — every deposit input at the shared address runs the same validator instance against the same `swept` sum — closes the multi-deposit skim hole. The merge reuses the Receiver `TopUp` redeemer (no new Receiver redeemer, no deployed-hash change). 9 inline Aiken tests (full sweep credited, multi-deposit credited, anti-skim partial-credit rejected, Receiver-not-credited / lovelace-decrease rejected, no-Receiver rejected, zero-swept rejected, token-wrapped deposit must credit full ADA, `total_swept` address scoping).
+- [x] Generalized `AccrueFee` (Option B / A2): an oracle update can fold side-deposits into the SAME tx by absorbing the added lovelace into `balance_lovelace`. `accrue_fee_transition` (`receiver_logic.ak`) now takes the receiver prev/next outputs, requires `added ≥ 0`, and pins `accrued += fee` (so the fee is read off the accrued-delta, never the balance-delta). Call sites updated: `receiver.ak` AccrueFee branch + `update_coordinator.ak::valid_receiver_accrue_fee`; `deposit.ak` unchanged (anti-skim `receiver_delta ≥ swept` sees the same physical increase). Inline tests cover absorb `added > 0`, reject `added < 0`, reject diversion of `added` into `accrued`, and `added = 0` identical-to-today. Measured: blueprint +620 bytes, AccrueFee bench cpu/mem delta ≈ 0, batch-10 unaffected. Changes the `receiver` + `update_coordinator` hashes → accepted re-bootstrap.
+- [x] Teardown / decommission burns: a `Burn` mint action + `Burn` spend redeemer on `config_state` / `payment_hook` / `receiver` (mirroring `pair_state`) — config-signer gated, NFT burned −1, no continuation output, zeroed value fields (receiver `balance == 0 && accrued == 0`, hook `accrued_fees == 0`). Recovers each UTxO's min-ADA on decommission. Inline Aiken burn tests beside each validator (happy burn recovers min-ADA; non-signer rejected; positive mint under `Burn` rejected; continuation carrying the NFT rejected; non-zero value-field rejected). Overall `aiken check` 156/0. The burns change the config/hook/receiver hashes → they ship on the next-gen re-bootstrap (see the [teardown audit](../audit/20260607-contract-teardown-ada-recovery.md)).
 - [~] Off-chain Lucid emulator adversarial matrix: happy-path orchestrator delivered via `npm run benchmark:emulator` (see `_archived/20260516-emulator-benchmark-plan.md`; latest evidence `docs/milestones/evidence/m1-emulator-benchmark-20260515124543/`). Adversarial negative-case matrix (two-client parallelism, expired intent, stale bootstrap duplicate, NFT redirect on settle and config-update, accrued drain via withdraw, settle without admin signature, non-admin withdraw, duplicate live pair) is still open.
 
 ## Workstream B — Off-chain CLI and deployment tooling
@@ -78,7 +82,12 @@ Tasks:
 - [x] Commands for Receiver top-up and Receiver withdraw (per client).
 - [x] Commands for batch update.
 - [x] Per-client state layout under `state/<network>/clients/<client>/`.
-- [x] CLI commands to publish reusable reference-script UTxOs at the `reference_holder` address: 3 global and 3 per client.
+- [x] CLI commands to publish reusable reference-script UTxOs at the `reference_holder` address: 3 global and 4 per client (receiver, pair spend, pair mint, **deposit** — the deposit reference script is published at `reference-scripts:publish-client` under `referenceScripts.client.deposit`).
+- [x] Side-deposit funding commands (per client): `deposit:address` (print the per-client deposit script address to hand to the client), `deposit:fund` (plain ADA payment to that address — runbook/test convenience), `deposit:merge` (sweep clean ADA deposits into the Receiver in one tx; `collectFrom([receiver], TopUp)` + `collectFrom(selectedDeposits, CollectDeposit)`, skipping dust / native-token / datum-bearing UTxOs). `makeDepositValidator` derives the per-client address from the Receiver NFT; the compiled script + `depositValidatorHash` + `depositValidatorAddress` are persisted in the client artifact at `receiver:parameterize` / `receiver:bootstrap`.
+- [x] Multi-client batch settle: `settle` takes repeatable `--client-state` and builds one N-receiver `SettleManifest`, collecting all N Receivers + the single shared payment hook in one tx (each Receiver's accrued drained to zero, Σ credited to the hook). The exactly-1 preflight is gone, replaced by `assertSettleManifestMatchesClientReceivers` (non-empty + unique + 1:1 with the loaded clients, order-independent).
+- [x] Deposit tx-build parameters are single-sourced and never hardcoded: `depositMinLovelace` (dust floor, default 1 ADA) + `depositMaxPerMerge` (per-merge cap, default 20) live in `config-bootstrap.json::configState`, set at `protocol:init` (`--deposit-min-lovelace` / `--deposit-max-per-merge`), read by both the CLI and the feeder daemon.
+- [x] `update --fold-deposits` (Option B / A2): the `update` command can absorb a bounded number of clean side-deposits into the oracle-update tx itself (`build-oracle-update.ts` / `build-batch-oracle-update.ts` `collectFrom(foldDeposits, CollectDeposit)`), capped by `depositMaxPerUpdateFold` in `config-bootstrap.json::configState` (set at `protocol:init --deposit-max-per-update-fold`, default 3, read via `readDepositMaxPerUpdateFold`). The standalone `deposit:merge` stays for bulk sweeps; the feeder fold is best-effort with fallback to a pure update. Exercised by `run-all-cli.sh` steps 36/37 (guard bumped 1..35 → 1..37).
+- [x] Decommission / teardown tooling: CLI verbs `receiver:burn` / `payment-hook:burn` / `config:burn` (mirror `pair:burn`) that burn each singleton NFT and recover its min-ADA; `reclaim-reference-script --script client` fixed to also reclaim the per-client `deposit` reference script. New chain-as-truth runbook `offchain/cli/scripts/run-teardown-cli.sh` (queries live on-chain UTxOs, acts only on what is live, records each into the entity JSON, marks orphans; `--run-id` / `--from-step` / `--skip-singleton-burns`) + helpers `scripts/teardown-helpers/{query-live,record-teardown}.ts`. Audit/procedure doc: [`docs/audit/20260607-contract-teardown-ada-recovery.md`](../audit/20260607-contract-teardown-ada-recovery.md). The Preview OLD deployment `preview_run_20260606-082456` was actually torn down (recovered receiver balance + hook accrued + 10 pairs + all reference scripts incl. config + coordinator; ~15 ADA stuck = the 3 non-burnable OLD-contract NFT min-UTxOs, expected).
 
 ## Workstream C — Data feeder (bridge)
 
@@ -99,8 +108,9 @@ High-level deliverables tracked here:
   inflight tracker, ops surface (API, metrics, health, alert evaluator).
 - [x] CLI tx builders refactored into a reusable library imported in-process
   by the feeder via `OracleIntentBridge`.
-- [x] DB-as-source-of-truth persistence (6-table SQLite/Postgres schema);
-  crash-safe checkpoint; no JSON state files at runtime.
+- [x] Persisted-state model: DB for scanner/tx/alert history plus reconciled
+  pair-state files for Cardano confirmed pair snapshots and `priceCache` cold-start;
+  crash-safe checkpoint.
 - [x] Spectra-parity API (14 endpoints) and metrics (6-phase latency histograms,
   Prometheus aliases, Cardano extensions).
 - [x] Cron service for time-threshold re-submissions.
@@ -108,10 +118,23 @@ High-level deliverables tracked here:
 - [x] Security hardening: rate limiter, path-length caps, log injection sanitizer,
   `synchronous = FULL`, path traversal check, WS exponential backoff.
 - [x] Mainnet rollout guide and rollback plan (`docs/plans/mainnet-rollout.md`).
+- [x] Side-deposit auto-merge in the daemon: when a Receiver drops below
+  `alerting.receiver_balance_low_lovelace` OR pending deposits reach
+  `alerting.deposit_pending_merge_lovelace`, the daemon enqueues `bridge.mergeDeposits(...)`
+  as a first-class **lane task** on the SAME per-lane serial submission queue the client's
+  oracle updates use (`enqueueLaneTask` → discriminated `QueueEntry` `submit`|`task`), so a
+  merge and an update on one Receiver can never run concurrently — mutual exclusion is
+  structural (the serial lane queue), not a best-effort lock. The pure decision lives in
+  `shouldAutoMergeDeposits`; a per-lane `mergeInProgress` flag is a dedup guard only (collapses
+  duplicate enqueues across refresh ticks), not the safety mechanism. The deposit floor is read
+  from `config-bootstrap.json::configState.depositMinLovelace` via `readDepositMinLovelace`.
+- [x] OpenAPI/Swagger surface: a metadata route table (`src/api/routes.ts`, TypeBox schemas)
+  drives an OpenAPI 3.0.3 doc at `/api/v1/openapi.json` and an offline Redoc UI at `/docs`
+  (vendored, no CDN; shipped in the Docker image).
 - [ ] M2 evidence packs (sustained Preview window, all 10 pairs, Grafana screenshots,
   error-counts TSV, alert firing demonstration) — pending live run. Tracked in detail in
   [milestone-feeder-plan.md](./milestone-feeder-plan.md) §2 (the feeder core itself is
-  done and verified; 475 tests pass).
+  done and verified; 555 tests pass).
 
 ## Workstream D — Indexer
 
@@ -131,6 +154,20 @@ Tasks:
   events to `alert_log`; Prometheus alert rules in `monitoring/alerts.yml`.
 - [x] Grafana dashboards: `feeder-overview.json`, `feeder-latency.json`,
   `feeder-cardano.json` (provisioned at `monitoring/grafana/`).
+- [x] Thresholds single-sourced from `infrastructure.<network>.yaml::alerting.*`: the
+  `generate-monitoring.ts` generator (`make generate-monitoring`, a prerequisite of `make up`)
+  writes the thresholds into `monitoring/alerts.yml` and the Grafana dashboard, and a drift
+  test (`make check-thresholds`) fails CI if any mirror diverges or a dashboard template var is
+  left dead. Rate panels switched to `increase[5m]` counts; `$client`/`$symbol`/`$customer`/`$error_code`
+  filter vars wired into the client-filterable panels.
+- [x] Side-deposit monitoring: gauge `dia_bridge_cardano_deposit_pending_lovelace`
+  (sum of clean un-merged deposits per client, labelled with the deposit address), a Grafana
+  "Deposit pending — ADA (per client)" panel, the Prometheus alert `ReceiverDepositsPending`,
+  and the threshold key `deposit_pending_merge_lovelace`.
+- [ ] **New metrics dashboard** (separate from `feeder.json`) covering the registered-but-unshown
+  metric families (per-stage latency, scanner RPC errors + backfill, worker pool counters,
+  `transaction_fee_lovelace`, HTTP/db/component-health, cron resubmissions, node/process defaults).
+  Still open.
 - [ ] QA validation report and anomaly-detection evidence (requires a sustained live run).
 - [ ] Dashboard screenshots capturing real data from the live evidence window.
 

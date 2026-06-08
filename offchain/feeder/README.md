@@ -5,22 +5,18 @@ Long-running daemon that consumes `IntentRegistered` events from the DIA
 matching Cardano oracle update transactions through the contracts
 deployed by `offchain/cli/`.
 
-The architecture mirrors
-[`diadata-org/Spectra-interoperability/services/bridge`](https://github.com/diadata-org/Spectra-interoperability/tree/main/services/bridge):
-modular YAML config, scanner → extractor → enricher → router →
-write-client pipeline, per-key transaction queues, HTTP API for health
-/ metrics / prices. The Cardano write-client is the only piece that
-diverges substantively — it builds Cardano txs via the pure builders in
-`offchain/cli/src/lib/` instead of EVM ABI calls.
+The pipeline is scanner → extractor → enricher → router → write-client, with
+per-key transaction queues and an HTTP API for health / metrics / prices. This
+README is the operator manual — how to run, configure, and observe the feeder.
+For how it works internally and how it diverges from its EVM ancestor, see
+[Architecture (see also)](#architecture-see-also).
 
 ## Contents
 
 - [Directory guide](#directory-guide)
+- [How to run — three forms](#how-to-run--three-forms)
 - [Service URLs — where to look (once it's running)](#service-urls--where-to-look-once-its-running)
 - [Per-run state (RUN_ID)](#per-run-state-run_id)
-  - [How a run is selected](#how-a-run-is-selected)
-  - [The flat-state fallback](#the-flat-state-fallback)
-  - [Migrating a flat deployment onto a run dir](#migrating-a-flat-deployment-onto-a-run-dir)
 - [Running with Docker](#running-with-docker)
   - [Compose services & profiles](#compose-services--profiles)
   - [Network-scoped stacks](#network-scoped-stacks)
@@ -54,9 +50,10 @@ diverges substantively — it builds Cardano txs via the pure builders in
 - [Thresholds and alerts](#thresholds-and-alerts)
   - [Built-in alert evaluator](#built-in-alert-evaluator)
   - [Prometheus alert thresholds](#prometheus-alert-thresholds)
+  - [Client funding (side-deposits)](#client-funding-side-deposits)
   - [Full alert map](#full-alert-map)
   - [Operational wallets at a glance](#operational-wallets-at-a-glance)
-- [Architecture & Spectra parity](#architecture--spectra-parity)
+- [Architecture (see also)](#architecture-see-also)
 
 ## Directory guide
 
@@ -67,9 +64,23 @@ diverges substantively — it builds Cardano txs via the pure builders in
 | [`state/`](./state/README.md) | Per-run, per-network state (`state/<network>_run_<id>/`): imported CLI artifacts (committed) + runtime DB/logs (gitignored). |
 | `src/`, `cmd/` | The feeder daemon source (TypeScript). |
 
-The deep architecture and the Spectra-parity table live in
-[`docs/architecture/feeder.md`](../../docs/architecture/feeder.md) — see
-[Architecture & Spectra parity](#architecture--spectra-parity) below.
+## How to run — three forms
+
+Pick one; full setup for each is in its section below.
+
+| Form | Command | Restart on crash? | Use when |
+| --- | --- | --- | --- |
+| **Docker** (recommended) | `make up` (`+ MONITORING=1`) | Yes — Compose `restart: unless-stopped` | Any real deployment |
+| **npm (local/dev)** | `npm run feeder:dev -- daemon` | No supervisor | Quick local dev / debugging |
+| **npm supervised** | `npm run feeder:supervised -- daemon` | Yes — restart loop with backoff | Local runs that need resilience |
+
+A note on lucid WASM: a transient lucid WASM build error (`detached ArrayBuffer`)
+is auto-retried in-process and never reaches the operator. A rare *persistent*
+one makes the daemon self-exit (code 17) so a supervisor restarts it with a
+fresh WASM module; it then resumes from the DB. Docker and the supervised npm
+form provide that supervisor; the bare `feeder:dev` form does not (a self-exit
+leaves the process stopped). Deep detail →
+[Architecture (see also)](#architecture-see-also).
 
 ## Service URLs — where to look (once it's running)
 
@@ -115,43 +126,28 @@ curl -s http://localhost:8080/api/v1/prices | jq   # latest prices
 > `make restart`.
 
 The full API reference (query params, response shapes) is in
-[§ HTTP API](#http-api) below. Monitoring stack details are in
-[§ Running with Docker](#running-with-docker).
+[§ HTTP API](#http-api) below.
 
 ## Per-run state (RUN_ID)
 
-Each deployment keeps its DB, logs, and pair state under a **per-run dir**,
-`state/<network>_run_<id>/`, keyed by the **same run id the CLI used**
-(`../cli/state/<network>_run_<id>/`). That is why two deployments of one network
-(e.g. two mainnet receivers) never clobber each other's database or scanner
-checkpoint.
+Each deployment's state lives in one **per-run dir**, `state/<network>_run_<id>/`,
+in the shared `offchain/state/` tree (`../state/` from the feeder). It holds the
+CLI's deployment record (config-bootstrap.json, clients) and the feeder's DB,
+logs, and pair state together. That is why two deployments of one network (e.g.
+two mainnet receivers) never clobber each other's database or scanner checkpoint.
 
 `RUN_ID` is an **environment variable**, so everything here works identically
-under Docker (`make … RUN_ID=…`) and npm (`RUN_ID=… npm run …`) — anything shown
-for one mode applies to the other.
+under Docker (`make … RUN_ID=…`) and npm (`RUN_ID=… npm run …`).
 
-### How a run is selected
+**The rule for picking a run: use `RUN_ID` if set, otherwise the newest run.**
 
-There is **one rule — use `RUN_ID` if set, otherwise the newest run.** It only
-differs in *which* directory tree counts as "the run", because that is each
-command's natural input:
-
-**Commands that operate on a feeder run** — the daemon, `checkpoint`, `reset`,
-`prune`, and the evidence pack ([`cmd/feeder/run-state.ts`](./cmd/feeder/run-state.ts)):
-
-| `RUN_ID` | Active run dir |
-| --- | --- |
-| set | `state/<network>_run_<RUN_ID>/` |
-| empty | the **newest** `state/<network>_run_*/` |
-| empty **and** no run dir exists | the flat `state/<network>/` (see [below](#the-flat-state-fallback)) |
-
-**`init bootstrap` / `init client`** — these don't pick from the feeder tree;
-they **import** a run from the CLI tree ([`cmd/feeder/init-cmd.ts`](./cmd/feeder/init-cmd.ts)).
-Same idea, applied to `../cli/state/`: by default they take the **newest**
-`../cli/state/<network>_run_*` (and prompt if several exist; pass `--from <path>`
-to choose one explicitly). They **preserve** that run id, so the feeder run dir
-mirrors the CLI one — and that id is exactly what you then pass as `RUN_ID` to
-start the daemon.
+- **Commands that operate on a run** (the daemon, `checkpoint`, `reset`, `prune`,
+  the evidence pack): with `RUN_ID` set they use `state/<network>_run_<RUN_ID>/`;
+  with it empty they use the **newest** `state/<network>_run_*/`.
+- **`init client`**: scans `../state/` for the run (the **newest**
+  `../state/<network>_run_*` by default; pass `--from <path>` to choose one) and
+  generates the router YAML pointing the daemon at it. Pass that run id as
+  `RUN_ID` to start the daemon.
 
 ```sh
 # Docker — pass it on any target
@@ -164,43 +160,23 @@ RUN_ID=20260517-063917 npm run feeder:dev -- checkpoint set --from-latest
 ```
 
 Or pin one deployment by setting `RUN_ID` in `.env` (read by both modes). The
-lowercase `<network>` comes from `CARDANO_NETWORK`.
-
-### The flat-state fallback
-
-Before per-run dirs existed, the feeder kept state directly in `state/<network>/`
-(no `_run_<id>`). A feeder still set up that way — for example a long-running
-Preview started before this change — keeps working untouched: when `RUN_ID` is
-empty **and** no `state/<network>_run_*` exists, the operate-on commands fall back
-to that flat `state/<network>/`. It is **not** a separate mode — it is the "no run
-dir yet" tail of the same rule. `init` never needs it because the CLI always
-produces run dirs, so there is always an id to import and preserve.
-
-### Migrating a flat deployment onto a run dir
-
-Re-run the import against the CLI run; it writes a fresh `state/<network>_run_<id>/`,
-then start that run:
-
-```sh
-make init-bootstrap                  # or: npm run feeder:dev -- init bootstrap
-make init-client                     # or: npm run feeder:dev -- init client
-make up RUN_ID=<id> MONITORING=1      # or: RUN_ID=<id> npm run feeder:dev -- daemon
-```
-
-Remove the old flat dir once you've confirmed the run dir is in use.
+lowercase `<network>` comes from `CARDANO_NETWORK`. You only need `RUN_ID` when
+you keep **several** deployments of the same network and want to pin a specific
+one; with a single deployment the newest-run default picks it automatically.
 
 ## Running with Docker
 
 The feeder and all CLI admin commands ship in **one image**
 (`dia-cardano-feeder:local`). Docker is the recommended deployment method
-because it bundles the compiled feeder, compiled CLI, and all native deps
-(better-sqlite3, lucid-evolution) without any host-side Node setup.
+because the image is **self-contained**: the compiled feeder, the CLI, the Aiken
+contracts (blueprint + compiler), and all native deps (better-sqlite3,
+lucid-evolution) are baked in. Compiling contracts, deploying on-chain, running
+the daemon, and tearing down all work in the container with no host-side setup.
 
 All `make` targets below run from `offchain/` (where `Makefile` lives).
-Run `make help` for a complete target list.
-The Makefile exports your current host `UID`/`GID` so Docker can write to
-the bind-mounted `offchain/feeder/state/` tree without leaving it
-read-only to the daemon.
+Run `make help` for a complete target list. The Makefile exports your current
+host `UID`/`GID` so Docker can write to the bind-mounted `offchain/state/`
+tree.
 
 ### Compose services & profiles
 
@@ -210,19 +186,18 @@ underlying map.
 
 | Service | Profile | What it is |
 | --- | --- | --- |
-| `feeder-sqlite` | `sqlite` | The feeder daemon with the **SQLite** backend (default). SQLite is an embedded file (`state/<network>_run_<id>/feeder.sqlite`) — **there is no database server**; the service *is* the feeder. |
+| `feeder-sqlite` | `sqlite` | The feeder daemon with the **SQLite** backend (default). SQLite is an embedded file (`state/<network>_run_<id>/feeder.sqlite`) — there is no database server; the service *is* the feeder. |
 | `feeder-postgres` | `postgres` | The **same** feeder daemon with the **PostgreSQL** backend. |
-| `postgres` | `postgres` | A real PostgreSQL 15 server, started only under this profile (data in the `postgres-data` volume). |
+| `postgres` | `postgres` | A PostgreSQL 15 server, started only under this profile (data in the `postgres-data` volume). |
 | `cli` | `cli` | Short-lived admin container for one-off CLI commands (`make cli CMD="…"`). |
 | `prometheus`, `grafana`, `renderer` | `monitoring` | The observability stack (`MONITORING=1`). |
 
 Things worth knowing:
 
 - `feeder-sqlite` and `feeder-postgres` are the **same image** — the suffix only picks
-  the DB backend. Run **exactly one** (both publish port 8080).
-- **SQLite needs no server** (it is just a file in the `state/` volume). **PostgreSQL**
-  adds the `postgres` server container. SQLite is the default and is sufficient for
-  single-instance deployments; Postgres is there for higher-scale / external-DB setups.
+  the DB backend. Run **exactly one** (both publish port 8080). SQLite is the default
+  and is sufficient for single-instance deployments; Postgres is for higher-scale /
+  external-DB setups.
 - Pick the backend with the make target: `make up` (SQLite, default) or
   `make up-postgres`. That sets `DATABASE_DRIVER`; the path/DSN come from `.env`
   (`DATABASE_PATH_*` for SQLite, `DATABASE_DSN_*` for Postgres), and the `database` block
@@ -235,9 +210,9 @@ Things worth knowing:
 ### Network-scoped stacks
 
 `make` scopes the Compose **project** per network — `dia-feeder-<network>`, taken
-from `CARDANO_NETWORK` in `feeder/.env` (the same selector the daemon reads). So
-Preview and Mainnet get separate containers **and** separate named volumes, and
-switching networks never destroys the other one's state:
+from `CARDANO_NETWORK` in `feeder/.env`. So Preview and Mainnet get separate
+containers **and** separate named volumes, and switching networks never destroys
+the other one's state:
 
 | `feeder/.env` | Compose project | Containers | Named volumes |
 | --- | --- | --- | --- |
@@ -260,21 +235,6 @@ make up MONITORING=1       # starts the dia-feeder-mainnet stack
 
 `make down-all` stops **both** `dia-feeder-preview` and `dia-feeder-mainnet` when
 you're unsure what's running.
-
-**One-time migration from the old single-project layout.** Deployments created
-before network-scoped projects ran under one project named `feeder`
-(container `feeder-feeder-sqlite-1`, volumes `feeder_*`). Stop that old stack
-once so it doesn't keep holding port 8080:
-
-```sh
-docker compose -f feeder/docker-compose.yml --project-directory feeder -p feeder \
-  --profile sqlite --profile postgres --profile cli --profile monitoring down --remove-orphans
-```
-
-The feeder DB/logs under `state/` are on the host bind mount and are kept; only
-the old monitoring volumes (`feeder_prometheus-data`, `feeder_grafana-data`) are
-left behind — the per-network stack starts fresh ones (Grafana dashboards
-re-provision automatically; Prometheus history restarts).
 
 ### Daemon only
 
@@ -312,32 +272,23 @@ make down              # stops everything
 
 - Prometheus: `http://localhost:9090` — raw metrics and alert state
   (`/alerts` shows the configured alert rules).
-- Grafana: `http://localhost:3000` — default credentials
-  `admin` / value of `GRAFANA_ADMIN_PASSWORD` in `.env` (defaults to
-  `admin`). The **DIA Cardano Oracle Feeder** dashboard is pre-provisioned.
-- Renderer: a `grafana/grafana-image-renderer` sidecar reachable to
-  Grafana over the compose network at `http://renderer:8081/render`.
-  Grafana is configured via `GF_RENDERING_SERVER_URL` (where to reach
-  the renderer) and `GF_RENDERING_CALLBACK_URL` (how the renderer's
-  headless Chrome calls back into Grafana to fetch the dashboard).
-  Used by `GET /render/d/...` requests to produce PNG snapshots of the
-  dashboard. The renderer adds no exposed port; access is only
-  intra-compose.
+- Grafana: `http://localhost:3000` — login `admin` / value of
+  `GRAFANA_ADMIN_PASSWORD` in `.env` (defaults to `admin`). The
+  **DIA Cardano Oracle Feeder** dashboard is pre-provisioned.
+- Renderer: a `grafana/grafana-image-renderer` sidecar that produces PNG
+  snapshots of the dashboard for Grafana. No exposed port; intra-compose only.
 
-To add a new alert rule, edit
-`offchain/feeder/monitoring/alerts.yml` and restart Prometheus
-(`docker compose restart prometheus`) — no Grafana changes needed.
+To add a new alert rule, edit `offchain/feeder/monitoring/alerts.yml` and restart
+Prometheus (`docker compose restart prometheus`) — no Grafana changes needed.
 
 ### Capturing an operational snapshot
 
-The `scripts/m2-evidence/` directory contains a script that packages a
-feeder's current logs, DB tables, live API responses and Grafana
-dashboard PNGs into a self-contained dated directory. Useful for
-sharing a point-in-time deployment record with another team or
-attaching to a release note. The script does not stop or restart the
-feeder. See
-[`scripts/README.md`](./scripts/README.md) for
-the full description (inputs, outputs, dependencies, dashboard rendering).
+`scripts/m2-evidence/` contains a script that packages a feeder's current logs,
+DB tables, live API responses, and Grafana dashboard PNGs into a self-contained
+dated directory — useful for sharing a point-in-time deployment record. The
+script does not stop or restart the feeder. See
+[`scripts/README.md`](./scripts/README.md) for the full description (inputs,
+outputs, dependencies, dashboard rendering).
 
 ### Admin commands (CLI)
 
@@ -372,13 +323,20 @@ make cli CMD="settle"
 make cli CMD="pair:burn --symbol BTC/USD"
 make cli CMD="pair:dedup --symbol BTC/USD"
 
-# Inspect the shared state tree inside the container.
-docker compose -f feeder/docker-compose.yml --project-directory feeder --profile cli run --rm --entrypoint sh cli -c "ls -R /app/state"
+# Teardown burns (decommission) — recover each UTxO's min-ADA.
+# Drain first: receiver:burn needs withdraw + settle; payment-hook:burn needs
+# payment-hook:withdraw; config:burn runs last, after reference scripts are reclaimed.
+make cli CMD="receiver:burn"
+make cli CMD="payment-hook:burn"
+make cli CMD="config:burn"
+
+# Inspect the CLI state tree inside the container.
+docker compose -f feeder/docker-compose.yml --project-directory feeder --profile cli run --rm --entrypoint sh cli -c "ls -R /app/offchain/state"
 ```
 
 > **Always start/restart containers with `make`, never with `docker compose`
 > directly.** The Makefile exports your host `UID`/`GID` so the container
-> runs as your user and can write the bind-mounted `feeder/state/` tree.
+> runs as your user and can write the bind-mounted `offchain/state/` tree.
 > A bare `docker compose up` defaults to `1000:1000`, which may not match
 > your user and leaves the SQLite DB read-only to the daemon
 > (`attempt to write a readonly database`).
@@ -388,10 +346,20 @@ docker compose -f feeder/docker-compose.yml --project-directory feeder --profile
 All commands run from `offchain/`. Pick the one that matches your machine.
 
 **Scenario A — fresh machine, never ran the CLI.**
-First do the full on-chain setup by following the CLI runbook:
-[**Wallet Setup → Protocol Deployment → Client Deployment**](../cli/README.md#wallet-setup)
-in `offchain/cli/README.md`. That produces the CLI state under
-`offchain/cli/state/<network>_run_<id>/`. Then continue with Scenario B.
+The image is self-contained, so the full on-chain deployment runs in Docker. Set
+`offchain/feeder/.env` (network + Blockfrost key + wallet seed + DIA creds), then:
+
+```sh
+make build      # build the image (once)
+make wallet     # create the operator wallet (fund it before deploying)
+make run-all    # full deployment runbook end to end
+                #   (or step by step: make protocol-init && make client-init)
+```
+
+That produces the deployment under `offchain/state/<network>_run_<id>/`. Then
+continue with Scenario B to import it into the feeder and start the daemon.
+(Prefer running on the host? The same runbook is documented for npm in
+[`offchain/cli/README.md`](../cli/README.md#wallet-setup).)
 
 **Scenario B — CLI state already exists, feeder never started.**
 First set the target network in `offchain/feeder/.env`: `CARDANO_NETWORK=Preview`
@@ -400,18 +368,15 @@ import the CLI deployment and start:
 
 ```sh
 make build             # only if the image isn't built yet
-make init-bootstrap    # import cli/state/<net>_run_<id>/config-bootstrap.json
-                       #   into feeder/state/<net>_run_<id>/  (prints the run id)
-make init-client       # import client JSON + generate config/routers/<net>/<client>.yaml (interactive)
+make init-client       # generate config/routers/<net>/<client>.yaml for the run (interactive)
 make checkpoint-latest # seed scanner to chain tip
 make up MONITORING=1   # start the daemon
 ```
 
-No `RUN_ID` needed here: `init` creates the one run dir, and the other commands
-default to the **newest** run, so they pick it automatically. You only pass
-`RUN_ID=<id>` once you keep **several** deployments of the same network and want
-to pin a specific one — see [Per-run state (RUN_ID)](#per-run-state-run_id) for
-the full rule, the flat-layout fallback, and migration.
+No `RUN_ID` needed: `init` creates the one run dir, and the other commands
+default to the **newest** run, so they pick it up automatically. Pin a specific
+one with `RUN_ID=<id>` only when you keep several deployments of the same network
+— see [Per-run state (RUN_ID)](#per-run-state-run_id).
 
 **Scenario C — everything set up, just want clean logs + DB.**
 The CLI state and router YAML already exist; you only want a fresh runtime:
@@ -433,8 +398,7 @@ These targets run the **feeder** binary as one-off containers (not `dia-cli`):
 
 | Target | What it does |
 | --- | --- |
-| `make init-bootstrap` | Import `config-bootstrap.json` from CLI state (`feeder init bootstrap`) |
-| `make init-client` | Import client JSON + generate router YAML interactively (`feeder init client`) |
+| `make init-client` | Generate the client's router YAML for the run, interactively (`feeder init client`) |
 | `make checkpoint-get` | Print the current scanner checkpoint |
 | `make checkpoint-latest` | Seed the checkpoint to the current chain tip (only new intents) |
 | `make restart` | Restart the daemon with **no** data changes |
@@ -443,24 +407,41 @@ These targets run the **feeder** binary as one-off containers (not `dia-cli`):
 | `make reset-restart` | Stop → `reset` → reseed checkpoint → start the daemon |
 | `make prune` | Prune only **old** rows/logs (keeps DB). `make prune MAX_AGE=30m` |
 
+### Deploy, contracts & teardown (Docker)
+
+These run the **CLI** / runbook scripts inside the same image:
+
+| Target | What it does |
+| --- | --- |
+| `make wallet` | Create the operator wallet |
+| `make protocol-init` / `make client-init` | Deploy the protocol / register a client (individual CLI steps) |
+| `make run-all ARGS="…"` | Full deployment runbook end to end (`run-all-cli.sh`); `ARGS` forwards `--from-step` / `--run-id` |
+| `make contracts-build` / `make contracts-check` | `aiken build` / `aiken check` in-image (regenerates `plutus.json`) |
+| `make teardown ARGS="…"` | Decommission + recover ADA (`run-teardown-cli.sh`) |
+
 ### Volume layout
+
+The image mirrors the repo under `/app` (`/app/contracts`, `/app/offchain/cli`,
+`/app/offchain/feeder`) with everything baked. Only the mutable dirs below are
+bind-mounted so their contents persist on the host:
 
 | Host / named volume | Container path | Used by | Contents |
 | --- | --- | --- | --- |
-| `./config/` | `/config` (ro) | feeder | Modular YAML config (read-only) |
-| `./config/` | `/app/config` (rw) | cli | Modular YAML config (writable — router YAML is written during `make init-client`) |
+| `feeder/config/` | `/app/offchain/feeder/config` | feeder | Modular YAML config (router YAML written by `init-client`) |
+| `offchain/state/` | `/app/offchain/state` | feeder, cli | Shared per-run state: the CLI deployment record (config-bootstrap.json, clients) **and** the feeder runtime (DB, logs, pair state). One tree, used by both. |
+| `contracts/aiken/` | `/app/contracts/aiken` | cli | Aiken sources + `plutus.json` (so `contracts-build` persists) |
+| `docs/milestones/evidence/` | `/app/docs/milestones/evidence` | cli | `run-all` / `teardown` evidence logs |
 | `.env` | env_file | feeder, cli | Secrets + selectors |
-| `./state/` | `/app/state` | feeder, cli | Bootstrap JSON, pair state, logs, SQLite DB |
 | `postgres-data` | (postgres svc) | postgres | Postgres data dir |
 | `prometheus-data` | `/prometheus` | prometheus | Prometheus TSDB (metric retention) |
 | `grafana-data` | `/var/lib/grafana` | grafana | Dashboard and alert state |
 
 The three **named** volumes are project-scoped, so each network gets its own —
 `dia-feeder-<network>_postgres-data`, `…_prometheus-data`, `…_grafana-data` (see
-[Network-scoped stacks](#network-scoped-stacks)). The `./config/`, `.env`, and
-`./state/` rows are **host bind mounts**, shared across networks; they stay
-network-safe because their contents are already keyed by network
-(`config/routers/<network>/`, `*_<NETWORK>` env suffixes, `state/<network>_run_<id>/`).
+[Network-scoped stacks](#network-scoped-stacks)). The bind-mount rows are shared
+across networks; they stay network-safe because their contents are already keyed
+by network (`config/routers/<network>/`, `*_<NETWORK>` env suffixes,
+`state/<network>_run_<id>/`).
 
 ## Running locally (npm)
 
@@ -470,12 +451,19 @@ Run the feeder directly on your machine, without Docker. Requires
 `offchain/feeder/`. This is the **mirror** of the Docker path above — pick
 one or the other, do not mix them.
 
-Network isolation works the same way conceptually, but there is no container or
-named volume to clobber: each `npm run feeder:dev` is **one process for one
-network** (the network from `CARDANO_NETWORK`, the run from `RUN_ID` — see
+The bare `npm run feeder:dev -- daemon` runs **without a supervisor**: if the
+daemon self-exits on a persistent lucid WASM fault (code 17) it stays stopped.
+For a resilient local run, wrap it with `npm run feeder:supervised -- daemon`
+(same args), which restarts with backoff exactly like Docker's
+`restart: unless-stopped` (see [How to run](#how-to-run--three-forms)). All the
+commands below use `feeder:dev`; swap in `feeder:supervised` to get the restart
+loop.
+
+Each `npm run feeder:dev` is **one process for one network** (the network from
+`CARDANO_NETWORK`, the run from `RUN_ID` — see
 [Per-run state (RUN_ID)](#per-run-state-run_id)). To run two networks at once,
-start two processes from two shells, each with its own `CARDANO_NETWORK` (and a
-distinct API port via `api.host`/port in `config/infrastructure.<network>.yaml`).
+start two processes from two shells, each with its own `CARDANO_NETWORK` and a
+distinct API port via `api.host`/port in `config/infrastructure.<network>.yaml`.
 
 ```sh
 cd offchain/feeder
@@ -489,7 +477,7 @@ cp .env.example .env   # fill in secrets from offchain/cli/.env
 First do the full on-chain setup by following the CLI runbook:
 [**Wallet Setup → Protocol Deployment → Client Deployment**](../cli/README.md#wallet-setup)
 (run locally with `npm run cli -- ...` from `offchain/cli/`). That produces
-the CLI state under `offchain/cli/state/<network>_run_<id>/`. Then continue with
+the CLI state under `offchain/state/<network>_run_<id>/`. Then continue with
 Scenario B.
 
 **Scenario B — CLI state already exists, feeder never started.**
@@ -497,16 +485,15 @@ First set the target network in `.env`: `CARDANO_NETWORK=Preview` or `Mainnet`
 (plus that network's secrets). Then import the CLI deployment and start:
 
 ```sh
-npm run feeder:dev -- init bootstrap                # import config-bootstrap.json (prints the run id)
-npm run feeder:dev -- init client                   # import client JSON + router YAML
+npm run feeder:dev -- init client                   # generate the client's router YAML for the run
 npm run feeder:dev -- checkpoint set --from-latest  # seed scanner to chain tip
 npm run feeder:dev                                  # start the daemon
 ```
 
-No `RUN_ID` needed here: `init` creates the one run dir, and the other commands
-default to the **newest** run. You only set `RUN_ID=<id>` (inline, e.g.
-`RUN_ID=… npm run feeder:dev`) once you keep **several** deployments of the same
-network and want to pin one — see [Per-run state (RUN_ID)](#per-run-state-run_id).
+No `RUN_ID` needed: `init` creates the one run dir, and the other commands
+default to the **newest** run. Set `RUN_ID=<id>` (inline, e.g.
+`RUN_ID=… npm run feeder:dev`) only when you keep several deployments of the same
+network — see [Per-run state (RUN_ID)](#per-run-state-run_id).
 
 **Scenario C — everything set up, just want clean logs + DB.**
 One command wipes the runtime state, reseeds the checkpoint, and starts:
@@ -522,7 +509,7 @@ The feeder needs two bootstrap files from the CLI; `init` copies them in:
 | `state/<network>_run_<id>/config-bootstrap.json` | `config:bootstrap` |
 | `state/<network>_run_<id>/clients/<id>.json` | `receiver:bootstrap` |
 
-`init` auto-scans `../cli/state/` for the latest matching network run; use
+`init` auto-scans `../state/` for the latest matching network run; use
 `--from <path>` to point at a specific run, and `--force` to overwrite
 without the confirmation prompt. If the daemon starts and a required file
 is missing, it exits immediately printing the exact `init` command to run.
@@ -547,12 +534,9 @@ state. `reset` exits after wiping; `--clean` wipes then starts the daemon.
 Every useful invocation, grouped by purpose. Copy the one you need.
 
 ```sh
-# ── Import CLI state ───────────────────────────────────────────────
-npm run feeder:dev -- init bootstrap                         # auto-scan ../cli/state/ for config-bootstrap.json
-npm run feeder:dev -- init bootstrap --from ../cli/state/preview_run_20260516-090057  # explicit source
-npm run feeder:dev -- init bootstrap --force                 # overwrite without prompting
-npm run feeder:dev -- init client                            # auto-scan + interactive router YAML wizard
-npm run feeder:dev -- init client --from ../cli/state/preview_run_20260516-090057/clients/client-a.json
+# ── Configure the router for a deployment ──────────────────────────
+npm run feeder:dev -- init client                            # auto-scan ../state/ + interactive router YAML wizard
+npm run feeder:dev -- init client --from ../state/preview_run_20260516-090057/clients/client-a.json
 npm run feeder:dev -- init client --force                    # overwrite without prompting
 
 # ── Start the daemon ───────────────────────────────────────────────
@@ -600,7 +584,7 @@ DIA Mainnet) is selected by `CARDANO_NETWORK` in `.env`.
 | `--validate-only` | — | Load + validate config and exit |
 | `--clean` | false | Delete feeder-generated state before starting (see below) |
 | `--from-block <N>` | — | Seed the checkpoint to block N−1 before starting; scanner processes from block N onwards. Mutually exclusive with `--from-latest`. |
-| `--from-latest` | false | Query the current chain tip via RPC and seed the checkpoint to that block; only intents arriving after startup are processed. Mutually exclusive with `--from-block`. |
+| `--from-latest` | false | Query the current chain tip and seed the checkpoint to that block; only intents arriving after startup are processed. Mutually exclusive with `--from-block`. |
 | `--log-level debug\|info\|warn\|error` | `info` | Console verbosity (file always gets everything) |
 | `--help` | — | Show help |
 
@@ -608,7 +592,7 @@ DIA Mainnet) is selected by `CARDANO_NETWORK` in `.env`.
 
 | Level | Console shows |
 |---|---|
-| `debug` | Everything — including `condition-filtered` (very noisy: one per non-matching intent, ~10/s), `policy-filtered`, scanner block deliveries (`scanner-ws: delivered N log(s)`), bridge internal calls (connecting, building, UTxO fetches) |
+| `debug` | Everything — including `condition-filtered` (very noisy: one per non-matching intent, ~10/s), `policy-filtered`, scanner block deliveries, internal build/UTxO-fetch calls |
 | `info` (default) | Daemon lifecycle, tx milestones (submitted, confirmed/failed), lane events |
 | `warn` | Transaction failures, preflight rejections, reconcile warnings |
 | `error` | Only TRANSACTION FAILED and fatal errors |
@@ -626,28 +610,28 @@ happens next: `--clean` (flag) wipes **then starts** the daemon, while
 that keeps the DB, use `prune` instead.
 
 All paths below are inside the active run dir (`state/<network>_run_<id>/`,
-selected by `RUN_ID`; the flat `state/<network>/` when no run dir exists).
+selected by `RUN_ID`).
 
 | Deleted | Reason |
 |---|---|
 | `<run>/logs/` | All log streams (feeder.log, transactions.jsonl, lane.jsonl, intents/) |
-| `<run>/feeder-checkpoint.json` | Stale file from an older run — deleted if present; scanner position is now stored in the DB (`chain_state` table) |
 | `<run>/feeder.sqlite*` | Full DB reset — clears processed_events, chain_state (scanner position), transaction_log |
-| `<run>/clients/*/pairs/*.json` | Feeder-written pair state — reconstructed from chain on next update |
+| `<run>/clients/*/pairs/*.json` | Feeder-written pair state — reconciled from live Cardano UTxOs on startup/update |
 
 | Never deleted | Why |
 |---|---|
 | `<run>/config-bootstrap.json` | CLI state file (`config:bootstrap`) |
 | `<run>/clients/*.json` | CLI state file (`receiver:bootstrap`) |
 
-The block-scanner position is stored in `chain_state.last_scan_block` in the SQLite/Postgres DB.
-`--clean` / `reset` reset it by removing the DB entirely. `feeder prune --max-age` prunes old rows
-from `processed_events` and `transaction_log` but never removes the DB file itself.
+The block-scanner position is stored in `chain_state.last_scan_block` in the
+SQLite/Postgres DB. `--clean` / `reset` reset it by removing the DB entirely.
+`feeder prune --max-age` prunes old rows from `processed_events` and
+`transaction_log` but never removes the DB file itself.
 
 ## Log streams
 
 The feeder writes four separate log streams under the active run dir's logs
-(`state/<network>_run_<id>/logs/`, or `state/<network>/logs/` when no run dir exists):
+(`state/<network>_run_<id>/logs/`):
 
 | File | Contents |
 |---|---|
@@ -690,9 +674,11 @@ The scanner's starting block is controlled by three mechanisms, in priority orde
 
 ## Database
 
-The feeder uses SQLite (default) or Postgres as its single source of truth for
-all persistent state. Every table survives restarts; in-memory caches are
-seeded from the DB on startup.
+The feeder uses SQLite (default) or Postgres for scanner, transaction, alert,
+and metric history. Confirmed Cardano pair snapshots also live in the active
+run dir under `<run>/clients/*/pairs/*.json`. On startup the daemon reconciles
+those pair-state files with live Cardano UTxOs, hydrates `priceCache` and
+last-confirmed metrics from them, and only then starts cron.
 
 The DB path is set by `database.path` in `infrastructure.<network>.yaml` or
 overridden by the `DATABASE_PATH_<NETWORK>` env var. For Postgres set
@@ -703,13 +689,13 @@ overridden by the `DATABASE_PATH_<NETWORK>` env var. For Postgres set
 | Table | Purpose |
 |---|---|
 | `processed_events` | Dedup and pipeline audit for source-chain events. Prevents reprocessing the same `intentHash` after a reconnect or restart. |
-| `chain_state` | Scanner position (`last_scan_block`) and health flags. Replaces the old `feeder-checkpoint.json` file. Updated after every confirmed scan range. |
+| `chain_state` | Scanner position (`last_scan_block`) and health flags. Updated after every confirmed scan range. |
 | `transaction_log` | Full pending → submitted → confirmed → failed lifecycle for every Cardano tx, including `txHash`, error codes, and latency breakdowns. |
-| `contract_symbol_updates` | Last confirmed price per `(routerId, destinationIndex, symbol)`. Seeded into the in-memory `priceCache` at boot so the cron service and router policy gate work correctly after a restart. |
+| `contract_symbol_updates` | Historical last-confirmed price rows written on confirmation. Runtime cold-start hydration uses reconciled pair-state files so the cron service and router policy gate see the same Cardano state operators inspect on disk. |
 | `performance_metrics` | Persistent counters (event totals, confirmed tx counts, latencies) that survive restarts. Used by the evidence-pack scripts to produce aggregate statistics. |
-| `alert_log` | Alert firing history written by the in-process alert evaluator (`src/alerting/evaluator.ts`). Includes `acknowledged` and `resolved` state. Queryable via `GET /api/v1/alerts`. |
+| `alert_log` | Alert firing history written by the in-process alert evaluator. Includes `acknowledged` and `resolved` state. Queryable via `GET /api/v1/alerts`. |
 
-`feeder cleanup --max-age <duration>` prunes old rows from `processed_events`
+`feeder prune --max-age <duration>` prunes old rows from `processed_events`
 and `transaction_log` (keeps recent rows). It never deletes the DB file or
 removes `chain_state` / `contract_symbol_updates` rows.
 
@@ -744,7 +730,7 @@ Run `npm run feeder:dev -- --validate-only` to see the full report.
 
 ### `event_processor` knobs
 
-The lane coalescer reads these keys from `infrastructure.<network>.yaml::event_processor`:
+Read from `infrastructure.<network>.yaml::event_processor`:
 
 | Key | Meaning |
 |---|---|
@@ -786,6 +772,17 @@ The lane coalescer reads these keys from `infrastructure.<network>.yaml::event_p
 | `enable_cors` | Set `true` only when the API is consumed directly from a browser |
 | `debug_enabled` | Expose extra diagnostic endpoints (not for production) |
 
+### Code-level defaults
+
+The fallback a knob takes when its YAML/env value is absent — plus fixed
+code-level constants (retry/backoff curve, cache sizes, API rate limits,
+pagination caps, the metrics namespace) — all live in one file:
+[`src/config/constants.ts`](./src/config/constants.ts), grouped by domain
+with a docstring per constant. Config-sourced values are **not** duplicated
+there: `infrastructure.<network>.yaml`, `.env`, and
+`state/<network>/config-bootstrap.json` stay authoritative; `constants.ts`
+holds only the code-level defaults the modules import.
+
 ## HTTP API
 
 The daemon exposes a lightweight HTTP API (default `0.0.0.0:8080`):
@@ -807,56 +804,29 @@ The daemon exposes a lightweight HTTP API (default `0.0.0.0:8080`):
 
 ### What "confirmed" means
 
-Every entry returned by `/api/v1/prices` carries a `confirmedAtDepth` field.
-This is the number of Cardano blocks that elapsed between the tx's inclusion
-block and the moment the feeder declared it confirmed — i.e. the value of
-`cardano.confirmation_depth` in `infrastructure.<network>.yaml` (default `1`).
+Every entry returned by `/api/v1/prices` carries a `confirmedAtDepth` field — the
+number of Cardano blocks observed before the feeder declared the tx confirmed.
+That depth is `cardano.confirmation_depth` in
+`config/infrastructure.<network>.yaml` (default `1`): the feeder waits for that
+many blocks before emitting `tx_confirmed`, updating the price cache, and
+recording the event in the DB.
 
-| `confirmedAtDepth` | Meaning |
+| `confirmation_depth` | Meaning |
 | --- | --- |
-| `1` (default) | The tx was observed in **one block** by at least one indexer provider (Blockfrost primary, Koios or Blockfrost REST as fallback). Probabilistically final: rollbacks beyond 1–2 blocks are essentially unobserved on mainnet. |
+| `1` (default) | Observed in one block. Probabilistically final and sufficient for a price oracle feed. |
 | `3`–`5` | Practical finality for most DeFi integrations. |
-| `2160` | Cryptographic security bound (Ouroboros Praos, `k = 2160` blocks ≈ 12 hours). Never needed for oracle feeds. |
+| `2160` | Cryptographic security bound. Never needed for oracle feeds. |
 
-**Cardano finality model**: Cardano uses Ouroboros Praos. The maximum
-theoretical rollback depth is `k = 2160` blocks (~12 hours at ~20 s/block).
-In practice, rollbacks deeper than 1–2 blocks are not observed on mainnet.
-For a price oracle feed, `confirmation_depth = 1` is practically sufficient.
-
-To configure a stricter depth: set `cardano.confirmation_depth` in
-`config/infrastructure.<network>.yaml`. The feeder waits for
-`confirmation_depth` additional blocks before emitting `tx_confirmed`,
-updating the price cache, and recording the event in the DB.
-
-**Reorg handling**: in this feeder, a "reorg" means a Cardano rollback
-where a transaction that had already looked confirmed is later no longer
-present on the canonical chain.
-
-The feeder detects this conservatively. After confirmation, and again
-during the long post-confirmation UTxO wait loops, it checks the
-transaction hash against **both** Koios and Blockfrost REST. It treats
-the transaction as dropped only when **both** providers definitively
-report it missing. A single provider outage, timeout, or transient
-indexer lag does **not** count as a reorg.
-
-When that happens, the feeder classifies the failure as
-`TxDroppedFromChain`, increments
-`dia_bridge_transactions_reorg_total{symbol, client_id}`, and applies
-the normal queue retry policy for transient submission failures. If
-retries are exhausted, the failure is recorded in the logs/metrics, and
-a later fresh intent can produce a new Cardano transaction.
-
-The `ReorgCounter` panel in Grafana therefore means: "transactions that
-looked confirmed at first, but were later dropped from the canonical
-chain after a rollback."
+For the Cardano finality / reorg model behind these numbers (Ouroboros Praos,
+how the feeder detects a rollback, the `ReorgCounter` panel), see
+[Architecture (see also)](#architecture-see-also).
 
 ## Thresholds and alerts
 
 ### Built-in alert evaluator
 
-The feeder runs an in-process alert evaluator loop (`src/alerting/evaluator.ts`)
-that writes firing and resolved events to the `alert_log` DB table. Alerts are
-readable at `GET /api/v1/alerts`.
+The feeder runs an in-process alert evaluator loop that writes firing and
+resolved events to the `alert_log` DB table, readable at `GET /api/v1/alerts`.
 
 Current rules:
 
@@ -868,18 +838,16 @@ Current rules:
 | `WorkerQueueSaturated` | The submission queue depth exceeds the saturation threshold | (evaluator internal) |
 | `TransactionFailureRateHigh` | The ratio of failed to total submissions exceeds the threshold | (evaluator internal) |
 
-The evaluator runs on the same `evaluationIntervalMs` cadence as `cron_service.tick_interval`
-(default 30 s). Prometheus alert rules in `monitoring/alerts.yml` cover additional
-conditions that are threshold-evaluated externally via `PromQL`.
+The evaluator runs on the same cadence as `cron_service.tick_interval`
+(default 30 s). Prometheus alert rules in `monitoring/alerts.yml` cover
+additional conditions evaluated externally via PromQL.
 
 ### Prometheus alert thresholds
 
 Operational thresholds live in two places with explicit responsibilities:
 
 - `infrastructure.<network>.yaml::alerting.<key>` — **canonical source**.
-  The feeder code reads these values directly (e.g. to emit
-  `dia_bridge_cardano_receiver_topup_warnings_total` when the receiver
-  balance drops below `receiver_balance_low_lovelace`).
+  The feeder code reads these values directly.
 - `monitoring/alerts.yml` (Prometheus rules) **and** the Grafana panels in
   `monitoring/grafana/dashboards/feeder.json` — mirror the YAML values.
   Operators tune thresholds in the YAML; if you change a number, update
@@ -888,9 +856,34 @@ Operational thresholds live in two places with explicit responsibilities:
 **Enforced — they cannot drift silently.** `src/config/__tests__/threshold-drift.test.ts`
 (run by `npm test`, or on demand with `make check-thresholds`) fails if any
 alert `expr` or Grafana panel threshold diverges from the YAML, if the two
-network YAMLs disagree, or if a dashboard template variable is left dead. So the
-YAML really is the single source of truth — change it there, fix the mirrors, and
-the test confirms they agree.
+network YAMLs disagree, or if a dashboard template variable is left dead.
+
+### Client funding (side-deposits)
+
+A client tops up its Receiver by sending an ordinary wallet ADA payment to its
+per-client deposit address — no CLI, no datum, just a normal send. The daemon
+then folds those accumulated deposits into the Receiver balance automatically.
+
+On top of the threshold-driven standalone merge, the feeder also folds up to
+`configState.depositMaxPerUpdateFold` confirmed deposits into the oracle update
+it is already submitting (best-effort — if the combined transaction fails it
+falls back to a plain update). A top-up thus rides along on an update that
+happens anyway, reducing the number of standalone merges; the standalone merge
+stays for bulk sweeps.
+
+You control **when** the daemon merges with two thresholds in
+`infrastructure.<network>.yaml::alerting`:
+
+| Key | What it does | Default |
+| --- | --- | --- |
+| `receiver_balance_low_lovelace` | Merge pending deposits once the Receiver balance falls below this | `2 000 000` (2 ADA) |
+| `deposit_pending_merge_lovelace` | Merge once the pending deposit pile reaches this, regardless of the Receiver balance | (set per deployment) |
+
+For the merge mechanism, how a merge and an oracle update on the same Receiver
+stay mutually exclusive (lane concurrency), and the deposit floor / per-merge
+cap that come from the CLI protocol state, see
+[Architecture (see also)](#architecture-see-also) →
+[Client funding: side-deposit address + merge](../../docs/architecture/feeder.md#client-funding-side-deposit-address--merge).
 
 **Units convention**: balances are **lovelace** (1 ADA = 1 000 000
 lovelace). Time intervals are **seconds** (or `_ms` for milliseconds).
@@ -901,10 +894,10 @@ Price deviation is **percent** (0–100).
 | Alert | Metric | YAML key | Default | Action |
 | --- | --- | --- | --- | --- |
 | `OraclePairStale` | `dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds` | `oracle_pair_stale_seconds` | `3600` s | Check `make logs`; usually a low Receiver or Admin wallet. |
-| `ReceiverBalanceLow` | `dia_bridge_cardano_receiver_balance_lovelace` | `receiver_balance_low_lovelace` | `2 000 000` (2 ADA) | `make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/<client>.json"` |
-| `SettleOverdue` | `dia_bridge_cardano_receiver_accrued_lovelace` | `settle_overdue_lovelace` | `10 000 000` (10 ADA) | `make cli CMD="settle --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/<client>.json"` |
-| `PaymentHookWithdrawReady` | `dia_bridge_cardano_payment_hook_accrued_lovelace` | `payment_hook_withdraw_ready_lovelace` | `50 000 000` (50 ADA) | `make cli CMD="payment-hook:withdraw --amount-lovelace <lovelace> --protocol-state /app/state/preview/config-bootstrap.json"` |
-| `AdminWalletLow` | `dia_bridge_cardano_admin_wallet_lovelace` | `admin_wallet_low_lovelace` | `5 000 000` (5 ADA) | Collect protocol revenue into this wallet: `settle` then `payment-hook:withdraw` (the withdraw_address is this wallet). Only if there is no accrued revenue, fund the address in `state/<net>/config-bootstrap.json` externally (Preview: faucet). |
+| `ReceiverBalanceLow` | `dia_bridge_cardano_receiver_balance_lovelace` | `receiver_balance_low_lovelace` | `2 000 000` (2 ADA) | `make cli CMD="receiver:top-up --amount-lovelace 5000000 --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json --client-state /app/offchain/state/preview_run_<id>/clients/<client>.json"` |
+| `SettleOverdue` | `dia_bridge_cardano_receiver_accrued_lovelace` | `settle_overdue_lovelace` | `10 000 000` (10 ADA) | `make cli CMD="settle --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json --client-state /app/offchain/state/preview_run_<id>/clients/<client>.json"` |
+| `PaymentHookWithdrawReady` | `dia_bridge_cardano_payment_hook_accrued_lovelace` | `payment_hook_withdraw_ready_lovelace` | `50 000 000` (50 ADA) | `make cli CMD="payment-hook:withdraw --amount-lovelace <lovelace> --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json"` |
+| `AdminWalletLow` | `dia_bridge_cardano_admin_wallet_lovelace` | `admin_wallet_low_lovelace` | `5 000 000` (5 ADA) | Collect protocol revenue into this wallet: `settle` then `payment-hook:withdraw` (the withdraw_address is this wallet). Only if there is no accrued revenue, fund the address in `state/<net>_run_<id>/config-bootstrap.json` externally (Preview: faucet). |
 | `PriceDeviationHigh` | `dia_bridge_price_deviation_percent_bucket` (p95) | `price_deviation_high_percent` | `5` % | Investigate DIA source — possible misreport. |
 | `PriceAgeHigh` | `dia_bridge_price_age_seconds_bucket` (p95) | `price_age_high_seconds` | `600` s | DIA source publishing stale prices. |
 | `ReorgRateHigh` | `dia_bridge_transactions_reorg_total` | `reorg_rate_high_per_hour` | `> 3 / 1 h` | Check provider lag + scanner block-lag panel. |
@@ -925,26 +918,27 @@ All four are refreshed two ways: (1) post-confirm, right after each
 `tx_confirmed`, and (2) on a periodic **balance-refresh poll** that runs
 independently of oracle-update traffic (read-only, on the
 `cron_service.tick_interval` cadence, default 30 s). The poll exists so the
-dashboard shows real balances even when NO update is flowing — e.g. when a
-Receiver is empty and updates are stalled, you can still see the Admin
-wallet and PaymentHook balances. A transient provider failure leaves an
-individual gauge unchanged (no misleading 0); the label-less gauges
-(`admin_wallet`, `payment_hook_accrued`) stay absent until the first real
-reading rather than reporting a default 0.
+dashboard shows real balances even when no update is flowing — e.g. when a
+Receiver is empty and updates are stalled, you can still see the Admin wallet
+and PaymentHook balances. A transient provider failure leaves an individual
+gauge unchanged (no misleading 0).
 
-## Architecture & Spectra parity
+## Architecture (see also)
 
-The deep architecture — the full pipeline (scanner → enricher → router → coalescer →
-queue → write-client), the DB-as-source-of-truth model, the concurrent HTTP + WebSocket
-transports, and the **canonical Spectra-parity / Cardano-divergence table** — lives in
-the architecture guide, so it stays in one place instead of drifting across docs:
+This README covers **operating** the feeder. For **how it works** and **why it
+diverges from its EVM ancestor (Spectra)**, see the architecture guides — kept in
+one place so the deep detail does not drift across docs:
 
-- [`docs/architecture/feeder.md`](../../docs/architecture/feeder.md) — plain-language
-  walkthrough of the whole feeder; the Spectra-parity disposition table is in
-  [§15](../../docs/architecture/feeder.md#spectra-parity-and-cardano-divergences-full-table).
+- [`docs/architecture/feeder.md`](../../docs/architecture/feeder.md) —
+  plain-language walkthrough of the whole feeder pipeline (scanner → enricher →
+  router → coalescer → queue → write-client), the persisted-state warm-up model,
+  and concurrent HTTP + WebSocket transports. Notable anchors:
+  - [Client funding: side-deposit address + merge](../../docs/architecture/feeder.md#client-funding-side-deposit-address--merge)
+    — the deposit-merge mechanism and lane mutual-exclusion (concurrency).
+  - [Confirmation depth (Cardano finality)](../../docs/architecture/feeder.md#11-confirmation-depth-cardano-finality)
+    — the reorg / Ouroboros finality model behind `confirmation_depth`.
+  - [Spectra parity and Cardano divergences (full table)](../../docs/architecture/feeder.md#spectra-parity-and-cardano-divergences-full-table)
+    — the canonical parity disposition table.
 - [`docs/architecture/cardano-oracle-architecture.md`](../../docs/architecture/cardano-oracle-architecture.md)
-  — the formal architecture spec (on-chain contracts, UTxO model, transaction shapes,
-  fee flow, and the feeder's DB/API/metrics).
-
-This README stays focused on **operating** the feeder (the sections above); the
-architecture guide explains **how it works** and **why it diverges from Spectra**.
+  — the formal architecture spec (on-chain contracts, UTxO model, transaction
+  shapes, fee flow, and the feeder's DB/API/metrics).

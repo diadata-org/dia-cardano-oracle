@@ -31,6 +31,8 @@ This document is the single architecture reference for the Cardano port of DIA's
   - [5.11 Settle accrued fees](#511-settle-accrued-fees)
   - [5.12 Update min UTxO (admin only)](#512-update-min-utxo-admin-only)
   - [5.13 Pair burn (admin only)](#513-pair-burn-admin-only)
+  - [5.14 Side-deposit funding & merge (per client)](#514-side-deposit-funding--merge-per-client)
+  - [5.15 Decommission / teardown](#515-decommission--teardown)
 - [6. Finalized design decisions](#6-finalized-design-decisions)
 - [7. Redeemer index reference](#7-redeemer-index-reference)
 - [8. Script identities and references](#8-script-identities-and-references)
@@ -39,7 +41,7 @@ This document is the single architecture reference for the Cardano port of DIA's
   - [8.3 Table G — Config datum as a source of truth](#83-table-g--config-datum-as-a-source-of-truth)
   - [8.4 Table H — Parameterization vs runtime references](#84-table-h--parameterization-vs-runtime-references)
 - [9. Off-chain feeder architecture](#9-off-chain-feeder-architecture)
-  - [9.1 Persistence model — DB as source of truth](#91-persistence-model--db-as-source-of-truth)
+  - [9.1 Persistence model — DB + pair-state files](#91-persistence-model--db--pair-state-files)
   - [9.2 Worker-pool layering](#92-worker-pool-layering)
   - [9.3 Cron service](#93-cron-service)
   - [9.4 Alert evaluator and `alert_log`](#94-alert-evaluator-and-alert_log)
@@ -64,13 +66,15 @@ Reference inputs to this document:
 | 3 | `payment_hook` | multivalidator (mint + spend) | 1 global | `bootstrap_ref_hook: OutputReference`, `hook_asset_name: AssetName`, `config_policy_id`, `config_asset_name`, `coordinator_credential: Credential` |
 | 4 | `receiver` | multivalidator (mint + spend) | 1 per client | `receiver_ref: OutputReference`, `receiver_asset_name: AssetName`, `config_policy_id`, `config_asset_name` |
 | 5 | `pair_state` | multivalidator (mint + spend) | 1 per client | `config_policy_id`, `config_asset_name`, `receiver_hash: ScriptHash` |
-| 6 | `reference_holder` | spend validator | 1 global | `config_policy_id: PolicyId`, `config_asset_name: AssetName` |
+| 6 | `deposit` | spend validator | 1 per client | `receiver_policy_id: PolicyId`, `receiver_asset_name: AssetName` |
+| 7 | `reference_holder` | spend validator | 1 global | `config_policy_id: PolicyId`, `config_asset_name: AssetName` |
 
 Notes:
 
 - The reusable global validators (`config_state` spend, `update_coordinator` withdraw, `payment_hook` spend) are published as reference scripts. One-shot minting policies are used only by their bootstrap transactions.
 - `receiver` is recompiled every time DIA onboards a new client. A fresh `receiver_ref` per client yields a different script hash and therefore a different address. The client is not an admin of their Receiver: they only prepay ADA and consume prices off-chain, matching the EVM behaviour. Every privileged action on the Receiver is signed by DIA admin (the `config_admins`).
 - `pair_state` is recompiled per client too, parametrized by that client's `receiver_hash`, so every client's pairs live in their own address, isolated from other clients' pairs.
+- `deposit` is recompiled per client, parametrized by that client's Receiver NFT (`receiver_policy_id` + `receiver_asset_name`). It is the per-client **side-deposit address**: a client funds their balance with an ordinary wallet payment here (no CLI, datum-less — spendable in Plutus V3), and the feeder/CLI later folds the deposits into the Receiver balance with a `TopUp` (§5.14). It is published as a reference script alongside the receiver/pair scripts (§1.5). It mints nothing and holds no NFT — it is a pure spend gate.
 - `update_coordinator` runs once per update or settle transaction using the `withdraw 0` trigger. It centralizes shared logic (DIA signature checks on updates, fee accrual constraints, settle manifest and hook deltas) so the per-UTxO validators do not duplicate those checks.
 - `reference_holder` is used as the address for reference-script UTxOs. It is parameterized with `config_policy_id` and `config_asset_name` so that DIA admin (the Config signers) can reclaim the ADA locked in these UTxOs when contracts are upgraded. Spend requires the Config NFT as a reference input and a valid Config signer key in the transaction.
 
@@ -152,6 +156,7 @@ flowchart LR
   TX --> RSR[Reference-script UTxO<br/>script: receiver spend of client X<br/>at reference_holder addr<br/>output 0]:::script
   TX --> RSP[Reference-script UTxO<br/>script: pair_state spend of client X<br/>at reference_holder addr<br/>output 1]:::script
   TX --> RSM[Reference-script UTxO<br/>script: pair_state mint of client X<br/>at reference_holder addr<br/>output 2]:::script
+  TX --> RSD[Reference-script UTxO<br/>script: deposit spend of client X<br/>at reference_holder addr<br/>output 3]:::script
   TX --> Change([Admin change]):::wallet
 
   classDef wallet fill:#fff8dc,stroke:#aa8800,color:#111
@@ -161,7 +166,7 @@ flowchart LR
 
 - **Frequency:** once per onboarded client, after Receiver bootstrap for that client.
 - **Inputs:** admin wallet UTxOs.
-- **Outputs:** three reference-script UTxOs: output 0 = `receiver` spend, output 1 = `pair_state` spend, output 2 = `pair_state` mint policy — all carrying the client-specific compiled binaries.
+- **Outputs:** four reference-script UTxOs: output 0 = `receiver` spend, output 1 = `pair_state` spend, output 2 = `pair_state` mint policy, output 3 = `deposit` spend — all carrying the client-specific compiled binaries.
 - **Isolation:** the binaries embed `receiver_ref` and `receiver_hash` respectively, so each client has its own set of reference-script UTxOs with distinct hashes; they cannot be reused across clients.
 - **Minting policies:** Receiver minting is one-shot/bootstrap and is NOT published as a reference script. The Pair minting policy is client-scoped and is published as a reference script (output 2); update transactions that create a new pair cite it by outRef instead of embedding it inline.
 
@@ -178,7 +183,7 @@ All are NFTs (quantity 1, fixed asset name).
 | Receiver NFT | `receiver` | Receiver bootstrap (per client) | Marks the canonical Receiver UTxO for that client |
 | Pair NFT | `pair_state` | First oracle update for that pair | Marks the canonical Pair UTxO for that client and pair |
 
-Per DIA's request, these NFTs are not a "client identity" mechanism. They are state tokens required by the eUTxO model to identify the live UTxO of each state. Client identity remains the script hash of the client's Receiver (same principle as the EVM contract address being the client identifier).
+These NFTs are **state tokens**: the eUTxO model uses them to mark which UTxO is currently the live one for each piece of state (the Config, the Hook, each client's Receiver, each client's pairs). Each client is identified by several things, all unique to it: its per-client script addresses and hashes (`receiver`, `pair_state`, and `deposit` are parametrized per client) and its per-client NFTs (the Receiver NFT and each Pair NFT are minted per client). Any of these identifies the client — the same way an EVM contract address identifies a client.
 
 ---
 
@@ -194,16 +199,17 @@ With `C` onboarded clients, client `i` subscribed to `N_i` pairs, the on-chain f
 | `receiver` spend of client `i` | 1 (Receiver UTxO of client `i`) | 1 per client |
 | `pair_state` spend of client `i` | `N_i` (one per subscribed pair) | 1 per client |
 | `pair_state` mint of client `i` | — (minting policy, no state UTxO) | 1 per client |
+| `deposit` spend of client `i` | 0 (side-deposit gate; deposits are plain wallet UTxOs at this address) | 1 per client |
 
 Totals:
 
-- **ReferenceHolder UTxOs:** `3` global + `3` per client.
+- **ReferenceHolder UTxOs:** `3` global + `4` per client.
 - **Global state UTxOs:** `1` Config + `1` Hook = `2`.
 - **Per-client state UTxOs:** `1` Receiver + `N_i` Pairs for client `i`.
 - **Total live state UTxOs on the chain:** `2 + sum_i (1 + N_i)`.
-- **Reference-script UTxOs:** `3` global + `3` per client. These are one-off immutable UTxOs, not "live state"; they only exist so consumers can cite the script hash instead of embedding the binary in every tx.
+- **Reference-script UTxOs:** `3` global + `4` per client (`receiver` spend, `pair_state` spend, `pair_state` mint, `deposit` spend). These are one-off immutable UTxOs, not "live state"; they only exist so consumers can cite the script hash instead of embedding the binary in every tx.
 
-Reference-script UTxOs are created at the `reference_holder` script address. The validator is admin-gated: any Config signer can reclaim the locked ADA (via `preview:reclaim-reference-script --script <name>`) when upgrading contracts. Reclaim names match publish commands 1:1: `config` reclaims global.config + global.coordinator together; `payment-hook` reclaims global.paymentHook alone; `client` reclaims client.receiver + client.pair + client.pairMint together. Each call spends the same UTxO set that the corresponding publish command created, carrying the Config NFT as a reference input and the signer's key. After reclaiming, the corresponding entries in the state artifact are cleared so stale outRefs cannot be reused.
+Reference-script UTxOs are created at the `reference_holder` script address. The validator is admin-gated: any Config signer can reclaim the locked ADA (via `reclaim-reference-script --script <name>`) when upgrading contracts or decommissioning a deployment. Reclaim names match publish commands 1:1: `config` reclaims global.config + global.coordinator together; `payment-hook` reclaims global.paymentHook alone; `client` reclaims client.receiver + client.pair + client.pairMint + the per-client `deposit` reference script together. Each call spends the same UTxO set that the corresponding publish command created, carrying the Config NFT as a reference input and the signer's key. After reclaiming, the corresponding entries in the state artifact are cleared so stale outRefs cannot be reused.
 
 ---
 
@@ -261,7 +267,7 @@ Invariant: `utxo.lovelace == min_utxo_lovelace + balance_lovelace + accrued_to_h
 
 Fee model (decoupled settlement):
 
-1. **AccrueFee** (during each price update): `balance -= fee`, `accrued_to_hook += fee`. The Receiver UTxO's total lovelace does not change — ADA shifts between accounting buckets. Fee is calculated as `base_fee + (N × per_pair_fee)` where N is the number of pairs in the batch (1 for single update).
+1. **AccrueFee** (during each price update): `balance -= fee`, `accrued_to_hook += fee`. Fee is calculated as `base_fee + (N × per_pair_fee)` where N is the number of pairs in the batch (1 for single update). On a plain update the Receiver UTxO's total lovelace does not change — the fee only shifts ADA from `balance` to `accrued_to_hook`. The same spend MAY additionally absorb swept side-deposits consumed in the same tx: `added = lovelace_of(next_output) − lovelace_of(prev_output) ≥ 0`, and the surplus is credited entirely to `balance` (`next.balance = prev.balance − fee + added`), so an update can also top up. `accrued_to_hook` moves by exactly `+fee` regardless, so the absorbed lovelace can only reach `balance`, never the hook-bound accrual (§5.14).
 2. **Settle** (async, admin-initiated): drains `accrued_to_hook_lovelace → 0` and moves the ADA to the PaymentHook UTxO in a separate transaction.
 3. **Withdraw** cannot drain `accrued_to_hook_lovelace` — it can only withdraw from `balance_lovelace`.
 
@@ -653,6 +659,8 @@ flowchart LR
 
 PaymentHook is **not** involved. Fees are accrued locally on the Receiver and settled later (§5.11).
 
+The same `AccrueFee` spend MAY additionally consume this client's `deposit` UTxOs and raise the Receiver's lovelace by the swept total (`balance += swept`), folding a top-up into the update (§5.14). The per-update fold count is bounded off-chain by `configState.depositMaxPerUpdateFold`.
+
 **Validators invoked**
 
 1. **`update_coordinator` withdraw** — redeemer `CoordinatorRedeemer::ApplySingle(witness)` (index 0). Stake credential firing this withdraw must equal `config.update_coordinator_credential`. Validates:
@@ -671,7 +679,7 @@ PaymentHook is **not** involved. Fees are accrued locally on the Receiver and se
    - At least one minted pair entry; each has `qty == 1`.
    - For every minted name: an output holds that NFT `qty 1` and inline `PairDatum`; payment credential `Script(pair_policy_id)`; `pair_asset_name(datum.pair_id) == minted_name`; `valid_pair_state(datum)`; `exact_locked_lovelace`.
    - Config NFT visible as reference input `qty 1`; decodes as `ConfigDatum`; `valid_config_state(config_datum)`.
-   - **Admin gate:** `has_config_signer(config_datum, tx)` — at least one `config_admins` payment key must appear in `tx.extra_signatories`. A signed DIA intent alone is NOT sufficient to create a Pair NFT: without this gate, an attacker holding a fresh DIA intent could replay it across two transactions to mint two NFTs with the same `pair_token_name`, since at creation time there is no prior on-chain `PairDatum` to anchor nonce uniqueness against. After this transaction the freshly stored `PairDatum.nonce` becomes the anti-replay anchor used by every later `is_fresh_update`. See `docs/security/security-notes.md`.
+   - **Admin gate:** `has_config_signer(config_datum, tx)` — at least one `config_admins` payment key must appear in `tx.extra_signatories`. A signed DIA intent alone is NOT sufficient to create a Pair NFT: without this gate, an attacker holding a fresh DIA intent could replay it across two transactions to mint two NFTs with the same `pair_token_name`, since at creation time there is no prior on-chain `PairDatum` to anchor nonce uniqueness against. After this transaction the freshly stored `PairDatum.nonce` becomes the anti-replay anchor used by every later `is_fresh_update`. The admin gate prevents *unauthorized* creation by a relayer holding only DIA intents; it does NOT by itself enforce on-chain live-pair uniqueness — a config admin can still create duplicate live Pair UTxOs for the same `(client, symbol)`, since there is no on-chain live-pair registry. See `docs/security/security-notes.md`.
    - **Coordinator intent binding + local expiry:** `pair_mint_intent_satisfied(tx, config_datum, pair_policy_id, pair_token_name)` — the coordinator withdraw redeemer in `tx.redeemers` must decode as `ApplySingle` or `ApplyBatch` and name **this** minted pair (`pair_policy_id` + minted asset name) AND that witness's intent must satisfy `intent_expiry_satisfied` against the tx's finite upper validity bound. This blocks piggy-backing on `ApplySettle` or on another pair's update witness, and re-asserts intent expiry on the same code path that consumes the intent (defence in depth: expiry is enforced both here and in the coordinator).
 
 3. **`receiver` spend** — redeemer `ReceiverRedeemer::AccrueFee` (index 1). Validates:
@@ -736,6 +744,8 @@ Same shape as §5.7 but for an EXISTING pair UTxO: the Pair UTxO is spent (no Pa
 
 PaymentHook is **not** an input or output in update transactions. This eliminates PaymentHook contention during high-frequency updates.
 
+As in §5.7, the `AccrueFee` spend MAY additionally consume this client's `deposit` UTxOs and raise the Receiver's lovelace by the swept total (`balance += swept`), folding a top-up into the update (§5.14); the fold count is bounded off-chain by `configState.depositMaxPerUpdateFold`.
+
 **Validators invoked**
 
 1. **`update_coordinator` withdraw** — redeemer `CoordinatorRedeemer::ApplySingle(witness)` (index 0). Same as §5.7 except the branch is `pair_input_count == 1`. Validates:
@@ -766,7 +776,7 @@ PaymentHook is **not** an input or output in update transactions. This eliminate
 - **Pair outputs:** emitted by the off-chain builder in the same canonical order; the ledger preserves builder output order, so a single `list.filter` over `tx.outputs` is already canonical.
 - **Pair inputs:** the ledger reorders inputs lexicographically by `OutputReference`; the coordinator looks up each witness's input by token-name against the short filtered list.
 - **Coordinator validates the correspondence:** witnesses ↔ pair outputs ↔ pair inputs ↔ mint count, all in a single linear pass per relevant list — `length(pair_outputs) == length(witnesses)`, `length(witnesses) - create_count == length(pair_inputs)`, `minted_pair_token_count == create_count`.
-- **Pair spend (`ApplyUpdate`) no longer decodes the full batch witness list.** It uses a `CoordinatorRedeemerFingerprint` (constructor-tag-only) to prove the coordinator is in `ApplySingle`/`ApplyBatch` mode and trusts the coordinator for everything else. This is what keeps per-pair execution cost flat as the batch grows.
+- **Pair spend (`ApplyUpdate`) does not decode the full batch witness list.** It uses a `CoordinatorRedeemerFingerprint` (constructor-tag-only) to prove the coordinator is in `ApplySingle`/`ApplyBatch` mode and trusts the coordinator for everything else. This keeps per-pair execution cost flat as the batch grows.
 - **Preview-confirmed envelope:** `batch-10` fits in the per-tx exec-units limit (latest emulator run: `cpu=4,295,001,740 mem=10,810,449`, ~67.6% of memory cap). See `docs/milestones/evidence/` for run-by-run numbers.
 
 The §below sub-sections detail the validators, the canonical-order proof, and the validation algorithm.
@@ -818,6 +828,8 @@ N intents in one tx, each addressing the SAME pair policy and the SAME Receiver.
   - `N` Pair UTxOs (one per witness, mix of newly-minted and recreated).
   - Receiver UTxO recreated with `balance -= N × fee`, `accrued_to_hook += N × fee`. Total Receiver UTxO lovelace unchanged.
 - **Signers:** none required by validators.
+
+As in §5.7/§5.8, the single `AccrueFee` spend MAY additionally consume this client's `deposit` UTxOs and raise the Receiver's lovelace by the swept total (`balance += swept`), folding a top-up into the batch (§5.14); the fold count is bounded off-chain by `configState.depositMaxPerUpdateFold`.
 
 **Validators invoked**
 
@@ -1163,6 +1175,63 @@ flowchart LR
 
 ---
 
+### 5.14 Side-deposit funding & merge (per client)
+
+**Problem.** Adding balance to a Receiver means spending and recreating that Receiver UTxO (a `TopUp`, §5.5), which needs the script + datum + protocol tooling. A client with an ordinary wallet cannot do that. So §5.5 `TopUp` is, in practice, an internal DIA/operator operation — not something a client runs.
+
+**Mechanism.** Each client has a per-client `deposit` script address (§1.1, parametrized by the Receiver NFT). A client funds their balance by sending ADA there with a normal wallet payment — no CLI, no datum. In Plutus V3 a datum-less script UTxO is presented to the spend validator as `None` and is spendable, so the payment lands as a usable deposit (sending to the Receiver address instead would strand it: the Receiver validator does `expect Some(datum)`).
+
+Crediting deposits to the Receiver balance has **two on-chain forms**, both consuming the deposit UTxOs under the `CollectDeposit` redeemer in the same tx that raises `balance_lovelace`:
+
+- **Standalone merge** — the canonical Receiver is spent under the `TopUp` redeemer (§5.5) together with the deposit UTxOs, raising `balance_lovelace` by the swept total. Used for bulk sweeps.
+- **Fold into an update** — an oracle update's `AccrueFee` spend (§5.7–§5.9) additionally absorbs the deposits, raising the Receiver's lovelace so the surplus lands in `balance_lovelace`. One tx then updates AND tops up.
+
+The anti-skim rule below (`receiver_delta ≥ swept`, in the `deposit` validator) applies to BOTH forms — the deposit validator does not care which Receiver redeemer credits it, only that the full sweep reaches the Receiver.
+
+**Transaction (merge).**
+
+| Role | Input | Output |
+|---|---|---|
+| spend | the canonical Receiver UTxO (redeemer `TopUp`) | Receiver recreated, `balance_lovelace += Σ deposits`, NFT qty 1 preserved |
+| spend | N selected deposit UTxOs at the deposit address (redeemer `CollectDeposit`) | (consumed; their ADA lands on the Receiver) |
+| ref | the `deposit` + `receiver` reference scripts | — |
+| signer | none required beyond network fee (the merge only credits the client) | — |
+
+**Validation / security (the `deposit` validator, `lib/dia_cardano_oracle/deposit_logic.ak`).** A `CollectDeposit` spend is valid only if the tx consumes the canonical Receiver (found by its NFT) and the Receiver's lovelace rises by **at least the total swept from this deposit address**. Consequences:
+
+- A deposit can only ever credit **its own** client's Receiver (it can't be stolen).
+- **Anti-skim:** every deposit input at the address runs the same validator instance with the same `swept` total, so a tx that sweeps N deposits but credits only some would fail — the full sweep must reach the Receiver.
+- A deposit is spendable only alongside a Receiver redeemer that raises the Receiver's lovelace: a `TopUp` (standalone merge) OR an `AccrueFee` that absorbs the swept lovelace into `balance` (folded update). `Settle` / `Withdraw` lower the Receiver's lovelace, so they can never co-spend a deposit — `delta >= swept` fails.
+
+**Off-chain.** Both forms are filtered to clean ADA-only deposits at or above a floor (dust / native-token / datum-bearing UTxOs are skipped and stay harmlessly at the address). The standalone merge is capped per tx at `depositMaxPerMerge`; the update-fold is capped at the smaller `depositMaxPerUpdateFold`, so the absorbed deposits stay within the tx budget alongside a price update. The CLI verbs are `deposit:address` / `deposit:fund` / `deposit:merge`; the fold is opportunistic on the update path.
+
+- **Params — HOW the tx is built.** The dust floor (`depositMinLovelace`), per-merge cap (`depositMaxPerMerge`), and per-update fold cap (`depositMaxPerUpdateFold`) are protocol tx-build params set at the CLI's `protocol:init` and stored in `config-bootstrap.json::configState`, siblings of `minUtxoLovelace` / `baseFeeLovelace`. The CLI and the feeder daemon both read them from that SAME protocol state (the daemon via `readDepositMinLovelace`) — no hardcoded copy, and **not** feeder-YAML keys.
+- **Triggers — WHEN the feeder merges.** The feeder runs the merge automatically when a Receiver falls below `alerting.receiver_balance_low_lovelace` or pending deposits reach `alerting.deposit_pending_merge_lovelace`. These live in the feeder `infrastructure.<network>.yaml::alerting.*` and decide timing only.
+- **Concurrency — hard exclusion.** The auto-merge is enqueued as a first-class task on the SAME per-lane submission queue as oracle updates (`enqueueLaneTask`, keyed by `laneKey`). Because the lane queue runs one entry at a time, an update and a merge on the same Receiver are mutually exclusive by construction — they can never spend the Receiver UTxO concurrently.
+
+---
+
+### 5.15 Decommission / teardown
+
+Decommissioning a deployment recovers the ADA locked in every state UTxO and every reference-script UTxO back to the admin wallet. The recovery has two arms: **burning the four NFT families** (which releases each state UTxO's min-ADA) and **reclaiming the reference scripts** (which releases the script-binary min-ADA, the largest line item).
+
+**State-UTxO burns.** Each of the four NFT-bearing families exposes a burn that destroys the NFT and consumes its UTxO with no continuation, so the locked min-ADA flows to the admin's change. All four share the same shape — config signer + the NFT burned `-1` in the same tx + no continuation output carrying the NFT — and each mint policy's `Burn` action and spend `Burn` redeemer both re-assert the admin signature, so neither side fires alone:
+
+| Family | Spend redeemer | Mint action | Value-field precondition (read from the consumed datum) |
+|---|---|---|---|
+| `config_state` | `ConfigRedeemer::Burn` (idx 1) | `ConfigMintAction::Burn` (idx 1) | none — Config has no value-bearing datum field beyond the min-ADA |
+| `payment_hook` | `PaymentHookRedeemer::Burn` (idx 3) | `PaymentHookMintAction::Burn` (idx 1) | `accrued_fees_lovelace == 0` (forces a §5.10 withdraw first) |
+| `receiver` | `ReceiverRedeemer::Burn` (idx 5) | `ReceiverMintAction::Burn` (idx 1) | `balance_lovelace == 0` AND `accrued_to_hook_lovelace == 0` (forces a §5.6 withdraw + §5.11 settle first) |
+| `pair_state` | `PairSpendAction::BurnPair` (idx 2) | `PairMintAction::BurnPairs` (idx 1) | none — Pair has no value-bearing datum field beyond the min-ADA (§5.13) |
+
+The value-field preconditions guarantee a burn can never be a backdoor around the proper drains: a Receiver can only be burned once its `balance` is withdrawn and its `accrued_to_hook` is settled to the hook, and the PaymentHook can only be burned once its `accrued_fees` are withdrawn to the `withdraw_address`. The Config burn locates its datum from the consumed input (the Config UTxO is itself being spent); the PaymentHook and Receiver burns locate the Config datum via the same visible-config helper their other admin paths use (input or reference input). There is no coordinator interaction on any burn path — no oracle update is applied and no fee accrues.
+
+**Reference-script reclaim.** The reference-script UTxOs at `reference_holder` are reclaimed by `reclaim-reference-script` (§3): `config` reclaims `config_state` spend + `update_coordinator` withdraw, `payment-hook` reclaims `payment_hook` spend, and `client` reclaims this client's `receiver` spend + `pair_state` spend + `pair_state` mint + `deposit` spend. Reclaim is admin-gated by the Config NFT as a reference input plus a Config signer, so the Config UTxO must stay alive until every reference script is reclaimed; the Config burn is therefore the last teardown step.
+
+After a full teardown the only residue is dust below the deposit floor and any UTxOs intentionally left at orphaned addresses; every state UTxO's min-ADA and every reference-script UTxO's min-ADA is recovered.
+
+---
+
 ## 6. Finalized design decisions
 
 1. **Config is shared.** One global Config UTxO is read as a reference input by Receivers, Pair states, PaymentHook, and the coordinator.
@@ -1176,18 +1245,24 @@ flowchart LR
 
 | Script | Idx | Redeemer | Used in |
 |---|:---:|---|---|
-| `config_state` mint | — | `ConfigMintAction::Bootstrap` | §5.1 |
+| `config_state` mint | 0 | `ConfigMintAction::Bootstrap` | §5.1 |
+| `config_state` mint | 1 | `ConfigMintAction::Burn` (admin-gated) | §5.15 |
 | `config_state` spend | 0 | `ConfigRedeemer::AdminUpdate` | §5.2, §5.3 |
-| `payment_hook` mint | — | `PaymentHookMintAction::Bootstrap` | §5.2 |
+| `config_state` spend | 1 | `ConfigRedeemer::Burn` (admin-gated) | §5.15 |
+| `payment_hook` mint | 0 | `PaymentHookMintAction::Bootstrap` | §5.2 |
+| `payment_hook` mint | 1 | `PaymentHookMintAction::Burn` (admin-gated) | §5.15 |
 | `payment_hook` spend | 0 | `PaymentHookRedeemer::ApplySettle` | §5.11 |
 | `payment_hook` spend | 1 | `PaymentHookRedeemer::AdminUpdate` | (admin-only mutation, no full-tx section) |
 | `payment_hook` spend | 2 | `PaymentHookRedeemer::Withdraw { amount }` | §5.10 |
-| `receiver` mint | — | `ReceiverMintAction::Bootstrap` | §5.4 |
+| `payment_hook` spend | 3 | `PaymentHookRedeemer::Burn` (admin-gated) | §5.15 |
+| `receiver` mint | 0 | `ReceiverMintAction::Bootstrap` | §5.4 |
+| `receiver` mint | 1 | `ReceiverMintAction::Burn` (admin-gated) | §5.15 |
 | `receiver` spend | 0 | `ReceiverRedeemer::TopUp` | §5.5 |
 | `receiver` spend | 1 | `ReceiverRedeemer::AccrueFee` | §5.7, §5.8, §5.9 |
 | `receiver` spend | 2 | `ReceiverRedeemer::Settle` | §5.11 |
 | `receiver` spend | 3 | `ReceiverRedeemer::Withdraw { amount, recipient }` | §5.6 |
 | `receiver` spend | 4 | `ReceiverRedeemer::UpdateMinUtxo { new_min_utxo_lovelace }` | §5.12 |
+| `receiver` spend | 5 | `ReceiverRedeemer::Burn` (admin-gated) | §5.15 |
 | `pair_state` mint | 0 | `PairMintAction::MintPairs` (admin-gated) | §5.7, §5.9 |
 | `pair_state` mint | 1 | `PairMintAction::BurnPairs` (admin-gated) | §5.13 |
 | `pair_state` spend | 0 | `PairSpendAction::ApplyUpdate` | §5.8, §5.9 |
@@ -1214,13 +1289,13 @@ truth, and which scripts are parameterized by what.
 
 | Identifier | Bound to script | Stored on-chain in | Stored off-chain in | Read by (on-chain) |
 |---|---|---|---|---|
-| `config_policy_id` | `validators/config_state.ak` (mint) | NFT bytes on the Config UTxO | `state.scripts.configPolicyId` (`offchain/cli/state/preview/config-bootstrap.json`) | Hardcoded as a compile-time parameter on `payment_hook`, `receiver`, `pair_state`, `update_coordinator` (`validators/{payment_hook,receiver,pair_state,update_coordinator}.ak` headers); also re-checked at runtime via `find_visible_config_input` |
+| `config_policy_id` | `validators/config_state.ak` (mint) | NFT bytes on the Config UTxO | `state.scripts.configPolicyId` (`offchain/state/preview/config-bootstrap.json`) | Hardcoded as a compile-time parameter on `payment_hook`, `receiver`, `pair_state`, `update_coordinator` (`validators/{payment_hook,receiver,pair_state,update_coordinator}.ak` headers); also re-checked at runtime via `find_visible_config_input` |
 | `config_asset_name` | same | NFT bytes on the Config UTxO | `state.scripts.configUnit.assetName` | Same compile-time parameters as above |
 | `payment_hook_policy_id` | `validators/payment_hook.ak` (mint) | NFT bytes on the Hook UTxO; **also recorded inside `ConfigDatum.payment_hook_ref`** | `state.scripts.paymentHookPolicyId` and `state.scripts.paymentHookValidator{Hash,Address}` | Read by `update_coordinator` `valid_settle` (`update_coordinator.ak:175-205`) and re-asserted by hook's `has_expected_hook_ref` (`payment_hook.ak:243-253`) |
 | `payment_hook_asset_name` | same | NFT bytes; `ConfigDatum.payment_hook_ref.asset_name` | `state.scripts.paymentHookUnit` | Same as above |
 | `receiver_policy_id` | `validators/receiver.ak` (mint) | NFT bytes on the Receiver UTxO; embedded in `UpdateWitness.receiver_policy_id` (off-chain witness) | `clientState.receiver.receiverPolicyId` (per-client artifact) | Read by `update_coordinator` `valid_receiver_accrue_fee` (`update_coordinator.ak:107-126`) which finds the receiver via this NFT |
 | `receiver_asset_name` | same | NFT bytes; embedded in `UpdateWitness` | `clientState.receiver.receiverAssetName` | Same as above |
-| `receiver_validator_hash` | `validators/receiver.ak` (spend) | None — derived from script | `clientState.receiver.receiverValidatorHash` | Wired as compile-time parameter into `pair_state._receiver_hash` so each client's `pair_state` script has its own address. The parameter is no longer read inside the validator body — receiver presence and identity are enforced once by `update_coordinator` via `valid_receiver_accrue_fee` in the same tx. |
+| `receiver_validator_hash` | `validators/receiver.ak` (spend) | None — derived from script | `clientState.receiver.receiverValidatorHash` | Wired as compile-time parameter into `pair_state._receiver_hash` so each client's `pair_state` script has its own address. The validator body does not read this parameter — receiver presence and identity are enforced once by `update_coordinator` via `valid_receiver_accrue_fee` in the same tx. |
 | `pair_policy_id` (per-client) | `validators/pair_state.ak` (mint) | NFT bytes on each pair UTxO; embedded in `UpdateWitness.pair_policy_id` | `pairArtifact.scripts.pairPolicyId` | Read by `update_coordinator.valid_single_update` and `valid_batch_update` (`update_coordinator.ak:319, 367, 389`) |
 | `pair_token_name` (per pair) | same | NFT bytes; equal to `blake2b_256(pair_id)` | `pairArtifact.scripts.pairUnit` | Re-derived on-chain by `oracle_logic.pair_asset_name` (`oracle_logic.ak:50-52`) and asserted at `pair_state.ak:115` and `update_coordinator.ak` C7 / C7' |
 | `coordinator_credential` (stake credential) | `validators/update_coordinator.ak` (withdraw) | `ConfigDatum.update_coordinator_credential` (set at hook bootstrap, frozen unless config admin update edits it) | `state.scripts.coordinatorHash`, `state.scripts.coordinatorRewardAddress` | Read by `update_coordinator` (must equal `own_credential`); subscripts read the matching `Withdraw` entry in `tx.redeemers` via `coordinator_intent_matches` (`pair_state`, `receiver`, `payment_hook.ApplySettle`) |
@@ -1262,9 +1337,9 @@ at compile time.
 | Script | Compile-time parameters | Re-read at runtime? |
 |---|---|---|
 | `config_state` | `bootstrap_ref: OutputReference`, `expected_asset_name: AssetName` (`validators/config_state.ak:12-14`) | `bootstrap_ref` is consumed once at mint time and never again; `expected_asset_name` is checked on every spend (continuation must carry `(own_policy_id, expected_asset_name) qty 1`). |
-| `payment_hook` | `bootstrap_ref`, `expected_asset_name`, `config_policy_id`, `config_asset_name`, `coordinator_credential: Credential` (`validators/payment_hook.ak:15-20`) | `config_policy_id` + `config_asset_name` are used to find the Config NFT at runtime (`payment_hook.ak:36-46, 211-239`); `coordinator_credential` is wired into the initial `ConfigDatum` at hook bootstrap (`payment_hook.ak:75-76`) and from then on the coordinator credential is re-derived from `ConfigDatum.update_coordinator_credential` rather than from the parameter. The compile-time parameter is what allowed bootstrap to assert the new Config datum names this exact credential. |
+| `payment_hook` | `bootstrap_ref`, `expected_asset_name`, `config_policy_id`, `config_asset_name`, `coordinator_credential: Credential` (`validators/payment_hook.ak:15-20`) | `config_policy_id` + `config_asset_name` are used to find the Config NFT at runtime (`payment_hook.ak:36-46, 211-239`); `coordinator_credential` is wired into the initial `ConfigDatum` at hook bootstrap (`payment_hook.ak:75-76`); the coordinator credential is otherwise read from `ConfigDatum.update_coordinator_credential` rather than from the parameter. The compile-time parameter lets the bootstrap assert that the new Config datum names this exact credential. |
 | `receiver` | `bootstrap_ref`, `expected_asset_name`, `config_policy_id`, `config_asset_name` (`validators/receiver.ak:15-19`) | `config_policy_id` + `config_asset_name` are used by `find_visible_config_input` on every receiver mint and on `AccrueFee`/`Settle`/`Withdraw` spends. |
-| `pair_state` | `config_policy_id`, `config_asset_name`, `_receiver_hash: ScriptHash` | `config_policy_id`/`asset_name` are searched on every mint and spend so the Config datum can be decoded to read the coordinator credential. `_receiver_hash` is now a script-identity parameter only — the validator body never reads it, because `update_coordinator` enforces receiver identity globally via `valid_receiver_accrue_fee`. `pair_state.mint` binds each minted Pair NFT through `pair_mint_intent_satisfied`, which decodes the coordinator's witness list once per batch mint and locally re-asserts `intent_expiry_satisfied`. `pair_state.spend.ApplyUpdate` uses `coordinator_in_update_mode`, which decodes ONLY the coordinator-redeemer constructor tag (rejecting `ApplySettle`); per-pair binding by name and intent expiry are not duplicated here. |
+| `pair_state` | `config_policy_id`, `config_asset_name`, `_receiver_hash: ScriptHash` | `config_policy_id`/`asset_name` are searched on every mint and spend so the Config datum can be decoded to read the coordinator credential. `_receiver_hash` is a script-identity parameter only — the validator body never reads it, because `update_coordinator` enforces receiver identity globally via `valid_receiver_accrue_fee`. `pair_state.mint` binds each minted Pair NFT through `pair_mint_intent_satisfied`, which decodes the coordinator's witness list once per batch mint and locally re-asserts `intent_expiry_satisfied`. `pair_state.spend.ApplyUpdate` uses `coordinator_in_update_mode`, which decodes ONLY the coordinator-redeemer constructor tag (rejecting `ApplySettle`); per-pair binding by name and intent expiry are not duplicated here. |
 | `update_coordinator` | `config_policy_id`, `config_asset_name` (`validators/update_coordinator.ak:30-33`) | Used to locate Config as a reference input on every coordinator withdraw (`update_coordinator.ak:39-48`). All other identifiers (hook NFT, receiver NFT, pair policy) come from runtime witnesses, not parameters. |
 | `reference_holder` | `config_policy_id: PolicyId`, `config_asset_name: AssetName` (`validators/reference_holder.ak:2-3`) | Admin-gated spend: requires the Config NFT as a reference input and a Config signer key in the transaction. This allows DIA to reclaim locked ADA when upgrading contracts. All consumers cite UTxOs at this address as `reference_input`s; no on-chain check enforces which UTxOs are cited. |
 
@@ -1272,12 +1347,13 @@ at compile time.
 
 ## 9. Off-chain feeder architecture
 
-### 9.1 Persistence model — DB as source of truth
+### 9.1 Persistence model — DB + pair-state files
 
-The feeder uses a 6-table relational schema (SQLite by default, optional Postgres) as
-its single source of truth. No JSON checkpoint files are written at runtime. All
-observable state — chain progress, event dedup, Cardano submissions, price cache,
-performance metrics, alerts — is in the database.
+The feeder uses a 6-table relational schema (SQLite by default, optional Postgres)
+for scanner progress, event dedup, Cardano submission history, performance metrics,
+and alert history. Confirmed Cardano pair snapshots are also persisted as
+`clients/*/pairs/*.json` files in the active run dir; those files are the cold-start
+source used to rebuild the in-memory price cache.
 
 | Table | Purpose |
 |---|---|
@@ -1292,6 +1368,12 @@ The checkpoint value (`chain_state.last_processed_block`) always wins over the Y
 `start_block` once the feeder has seen at least one block. Crash recovery on startup
 marks any `pending` or `submitted` transactions as `failed` so the state machine
 restarts clean.
+
+Before cron/alerting start, the daemon also reconciles the active run's
+`clients/*/pairs/*.json` files against live Cardano pair UTxOs, hydrates the
+in-memory `priceCache`, and seeds last-confirmed metrics/readiness from that
+confirmed pair-state snapshot. The cache is therefore restart-safe without
+depending on fresh DIA events to arrive first.
 
 ### 9.2 Worker-pool layering
 
@@ -1342,14 +1424,24 @@ thread) together guarantee that no two Cardano transactions contend for the same
 UTxO. The JS event loop is single-threaded, so the LaneCoalescer state machine is
 race-free without a mutex.
 
+**Build-step resilience.** The final stage builds each tx with `@lucid-evolution/lucid`,
+whose `.complete()` (CML WASM) intermittently throws a transient detached-ArrayBuffer
+error. The build is retried by rebuilding a fresh tx — never by re-completing the stale
+builder (which would duplicate outputs) and never by re-submitting an already-submitted
+tx; on persistent failure the daemon self-exits (code 17) so a supervisor restarts it with
+a fresh WASM module, and state resumes from the DB. The full design (the shared
+`completeWithRetry` wrapper, the CLI fresh-process step retry, and the daemon's
+consecutive-failure self-exit) is documented in
+[`feeder.md` §20](./feeder.md#20-lucid-wasm-build-resilience-submissionfinality-hardening).
+
 ### 9.3 Cron service
 
 When `cron_service.enabled = true` in `infrastructure.<network>.yaml`, the cron service
-runs a periodic tick loop. On each tick it reads the on-chain confirmed price timestamp
-for every cron-enabled destination (from `contract_symbol_updates`) and compares it
-against the `time_threshold` configured on that router destination. If the on-chain
-timestamp is older than `time_threshold`, the cron service re-submits the latest known
-intent (held in the `LatestIntentCache`) through the same submission path as live events.
+runs a periodic tick loop. On each tick it reads the last confirmed timestamp from the
+hydrated `priceCache` for every cron-enabled destination and compares it against the
+`time_threshold` configured on that router destination. If the on-chain timestamp is
+older than `time_threshold`, the cron service re-submits the latest known intent (held
+in the `LatestIntentCache`) through the same coalescer submission path as live events.
 
 The cron service skips re-submission when the latest intent hash already matches the
 on-chain confirmed hash (`outcome = "skipped_already_fresh"`), ensuring idempotency.
@@ -1390,21 +1482,10 @@ on Prometheus metric data.
 
 ### 9.6 Spectra parity
 
-The feeder naming follows the
-[Spectra interoperability bridge](https://github.com/diadata-org/Spectra-interoperability)
-(`services/bridge/`) as the canonical reference for all metric names, API paths,
-config keys, and DB column names. Deviations from Spectra are Cardano-specific
-extensions (e.g. `cardano.*` config block, `fee_paid_lovelace`, Cardano network
-selectors). The full disposition register — which Spectra metric names, API paths,
-config keys, and DB columns are matched 1:1 versus adapted for Cardano — is the
-"Spectra parity and Cardano divergences" table in the feeder architecture guide
-([`docs/architecture/feeder.md` §15](./feeder.md#spectra-parity-and-cardano-divergences-full-table)).
-
-Typed Spectra keys that are surfaced in the YAML but **not wired** to runtime behaviour
-yet (e.g. `replica.*` HA failover, dedicated head-tracker / gap-detection loops,
-`listen_addr`) are inventoried in
-[`docs/architecture/feeder.md` §17](./feeder.md#17-state-implemented--m2--deferred-to-m3).
-Each is either a future M3 wiring task or a permanent "excluded" classification
-(multi-chain / EVM-destination Spectra subsystems).
+The feeder's Spectra parity disposition — which Spectra metric names, API paths,
+config keys, and DB columns are matched 1:1 versus adapted for Cardano, plus the
+typed-but-not-yet-wired keys — lives in the feeder architecture guide:
+[`docs/architecture/feeder.md` §15](./feeder.md#spectra-parity-and-cardano-divergences-full-table)
+and [§17](./feeder.md#17-state-implemented--m2--deferred-to-m3).
 
 ---

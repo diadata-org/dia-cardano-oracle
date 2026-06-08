@@ -198,9 +198,9 @@ aggregate accrued across shards.
     native-token junk, or oversized-datum UTxOs a griefer might park there (they stay
     harmlessly at the address, they do not block the Receiver).
   - **Merge**: build a tx that consumes the Receiver UTxO + the selected deposit UTxOs and
-    recreates the Receiver with `balance += Σ swept` (the deposit-collect branch / a new
-    `AbsorbDeposits` redeemer), then submit it through the same serial lane so it never
-    races the feeder's own updates.
+    recreates the Receiver with `balance += Σ swept` (the deposit-collect branch reusing the
+    Receiver's existing `TopUp` redeemer — the merge IS a TopUp, no new Receiver redeemer),
+    then submit it through the same serial lane so it never races the feeder's own updates.
   - **Trigger**: run the merge **when the Receiver balance falls below a threshold** —
     reuse the existing `receiver_balance_low` threshold (`infrastructure.<network>.yaml`
     `alerting.*`, surfaced by the `ReceiverBalanceLow` alert) rather than inventing a new
@@ -236,7 +236,7 @@ aggregate accrued across shards.
     Trigger --> Feeder
 
     Recv[Receiver UTxO<br/>NFT qty 1]:::recv
-    Merge((Merge / AbsorbDeposits tx)):::tx
+    Merge((Merge tx — reuses TopUp)):::tx
 
     Feeder -->|watch + filter<br/>skip dust/tokens| Merge
     D1 -->|swept| Merge
