@@ -1,0 +1,7 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts deposit:merge --protocol-state ./state/preview_run_20260606-082456/config-bootstrap.json --client-state ./state/preview_run_20260606-082456/clients/client-a.json
+
+[1G[0K[deposit] Connecting to Preview and selecting the configured wallet
+Cannot convert undefined to a BigInt
+[1G[0K⠙[1G[0K

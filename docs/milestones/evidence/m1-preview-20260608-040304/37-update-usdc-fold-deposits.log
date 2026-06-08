@@ -1,0 +1,67 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts update --fold-deposits --intent ./state/preview_run_20260608-040304/intents/usdc-usd-fold.signed.json --protocol-state ./state/preview_run_20260608-040304/config-bootstrap.json --client-state ./state/preview_run_20260608-040304/clients/client-a.json --pair-state ./state/preview_run_20260608-040304/clients/client-a/pairs/usdc-usd.json
+
+[1G[0K[update] Loading signed intent from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_run_20260608-040304/intents/usdc-usd-fold.signed.json
+[update] Loading client and protocol state
+[update] Connecting to Preview and selecting the configured wallet
+[update] Folding 1 side-deposit(s) totalling 5000000 lovelace into this update
+[update] Building Preview oracle update transaction
+[update] Tx resources: fee=0.936746 ADA (936746 lovelace), cpu=820404752, mem=2314237
+[update] Output[0] | addr=addr_test1wr00...zug5ju | lovelace=5.000000 ADA (5000000) | assets=def5c14be6bc...d4c1ac=1 | datum=inline(92B)
+[update] Output[1] | addr=addr_test1wrn8...n9jphd | lovelace=62.550000 ADA (62550000) | assets=e6721fde8af7...545f41=1 | datum=inline(19B)
+[update] Output[2] | addr=addr_test1qpgp...quxj3j | lovelace=763.374150 ADA (763374150)
+[update] Unsigned transaction ready: 196074d53db562af55a937fa86bfe41518b5041a2f9f29ad7290925e3cfc7f97
+[update] Submitted transaction hash: 196074d53db562af55a937fa86bfe41518b5041a2f9f29ad7290925e3cfc7f97
+[update] Confirmed by Blockfrost: oracle update transaction 196074d53db562af55a937fa86bfe41518b5041a2f9f29ad7290925e3cfc7f97.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_run_20260608-040304/clients/client-a/pairs/usdc-usd.json
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
+  },
+  "pair": {
+    "tokenName": "0156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac",
+    "pairId": "555344432f555344",
+    "pairUnit": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac",
+    "pairValidatorAddress": "addr_test1wr00ts2tu67wa7u4w6g3pgxgcl2nvtjch7830dhwrsdajqszug5ju"
+  },
+  "pairState": {
+    "pairId": "555344432f555344",
+    "price": "100045678",
+    "timestamp": "1780902601",
+    "nonce": "1780902601000",
+    "intentHash": "dcd769dc96eb70a8aedb37fe536d9490897f18b3c6466d4e98b04b3fb019a332",
+    "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+    "minUtxoLovelace": "5000000",
+    "intent": {
+      "intentType": "OracleUpdate",
+      "version": "1.0",
+      "chainId": "10050",
+      "nonce": "1780902601000",
+      "expiry": "1780906201",
+      "symbol": "USDC/USD",
+      "price": "100045678",
+      "timestamp": "1780902601",
+      "source": "DIA Oracle",
+      "signature": "d49817ab96978d63d0ea0397ff2b8cd59fe8185fc79204938b385f50409ce73a2308b6bc1e5caf186c4945a235e780ab2ff6638c4e6af915621c9e54e3f4ff521b",
+      "signer": "2b1c7eff297766569966b630a6862947a8e5285a"
+    }
+  },
+  "datum": {
+    "pairCbor": "d8799f48555344432f5553441a05f6936e1a6a266ac91b0000019ea61121285820dcd769dc96eb70a8aedb37fe536d9490897f18b3c6466d4e98b04b3fb019a332542b1c7eff297766569966b630a6862947a8e5285a1a004c4b40ff"
+  },
+  "transactions": [
+    {
+      "step": "preview:update",
+      "submittedTxHash": "26f31aa8ced1919755934cda200856db7c8367b43936137b97649a48096f1ed6",
+      "confirmed": true
+    },
+    {
+      "step": "preview:update",
+      "submittedTxHash": "196074d53db562af55a937fa86bfe41518b5041a2f9f29ad7290925e3cfc7f97",
+      "confirmed": true
+    }
+  ]
+}
+[1G[0K⠙[1G[0K

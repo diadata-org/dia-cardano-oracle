@@ -1,0 +1,10 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts pair:burn --protocol-state ./state/preview_run_20260606-082456/config-bootstrap.json --client-state ./state/preview_run_20260606-082456/clients/client-a.json --pair-state ./state/preview_run_20260606-082456/clients/client-a/pairs/dai-usd.json
+
+[1G[0K[pair:burn] Loading protocol, client and pair state
+[pair:burn] Connecting to Preview and selecting the configured wallet
+[pair:burn] Finding Config UTxO
+[pair:burn] Finding Pair UTxO
+Unable to observe a single pair UTxO at addr_test1wz0cphvkde9qdn88alf97cn8k9w60fwufnp32lncj2879zqy0nw7v with unit 9f80dd966e4a06cce7efd25f6267b15da7a5dc4cc3157e78928fe2880ae6401fc15363e085cf3d2f90ae10566e797d8686ab048ba30f5914c7ff2852.
+[1G[0K⠙[1G[0K

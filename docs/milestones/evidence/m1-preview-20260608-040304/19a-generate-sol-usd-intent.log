@@ -1,0 +1,28 @@
+[run] intent:create-and-sign --protocol-state ./state/preview_run_20260608-040304/config-bootstrap.json --intent-type OracleUpdate --symbol SOL/USD --price 18500000000 --source "DIA Oracle" --out ./state/preview_run_20260608-040304/intents/sol-usd.signed.json
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts intent:create-and-sign --protocol-state ./state/preview_run_20260608-040304/config-bootstrap.json --intent-type OracleUpdate --symbol SOL/USD --price 18500000000 --source DIA Oracle --out ./state/preview_run_20260608-040304/intents/sol-usd.signed.json
+
+[1G[0K[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_run_20260608-040304/intents/sol-usd.signed.json
+{
+  "intent": {
+    "intentType": "OracleUpdate",
+    "version": "1.0",
+    "chainId": "10050",
+    "nonce": "1780894397000",
+    "expiry": "1780897997",
+    "symbol": "SOL/USD",
+    "price": "18500000000",
+    "timestamp": "1780894397",
+    "source": "DIA Oracle",
+    "signature": "0x9b331740f0441da63e5796f4bd96e66172228644d63ada613efbbeaddf135f837fd8935fdb9731e5eb6b0bc2fb5fdc07727b8cf418de387ac4539caed33a02b71b",
+    "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+  },
+  "witness": {
+    "signerPublicKey": "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531",
+    "signerAddress": "0x2b1c7eff297766569966b630a6862947a8e5285a",
+    "intentHash": "4c42eb9a3b9b1e46c131307639a9925f7422c3405d0c870e6b4f596add9399a5",
+    "compactSignature": "9b331740f0441da63e5796f4bd96e66172228644d63ada613efbbeaddf135f837fd8935fdb9731e5eb6b0bc2fb5fdc07727b8cf418de387ac4539caed33a02b7"
+  }
+}
+[1G[0K⠙[1G[0K

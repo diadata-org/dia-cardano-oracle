@@ -1,0 +1,28 @@
+[run] intent:create-and-sign --protocol-state ./state/preview_run_20260608-040304/config-bootstrap.json --intent-type OracleUpdate --symbol BNB/USD --price 61500000000 --source "DIA Oracle" --out ./state/preview_run_20260608-040304/intents/bnb-usd.signed.json
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts intent:create-and-sign --protocol-state ./state/preview_run_20260608-040304/config-bootstrap.json --intent-type OracleUpdate --symbol BNB/USD --price 61500000000 --source DIA Oracle --out ./state/preview_run_20260608-040304/intents/bnb-usd.signed.json
+
+[1G[0K[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_run_20260608-040304/intents/bnb-usd.signed.json
+{
+  "intent": {
+    "intentType": "OracleUpdate",
+    "version": "1.0",
+    "chainId": "10050",
+    "nonce": "1780894626000",
+    "expiry": "1780898226",
+    "symbol": "BNB/USD",
+    "price": "61500000000",
+    "timestamp": "1780894626",
+    "source": "DIA Oracle",
+    "signature": "0x01a963dd933f487a2db04c0c5fba127713c10a8cde6faa6c6266b9f8121e4a361bd620f3e1256e94c56b0d18bd5e97a1a359a18dcc7828a94469b80e31eda6fe1b",
+    "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+  },
+  "witness": {
+    "signerPublicKey": "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531",
+    "signerAddress": "0x2b1c7eff297766569966b630a6862947a8e5285a",
+    "intentHash": "7c7bea79519f73cc6778085fd7e31cb27eeff176ca2be6b6efc995757f54138a",
+    "compactSignature": "01a963dd933f487a2db04c0c5fba127713c10a8cde6faa6c6266b9f8121e4a361bd620f3e1256e94c56b0d18bd5e97a1a359a18dcc7828a94469b80e31eda6fe"
+  }
+}
+[1G[0K⠙[1G[0K

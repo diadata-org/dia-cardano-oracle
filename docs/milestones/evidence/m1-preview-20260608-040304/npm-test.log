@@ -1,0 +1,378 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 test
+> tsx src/__tests__/run-tests.ts
+
+[config:parameterize] Using Config values from the protocol artifact
+[config:parameterize] Connecting to Preview and selecting the configured wallet
+[config:parameterize] Using wallet bootstrap UTxO 0000000000000000000000000000000000000000000000000000000000000000#0
+[config:parameterize] Deriving parameterized Config and Coordinator scripts offline
+[config:bootstrap] Using Config values from the protocol artifact
+[config:bootstrap] Connecting to Preview and selecting the configured wallet
+[config:bootstrap] Selected wallet bootstrap UTxO 0000000000000000000000000000000000000000000000000000000000000000#0
+[config:bootstrap] Loading Config and Coordinator scripts from compiled state
+[config:bootstrap] Building Preview config bootstrap transaction
+[config:bootstrap] Tx resources: fee=0.314842 ADA (314842 lovelace), cpu=63369922, mem=196946
+[config:bootstrap] Output[0] | addr=addr_test1wqfm...w6rtsu | lovelace=5.000000 ADA (5000000) | assets=13be3a1a2ed0...464947=1 | datum=inline(140B)
+[config:bootstrap] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=49994.685158 ADA (49994685158)
+[config:bootstrap] Unsigned transaction ready: 30872a4a009589c89c14cb652024173f07a272bbdc1dd10e5a77bfe745b9c70f
+[config:bootstrap] Signing transaction with the configured wallet
+[config:bootstrap] Submitting transaction to Preview
+[config:bootstrap] Submitted transaction hash: 30872a4a009589c89c14cb652024173f07a272bbdc1dd10e5a77bfe745b9c70f
+[config:bootstrap] Waiting for transaction confirmation on Preview
+[config:bootstrap] Confirmed by Blockfrost: config bootstrap transaction 30872a4a009589c89c14cb652024173f07a272bbdc1dd10e5a77bfe745b9c70f.
+[config:reference-scripts] Connecting to Preview and selecting the configured wallet
+[config:reference-scripts] Computed min lovelace for reference-script outputs: configValidator=11999040, coordinatorValidator=35919540
+[config:reference-scripts] Building Preview config reference-script publish transaction
+[config:reference-scripts] Tx resources: fee=0.640745 ADA (640745 lovelace), cpu=0, mem=0
+[config:reference-scripts] Output[0] | addr=addr_test1wzg9...8hq5f6 | lovelace=11.999040 ADA (11999040) | scriptRef=2579B(PlutusV3)
+[config:reference-scripts] Output[1] | addr=addr_test1wzg9...8hq5f6 | lovelace=35.919540 ADA (35919540) | scriptRef=8129B(PlutusV3)
+[config:reference-scripts] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49946.125833 ADA (49946125833)
+[config:reference-scripts] Unsigned transaction ready: f441ac802b15a26d35a496148c20176bab4330d9898cf3e551a5dacaee1e7f01
+[config:reference-scripts] Submitted transaction hash: f441ac802b15a26d35a496148c20176bab4330d9898cf3e551a5dacaee1e7f01
+[config:reference-scripts] Confirmed by Blockfrost: config reference-script publish transaction f441ac802b15a26d35a496148c20176bab4330d9898cf3e551a5dacaee1e7f01.
+[payment-hook:parameterize] Using PaymentHook values from the protocol artifact
+[payment-hook:parameterize] Connecting to Preview and selecting the configured wallet
+[payment-hook:parameterize] Using wallet bootstrap UTxO f441ac802b15a26d35a496148c20176bab4330d9898cf3e551a5dacaee1e7f01#2
+[payment-hook:parameterize] Deriving parameterized PaymentHook scripts offline
+[payment-hook:bootstrap] Using PaymentHook values from the protocol artifact
+[payment-hook:bootstrap] Loading config state from /tmp/dia-emulator-flow-moEPZO/config-bootstrap.json
+[payment-hook:bootstrap] Connecting to Preview and selecting the configured wallet
+[payment-hook:bootstrap] Building Preview payment-hook bootstrap transaction
+[payment-hook:bootstrap] Tx resources: fee=0.621310 ADA (621310 lovelace), cpu=311011811, mem=939983
+[payment-hook:bootstrap] Output[0] | addr=addr_test1wqfm...w6rtsu | lovelace=5.000000 ADA (5000000) | assets=13be3a1a2ed0...464947=1 | datum=inline(227B)
+[payment-hook:bootstrap] Output[1] | addr=addr_test1wp75...8meml7 | lovelace=5.000000 ADA (5000000) | assets=7d4099ae8af9...4f4f4b=1 | datum=inline(92B)
+[payment-hook:bootstrap] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49938.504523 ADA (49938504523)
+[payment-hook:bootstrap] Unsigned transaction ready: 97cf3f8e00c2b754f1ddd8f42d3fab2cf7cd91c3a366264f19aedbce06a61a2c
+[payment-hook:bootstrap] Submitted transaction hash: 97cf3f8e00c2b754f1ddd8f42d3fab2cf7cd91c3a366264f19aedbce06a61a2c
+[payment-hook:bootstrap] Confirmed by Blockfrost: payment-hook bootstrap transaction 97cf3f8e00c2b754f1ddd8f42d3fab2cf7cd91c3a366264f19aedbce06a61a2c.
+[payment-hook:reference-script] Connecting to Preview and selecting the configured wallet
+[payment-hook:reference-script] Computed min lovelace for reference-script outputs: paymentHookValidator=23200730
+[payment-hook:reference-script] Building Preview payment-hook reference-script publish transaction
+[payment-hook:reference-script] Tx resources: fee=0.395445 ADA (395445 lovelace), cpu=0, mem=0
+[payment-hook:reference-script] Output[0] | addr=addr_test1wzg9...8hq5f6 | lovelace=23.200730 ADA (23200730) | scriptRef=5178B(PlutusV3)
+[payment-hook:reference-script] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=49914.908348 ADA (49914908348)
+[payment-hook:reference-script] Unsigned transaction ready: b07929f0ce7ae84de28ba55653ce456e541c36cd3437d2226d0f34c09d66829d
+[payment-hook:reference-script] Submitted transaction hash: b07929f0ce7ae84de28ba55653ce456e541c36cd3437d2226d0f34c09d66829d
+[payment-hook:reference-script] Confirmed by Blockfrost: payment-hook reference-script publish transaction b07929f0ce7ae84de28ba55653ce456e541c36cd3437d2226d0f34c09d66829d.
+[receiver:parameterize] Using receiver values from the client artifact
+[receiver:parameterize] Connecting to Preview and selecting the configured wallet
+[receiver:parameterize] Using wallet bootstrap UTxO b07929f0ce7ae84de28ba55653ce456e541c36cd3437d2226d0f34c09d66829d#1
+[receiver:parameterize] Deriving parameterized Receiver and Pair scripts offline
+[receiver:bootstrap] Using Receiver values from the client artifact
+[receiver:bootstrap] Loading config state from /tmp/dia-emulator-flow-moEPZO/clients/client-a.json
+[receiver:bootstrap] Connecting to Preview and selecting the configured wallet
+[receiver:bootstrap] Building Preview receiver bootstrap transaction
+[receiver:bootstrap] Tx resources: fee=0.446863 ADA (446863 lovelace), cpu=94885028, mem=299770
+[receiver:bootstrap] Output[0] | addr=addr_test1wr3k...wdjyj0 | lovelace=5.000000 ADA (5000000) | assets=e36022be3532...545f41=1 | datum=inline(11B)
+[receiver:bootstrap] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=49909.461485 ADA (49909461485)
+[receiver:bootstrap] Unsigned transaction ready: fbf8b05810b4a34cb7149a6e8f9448c960efc68511b1d2a64145d89235de204d
+[receiver:bootstrap] Submitted transaction hash: fbf8b05810b4a34cb7149a6e8f9448c960efc68511b1d2a64145d89235de204d
+[receiver:bootstrap] Confirmed by Blockfrost: receiver bootstrap transaction fbf8b05810b4a34cb7149a6e8f9448c960efc68511b1d2a64145d89235de204d.
+[reference-scripts:publish-client] Loading client state from /tmp/dia-emulator-flow-moEPZO/clients/client-a.json
+[reference-scripts:publish-client] Connecting to Preview and selecting the configured wallet
+[reference-scripts:publish-client] Computed min lovelace for reference-script outputs: receiverValidator=24265300, pairValidator=21683610, pairMintPolicy=21683610, depositValidator=4163460
+[reference-scripts:publish-client] Building Preview client reference-script publish transaction
+[reference-scripts:publish-client] Tx resources: fee=0.870425 ADA (870425 lovelace), cpu=0, mem=0
+[reference-scripts:publish-client] Output[0] | addr=addr_test1wzg9...8hq5f6 | lovelace=24.265300 ADA (24265300) | scriptRef=5425B(PlutusV3)
+[reference-scripts:publish-client] Output[1] | addr=addr_test1wzg9...8hq5f6 | lovelace=21.683610 ADA (21683610) | scriptRef=4826B(PlutusV3)
+[reference-scripts:publish-client] Output[2] | addr=addr_test1wzg9...8hq5f6 | lovelace=21.683610 ADA (21683610) | scriptRef=4826B(PlutusV3)
+[reference-scripts:publish-client] Output[3] | addr=addr_test1wzg9...8hq5f6 | lovelace=4.163460 ADA (4163460) | scriptRef=761B(PlutusV3)
+[reference-scripts:publish-client] Output[4] | addr=addr_test1qp76...r64e2n | lovelace=49836.795080 ADA (49836795080)
+[reference-scripts:publish-client] Unsigned transaction ready: 7b403803945034fa4e7ab132a504659a55e1dec80d47aea84cd6f3fd25939881
+[reference-scripts:publish-client] Submitted transaction hash: 7b403803945034fa4e7ab132a504659a55e1dec80d47aea84cd6f3fd25939881
+[reference-scripts:publish-client] Confirmed by Blockfrost: client reference-script publish transaction 7b403803945034fa4e7ab132a504659a55e1dec80d47aea84cd6f3fd25939881.
+[receiver:top-up] Using amountLovelace=200000000 for receiver top-up
+[receiver:top-up] Loading client state from /tmp/dia-emulator-flow-moEPZO/clients/client-a.json
+[receiver:top-up] Connecting to Preview and selecting the configured wallet
+[receiver:top-up] Building Preview receiver top-up transaction
+[receiver:top-up] Tx resources: fee=0.364496 ADA (364496 lovelace), cpu=79442014, mem=250836
+[receiver:top-up] Output[0] | addr=addr_test1wr3k...wdjyj0 | lovelace=205.000000 ADA (205000000) | assets=e36022be3532...545f41=1 | datum=inline(15B)
+[receiver:top-up] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=49636.430584 ADA (49636430584)
+[receiver:top-up] Unsigned transaction ready: 7bcca6f2bbf986bf60bea88ab8d0dc4e8295aeceff78bd336753ecb54f1a4465
+[receiver:top-up] Submitted transaction hash: 7bcca6f2bbf986bf60bea88ab8d0dc4e8295aeceff78bd336753ecb54f1a4465
+[receiver:top-up] Confirmed by Blockfrost: receiver top-up transaction 7bcca6f2bbf986bf60bea88ab8d0dc4e8295aeceff78bd336753ecb54f1a4465.
+[deposit] Connecting to Preview and selecting the configured wallet
+[deposit] Paying 5000000 lovelace to deposit address addr_test1wr2kngamgfc45r5myg2ey2anyj3grs7kp2r40kgt9txa8ws460unp
+[deposit] Tx resources: fee=0.167261 ADA (167261 lovelace), cpu=0, mem=0
+[deposit] Submitted transaction hash: 37e78ad5dd3f67856b0b55234a5c5de808d891be385613b4e66d3a326d3e76b2
+[deposit] Confirmed by Blockfrost: deposit fund transaction 37e78ad5dd3f67856b0b55234a5c5de808d891be385613b4e66d3a326d3e76b2.
+[deposit] Connecting to Preview and selecting the configured wallet
+[deposit] Paying 5000000 lovelace to deposit address addr_test1wr2kngamgfc45r5myg2ey2anyj3grs7kp2r40kgt9txa8ws460unp
+[deposit] Tx resources: fee=0.167261 ADA (167261 lovelace), cpu=0, mem=0
+[deposit] Submitted transaction hash: d3997a4a7602ca72440a9b2758870b0fa5358be08c3050821679b20716371bce
+[deposit] Confirmed by Blockfrost: deposit fund transaction d3997a4a7602ca72440a9b2758870b0fa5358be08c3050821679b20716371bce.
+[deposit] Connecting to Preview and selecting the configured wallet
+[deposit] Merging 2 deposit(s) totalling 10000000 lovelace (0 skipped) into the receiver
+[deposit] Tx resources: fee=0.437404 ADA (437404 lovelace), cpu=214009198, mem=647604
+[deposit] Output[0] | addr=addr_test1wr3k...wdjyj0 | lovelace=215.000000 ADA (215000000) | assets=e36022be3532...545f41=1 | datum=inline(15B)
+[deposit] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=49625.658658 ADA (49625658658)
+[deposit] Submitted transaction hash: 8e68acd48bafac0412d07c727e59a9d6f49b60dc44471e25bb00f8f58de3fc41
+[deposit] Confirmed by Blockfrost: deposit merge transaction 8e68acd48bafac0412d07c727e59a9d6f49b60dc44471e25bb00f8f58de3fc41.
+[deposit] Connecting to Preview and selecting the configured wallet
+[deposit] Paying 7000000 lovelace to deposit address addr_test1wr2kngamgfc45r5myg2ey2anyj3grs7kp2r40kgt9txa8ws460unp
+[deposit] Tx resources: fee=0.167261 ADA (167261 lovelace), cpu=0, mem=0
+[deposit] Submitted transaction hash: 6787fcdd91c64f5899e7e6beb2db79b85debd8b7aa195a702f931903fdac73fc
+[deposit] Confirmed by Blockfrost: deposit fund transaction 6787fcdd91c64f5899e7e6beb2db79b85debd8b7aa195a702f931903fdac73fc.
+[update] Loading signed intent from /tmp/dia-emulator-flow-moEPZO/intents/pair-0.signed.json
+[update] Loading client and protocol state
+[update] Connecting to Preview and selecting the configured wallet
+[update] Folding 1 side-deposit(s) totalling 7000000 lovelace into this update
+[update] Building Preview oracle update transaction
+[update] Tx resources: fee=0.865954 ADA (865954 lovelace), cpu=815034416, mem=2293192
+[update] Output[0] | addr=addr_test1wrdk...5jxg9x | lovelace=5.000000 ADA (5000000) | assets=db6132e3d19c...26f61f=1 | datum=inline(93B)
+[update] Output[1] | addr=addr_test1wr3k...wdjyj0 | lovelace=222.000000 ADA (222000000) | assets=e36022be3532...545f41=1 | datum=inline(19B)
+[update] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49612.625443 ADA (49612625443)
+[update] Unsigned transaction ready: b46bf807c62cf79dce3917f09b7748185880a58366eaf7fc589f9339ae6f28ee
+[update] Submitted transaction hash: b46bf807c62cf79dce3917f09b7748185880a58366eaf7fc589f9339ae6f28ee
+[update] Confirmed by Blockfrost: oracle update transaction b46bf807c62cf79dce3917f09b7748185880a58366eaf7fc589f9339ae6f28ee.
+[update] Loading signed intent from /tmp/dia-emulator-flow-moEPZO/intents/pair-1.signed.json
+[update] Loading client and protocol state
+[update] Connecting to Preview and selecting the configured wallet
+[update] Building Preview oracle update transaction
+[update] Tx resources: fee=0.812022 ADA (812022 lovelace), cpu=707853653, mem=1954146
+[update] Output[0] | addr=addr_test1wrdk...5jxg9x | lovelace=5.000000 ADA (5000000) | assets=db6132e3d19c...bde94d=1 | datum=inline(93B)
+[update] Output[1] | addr=addr_test1wr3k...wdjyj0 | lovelace=222.000000 ADA (222000000) | assets=e36022be3532...545f41=1 | datum=inline(19B)
+[update] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49606.813421 ADA (49606813421)
+[update] Unsigned transaction ready: 3fb230dc2e51a0fe532802b3af602be876e0495c616761748257af2e35e0ba0f
+[update] Submitted transaction hash: 3fb230dc2e51a0fe532802b3af602be876e0495c616761748257af2e35e0ba0f
+[update] Confirmed by Blockfrost: oracle update transaction 3fb230dc2e51a0fe532802b3af602be876e0495c616761748257af2e35e0ba0f.
+[update:batch] Loading batch update manifest from /tmp/dia-emulator-flow-moEPZO/update-batches/batch-1.manifest.json
+[update:batch] Connecting to Preview and selecting the configured wallet
+[update:batch] Building Preview oracle batch update transaction
+[update:batch] Tx resources: fee=0.882417 ADA (882417 lovelace), cpu=710642076, mem=1966951
+[update:batch] Output[0] | addr=addr_test1wrdk...5jxg9x | lovelace=5.000000 ADA (5000000) | assets=db6132e3d19c...bde94d=1 | datum=inline(93B)
+[update:batch] Output[1] | addr=addr_test1wr3k...wdjyj0 | lovelace=222.000000 ADA (222000000) | assets=e36022be3532...545f41=1 | datum=inline(19B)
+[update:batch] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49605.931004 ADA (49605931004)
+[update:batch] Unsigned transaction ready: fda584e8588028f4dcd8a00c8358ab92197a74350a69e07cd2606973cd0151af
+[update:batch] Submitted transaction hash: fda584e8588028f4dcd8a00c8358ab92197a74350a69e07cd2606973cd0151af
+[update:batch] Confirmed by Blockfrost: oracle batch update transaction fda584e8588028f4dcd8a00c8358ab92197a74350a69e07cd2606973cd0151af.
+[receiver:parameterize] Using receiver values from the client artifact
+[receiver:parameterize] Connecting to Preview and selecting the configured wallet
+[receiver:parameterize] Using wallet bootstrap UTxO fda584e8588028f4dcd8a00c8358ab92197a74350a69e07cd2606973cd0151af#2
+[receiver:parameterize] Deriving parameterized Receiver and Pair scripts offline
+[receiver:bootstrap] Using Receiver values from the client artifact
+[receiver:bootstrap] Loading config state from /tmp/dia-emulator-flow-moEPZO/clients/client-b.json
+[receiver:bootstrap] Connecting to Preview and selecting the configured wallet
+[receiver:bootstrap] Building Preview receiver bootstrap transaction
+[receiver:bootstrap] Tx resources: fee=0.446863 ADA (446863 lovelace), cpu=94885028, mem=299770
+[receiver:bootstrap] Output[0] | addr=addr_test1wrmy...d0ujcr | lovelace=5.000000 ADA (5000000) | assets=f644a0a88afc...545f42=1 | datum=inline(11B)
+[receiver:bootstrap] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=49600.484141 ADA (49600484141)
+[receiver:bootstrap] Unsigned transaction ready: 24a238f4311d77269d05d03199f95bcdf0e6195bc545a650fc9573f5ba28a89a
+[receiver:bootstrap] Submitted transaction hash: 24a238f4311d77269d05d03199f95bcdf0e6195bc545a650fc9573f5ba28a89a
+[receiver:bootstrap] Confirmed by Blockfrost: receiver bootstrap transaction 24a238f4311d77269d05d03199f95bcdf0e6195bc545a650fc9573f5ba28a89a.
+[reference-scripts:publish-client] Loading client state from /tmp/dia-emulator-flow-moEPZO/clients/client-b.json
+[reference-scripts:publish-client] Connecting to Preview and selecting the configured wallet
+[reference-scripts:publish-client] Computed min lovelace for reference-script outputs: receiverValidator=24265300, pairValidator=21683610, pairMintPolicy=21683610, depositValidator=4163460
+[reference-scripts:publish-client] Building Preview client reference-script publish transaction
+[reference-scripts:publish-client] Tx resources: fee=0.870425 ADA (870425 lovelace), cpu=0, mem=0
+[reference-scripts:publish-client] Output[0] | addr=addr_test1wzg9...8hq5f6 | lovelace=24.265300 ADA (24265300) | scriptRef=5425B(PlutusV3)
+[reference-scripts:publish-client] Output[1] | addr=addr_test1wzg9...8hq5f6 | lovelace=21.683610 ADA (21683610) | scriptRef=4826B(PlutusV3)
+[reference-scripts:publish-client] Output[2] | addr=addr_test1wzg9...8hq5f6 | lovelace=21.683610 ADA (21683610) | scriptRef=4826B(PlutusV3)
+[reference-scripts:publish-client] Output[3] | addr=addr_test1wzg9...8hq5f6 | lovelace=4.163460 ADA (4163460) | scriptRef=761B(PlutusV3)
+[reference-scripts:publish-client] Output[4] | addr=addr_test1qp76...r64e2n | lovelace=49527.817736 ADA (49527817736)
+[reference-scripts:publish-client] Unsigned transaction ready: 3fe8fb61c469181677cf53a7708e5664730bce9dcb9a80d7a647c4109306e422
+[reference-scripts:publish-client] Submitted transaction hash: 3fe8fb61c469181677cf53a7708e5664730bce9dcb9a80d7a647c4109306e422
+[reference-scripts:publish-client] Confirmed by Blockfrost: client reference-script publish transaction 3fe8fb61c469181677cf53a7708e5664730bce9dcb9a80d7a647c4109306e422.
+[receiver:top-up] Using amountLovelace=20000000 for receiver top-up
+[receiver:top-up] Loading client state from /tmp/dia-emulator-flow-moEPZO/clients/client-b.json
+[receiver:top-up] Connecting to Preview and selecting the configured wallet
+[receiver:top-up] Building Preview receiver top-up transaction
+[receiver:top-up] Tx resources: fee=0.364064 ADA (364064 lovelace), cpu=76816537, mem=246642
+[receiver:top-up] Output[0] | addr=addr_test1wrmy...d0ujcr | lovelace=25.000000 ADA (25000000) | assets=f644a0a88afc...545f42=1 | datum=inline(15B)
+[receiver:top-up] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=49507.453672 ADA (49507453672)
+[receiver:top-up] Unsigned transaction ready: 7d770bafbb52040b23a1ea450923c50bf8c19908b69f44fee4bd055262420df6
+[receiver:top-up] Submitted transaction hash: 7d770bafbb52040b23a1ea450923c50bf8c19908b69f44fee4bd055262420df6
+[receiver:top-up] Confirmed by Blockfrost: receiver top-up transaction 7d770bafbb52040b23a1ea450923c50bf8c19908b69f44fee4bd055262420df6.
+[update] Loading signed intent from /tmp/dia-emulator-flow-moEPZO/intents/client-b-pair-1.signed.json
+[update] Loading client and protocol state
+[update] Connecting to Preview and selecting the configured wallet
+[update] Building Preview oracle update transaction
+[update] Tx resources: fee=0.812022 ADA (812022 lovelace), cpu=707853653, mem=1954146
+[update] Output[0] | addr=addr_test1wqw6...6qg2kw | lovelace=5.000000 ADA (5000000) | assets=1da3594e9aa6...bde94d=1 | datum=inline(93B)
+[update] Output[1] | addr=addr_test1wrmy...d0ujcr | lovelace=25.000000 ADA (25000000) | assets=f644a0a88afc...545f42=1 | datum=inline(19B)
+[update] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49501.641650 ADA (49501641650)
+[update] Unsigned transaction ready: 56a49fd23fdf1427ac8036bb91284fec7e93800c7a1c6ded4528d24e2935d6c6
+[update] Submitted transaction hash: 56a49fd23fdf1427ac8036bb91284fec7e93800c7a1c6ded4528d24e2935d6c6
+[update] Confirmed by Blockfrost: oracle update transaction 56a49fd23fdf1427ac8036bb91284fec7e93800c7a1c6ded4528d24e2935d6c6.
+[settle] Loading protocol state from /tmp/dia-emulator-flow-moEPZO/config-bootstrap.json
+[settle] Loading 2 client states
+[settle] Connecting to Preview and selecting the configured wallet
+[settle] Building Preview settle transaction
+[settle] Settling 4000000 lovelace from 2 receivers to payment hook
+[settle] Tx resources: fee=1.042700 ADA (1042700 lovelace), cpu=888646665, mem=2781506
+[settle] Output[0] | addr=addr_test1wr3k...wdjyj0 | lovelace=219.000000 ADA (219000000) | assets=e36022be3532...545f41=1 | datum=inline(15B)
+[settle] Output[1] | addr=addr_test1wrmy...d0ujcr | lovelace=24.000000 ADA (24000000) | assets=f644a0a88afc...545f42=1 | datum=inline(15B)
+[settle] Output[2] | addr=addr_test1wp75...8meml7 | lovelace=9.000000 ADA (9000000) | assets=7d4099ae8af9...4f4f4b=1 | datum=inline(100B)
+[settle] Output[3] | addr=addr_test1qp76...r64e2n | lovelace=49500.598950 ADA (49500598950)
+[settle] Unsigned transaction ready: ad11a359b4e6776df7112a4c8d9e961515ee5f94650443becf40ed9285bcf2c6
+[settle] Submitted transaction hash: ad11a359b4e6776df7112a4c8d9e961515ee5f94650443becf40ed9285bcf2c6
+[settle] Confirmed by Blockfrost: settle transaction ad11a359b4e6776df7112a4c8d9e961515ee5f94650443becf40ed9285bcf2c6.
+[receiver:withdraw] Using amountLovelace=5000000 for receiver withdraw
+[receiver:withdraw] Loading client state from /tmp/dia-emulator-flow-moEPZO/clients/client-a.json
+[receiver:withdraw] Connecting to Preview and selecting the configured wallet
+[receiver:withdraw] Building Preview receiver withdraw transaction
+[receiver:withdraw] Tx resources: fee=0.396263 ADA (396263 lovelace), cpu=167896137, mem=521589
+[receiver:withdraw] Output[0] | addr=addr_test1wr3k...wdjyj0 | lovelace=214.000000 ADA (214000000) | assets=e36022be3532...545f41=1 | datum=inline(15B)
+[receiver:withdraw] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=5.000000 ADA (5000000)
+[receiver:withdraw] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49500.202687 ADA (49500202687)
+[receiver:withdraw] Unsigned transaction ready: d77821d1bd0f03ce1adbd138163291493a2519904767ef55a6513501188fd408
+[receiver:withdraw] Submitted transaction hash: d77821d1bd0f03ce1adbd138163291493a2519904767ef55a6513501188fd408
+[receiver:withdraw] Confirmed by Blockfrost: receiver withdraw transaction d77821d1bd0f03ce1adbd138163291493a2519904767ef55a6513501188fd408.
+[payment-hook:withdraw] Using amountLovelace=3000000 for payment-hook withdraw
+[payment-hook:withdraw] Loading config state from /tmp/dia-emulator-flow-moEPZO/config-bootstrap.json
+[payment-hook:withdraw] Connecting to Preview and selecting the configured wallet
+[payment-hook:withdraw] Building Preview payment-hook withdraw transaction
+[payment-hook:withdraw] Tx resources: fee=0.383659 ADA (383659 lovelace), cpu=147772891, mem=452902
+[payment-hook:withdraw] Output[0] | addr=addr_test1wp75...8meml7 | lovelace=6.000000 ADA (6000000) | assets=7d4099ae8af9...4f4f4b=1 | datum=inline(104B)
+[payment-hook:withdraw] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=3.000000 ADA (3000000)
+[payment-hook:withdraw] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49499.819028 ADA (49499819028)
+[payment-hook:withdraw] Unsigned transaction ready: 067157e1170253130609e6a5f8a2dfa0c9a58ed526393e3160db5449e80485ed
+[payment-hook:withdraw] Submitted transaction hash: 067157e1170253130609e6a5f8a2dfa0c9a58ed526393e3160db5449e80485ed
+[payment-hook:withdraw] Confirmed by Blockfrost: payment-hook withdraw transaction 067157e1170253130609e6a5f8a2dfa0c9a58ed526393e3160db5449e80485ed.
+[reclaim-reference-script:payment-hook] Fetching reference-script UTxOs and Config UTxO from chain
+[reclaim-reference-script:payment-hook] Building reclaim transaction (spending 1 UTxO(s))
+[reclaim-reference-script:payment-hook] Tx resources: fee=0.314883 ADA (314883 lovelace), cpu=39155379, mem=129894
+[reclaim-reference-script:payment-hook] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=22.885847 ADA (22885847)
+[reclaim-reference-script:payment-hook] Unsigned transaction ready: ae91fb8421d5817a803777463b4d216399294f885358dfe1d4168d10e308d71c
+[reclaim-reference-script:payment-hook] Submitted transaction hash: ae91fb8421d5817a803777463b4d216399294f885358dfe1d4168d10e308d71c
+[reclaim-reference-script:payment-hook] Confirmed by Blockfrost: reclaim-reference-script (payment-hook) transaction ae91fb8421d5817a803777463b4d216399294f885358dfe1d4168d10e308d71c.
+[payment-hook:reference-script] Connecting to Preview and selecting the configured wallet
+[payment-hook:reference-script] Computed min lovelace for reference-script outputs: paymentHookValidator=23200730
+[payment-hook:reference-script] Building Preview payment-hook reference-script publish transaction
+[payment-hook:reference-script] Tx resources: fee=0.395445 ADA (395445 lovelace), cpu=0, mem=0
+[payment-hook:reference-script] Output[0] | addr=addr_test1wzg9...8hq5f6 | lovelace=23.200730 ADA (23200730) | scriptRef=5178B(PlutusV3)
+[payment-hook:reference-script] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=49476.222853 ADA (49476222853)
+[payment-hook:reference-script] Unsigned transaction ready: 2b3464c69f211348be98f4d45c45203fa75157f34298f35a88757d0893e77505
+[payment-hook:reference-script] Submitted transaction hash: 2b3464c69f211348be98f4d45c45203fa75157f34298f35a88757d0893e77505
+[payment-hook:reference-script] Confirmed by Blockfrost: payment-hook reference-script publish transaction 2b3464c69f211348be98f4d45c45203fa75157f34298f35a88757d0893e77505.
+[receiver:withdraw] Using amountLovelace=209000000 for receiver withdraw
+[receiver:withdraw] Loading client state from /tmp/dia-emulator-flow-moEPZO/clients/client-a.json
+[receiver:withdraw] Connecting to Preview and selecting the configured wallet
+[receiver:withdraw] Building Preview receiver withdraw transaction
+[receiver:withdraw] Tx resources: fee=0.396519 ADA (396519 lovelace), cpu=170521614, mem=525783
+[receiver:withdraw] Output[0] | addr=addr_test1wr3k...wdjyj0 | lovelace=5.000000 ADA (5000000) | assets=e36022be3532...545f41=1 | datum=inline(11B)
+[receiver:withdraw] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=209.000000 ADA (209000000)
+[receiver:withdraw] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49475.826334 ADA (49475826334)
+[receiver:withdraw] Unsigned transaction ready: 98239d6b552f57696de2e3d194672e8cc539d9a222e6e088c6262aeb1ed370a4
+[receiver:withdraw] Submitted transaction hash: 98239d6b552f57696de2e3d194672e8cc539d9a222e6e088c6262aeb1ed370a4
+[receiver:withdraw] Confirmed by Blockfrost: receiver withdraw transaction 98239d6b552f57696de2e3d194672e8cc539d9a222e6e088c6262aeb1ed370a4.
+[pair:burn] Loading protocol, client and pair state
+[pair:burn] Connecting to Preview and selecting the configured wallet
+[pair:burn] Finding Config UTxO
+[pair:burn] Finding Pair UTxO
+[pair:burn] Burning Pair NFT db6132e3d19cff158434214c36d4118e2f5d99aac1f060055c4ba2199338e4f165c55e2a0d16f711c302df7f6f8ae8addb401c98c394d8305526f61f and recovering 5000000 lovelace.
+[pair:burn] Tx resources: fee=0.441313 ADA (441313 lovelace), cpu=158670212, mem=513069
+[pair:burn] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=4.558687 ADA (4558687)
+[pair:burn] Submitted: 93d8d9828108c1c7008330f797cff8d0a6ec1e2690eda4a8dc84f091340ba951
+[pair:burn] Confirmed by Blockfrost: pair:burn 93d8d9828108c1c7008330f797cff8d0a6ec1e2690eda4a8dc84f091340ba951.
+[pair:burn] Loading protocol, client and pair state
+[pair:burn] Connecting to Preview and selecting the configured wallet
+[pair:burn] Finding Config UTxO
+[pair:burn] Finding Pair UTxO
+[pair:burn] Burning Pair NFT db6132e3d19cff158434214c36d4118e2f5d99aac1f060055c4ba219fcc2bd79cd273b853d452fa31c230dca27b1b69577d2a204408853a803bde94d and recovering 5000000 lovelace.
+[pair:burn] Tx resources: fee=0.441313 ADA (441313 lovelace), cpu=158670212, mem=513069
+[pair:burn] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=4.558687 ADA (4558687)
+[pair:burn] Submitted: fa4b230e352c60d7dbe3a0eab5e64035bf79e11fb1c616860b437e0ede863143
+[pair:burn] Confirmed by Blockfrost: pair:burn fa4b230e352c60d7dbe3a0eab5e64035bf79e11fb1c616860b437e0ede863143.
+[receiver:burn] Loading protocol and client state
+[receiver:burn] Connecting to Preview and selecting the configured wallet
+[receiver:burn] Finding Config UTxO
+[receiver:burn] Finding Receiver UTxO
+[receiver:burn] Burning Receiver NFT e36022be35324dee6967b9a64522d5c4c82e0232afc89696b5a689584449415f52454345495645525f434c49454e545f41 and recovering 5000000 lovelace.
+[receiver:burn] Tx resources: fee=0.381457 ADA (381457 lovelace), cpu=143666856, mem=473687
+[receiver:burn] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=4.618543 ADA (4618543)
+[receiver:burn] Unsigned transaction ready: 204ee22c0a2af418c862f37a8df69cc8dcab5daa06684883526ddb40d053a740
+[receiver:burn] Submitted transaction hash: 204ee22c0a2af418c862f37a8df69cc8dcab5daa06684883526ddb40d053a740
+[receiver:burn] Confirmed by Blockfrost: receiver burn transaction 204ee22c0a2af418c862f37a8df69cc8dcab5daa06684883526ddb40d053a740.
+[receiver:withdraw] Using amountLovelace=19000000 for receiver withdraw
+[receiver:withdraw] Loading client state from /tmp/dia-emulator-flow-moEPZO/clients/client-b.json
+[receiver:withdraw] Connecting to Preview and selecting the configured wallet
+[receiver:withdraw] Building Preview receiver withdraw transaction
+[receiver:withdraw] Tx resources: fee=0.396519 ADA (396519 lovelace), cpu=170521614, mem=525783
+[receiver:withdraw] Output[0] | addr=addr_test1wrmy...d0ujcr | lovelace=5.000000 ADA (5000000) | assets=f644a0a88afc...545f42=1 | datum=inline(11B)
+[receiver:withdraw] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=19.000000 ADA (19000000)
+[receiver:withdraw] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49475.429815 ADA (49475429815)
+[receiver:withdraw] Unsigned transaction ready: 4adbf58cd81d14c262f2e315bca39965edd76f82e1f0c7274114460deda1cc7d
+[receiver:withdraw] Submitted transaction hash: 4adbf58cd81d14c262f2e315bca39965edd76f82e1f0c7274114460deda1cc7d
+[receiver:withdraw] Confirmed by Blockfrost: receiver withdraw transaction 4adbf58cd81d14c262f2e315bca39965edd76f82e1f0c7274114460deda1cc7d.
+[pair:burn] Loading protocol, client and pair state
+[pair:burn] Connecting to Preview and selecting the configured wallet
+[pair:burn] Finding Config UTxO
+[pair:burn] Finding Pair UTxO
+[pair:burn] Burning Pair NFT 1da3594e9aa65477c666ea32ce783b0ea0f1ccd52d2c0db0ae5034a9fcc2bd79cd273b853d452fa31c230dca27b1b69577d2a204408853a803bde94d and recovering 5000000 lovelace.
+[pair:burn] Tx resources: fee=0.441313 ADA (441313 lovelace), cpu=158670212, mem=513069
+[pair:burn] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=4.558687 ADA (4558687)
+[pair:burn] Submitted: 05a609ece65a012d9ebae00df815ea371dacdf25047024f40f4a93280acb2871
+[pair:burn] Confirmed by Blockfrost: pair:burn 05a609ece65a012d9ebae00df815ea371dacdf25047024f40f4a93280acb2871.
+[receiver:burn] Loading protocol and client state
+[receiver:burn] Connecting to Preview and selecting the configured wallet
+[receiver:burn] Finding Config UTxO
+[receiver:burn] Finding Receiver UTxO
+[receiver:burn] Burning Receiver NFT f644a0a88afceb489870e33bb199da0af04782178014890cfeee9bd34449415f52454345495645525f434c49454e545f42 and recovering 5000000 lovelace.
+[receiver:burn] Tx resources: fee=0.381457 ADA (381457 lovelace), cpu=143666856, mem=473687
+[receiver:burn] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=4.618543 ADA (4618543)
+[receiver:burn] Unsigned transaction ready: 9d9b8b6c22dca48d33a0f47236e5132e33eff1b9163c1583252ae83de240e4d2
+[receiver:burn] Submitted transaction hash: 9d9b8b6c22dca48d33a0f47236e5132e33eff1b9163c1583252ae83de240e4d2
+[receiver:burn] Confirmed by Blockfrost: receiver burn transaction 9d9b8b6c22dca48d33a0f47236e5132e33eff1b9163c1583252ae83de240e4d2.
+[payment-hook:withdraw] Using amountLovelace=1000000 for payment-hook withdraw
+[payment-hook:withdraw] Loading config state from /tmp/dia-emulator-flow-moEPZO/config-bootstrap.json
+[payment-hook:withdraw] Connecting to Preview and selecting the configured wallet
+[payment-hook:withdraw] Building Preview payment-hook withdraw transaction
+[payment-hook:withdraw] Tx resources: fee=0.384755 ADA (384755 lovelace), cpu=152380058, mem=469178
+[payment-hook:withdraw] Output[0] | addr=addr_test1wp75...8meml7 | lovelace=5.000000 ADA (5000000) | assets=7d4099ae8af9...4f4f4b=1 | datum=inline(100B)
+[payment-hook:withdraw] Output[1] | addr=addr_test1qp76...r64e2n | lovelace=1.000000 ADA (1000000)
+[payment-hook:withdraw] Output[2] | addr=addr_test1qp76...r64e2n | lovelace=49475.045060 ADA (49475045060)
+[payment-hook:withdraw] Unsigned transaction ready: de99e3060507cc737ce9156af5152bb7c403c5ada5fb72da3385d9b2bd6d821b
+[payment-hook:withdraw] Submitted transaction hash: de99e3060507cc737ce9156af5152bb7c403c5ada5fb72da3385d9b2bd6d821b
+[payment-hook:withdraw] Confirmed by Blockfrost: payment-hook withdraw transaction de99e3060507cc737ce9156af5152bb7c403c5ada5fb72da3385d9b2bd6d821b.
+[payment-hook:burn] Loading protocol state
+[payment-hook:burn] Connecting to Preview and selecting the configured wallet
+[payment-hook:burn] Finding Config UTxO
+[payment-hook:burn] Finding PaymentHook UTxO
+[payment-hook:burn] Burning PaymentHook NFT 7d4099ae8af9f2252724e9edccd46f7dc0dc0fdf5327129e75df6f134449415f5041594d454e545f484f4f4b and recovering 5000000 lovelace.
+[payment-hook:burn] Tx resources: fee=0.368252 ADA (368252 lovelace), cpu=120736448, mem=405724
+[payment-hook:burn] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=4.631748 ADA (4631748)
+[payment-hook:burn] Unsigned transaction ready: 146079f23615a16b819acbe4b3a33b3dd0d8397049a7d6a70c6ba988af3b8244
+[payment-hook:burn] Submitted transaction hash: 146079f23615a16b819acbe4b3a33b3dd0d8397049a7d6a70c6ba988af3b8244
+[payment-hook:burn] Confirmed by Blockfrost: payment-hook burn transaction 146079f23615a16b819acbe4b3a33b3dd0d8397049a7d6a70c6ba988af3b8244.
+[reclaim-reference-script:client] Fetching reference-script UTxOs and Config UTxO from chain
+[reclaim-reference-script:client] Building reclaim transaction (spending 4 UTxO(s))
+[reclaim-reference-script:client] Tx resources: fee=0.527401 ADA (527401 lovelace), cpu=210755520, mem=707688
+[reclaim-reference-script:client] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=71.268579 ADA (71268579)
+[reclaim-reference-script:client] Unsigned transaction ready: c7c869322ad146e637dbd4e27a86f79379057142786b576a816370d14faa9162
+[reclaim-reference-script:client] Submitted transaction hash: c7c869322ad146e637dbd4e27a86f79379057142786b576a816370d14faa9162
+[reclaim-reference-script:client] Confirmed by Blockfrost: reclaim-reference-script (client) transaction c7c869322ad146e637dbd4e27a86f79379057142786b576a816370d14faa9162.
+[reclaim-reference-script:client] Fetching reference-script UTxOs and Config UTxO from chain
+[reclaim-reference-script:client] Building reclaim transaction (spending 4 UTxO(s))
+[reclaim-reference-script:client] Tx resources: fee=0.527401 ADA (527401 lovelace), cpu=210755520, mem=707688
+[reclaim-reference-script:client] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=71.268579 ADA (71268579)
+[reclaim-reference-script:client] Unsigned transaction ready: 6f71479b5dcc2ba929f93d1c47997089563a6c4a6ba7adf55d2746ba6fc9a4cb
+[reclaim-reference-script:client] Submitted transaction hash: 6f71479b5dcc2ba929f93d1c47997089563a6c4a6ba7adf55d2746ba6fc9a4cb
+[reclaim-reference-script:client] Confirmed by Blockfrost: reclaim-reference-script (client) transaction 6f71479b5dcc2ba929f93d1c47997089563a6c4a6ba7adf55d2746ba6fc9a4cb.
+[reclaim-reference-script:payment-hook] Fetching reference-script UTxOs and Config UTxO from chain
+[reclaim-reference-script:payment-hook] Building reclaim transaction (spending 1 UTxO(s))
+[reclaim-reference-script:payment-hook] Tx resources: fee=0.314883 ADA (314883 lovelace), cpu=39155379, mem=129894
+[reclaim-reference-script:payment-hook] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=22.885847 ADA (22885847)
+[reclaim-reference-script:payment-hook] Unsigned transaction ready: 78f92162fd386604115cf8ec2ba55b5f53f3c923b9f69b6d586b98c1f3aea054
+[reclaim-reference-script:payment-hook] Submitted transaction hash: 78f92162fd386604115cf8ec2ba55b5f53f3c923b9f69b6d586b98c1f3aea054
+[reclaim-reference-script:payment-hook] Confirmed by Blockfrost: reclaim-reference-script (payment-hook) transaction 78f92162fd386604115cf8ec2ba55b5f53f3c923b9f69b6d586b98c1f3aea054.
+[reclaim-reference-script:config] Fetching reference-script UTxOs and Config UTxO from chain
+[reclaim-reference-script:config] Building reclaim transaction (spending 2 UTxO(s))
+[reclaim-reference-script:config] Tx resources: fee=0.412913 ADA (412913 lovelace), cpu=87333092, mem=291140
+[reclaim-reference-script:config] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=47.505667 ADA (47505667)
+[reclaim-reference-script:config] Unsigned transaction ready: da93c96d45e0f3a786bacf12542024845870422f9be42b603abb266878e37c0b
+[reclaim-reference-script:config] Submitted transaction hash: da93c96d45e0f3a786bacf12542024845870422f9be42b603abb266878e37c0b
+[reclaim-reference-script:config] Confirmed by Blockfrost: reclaim-reference-script (config) transaction da93c96d45e0f3a786bacf12542024845870422f9be42b603abb266878e37c0b.
+[config:burn] Loading protocol state
+[config:burn] Connecting to Preview and selecting the configured wallet
+[config:burn] Finding Config UTxO
+[config:burn] Burning Config NFT 13be3a1a2ed0594cb95d441a942359fc4278b7bee19686c561040d614449415f434f4e464947 and recovering 5000000 lovelace.
+[config:burn] Reference script for config not found on-chain (#0); will attach the validator inline.
+[config:burn] Reference script for config is missing on-chain; attaching the config validator and mint policy inline.
+[config:burn] Tx resources: fee=0.308661 ADA (308661 lovelace), cpu=67630989, mem=224044
+[config:burn] Output[0] | addr=addr_test1qp76...r64e2n | lovelace=4.691339 ADA (4691339)
+[config:burn] Unsigned transaction ready: 37e216b9cdce9fddf047bd2735a571bb4efd9c46fdb168e2685d5268a70ea167
+[config:burn] Submitted transaction hash: 37e216b9cdce9fddf047bd2735a571bb4efd9c46fdb168e2685d5268a70ea167
+[config:burn] Confirmed by Blockfrost: config burn transaction 37e216b9cdce9fddf047bd2735a571bb4efd9c46fdb168e2685d5268a70ea167.
+CLI tests passed
+[node-tests] npm test PASSED

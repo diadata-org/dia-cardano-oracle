@@ -1,0 +1,15 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts receiver:withdraw --amount-lovelace 42550000 --protocol-state ./state/preview_run_20260606-082456/config-bootstrap.json --client-state ./state/preview_run_20260606-082456/clients/client-a.json
+
+[1G[0K[receiver:withdraw] Using amountLovelace=42550000 for receiver withdraw
+[receiver:withdraw] Loading client state from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_run_20260606-082456/clients/client-a.json
+[receiver:withdraw] Connecting to Preview and selecting the configured wallet
+[receiver:withdraw] Building Preview receiver withdraw transaction
+[receiver:withdraw] Tx resources: fee=0.384202 ADA (384202 lovelace), cpu=167570447, mem=520785
+[receiver:withdraw] Output[0] | addr=addr_test1wr5m...d0pf2h | lovelace=15.000000 ADA (15000000) | assets=e9b20749e642...545f41=1 | datum=inline(15B)
+[receiver:withdraw] Output[1] | addr=addr_test1qpgp...quxj3j | lovelace=42.550000 ADA (42550000)
+[receiver:withdraw] Output[2] | addr=addr_test1qpgp...quxj3j | lovelace=1096.393094 ADA (1096393094)
+[receiver:withdraw] Unsigned transaction ready: e6799fa99ea9c351f561b596ee0026299bb2f72ddc2e34a6ffa562cd00d0bee2
+[receiver:withdraw] Submitted transaction hash: e6799fa99ea9c351f561b596ee0026299bb2f72ddc2e34a6ffa562cd00d0bee2
+^C

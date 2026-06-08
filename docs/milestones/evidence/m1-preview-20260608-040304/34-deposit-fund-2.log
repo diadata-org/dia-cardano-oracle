@@ -1,0 +1,15 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts deposit:fund --amount-lovelace 5000000 --protocol-state ./state/preview_run_20260608-040304/config-bootstrap.json --client-state ./state/preview_run_20260608-040304/clients/client-a.json
+
+[1G[0K[deposit] Connecting to Preview and selecting the configured wallet
+[deposit] Paying 5000000 lovelace to deposit address addr_test1wru2vqxp3867plfw3rs4mmhmlvxqvnzlkel9rjkuc3rzp0qrstq95
+[deposit] Tx resources: fee=0.167085 ADA (167085 lovelace), cpu=0, mem=0
+[deposit] Submitted transaction hash: 645af9a84c295d3236a332a209d6469fb43a8684593fd4fee1971d9cb947db27
+[deposit] Confirmed by Blockfrost: deposit fund transaction 645af9a84c295d3236a332a209d6469fb43a8684593fd4fee1971d9cb947db27.
+{
+  "depositValidatorAddress": "addr_test1wru2vqxp3867plfw3rs4mmhmlvxqvnzlkel9rjkuc3rzp0qrstq95",
+  "submittedTxHash": "645af9a84c295d3236a332a209d6469fb43a8684593fd4fee1971d9cb947db27",
+  "confirmed": true
+}
+[1G[0K⠙[1G[0K
