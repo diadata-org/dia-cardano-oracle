@@ -53,7 +53,6 @@ services:
       # DATABASE_PATH is intentionally NOT set here: the daemon derives it from
       # the active run dir (state/<network>_run_<id>/feeder.sqlite). Setting
       # DATABASE_PATH_TESTNET/MAINNET would pin a fixed path and defeat per-run.
-      # CARDANO_FEEDER_CLI_DIST_ROOT already set by Dockerfile ENV.
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/live"]
       interval: 30s

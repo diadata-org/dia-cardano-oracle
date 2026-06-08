@@ -75,10 +75,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 USER node
 
-# CLI module root for the feeder lib-bridge dynamic imports. Set here so the
-# feeder inside the container resolves the compiled CLI dist.
-ENV CARDANO_FEEDER_CLI_DIST_ROOT=/app/offchain/cli/dist
-
 # Default service = feeder daemon. Each compose service sets its own working_dir
 # and may override the command (CLI, aiken, run-all, teardown, …).
 WORKDIR /app/offchain/feeder
