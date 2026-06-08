@@ -50,6 +50,7 @@
 #   settle_overdue_lovelace              = 10_000_000 -> 10 ADA
 #   payment_hook_withdraw_ready_lovelace = 50_000_000 -> 50 ADA
 #   admin_wallet_low_lovelace            = 5_000_000  -> 5 ADA
+#   deposit_pending_merge_lovelace       = 5_000_000  -> 5 ADA
 # Non-lovelace keys are used verbatim:
 #   oracle_pair_stale_seconds = 3600   price_age_high_seconds = 600
 #   price_deviation_high_percent = 5   reorg_rate_high_per_hour = 3
@@ -227,7 +228,7 @@ groups:
             3. FALLBACK ONLY — if there is no accrued revenue to collect (the
                PaymentHook and all Receivers are near zero) and the wallet is
                genuinely empty, fund it from outside. Find its address:
-                 grep -A2 '"wallet"' offchain/feeder/state/preview/config-bootstrap.json
+                 grep -A2 '"wallet"' offchain/state/preview/config-bootstrap.json
                then on Preview request test ADA from the Cardano faucet
                (https://docs.cardano.org/cardano-testnets/tools/faucet); on
                Mainnet send ADA from the treasury.
@@ -320,3 +321,38 @@ groups:
                CARDANO_PROVIDER in offchain/feeder/.env (e.g. Blockfrost <-> Koios)
                and restart:
                  cd offchain && make restart
+
+      # ---------------------------------------------------------------------
+      - alert: ReceiverDepositsPending
+        expr: >
+          dia_bridge_cardano_deposit_pending_lovelace / 1000000 > 5
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Client {{ $labels.client_id }} has over 5 ADA of un-merged deposits waiting"
+          description: >
+            The per-client deposit address for client {{ $labels.client_id }}
+            holds {{ $value | printf "%.2f" }} ADA of deposits that have not yet
+            been folded into the Receiver balance (alert fires above 5 ADA).
+            Nothing is broken — this is the client's prepaid funding waiting to
+            be applied.
+
+            Client deposit address (on Preview, view on a testnet explorer):
+              {{ $labels.deposit_address }}
+
+            WHY: clients add prepaid funds by sending ADA to their per-client
+            deposit address (side-deposit funding) instead of running
+            `receiver:top-up` themselves. Those deposits accumulate there until
+            a `deposit:merge` spends them and the current Receiver UTxO together,
+            re-creating the Receiver with the deposits folded into its spendable
+            balance. Until a merge runs, the deposited ADA cannot pay update fees
+            — only the Receiver's spendable balance can (see ReceiverBalanceLow).
+            Merging is safe and idempotent; it never touches the accrued bucket.
+
+            WHAT TO DO — run a merge for this client (folds deposits ->
+            Receiver balance):
+              Docker: cd offchain && make cli CMD="deposit:merge --protocol-state /app/state/preview/config-bootstrap.json --client-state /app/state/preview/clients/{{ $labels.client_id }}.json"
+              npm:    cd offchain/cli && npm run cli -- deposit:merge --protocol-state ../feeder/state/preview/config-bootstrap.json --client-state ../feeder/state/preview/clients/{{ $labels.client_id }}.json
+            After it confirms, the deposit-pending total drops to 0 and the alert
+            clears within ~1 minute.

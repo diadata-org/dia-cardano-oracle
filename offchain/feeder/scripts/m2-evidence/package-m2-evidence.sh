@@ -7,7 +7,7 @@
 # Reads logs + sqlite + live API + Grafana renderer and writes a
 # self-contained directory under docs/milestones/evidence/. Inputs:
 #
-#   logs + sqlite : offchain/feeder/state/<network>_run_<id>/ (or flat
+#   logs + sqlite : offchain/state/<network>_run_<id>/ (or flat
 #                   state/<network>/ when no run dir exists; honors RUN_ID)
 #   feeder API    : http://localhost:8080
 #   Grafana       : http://localhost:3000 (renderer profile must be up)
@@ -41,7 +41,7 @@ NETWORK="$(echo "${EVIDENCE_NETWORK:-preview}" | tr '[:upper:]' '[:lower:]')"
 #   RUN_ID set   -> state/<network>_run_<RUN_ID>
 #   RUN_ID empty -> newest state/<network>_run_*
 #   no run dirs  -> flat state/<network>  (pre-per-run layout / live preview)
-STATE_ROOT="$REPO_ROOT/offchain/feeder/state"
+STATE_ROOT="$REPO_ROOT/offchain/state"
 if [[ -n "${RUN_ID:-}" ]]; then
   STATE_DIR="$STATE_ROOT/${NETWORK}_run_${RUN_ID}"
 else

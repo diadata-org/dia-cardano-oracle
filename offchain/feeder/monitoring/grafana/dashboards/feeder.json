@@ -255,8 +255,45 @@
       "type": "stat"
     },
     {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Un-merged client deposits (side-deposit funding) waiting at the per-client deposit address, in ADA. Above 5 ADA (alerting.deposit_pending_merge_lovelace) triggers the ReceiverDepositsPending alert — run `deposit:merge` to fold the deposits into the Receiver balance.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ADA",
+          "decimals": 2,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 5 }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
+      "id": 15,
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_cardano_deposit_pending_lovelace{client_id=~\"$client\"} / 1000000",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Deposit pending — ADA (per client)",
+      "type": "gauge"
+    },
+    {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
       "id": 101,
       "title": "Row 2 — Throughput & Latency",
       "type": "row"
@@ -271,7 +308,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 19 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 27 },
       "id": 4,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
@@ -304,7 +341,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 19 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 27 },
       "id": 5,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
@@ -327,7 +364,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 19 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 27 },
       "id": 6,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
@@ -342,7 +379,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 },
       "id": 102,
       "title": "Row 3 — Chain & Scanner Health",
       "type": "row"
@@ -365,7 +402,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 28 },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 36 },
       "id": 7,
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
@@ -394,7 +431,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 9, "x": 6, "y": 28 },
+      "gridPos": { "h": 8, "w": 9, "x": 6, "y": 36 },
       "id": 8,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
@@ -417,7 +454,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 9, "x": 15, "y": 28 },
+      "gridPos": { "h": 8, "w": 9, "x": 15, "y": 36 },
       "id": 9,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
@@ -432,7 +469,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 44 },
       "id": 103,
       "title": "Row 4 — Price Quality & Anomaly Detection",
       "type": "row"
@@ -455,7 +492,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 37 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 45 },
       "id": 13,
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
@@ -484,7 +521,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 45 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 53 },
       "id": 10,
       "options": {
         "calculate": false,
@@ -505,7 +542,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 53 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 61 },
       "id": 104,
       "title": "Row 5 — Billing (per client / customer)",
       "type": "row"
@@ -520,7 +557,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 54 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 62 },
       "id": 14,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
@@ -560,7 +597,7 @@
         "label": "Client",
         "name": "client",
         "options": [],
-        "query": { "query": "label_values(dia_bridge_transactions_submitted_total, client_id)", "refId": "client" },
+        "query": { "query": "label_values(dia_bridge_cardano_receiver_balance_lovelace, client_id)", "refId": "client" },
         "refresh": 2,
         "type": "query"
       },
@@ -574,7 +611,7 @@
         "label": "Symbol",
         "name": "symbol",
         "options": [],
-        "query": { "query": "label_values(dia_bridge_transactions_submitted_total, symbol)", "refId": "symbol" },
+        "query": { "query": "label_values(dia_bridge_cardano_pair_is_create{client_id=~\"$client\"}, symbol)", "refId": "symbol" },
         "refresh": 2,
         "type": "query"
       },
@@ -588,7 +625,7 @@
         "label": "Customer",
         "name": "customer",
         "options": [],
-        "query": { "query": "label_values(dia_bridge_transaction_fee_lovelace, customer)", "refId": "customer" },
+        "query": { "query": "label_values(dia_bridge_transaction_fee_lovelace_count, customer)", "refId": "customer" },
         "refresh": 2,
         "type": "query"
       },
