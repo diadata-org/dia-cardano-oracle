@@ -24,16 +24,13 @@
 // cron, the on-chain pair would stay stale even though DIA is emitting
 // fresh data. The cron service guarantees a maximum staleness per pair.
 //
-// Submission goes through the same `queueManager.submit` path the
-// event-driven flow uses, so the inflight lock, retry policy, and
-// metric emission all behave identically. The Cardano contract's
-// monotonicity check on `(timestamp, nonce)` ensures we never duplicate
-// an on-chain update: if the latest known intent is the same one that
-// is already on chain, the tx fails with `NonMonotonicNonce` and the
-// daemon increments `transactions_failed_total{error_code=...}`. The
-// counter `cron_resubmissions_total{outcome="skipped_already_fresh"}`
-// captures the case where the cron tick decided NOT to submit because
-// the on-chain timestamp is already at or beyond the cached intent.
+// Submission goes through the same coalescer path the event-driven flow uses.
+// That keeps cron-triggered symbols batched per lane and lets newer intents
+// supersede older buffered ones instead of building a FIFO backlog. The
+// Cardano contract's monotonicity check on `(timestamp, nonce)` ensures we
+// never duplicate an on-chain update: if the latest known intent is the same
+// one that is already on chain, the cron skips it cleanly and increments
+// `cron_resubmissions_total{outcome="skipped_already_fresh"}`.
 
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -41,7 +38,7 @@ import type { CardanoDestinationConfig, RouterConfig } from "../config/types.js"
 import type { FeederMetrics } from "../api/metrics.js";
 import type { PriceCache } from "../processor/price-cache.js";
 import type { LatestIntentCache } from "./latest-intent-cache.js";
-import type { SubmitRequest, SubmitResult } from "../submitter/types.js";
+import type { SubmitRequest } from "../submitter/types.js";
 import { parseDurationMs } from "../router/policy.js";
 import { extractRouterSymbols } from "../router/symbols.js";
 
@@ -62,7 +59,7 @@ export type CronServiceOptions = {
    *  Read-only here — written by the daemon's `onResult` callback. */
   priceCache: PriceCache;
   /** Submission entry point shared with the event-driven flow. */
-  submit: (request: SubmitRequest) => Promise<SubmitResult>;
+  submit: (request: SubmitRequest) => void | Promise<unknown>;
   /** Metrics emitter. */
   metrics: FeederMetrics;
   /** Structured log sink. */
@@ -213,10 +210,10 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
             `intentHash=${latest.intentHash}).`,
         );
         options.metrics.cronResubmissions.inc({ ...labels, outcome: "submitted" });
-        // Fire-and-forget: the queue manager records the result in metrics
+        // Fire-and-forget: the coalescer/queue records the result in metrics
         // and DB via the daemon's onResult callback the same way an
         // event-driven submission would.
-        options.submit(request).catch((err: unknown) => {
+        Promise.resolve(options.submit(request)).catch((err: unknown) => {
           options.log(
             `cron-service: submit failed for ${symbol} (router=${router.id}) — ${(err as Error).message}`,
           );

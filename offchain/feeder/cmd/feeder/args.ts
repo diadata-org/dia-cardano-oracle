@@ -23,12 +23,11 @@
 //
 // Positional sub-commands:
 //
-//   init bootstrap       copy config-bootstrap.json from CLI state
-//   init client          copy client JSON + generate router YAML interactively
+//   init client          generate the router YAML for a deployment interactively
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type Transport = "http" | "ws";
-export type InitSubCommand = "bootstrap" | "client";
+export type InitSubCommand = "client";
 export type CheckpointSubCommand = "set" | "get";
 
 /** Mutually exclusive top-level "mode" the binary runs in. */
@@ -274,11 +273,10 @@ function parsePruneArgs(argv: string[]): ParsedArgs {
 
 function parseInitArgs(argv: string[]): ParsedArgs {
   const sub = argv[1] as InitSubCommand | undefined;
-  if (sub !== "bootstrap" && sub !== "client") {
+  if (sub !== "client") {
     throw new Error(
-      `'init' requires a sub-command: bootstrap or client\n` +
-      `  feeder init bootstrap [--from <cli-state-dir>] [--force]\n` +
-      `  feeder init client    [--from <client.json>]   [--force]`,
+      `'init' requires the 'client' sub-command:\n` +
+      `  feeder init client [--from <client.json>] [--force]`,
     );
   }
 

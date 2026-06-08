@@ -11,9 +11,8 @@
 //     submitted. Independent of `--scan`: can be used together or alone.
 //   - `--from-block <N>` / `--from-latest` seed the block-scanner checkpoint
 //     before startup. Use after `--clean` to avoid replaying expired intents.
-//   - `init bootstrap` copies config-bootstrap.json from a CLI state dir.
-//   - `init client`    copies a client JSON and generates a router YAML
-//     interactively.
+//   - `init client`    generates a router YAML pointing the daemon at the
+//     client's state under ../state/<network>_run_<id>/ (interactive).
 //   - default: long-running daemon.
 //
 // This file stays thin: it parses args, resolves the active network,
@@ -29,6 +28,7 @@ import { runDaemon, cleanFeederState } from "./daemon-cmd.js";
 import { runInit } from "./init-cmd.js";
 import { runCheckpoint } from "./checkpoint-cmd.js";
 import { runPrune, parseDuration } from "./prune-cmd.js";
+import { DEFAULT_PRUNE_MAX_AGE_MS } from "../../src/config/constants.js";
 
 const HELP_TEXT = `dia-cardano-oracle-feeder
 
@@ -40,7 +40,6 @@ Usage:
   feeder --config <dir> [--log-level <level>]
   feeder --config <dir> --validate-only
   feeder --config <dir> --scan [--transport http|ws] [--dry-run]
-  feeder init bootstrap [--from <cli-state-dir-or-file>] [--force]
   feeder init client    [--from <client.json>]           [--force]
   feeder checkpoint get
   feeder checkpoint set --from-latest | --from-block <N> | --clear
@@ -78,20 +77,14 @@ Flags:
                           config-bootstrap.json, clients/*.json
   --help, -h            Show this help message and exit.
 
-Init sub-commands (one-time setup):
-  init bootstrap        Copy config-bootstrap.json from a CLI state dir into
-                        the matching state/<network>_run_<id>/ (same run id as
-                        the CLI). Auto-scans ../cli/state/ for matching network
-                        run dirs; use --from to supply a path explicitly.
-  init client           Copy a client JSON from a CLI state dir into
-                        state/<network>_run_<id>/clients/, then run an
-                        interactive wizard to generate
-                        config/routers/<network>/<id>.yaml.
-                        Use --from <client.json> to skip auto-scan.
+Init sub-command (one-time setup):
+  init client           Interactive wizard that generates
+                        config/routers/<network>/<id>.yaml pointing the daemon at
+                        the client's state under ../state/<network>_run_<id>/.
+                        Auto-scans ../state/ for the run; use --from <client.json>
+                        to pick one.
 
-  --from <path>         Source path for init sub-commands. For 'bootstrap':
-                        a CLI state dir or the JSON file directly. For
-                        'client': the client JSON file.
+  --from <path>         Source path for 'init client': the client JSON file.
   --force               Skip the overwrite confirmation prompt (init only).
 
 Checkpoint sub-commands (mutate chain_state.last_scan_block in the DB):
@@ -218,7 +211,6 @@ async function dispatch(args: ParsedArgs): Promise<number> {
 
     case "init":
       return runInit({
-        subCommand: args.initSubCommand!,
         network,
         from: args.initFrom,
         force: args.force,
@@ -241,7 +233,7 @@ async function dispatch(args: ParsedArgs): Promise<number> {
         network,
         // Default cutoff: 1h. parseDuration throws on malformed input,
         // surfacing a clear error rather than silently using the default.
-        maxAgeMs: args.maxAge !== undefined ? parseDuration(args.maxAge) : 60 * 60 * 1_000,
+        maxAgeMs: args.maxAge !== undefined ? parseDuration(args.maxAge) : DEFAULT_PRUNE_MAX_AGE_MS,
         dryRun: args.dryRun,
         report,
       });

@@ -1,31 +1,24 @@
-// `feeder init` — one-time setup wizard.
+// `feeder init client` — one-time setup wizard. State lives at
+// ../state/<network>_run_<id>/ (offchain/state); the CLI and the feeder both
+// use that tree. This generates config/routers/<network>/<id>.yaml pointing the
+// daemon at the client's state (../state/<run>/clients/<id>.json).
 //
-// Sub-commands:
-//   init bootstrap   Copy config-bootstrap.json from a CLI <network>_run_<id>
-//                    dir into the feeder's matching state/<network>_run_<id>/.
-//   init client      Copy a client JSON from the same CLI run dir, then run an
-//                    interactive wizard to generate config/routers/<network>/<id>.yaml.
-//
-// Run from offchain/feeder/ (the feeder working directory). The auto-scan
-// looks under ../cli/state/ for <network>_run_* dirs, newest first; it uses the
-// only match, prompts when several exist, or takes --from <path> to pick one
-// explicitly.
-//
-// The CLI run id is preserved so the feeder's run dir matches the deployment
-// (state/<network>_run_<id>/), and multiple deployments never clobber each
-// other. The daemon then selects the run via the RUN_ID env (or the newest run
-// dir by default) — see cmd/feeder/run-state.ts.
+// Run from offchain/feeder/. The auto-scan looks under ../state/ for
+// <network>_run_* dirs, newest first; it uses the only match, prompts when
+// several exist, or takes --from <path>. The daemon selects the run via RUN_ID
+// (or the newest run dir) — see cmd/feeder/run-state.ts.
 
-import { access, copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createInterface, type Interface } from "node:readline/promises";
 import { join, basename, extname, dirname } from "node:path";
+
+import { DEFAULT_INIT_PAIRS } from "../../src/config/constants.js";
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 export type InitCmdOptions = {
-  subCommand: "bootstrap" | "client";
   network: string;
   from?: string;
   force: boolean;
@@ -33,9 +26,6 @@ export type InitCmdOptions = {
 };
 
 export async function runInit(options: InitCmdOptions): Promise<number> {
-  if (options.subCommand === "bootstrap") {
-    return runInitBootstrap(options);
-  }
   return runInitClient(options);
 }
 
@@ -57,70 +47,6 @@ function runIdFromSourcePath(sourcePath: string, networkLower: string): string |
 }
 
 // ---------------------------------------------------------------------------
-// init bootstrap
-// ---------------------------------------------------------------------------
-
-async function runInitBootstrap(options: InitCmdOptions): Promise<number> {
-  const { network, from, force, report } = options;
-  const networkLower = network.toLowerCase();
-
-  report(`init bootstrap: network=${network}`);
-
-  const rl = openRl();
-  try {
-    let sourcePath: string;
-    if (from) {
-      sourcePath = from.endsWith(".json") ? from : join(from, "config-bootstrap.json");
-    } else {
-      const candidates = await findCliBootstrapCandidates(networkLower);
-      if (candidates.length === 0) {
-        report(`init bootstrap: no CLI state dirs found under ../cli/state/`);
-        report(`init bootstrap: hint: run from offchain/feeder/, or use --from <path>`);
-        return 1;
-      }
-      if (candidates.length === 1) {
-        sourcePath = candidates[0];
-        out(`  Found: ${candidates[0]}`);
-      } else {
-        sourcePath = await selectOne(rl, "Multiple CLI runs found (newest first) — Enter takes the newest, or pick a number:", candidates);
-      }
-    }
-
-    if (!await fileExists(sourcePath)) {
-      report(`init bootstrap: source not found: ${sourcePath}`);
-      return 1;
-    }
-
-    // Import into the feeder run dir that matches the CLI deployment's run id,
-    // so multiple deployments stay isolated (state/<network>_run_<id>/).
-    const runId = runIdFromSourcePath(sourcePath, networkLower);
-    if (!runId) {
-      report(`init bootstrap: could not determine the run id. Use --from a CLI <network>_run_<id> dir, or set RUN_ID.`);
-      return 1;
-    }
-    const target = `state/${networkLower}_run_${runId}/config-bootstrap.json`;
-
-    if (await fileExists(target) && !force) {
-      const ok = await askConfirm(rl, `  ${target} already exists. Overwrite?`, false);
-      if (!ok) {
-        out("  Aborted.");
-        return 0;
-      }
-    }
-
-    await mkdir(dirname(target), { recursive: true });
-    await copyFile(sourcePath, target);
-    report(`init bootstrap: wrote ${target}`);
-    out(`\n  Done. Bootstrap state ready at ${target}`);
-    out(`  Run id: ${runId}. Start this run with: make up RUN_ID=${runId} MONITORING=1`);
-    out(`  (Without RUN_ID the feeder uses the newest state/${networkLower}_run_* dir.)`);
-    return 0;
-  } finally {
-    rl.close();
-  }
-}
-
-// ---------------------------------------------------------------------------
 // init client
 // ---------------------------------------------------------------------------
 
@@ -137,9 +63,9 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     if (from) {
       sourcePath = from;
     } else {
-      const candidates = await findCliClientCandidates(networkLower);
+      const candidates = await findConfigClientCandidates(networkLower);
       if (candidates.length === 0) {
-        report(`init client: no client JSONs found under ../cli/state/`);
+        report(`init client: no client JSONs found under ../state/`);
         report(`init client: hint: run from offchain/feeder/, or use --from <client.json>`);
         return 1;
       }
@@ -164,24 +90,15 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
       return 1;
     }
 
-    // --- Step 3: copy client JSON into the feeder run dir matching the CLI run ---
+    // --- Step 3: locate the client's state in the run dir. The router YAML
+    // generated below points the daemon at this path. ---
     const runId = runIdFromSourcePath(sourcePath, networkLower);
     if (!runId) {
-      report(`init client: could not determine the run id. Use --from a CLI <network>_run_<id> client JSON, or set RUN_ID.`);
+      report(`init client: could not determine the run id from ${sourcePath}.`);
       return 1;
     }
-    const runDir = `state/${networkLower}_run_${runId}`;
-    const clientTarget = `${runDir}/clients/${clientId}.json`;
-    if (await fileExists(clientTarget) && !force) {
-      const ok = await askConfirm(rl, `  ${clientTarget} already exists. Overwrite?`, false);
-      if (!ok) {
-        out("  Aborted.");
-        return 0;
-      }
-    }
-    await mkdir(dirname(clientTarget), { recursive: true });
-    await copyFile(sourcePath, clientTarget);
-    report(`init client: wrote ${clientTarget}`);
+    const runDir = `../state/${networkLower}_run_${runId}`;
+    const clientStatePath = `${runDir}/clients/${clientId}.json`;
 
     // --- Step 4: interactive router YAML generation ---
     out(`\n  Now let's configure the router for ${clientId} on Cardano ${network}.\n`);
@@ -190,12 +107,8 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     const routerTarget = `config/routers/${networkLower}/${clientId}.yaml`;
 
     const existingPairs = await loadExistingPairsFromYaml(routerTarget);
-    const DEFAULT_PAIRS = [
-      "BTC/USD", "ETH/USD", "USDC/USD", "USDT/USD",
-      "DOGE/USD", "LTC/USD", "ARB/USD", "SHIB/USD",
-      "NEIRO/USD", "XVG/USD",
-    ];
-    const pairPool = existingPairs.length > 0 ? existingPairs : DEFAULT_PAIRS;
+    const pairPool: string[] =
+      existingPairs.length > 0 ? existingPairs : [...DEFAULT_INIT_PAIRS];
     // All selected by default (select all for new, keep all for re-init)
     const initialSelected = pairPool.map(() => true);
 
@@ -214,17 +127,19 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
       ? "CARDANO_WALLET_SEED_MAINNET"
       : "CARDANO_WALLET_SEED_TESTNET";
     const keyEnv       = await askText(rl, "  Wallet seed env var", defaultKeyEnv);
-    const timeThresh   = await askText(rl, "  Min time between updates (e.g. 5m, 1h)", "5m");
-    const priceDevRaw  = await askText(rl, "  Price deviation threshold (e.g. 0.1%, 0.5%)", "0.1%");
+    const customer     = await askText(rl, "  Customer — business client that groups this router (defaults to the client id)", clientId);
+    const timeThresh   = await askText(rl, "  Heartbeat — max time between updates; the cron pushes at least this often (e.g. 5m, 10m)", "10m");
+    const priceDevRaw  = await askText(rl, "  Price deviation to push early (e.g. 0.1%, 0.5%)", "0.1%");
     const priceDev     = priceDevRaw.replace(/"/g, "");
 
     const yaml = buildRouterYaml({
       routerId,
       clientId,
+      customer,
       network: network as "Preview" | "Mainnet",
       keyEnv,
       pairs: activePairs,
-      clientStatePath: clientTarget,
+      clientStatePath,
       protocolStatePath: `${runDir}/config-bootstrap.json`,
       timeThreshold: timeThresh,
       priceDeviation: priceDev,
@@ -251,7 +166,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     out(`\n  All done (run id ${runId}). Start the feeder for THIS run:`);
     out(`    Docker:  make up RUN_ID=${runId} MONITORING=1     (from offchain/)`);
     out(`    Local:   RUN_ID=${runId} npm run feeder:dev -- daemon  (from offchain/feeder/)`);
-    out(`  Without RUN_ID the feeder picks the newest state/${networkLower}_run_* dir.`);
+    out(`  Without RUN_ID the feeder picks the newest ../state/${networkLower}_run_* dir.`);
     out(``);
     return 0;
   } finally {
@@ -266,6 +181,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
 export function buildRouterYaml(opts: {
   routerId: string;
   clientId: string;
+  customer: string;
   network: "Preview" | "Mainnet";
   keyEnv: string;
   pairs: string[];
@@ -283,7 +199,7 @@ routers:
   ${opts.routerId}:
     id: ${opts.routerId}
     name: ${opts.clientId} → Cardano ${opts.network}
-    customer: ${opts.clientId}
+    customer: ${opts.customer}
     type: event
     enabled: true
     # Env var holding the Cardano wallet mnemonic seed (from .env).
@@ -306,50 +222,35 @@ ${pairsBlock}
     destinations:
       - cardano:
           network: ${opts.network}
-          # Paths to the CLI bootstrap state files (see: feeder init bootstrap/client).
           client_state_path: ${opts.clientStatePath}
           protocol_state_path: ${opts.protocolStatePath}
-        # Minimum time between two updates for the same symbol.
-        time_threshold: ${opts.timeThreshold}
-        # Minimum price change required to trigger an update.
+        # Push an update as soon as the price moves at least this much.
         price_deviation: "${opts.priceDeviation}"
+        # The cron heartbeat guarantees an update at least this often (the max
+        # staleness per pair), even when the price is flat. Needs cron: true below.
+        time_threshold: ${opts.timeThreshold}
+        # Enable the cron liveness heartbeat for this destination (Spectra parity);
+        # without it, a flat pair would only update on price deviation and could
+        # stay stale past time_threshold.
+        cron: true
 `;
 }
 
 // ---------------------------------------------------------------------------
-// CLI state discovery
+// State discovery
 // ---------------------------------------------------------------------------
 
-export async function findCliBootstrapCandidates(
+export async function findConfigClientCandidates(
   networkLower: string,
-  cliStateDir = "../cli/state",
-): Promise<string[]> {
-  const prefix = networkLower === "mainnet" ? "mainnet_run_" : "preview_run_";
-  try {
-    const entries = await readdir(cliStateDir, { withFileTypes: true });
-    const hits: string[] = [];
-    for (const e of entries) {
-      if (!e.isDirectory() || !e.name.startsWith(prefix)) continue;
-      const candidate = join(cliStateDir, e.name, "config-bootstrap.json");
-      if (await fileExists(candidate)) hits.push(candidate);
-    }
-    return hits.sort().reverse(); // newest first
-  } catch {
-    return [];
-  }
-}
-
-export async function findCliClientCandidates(
-  networkLower: string,
-  cliStateDir = "../cli/state",
+  stateDir = "../state",
 ): Promise<string[]> {
   const prefix = networkLower === "mainnet" ? "mainnet_run_" : "preview_run_";
   const hits: string[] = [];
   try {
-    const runDirs = await readdir(cliStateDir, { withFileTypes: true });
+    const runDirs = await readdir(stateDir, { withFileTypes: true });
     for (const rd of runDirs) {
       if (!rd.isDirectory() || !rd.name.startsWith(prefix)) continue;
-      const clientsDir = join(cliStateDir, rd.name, "clients");
+      const clientsDir = join(stateDir, rd.name, "clients");
       try {
         const files = await readdir(clientsDir, { withFileTypes: true });
         for (const f of files) {
@@ -362,7 +263,7 @@ export async function findCliClientCandidates(
       }
     }
   } catch {
-    // no cliStateDir
+    // no stateDir
   }
   return hits.sort().reverse(); // newest first
 }

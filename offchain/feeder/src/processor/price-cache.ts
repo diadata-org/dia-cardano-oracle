@@ -75,7 +75,10 @@ export function createPriceCache(options: { now?: () => number } = {}): PriceCac
 
   return {
     set(key, entry) {
-      store.set(cacheKey(key), { ...entry, updatedAtMs: now() });
+      store.set(cacheKey(key), {
+        ...entry,
+        updatedAtMs: entry.updatedAtMs > 0 ? entry.updatedAtMs : now(),
+      });
     },
 
     get(key) {

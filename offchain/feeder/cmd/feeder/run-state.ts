@@ -1,30 +1,28 @@
-// Per-run state directory resolution — mirrors the CLI's
-// `cli/state/<network>_run_<id>/` layout so multiple deployments of the same
-// network never clobber each other's feeder state (DB, logs, pair state).
-//
-// The CLI threads a run id (run-all-cli.sh `RUN_ID`, default a UTC timestamp)
-// into every `--*-state` path. The feeder mirrors that with a single `RUN_ID`
-// env honoured by the daemon and every state-touching sub-command, plus the
-// `init` importers that materialise a run dir from the CLI state.
+// Per-run state directory resolution. State lives at
+// `offchain/state/<network>_run_<id>/`, reached as `../state` from each package's
+// cwd (offchain/feeder and offchain/cli both resolve to offchain/state; in Docker,
+// /app/offchain/{cli,feeder} both reach /app/offchain/state). A run dir holds the
+// CLI's config-bootstrap.json and clients plus the feeder's DB, logs and pair
+// state. The CLI threads a run id (run-all-cli.sh `RUN_ID`, a UTC timestamp); the
+// feeder honours the same single `RUN_ID` env in the daemon and sub-commands.
 //
 // Selection order:
-//   1. `RUN_ID` env set        -> state/<network>_run_<RUN_ID>/
-//   2. else newest existing    -> state/<network>_run_*  (lexically last; the
+//   1. `RUN_ID` env set        -> ../state/<network>_run_<RUN_ID>/
+//   2. else newest existing    -> ../state/<network>_run_*  (lexically last; the
 //                                 run id is a sortable UTC timestamp)
-//   3. else (no run dirs yet)  -> state/<network>/        (flat pre-run layout)
+//   3. else (no run dirs yet)  -> ../state/<network>/        (flat fallback)
 //
-// Step 3 keeps a feeder that was set up under the old flat layout working
-// until it is migrated to a run dir (re-run `init`). DATABASE_PATH_<suffix>
-// and FEEDER_LOG_DIR still override the derived paths when an operator wants
-// to pin an explicit location.
+// DATABASE_PATH_<suffix> and FEEDER_LOG_DIR still override the derived paths when
+// an operator wants to pin an explicit location.
 
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
 import type { CardanoNetwork } from "../../src/source/env.js";
 
-/** Root that holds all per-network / per-run state dirs (relative to cwd). */
-export const STATE_ROOT = "state";
+/** Root that holds all per-network / per-run state dirs: the shared
+ *  `offchain/state` tree, reached as `../state` from each package's cwd. */
+export const STATE_ROOT = "../state";
 
 /** The `<network>_run_` prefix for a network's run directories. */
 export function runDirPrefix(network: CardanoNetwork): string {

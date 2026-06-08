@@ -28,7 +28,14 @@ describe("price-cache: set/get", () => {
     c.set(key, entry({ price: 100n }));
     const got = c.get(key);
     assert.equal(got?.price, 100n);
-    assert.equal(got?.updatedAtMs, 123); // stamped by now()
+    assert.equal(got?.updatedAtMs, 123); // 0 is stamped by now()
+  });
+
+  it("preserves a positive updatedAtMs when hydrating from persisted state", () => {
+    const c = createPriceCache({ now: () => 123 });
+    const key = { routerId: "r", destinationIndex: 0, symbol: "BTC/USD" };
+    c.set(key, entry({ updatedAtMs: 456 }));
+    assert.equal(c.get(key)?.updatedAtMs, 456);
   });
 
   it("set overwrites an existing entry for the same key without changing size", () => {

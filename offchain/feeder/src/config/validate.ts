@@ -194,7 +194,7 @@ function validateAlerting(
         "receiver_balance_low_lovelace, settle_overdue_lovelace, " +
         "payment_hook_withdraw_ready_lovelace, admin_wallet_low_lovelace, " +
         "oracle_pair_stale_seconds, price_deviation_high_percent, price_age_high_seconds, " +
-        "reorg_rate_high_per_hour.",
+        "reorg_rate_high_per_hour, deposit_pending_merge_lovelace.",
     );
     return;
   }
@@ -206,6 +206,7 @@ function validateAlerting(
   validatePositiveNumber("price_deviation_high_percent", alerting.price_deviation_high_percent, c);
   validatePositiveInteger("price_age_high_seconds", alerting.price_age_high_seconds, c);
   validatePositiveInteger("reorg_rate_high_per_hour", alerting.reorg_rate_high_per_hour, c);
+  validatePositiveInteger("deposit_pending_merge_lovelace", alerting.deposit_pending_merge_lovelace, c);
 
   const required: Array<[string, unknown]> = [
     ["receiver_balance_low_lovelace", alerting.receiver_balance_low_lovelace],
@@ -216,6 +217,7 @@ function validateAlerting(
     ["price_deviation_high_percent", alerting.price_deviation_high_percent],
     ["price_age_high_seconds", alerting.price_age_high_seconds],
     ["reorg_rate_high_per_hour", alerting.reorg_rate_high_per_hour],
+    ["deposit_pending_merge_lovelace", alerting.deposit_pending_merge_lovelace],
   ];
   for (const [field, value] of required) {
     if (value === undefined) {

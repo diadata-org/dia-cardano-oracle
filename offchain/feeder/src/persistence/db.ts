@@ -1,5 +1,11 @@
 import * as nodePath from "node:path";
 
+import {
+  DEFAULT_QUERY_LIMIT,
+  MAX_QUERY_LIMIT,
+  DEFAULT_BULK_QUERY_LIMIT,
+} from "../config/constants.js";
+
 // Pluggable database adapter — 6-table schema.
 //
 // Tables:
@@ -604,7 +610,7 @@ async function createSqliteDb(filePath: string): Promise<Db> {
       }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const limit = Math.min(query.limit ?? 100, 1000);
+      const limit = Math.min(query.limit ?? DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT);
       const offset = query.offset ?? 0;
 
       const rows = db.prepare(
@@ -699,7 +705,7 @@ async function createSqliteDb(filePath: string): Promise<Db> {
       if (query.chain !== undefined) { conditions.push("destination_chain_name = ?"); params.push(query.chain); }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const limit = Math.min(query.limit ?? 100, 1000);
+      const limit = Math.min(query.limit ?? DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT);
       const offset = query.offset ?? 0;
 
       const rows = db.prepare(
@@ -771,7 +777,7 @@ async function createSqliteDb(filePath: string): Promise<Db> {
       if (filter.until !== undefined) { conditions.push("recorded_at_ms <= ?"); params.push(filter.until); }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const limit = filter.limit ?? 1000;
+      const limit = filter.limit ?? DEFAULT_BULK_QUERY_LIMIT;
 
       const rows = db.prepare(
         `SELECT * FROM performance_metrics ${where} ORDER BY recorded_at_ms DESC LIMIT ?`,
@@ -816,7 +822,7 @@ async function createSqliteDb(filePath: string): Promise<Db> {
       }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const limit = query.limit ?? 100;
+      const limit = query.limit ?? DEFAULT_QUERY_LIMIT;
       const offset = query.offset ?? 0;
 
       const rows = db.prepare(
@@ -1019,7 +1025,7 @@ async function createPostgresDb(dsn: string): Promise<Db> {
       }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const limit = Math.min(query.limit ?? 100, 1000);
+      const limit = Math.min(query.limit ?? DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT);
       const offset = query.offset ?? 0;
 
       const r = await pool.query(
@@ -1121,7 +1127,7 @@ async function createPostgresDb(dsn: string): Promise<Db> {
       if (query.chain !== undefined) { conditions.push(`destination_chain_name = $${idx++}`); params.push(query.chain); }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const limit = Math.min(query.limit ?? 100, 1000);
+      const limit = Math.min(query.limit ?? DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT);
       const offset = query.offset ?? 0;
 
       const r = await pool.query(
@@ -1200,7 +1206,7 @@ async function createPostgresDb(dsn: string): Promise<Db> {
       if (filter.until !== undefined) { conditions.push(`recorded_at_ms <= $${idx++}`); params.push(filter.until); }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const limit = filter.limit ?? 1000;
+      const limit = filter.limit ?? DEFAULT_BULK_QUERY_LIMIT;
 
       const r = await pool.query(
         `SELECT * FROM performance_metrics ${where} ORDER BY recorded_at_ms DESC LIMIT $${idx}`,
@@ -1251,7 +1257,7 @@ async function createPostgresDb(dsn: string): Promise<Db> {
       }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-      const limit = query.limit ?? 100;
+      const limit = query.limit ?? DEFAULT_QUERY_LIMIT;
       const offset = query.offset ?? 0;
 
       const r = await pool.query(

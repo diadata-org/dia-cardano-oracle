@@ -47,3 +47,9 @@ export {
 } from "./retry-policy.js";
 
 export { laneKey } from "./lane-key.js";
+
+export {
+  isTransientWasmBuildError,
+  nextWasmFailureCount,
+  shouldExitOnWasmFailures,
+} from "./wasm-failure-guard.js";

@@ -8,6 +8,8 @@
 //
 // Both handlers return JSON bodies.
 
+import { DEFAULT_MAX_STALENESS_MS } from "../config/constants.js";
+
 export type HealthState = {
   /** Epoch-ms of the last successful registry poll. 0 = never. */
   lastRegistryPollMs: number;
@@ -48,7 +50,7 @@ export function livenessResult(): HealthResult {
 
 export function readinessResult(state: HealthState): HealthResult {
   const now = (state.now ?? Date.now)();
-  const staleness = state.maxStalenessMs ?? 5 * 60_000;
+  const staleness = state.maxStalenessMs ?? DEFAULT_MAX_STALENESS_MS;
   const maxAge = state.maxLastConfirmedAgeMs ?? 0;
 
   const registryAge = now - state.lastRegistryPollMs;

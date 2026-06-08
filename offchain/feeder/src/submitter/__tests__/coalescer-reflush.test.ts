@@ -66,6 +66,7 @@ describe("coalescer reflush loop", () => {
         await Promise.resolve();
         return requests.map(okResult);
       },
+      async enqueueLaneTask(_dest, run) { await run(); },
       queueKeys() { return []; },
       totalPending() { return 0; },
     };

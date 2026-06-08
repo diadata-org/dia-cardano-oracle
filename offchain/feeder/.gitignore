@@ -3,13 +3,3 @@ dist/
 .env
 .env.*
 !.env.example
-*.sqlite
-*.sqlite-journal
-*.sqlite-shm
-*.sqlite-wal
-# Runtime state — generated while the feeder runs; not committed.
-# Bootstrap state files (state/*/config-bootstrap.json, state/*/clients/*.json)
-# are committed so a fresh clone is ready to run without a manual copy step.
-state/*/logs/
-state/*/feeder-checkpoint.json
-state/*/clients/*/pairs/

@@ -19,6 +19,16 @@ import {
   type ModularConfig,
   type ValidationIssue,
 } from "../../src/config/index.js";
+import {
+  DEFAULT_SCAN_INTERVAL_MS,
+  DEFAULT_BLOCK_RANGE,
+  DEFAULT_CONFIRMATIONS,
+  DEFAULT_START_BLOCK,
+  DEFAULT_DEDUP_CACHE_SIZE,
+  DEFAULT_DEDUP_CACHE_TTL_MS,
+  DEFAULT_RECONNECT_INTERVAL_MS,
+  DEFAULT_MAX_RECONNECTS,
+} from "../../src/config/constants.js";
 import { createRegistryEnricher, identityTransformer } from "../../src/pipeline/index.js";
 import {
   createDedupCache,
@@ -71,14 +81,14 @@ export type ScanCmdOptions = {
 };
 
 const DEFAULTS = {
-  scanIntervalMs: 10_000,
-  blockRange: 500n,
-  confirmations: 6n,
-  startBlock: 0n,
-  dedupCapacity: 4096,
-  dedupTtlMs: 60 * 60_000, // 1h
-  reconnectIntervalMs: 5_000,
-  maxReconnects: 60,
+  scanIntervalMs: DEFAULT_SCAN_INTERVAL_MS,
+  blockRange: DEFAULT_BLOCK_RANGE,
+  confirmations: DEFAULT_CONFIRMATIONS,
+  startBlock: DEFAULT_START_BLOCK,
+  dedupCapacity: DEFAULT_DEDUP_CACHE_SIZE,
+  dedupTtlMs: DEFAULT_DEDUP_CACHE_TTL_MS,
+  reconnectIntervalMs: DEFAULT_RECONNECT_INTERVAL_MS,
+  maxReconnects: DEFAULT_MAX_RECONNECTS,
 } as const;
 
 // ---------------------------------------------------------------------------

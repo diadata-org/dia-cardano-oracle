@@ -45,6 +45,7 @@ import type { EnrichedIntent } from "../source/types.js";
 import type { QueueManager } from "./queue-manager.js";
 import type { SubmitRequest, SubmitResult } from "./types.js";
 import { laneKey } from "./lane-key.js";
+import { DEFAULT_COALESCE_WINDOW_MS } from "../config/constants.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -130,7 +131,7 @@ type Lane = {
 export function createCoalescerManager(options: CoalescerOptions): CoalescerManager {
   const {
     queueManager,
-    coalesceWindowMs = 2_000,
+    coalesceWindowMs = DEFAULT_COALESCE_WINDOW_MS,
     maxIntentAgeMs,
     maxBatchSize,
     sizeFallbackEnabled = false,

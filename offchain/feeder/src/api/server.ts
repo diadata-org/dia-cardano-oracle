@@ -1,6 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import type { ModularConfig } from "../config/types.js";
+import {
+  DEFAULT_API_HOST,
+  DEFAULT_API_PORT,
+  API_RATE_LIMIT_MAX,
+  API_RATE_LIMIT_WINDOW_MS,
+  API_RATE_LIMIT_SWEEP_EVERY,
+} from "../config/constants.js";
 import type { Db } from "../persistence/index.js";
 import type { PriceCache } from "../processor/price-cache.js";
 import { livenessResult, readinessResult, type HealthState } from "./health.js";
@@ -94,15 +101,12 @@ type RouteMatch =
 // ---------------------------------------------------------------------------
 
 type RateLimitBucket = { count: number; resetAt: number };
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX = 60;
 
-// Sweep expired buckets every N calls. Without eviction the bucket Map grows
-// one entry per unique remote address forever; behind a proxy forwarding many
-// distinct source IPs this is an unbounded memory leak. A lazy sweep (no
-// timer to clean up on shutdown) keeps it bounded to the active-IP set.
-const RATE_LIMIT_SWEEP_EVERY = 1_000;
-
+// Sweep expired buckets every N calls (API_RATE_LIMIT_SWEEP_EVERY). Without
+// eviction the bucket Map grows one entry per unique remote address forever;
+// behind a proxy forwarding many distinct source IPs this is an unbounded
+// memory leak. A lazy sweep (no timer to clean up on shutdown) keeps it
+// bounded to the active-IP set.
 export function createRateLimiter() {
   const buckets = new Map<string, RateLimitBucket>();
   let callsSinceSweep = 0;
@@ -110,7 +114,7 @@ export function createRateLimiter() {
   return function isAllowed(remoteAddress: string): boolean {
     const now = Date.now();
 
-    if (++callsSinceSweep >= RATE_LIMIT_SWEEP_EVERY) {
+    if (++callsSinceSweep >= API_RATE_LIMIT_SWEEP_EVERY) {
       callsSinceSweep = 0;
       for (const [addr, b] of buckets) {
         if (now > b.resetAt) buckets.delete(addr);
@@ -119,11 +123,11 @@ export function createRateLimiter() {
 
     let bucket = buckets.get(remoteAddress);
     if (!bucket || now > bucket.resetAt) {
-      bucket = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+      bucket = { count: 0, resetAt: now + API_RATE_LIMIT_WINDOW_MS };
       buckets.set(remoteAddress, bucket);
     }
 
-    if (bucket.count >= RATE_LIMIT_MAX) {
+    if (bucket.count >= API_RATE_LIMIT_MAX) {
       return false;
     }
     bucket.count++;
@@ -137,8 +141,8 @@ export function createRateLimiter() {
 
 export function createApiServer(options: ApiServerOptions): ApiServer {
   const { config, db, metrics, priceCache, chainRuntime, healthState } = options;
-  const host = options.host ?? config.infrastructure?.api?.host ?? "127.0.0.1";
-  const port = options.port ?? config.infrastructure?.api?.port ?? 8080;
+  const host = options.host ?? config.infrastructure?.api?.host ?? DEFAULT_API_HOST;
+  const port = options.port ?? config.infrastructure?.api?.port ?? DEFAULT_API_PORT;
   const startTimeMs = options.startTimeMs ?? Date.now();
   const network = options.network ?? "unknown";
   const cronEnabled = options.cronEnabled ?? (config.infrastructure?.cron_service?.enabled ?? false);

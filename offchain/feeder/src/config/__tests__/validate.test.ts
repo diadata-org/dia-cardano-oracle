@@ -70,6 +70,7 @@ function makeConfig(includeTxMode = false): ModularConfig {
         price_deviation_high_percent: 5,
         price_age_high_seconds: 600,
         reorg_rate_high_per_hour: 3,
+        deposit_pending_merge_lovelace: 5000000,
       },
     },
     chains: {

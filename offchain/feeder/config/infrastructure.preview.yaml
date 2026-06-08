@@ -289,6 +289,12 @@ infrastructure:
     # Prometheus-only (not consumed by feeder code); kept here so every alert
     # threshold has one canonical home (enforced by the threshold-drift test).
     reorg_rate_high_per_hour: 3                         # >3 reorg-dropped txs/1h
+    # Sum of un-merged client deposits at a per-client deposit address above
+    # this value → ReceiverDepositsPending alert. Action: CLI `deposit:merge`
+    # to fold the deposits into the client's Receiver balance. Prometheus-only
+    # (not consumed by feeder code); kept here so every alert threshold has one
+    # canonical home (enforced by the threshold-drift test).
+    deposit_pending_merge_lovelace: 5000000            # 5 ADA of un-merged deposits → run a merge
 
   # --------------------------------------------------------------------------
   # replica — Spectra parity, HA failover monitor.

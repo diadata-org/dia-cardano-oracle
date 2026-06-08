@@ -10,6 +10,10 @@
 
 import type { Db } from "../persistence/db.js";
 import type { PriceCache } from "../processor/price-cache.js";
+import {
+  DEFAULT_ALERT_EVALUATION_INTERVAL_MS,
+  DEFAULT_PAIR_STALENESS_THRESHOLD_MS,
+} from "../config/constants.js";
 
 export type AlertEvaluatorOptions = {
   db: Db;
@@ -36,8 +40,8 @@ export function startAlertEvaluator(options: AlertEvaluatorOptions): AlertEvalua
   const {
     db,
     priceCache,
-    evaluationIntervalMs = 30_000,
-    pairStalenessThresholdMs = 300_000,
+    evaluationIntervalMs = DEFAULT_ALERT_EVALUATION_INTERVAL_MS,
+    pairStalenessThresholdMs = DEFAULT_PAIR_STALENESS_THRESHOLD_MS,
     log = () => {},
     signal,
   } = options;

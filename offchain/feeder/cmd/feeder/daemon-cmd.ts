@@ -28,7 +28,7 @@
 //   METRICS_ENABLED          "true" to enable prom-client metrics.
 //   METRICS_NAMESPACE        metric name prefix — default "dia_bridge".
 
-import { access, rm, readdir } from "node:fs/promises";
+import { access, rm, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { seedCheckpointIfNeeded } from "./checkpoint-seed.js";
@@ -49,6 +49,7 @@ import {
   createEventWorkerPool,
   createPriceCache,
   type EventWorkerPool,
+  type PriceCache,
 } from "../../src/processor/index.js";
 import {
   createLatestIntentCache,
@@ -75,11 +76,18 @@ import {
   createRouterRegistry,
   routeIntent,
 } from "../../src/router/index.js";
+import { extractRouterSymbols } from "../../src/router/symbols.js";
 import {
   createQueueManager,
   createCoalescerManager,
+  createInflightTable,
+  laneKey,
+  nextWasmFailureCount,
+  shouldExitOnWasmFailures,
   type CoalescerManager,
+  type InflightTable,
 } from "../../src/submitter/index.js";
+import type { CardanoDestinationConfig } from "../../src/config/types.js";
 import type { SubmitRequest, SubmitResult, RouterSigner } from "../../src/submitter/types.js";
 import {
   createUpdateWorkerPoolManager,
@@ -88,7 +96,7 @@ import {
 import type { OracleIntentBridge } from "../../src/lib-bridge/index.js";
 import { createRealOracleIntentBridge } from "../../src/lib-bridge/index.js";
 import { reconcileAllDestinations } from "../../src/lib-bridge/reconcile.js";
-import { resolveRunStateDir } from "./run-state.js";
+import { resolveRunStateDir, STATE_ROOT } from "./run-state.js";
 import { createCardanoWriteClient } from "../../src/submitter/cardano-write-client.js";
 import {
   createApiServer,
@@ -105,6 +113,36 @@ import { createFileLogger, type FileLogger } from "../../src/logger/file-logger.
 import { runPreflight } from "../../src/submitter/preflight.js";
 import { createDefaultRetryPolicy } from "../../src/submitter/retry-policy.js";
 import { sanitizeLogLine } from "../../src/utils/sanitize.js";
+import {
+  DEFAULT_SCAN_INTERVAL_MS,
+  DEFAULT_BLOCK_RANGE,
+  DEFAULT_START_BLOCK,
+  DEFAULT_CONFIRMATIONS,
+  DEFAULT_MAX_BLOCK_GAP,
+  DEFAULT_DEDUP_CACHE_SIZE,
+  DEFAULT_DEDUP_CACHE_TTL_MS,
+  DEFAULT_RECONNECT_INTERVAL_MS,
+  DEFAULT_MAX_RECONNECTS,
+  DEFAULT_MAX_STALENESS_MS,
+  DEFAULT_CONFIRMATION_DEPTH,
+  DEFAULT_COALESCE_WINDOW_MS,
+  DEFAULT_PARALLEL_WORKER_COUNT,
+  DEFAULT_PARALLEL_QUEUE_SIZE,
+  DEFAULT_PARALLEL_TIMEOUT_MS,
+  DEFAULT_UPDATE_WORKER_MAX_WORKERS,
+  DEFAULT_UPDATE_WORKER_QUEUE_SIZE,
+  DEFAULT_UPDATE_WORKER_TIMEOUT_MS,
+  DEFAULT_CRON_TICK_INTERVAL_MS,
+  DEFAULT_HEALTH_CHECK_INTERVAL_MS,
+  DEFAULT_ALERT_EVALUATION_INTERVAL_MS,
+  DEFAULT_ORACLE_PAIR_STALE_SECONDS,
+  DEFAULT_API_HOST,
+  DEFAULT_API_PORT,
+  API_WILDCARD_HOST,
+  METRICS_NAMESPACE,
+  DEFAULT_WASM_FATAL_CONSECUTIVE_FAILURES,
+  WASM_FATAL_EXIT_CODE,
+} from "../../src/config/constants.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -205,6 +243,86 @@ function parsePositiveInteger(raw: number | undefined): number | undefined {
   return Math.max(1, Math.floor(raw));
 }
 
+/** Inputs for the pure auto-merge trigger decision. All chain-derived values
+ *  come from one `snapshotBalances` probe; the lock/lane facts come from the
+ *  shared in-flight table and the daemon's merge-in-progress set. */
+export type AutoMergeDecisionInput = {
+  /** Receiver `balanceLovelace` from the latest snapshot. Undefined when the
+   *  receiver query failed — we then cannot evaluate the low-balance arm. */
+  receiverBalanceLovelace?: bigint;
+  /** Summed clean pending deposits from the latest snapshot. Undefined when
+   *  the deposit query failed or the client has no deposit address. */
+  depositPendingLovelace?: bigint;
+  /** `alerting.receiver_balance_low_lovelace` — always present (validated). */
+  receiverBalanceLowLovelace: bigint;
+  /** `alerting.deposit_pending_merge_lovelace` — optional; undefined disables
+   *  the pending-high arm of the trigger. */
+  depositPendingMergeLovelace?: bigint;
+  /**
+   * True when a merge task for this lane is already enqueued or running. This
+   * is a DEDUP guard, not a safety lock: a merge spans many refresh ticks
+   * (build → submit → confirm), so without it the daemon would stack a fresh
+   * merge task every tick. Mutual exclusion against oracle updates is handled
+   * structurally by the lane queue (the merge runs on the same serial lane),
+   * not by this flag.
+   */
+  mergeInProgress: boolean;
+};
+
+export type AutoMergeDecision =
+  | { merge: true; reason: "receiver_balance_low" | "deposit_pending_high" }
+  | { merge: false; reason: "no_pending" | "below_threshold" | "merge_in_progress" };
+
+/**
+ * Pure decision: should the daemon submit a `deposit:merge` for this lane on
+ * this tick?
+ *
+ * A merge runs when there ARE clean pending deposits to fold in AND either:
+ *   - the Receiver balance is below `receiver_balance_low_lovelace` (top up a
+ *     starving Receiver from its accumulated deposits), OR
+ *   - pending deposits have reached `deposit_pending_merge_lovelace` (fold a
+ *     meaningful pile in before it grows unbounded),
+ * AND a merge is not already enqueued/running for this lane (dedup only).
+ *
+ * The merge never races an oracle update on the same Receiver UTxO because it
+ * is dispatched onto the SAME serial lane queue the client's updates use — the
+ * queue runs one entry at a time per lane, so an update and a merge are
+ * mutually exclusive by construction. This decision therefore no longer
+ * inspects an in-flight lock; it only decides WHETHER a merge is due.
+ *
+ * Kept pure (no chain, no locks, no I/O) so the trigger logic is unit-tested
+ * in isolation from the live submission path.
+ */
+export function shouldAutoMergeDeposits(input: AutoMergeDecisionInput): AutoMergeDecision {
+  // Dedup guard first: a merge spans many ticks, so skip if one is already
+  // enqueued/running for this lane. Safety (no overlap with updates) is the
+  // lane queue's job, not this flag's.
+  if (input.mergeInProgress) return { merge: false, reason: "merge_in_progress" };
+
+  // Nothing clean to merge → no-op (also avoids a guaranteed-to-throw
+  // `depositMerge` call when there are zero eligible deposits).
+  const pending = input.depositPendingLovelace ?? 0n;
+  if (pending <= 0n) return { merge: false, reason: "no_pending" };
+
+  // Arm 1 — Receiver is starving: fold deposits in to keep updates funded.
+  if (
+    input.receiverBalanceLovelace !== undefined &&
+    input.receiverBalanceLovelace < input.receiverBalanceLowLovelace
+  ) {
+    return { merge: true, reason: "receiver_balance_low" };
+  }
+
+  // Arm 2 — pending pile has reached the configured merge threshold.
+  if (
+    input.depositPendingMergeLovelace !== undefined &&
+    pending >= input.depositPendingMergeLovelace
+  ) {
+    return { merge: true, reason: "deposit_pending_high" };
+  }
+
+  return { merge: false, reason: "below_threshold" };
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -276,7 +394,7 @@ function createLeveledReport(
 export async function cleanFeederState(
   network: string,
   report: (line: string) => void,
-  stateBase = "state",
+  stateBase = STATE_ROOT,
 ): Promise<void> {
   // Clean the ACTIVE run dir (RUN_ID / newest / flat fallback), so a reset
   // never wipes a different deployment's run dir. `stateBase` lets tests point
@@ -330,12 +448,15 @@ export async function checkBootstrapStateFiles(
   config: ModularConfig,
   network: string,
   report: (line: string) => void,
-  stateBase = "state",
+  stateBase = STATE_ROOT,
 ): Promise<boolean> {
-  const bootstrapPath = `${stateBase}/${network.toLowerCase()}/config-bootstrap.json`;
+  const bootstrapPath = path.join(
+    resolveRunStateDir(network as CardanoNetwork, stateBase),
+    "config-bootstrap.json",
+  );
   if (!await fileExists(bootstrapPath)) {
     report(`daemon: missing bootstrap state file: ${bootstrapPath}`);
-    report(`daemon: hint → npm run feeder:dev -- init bootstrap`);
+    report(`daemon: hint → deploy with the CLI (run-all / protocol-init) so ${bootstrapPath} exists, then 'init client'.`);
     return false;
   }
   for (const [routerId, router] of Object.entries(config.routers)) {
@@ -351,6 +472,160 @@ export async function checkBootstrapStateFiles(
     }
   }
   return true;
+}
+
+/**
+ * Read the deposit dust floor from a CLI-produced protocol state file
+ * (`config-bootstrap.json::configState.depositMinLovelace`, set at the CLI's
+ * `protocol:init`). This is the single source shared with the CLI's
+ * `deposit:*` commands; the daemon passes it to the bridge so the
+ * deposit-pending probe counts exactly the deposits the CLI sweep would.
+ * Throws a clear, actionable error when the file or the field is absent —
+ * there is no hardcoded fallback.
+ */
+export async function readDepositMinLovelace(bootstrapStatePath: string): Promise<bigint> {
+  try {
+    const protocolState = JSON.parse(await readFile(bootstrapStatePath, "utf8")) as {
+      configState?: { depositMinLovelace?: string };
+    };
+    const floor = protocolState.configState?.depositMinLovelace;
+    if (floor === undefined) {
+      throw new Error("configState.depositMinLovelace is missing");
+    }
+    return BigInt(floor);
+  } catch (err) {
+    throw new Error(
+      `daemon: cannot read configState.depositMinLovelace from ${bootstrapStatePath} ` +
+        `(${(err as Error).message}). It is set at the CLI's protocol:init.`,
+    );
+  }
+}
+
+/**
+ * Read the opportunistic-fold cap from a CLI-produced protocol state file
+ * (`config-bootstrap.json::configState.depositMaxPerUpdateFold`, set at the
+ * CLI's `protocol:init`). This is the SAME source the CLI's update builders
+ * use; the daemon passes it to the bridge so an oracle update folds at most
+ * this many clean side-deposits into the same tx. Throws a clear, actionable
+ * error when the file or the field is absent — no hardcoded fallback.
+ */
+export async function readDepositMaxPerUpdateFold(bootstrapStatePath: string): Promise<number> {
+  try {
+    const protocolState = JSON.parse(await readFile(bootstrapStatePath, "utf8")) as {
+      configState?: { depositMaxPerUpdateFold?: string };
+    };
+    const cap = protocolState.configState?.depositMaxPerUpdateFold;
+    if (cap === undefined) {
+      throw new Error("configState.depositMaxPerUpdateFold is missing");
+    }
+    return Number(cap);
+  } catch (err) {
+    throw new Error(
+      `daemon: cannot read configState.depositMaxPerUpdateFold from ${bootstrapStatePath} ` +
+      `(${(err as Error).message}). It is set at the CLI's protocol:init.`,
+    );
+  }
+}
+
+type PersistedPairStateFile = {
+  pairState?: {
+    price?: string;
+    timestamp?: string;
+    intentHash?: string;
+    intent?: {
+      symbol?: string;
+      price?: string;
+      timestamp?: string;
+    };
+  };
+  transactions?: Array<{ submittedTxHash?: string; confirmed?: boolean }>;
+};
+
+async function hydratePriceCacheFromPairStateFiles(args: {
+  config: ModularConfig;
+  priceCache: PriceCache;
+  metrics: FeederMetrics;
+  confirmationDepth: number;
+  log: (line: string) => void;
+}): Promise<{ hydrated: number; maxUpdatedAtMs: number }> {
+  const { config, priceCache, metrics, confirmationDepth, log } = args;
+  let hydrated = 0;
+  let maxUpdatedAtMs = 0;
+
+  for (const router of Object.values(config.routers)) {
+    if (!router.enabled) continue;
+    const routerSymbols = new Set(extractRouterSymbols(router));
+    if (routerSymbols.size === 0) continue;
+
+    for (let destinationIndex = 0; destinationIndex < router.destinations.length; destinationIndex++) {
+      const dest = router.destinations[destinationIndex];
+      if (!dest?.cardano) continue;
+
+      const clientStatePath = dest.cardano.client_state_path;
+      const clientId = clientIdFromStatePath(clientStatePath);
+      const pairsDir = path.join(
+        path.dirname(clientStatePath),
+        path.basename(clientStatePath, ".json"),
+        "pairs",
+      );
+
+      let files: string[];
+      try {
+        files = (await readdir(pairsDir)).filter((file) => file.endsWith(".json"));
+      } catch {
+        continue;
+      }
+
+      for (const file of files) {
+        const pairPath = path.join(pairsDir, file);
+        try {
+          const [raw, fileStat] = await Promise.all([
+            readFile(pairPath, "utf8"),
+            stat(pairPath),
+          ]);
+          const parsed = JSON.parse(raw) as PersistedPairStateFile;
+          const pairState = parsed.pairState;
+          const symbol = pairState?.intent?.symbol;
+          if (!symbol || !routerSymbols.has(symbol)) continue;
+
+          const priceRaw = pairState.price ?? pairState.intent?.price;
+          const timestampRaw = pairState.timestamp ?? pairState.intent?.timestamp;
+          const intentHashRaw = pairState.intentHash;
+          if (!priceRaw || !timestampRaw || !intentHashRaw) continue;
+
+          const lastConfirmedTx = [...(parsed.transactions ?? [])]
+            .reverse()
+            .find((tx) => tx.confirmed === true && tx.submittedTxHash);
+          const intentHash = intentHashRaw.startsWith("0x") ? intentHashRaw : `0x${intentHashRaw}`;
+          const updatedAtMs = Math.max(1, Math.floor(fileStat.mtimeMs));
+
+          priceCache.set(
+            { routerId: router.id, destinationIndex, symbol },
+            {
+              symbol,
+              price: BigInt(priceRaw),
+              timestamp: BigInt(timestampRaw),
+              intentHash,
+              cardanoTxHash: lastConfirmedTx?.submittedTxHash,
+              confirmedAtDepth: confirmationDepth,
+              updatedAtMs,
+            },
+          );
+          metrics.cardanoOracleLastConfirmedTimestampSeconds.set(
+            { symbol, client_id: clientId },
+            Number(timestampRaw),
+          );
+          hydrated++;
+          maxUpdatedAtMs = Math.max(maxUpdatedAtMs, updatedAtMs);
+        } catch (err) {
+          log(`price-cache: skipped ${pairPath} during startup hydrate — ${(err as Error).message}`);
+        }
+      }
+    }
+  }
+
+  log(`price-cache: hydrated ${hydrated} confirmed pair state entr${hydrated === 1 ? "y" : "ies"} from disk`);
+  return { hydrated, maxUpdatedAtMs };
 }
 
 export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
@@ -480,7 +755,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const metricsNamespace =
     config.infrastructure?.metrics?.namespace ??
     process.env.METRICS_NAMESPACE?.trim() ??
-    "dia_bridge";
+    METRICS_NAMESPACE;
   const baseMetrics = metricsEnabled
     ? await createMetrics({
         namespace: metricsNamespace,
@@ -544,21 +819,21 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // ------------------------------------------------------------------
   const infra: InfrastructureConfig =
     config.infrastructure ?? ({} as InfrastructureConfig);
-  const scanIntervalMs   = parseDurationMs(infra.block_scanner?.scan_interval,   10_000);
-  const blockRange       = BigInt(infra.block_scanner?.block_range               ?? 500);
-  const startBlock       = BigInt(infra.source?.start_block                      ?? 0);
-  const confirmations    = BigInt(infra.block_scanner?.confirmations             ?? 6);
+  const scanIntervalMs   = parseDurationMs(infra.block_scanner?.scan_interval,   DEFAULT_SCAN_INTERVAL_MS);
+  const blockRange       = BigInt(infra.block_scanner?.block_range               ?? DEFAULT_BLOCK_RANGE);
+  const startBlock       = BigInt(infra.source?.start_block                      ?? DEFAULT_START_BLOCK);
+  const confirmations    = BigInt(infra.block_scanner?.confirmations             ?? DEFAULT_CONFIRMATIONS);
   // Gap recovery: when backward_sync=true, the HTTP scanner re-syncs from
   // last_processed_block using large chunks (backfill_chunk_blocks) and skips
   // scan_interval between chunks until caught up. Defaults preserve current
   // behaviour for installations that have not opted in.
   const backwardSync     = infra.block_scanner?.backward_sync === true;
-  const maxBlockGap      = BigInt(infra.block_scanner?.max_block_gap             ?? 5000);
-  const dedupCapacity    = infra.event_processor?.dedup_cache_size               ?? 4096;
-  const dedupTtlMs       = parseDurationMs(infra.event_processor?.dedup_cache_ttl, 60 * 60_000);
-  const reconnectMs      = parseDurationMs(infra.event_monitor?.reconnect_interval, 5_000);
-  const maxReconnects    = infra.event_monitor?.max_reconnect_attempts           ?? 60;
-  const maxStalenessMs   = parseDurationMs(infra.health_check?.max_processing_lag, 5 * 60_000);
+  const maxBlockGap      = BigInt(infra.block_scanner?.max_block_gap             ?? DEFAULT_MAX_BLOCK_GAP);
+  const dedupCapacity    = infra.event_processor?.dedup_cache_size               ?? DEFAULT_DEDUP_CACHE_SIZE;
+  const dedupTtlMs       = parseDurationMs(infra.event_processor?.dedup_cache_ttl, DEFAULT_DEDUP_CACHE_TTL_MS);
+  const reconnectMs      = parseDurationMs(infra.event_monitor?.reconnect_interval, DEFAULT_RECONNECT_INTERVAL_MS);
+  const maxReconnects    = infra.event_monitor?.max_reconnect_attempts           ?? DEFAULT_MAX_RECONNECTS;
+  const maxStalenessMs   = parseDurationMs(infra.health_check?.max_processing_lag, DEFAULT_MAX_STALENESS_MS);
   const maxLastConfirmedAgeMs = parseDurationMs(
     config.infrastructure?.api?.readiness?.max_last_confirmed_age,
     0,
@@ -581,7 +856,29 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       "daemon: infrastructure.worker_pool.inflight_timeout_ms is required (no silent default).",
     );
   }
-  const cardanoConfirmationDepth = infra.cardano?.confirmation_depth ?? 1;
+  const cardanoConfirmationDepth = infra.cardano?.confirmation_depth ?? DEFAULT_CONFIRMATION_DEPTH;
+
+  // Deposit floor — a deposit tx-build param (CLI domain) read from the
+  // protocol state's config-bootstrap.json::configState.depositMinLovelace
+  // (set at the CLI's protocol:init, the single source shared with the CLI's
+  // `deposit:*` commands). The floor is passed to the bridge so the
+  // deposit-pending probe counts exactly the deposits the CLI sweep would.
+  // The per-merge cap (configState.depositMaxPerMerge) is enforced inside the
+  // CLI's `depositMerge` (which the auto-merge path delegates to), so the
+  // daemon does not re-apply it here.
+  // The deposit config lives in the ACTIVE run dir's config-bootstrap.json — the
+  // same file the router destinations read (protocol_state_path) and where the
+  // logger/DB live. Resolve it via resolveRunStateDir so RUN_ID / newest-run
+  // selection stays consistent across the daemon (not a hardcoded flat path).
+  const depositBootstrapPath = path.join(resolveRunStateDir(network), "config-bootstrap.json");
+  const depositMinLovelace = await readDepositMinLovelace(depositBootstrapPath);
+  // Opportunistic-fold cap — how many clean side-deposits an oracle update may
+  // absorb into the same tx. A deposit tx-build param read from the same
+  // protocol state (configState.depositMaxPerUpdateFold, set at the CLI's
+  // protocol:init); passed to the bridge so the update path folds best-effort
+  // with a pure-update fallback. The standalone auto-merge below still handles
+  // bulk sweeps via configState.depositMaxPerMerge.
+  const depositMaxPerUpdateFold = await readDepositMaxPerUpdateFold(depositBootstrapPath);
 
   // Alerting thresholds — validated as required at config load. The
   // values come from `infrastructure.<network>.yaml::alerting` and are
@@ -594,6 +891,16 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     );
   }
   const receiverBalanceLowLovelace = BigInt(alerting.receiver_balance_low_lovelace!);
+  // Auto-merge threshold — sum of pending side-deposits at/above which the
+  // daemon folds them into the Receiver via `deposit:merge`. This YAML key
+  // (`alerting.deposit_pending_merge_lovelace`) is optional: when absent the
+  // pending-deposits-high arm of the auto-merge trigger is disabled (the
+  // low-Receiver-balance arm still fires). Tolerated-undefined per the
+  // feature spec — never default to a hardcoded value.
+  const depositPendingMergeLovelace =
+    alerting.deposit_pending_merge_lovelace !== undefined
+      ? BigInt(alerting.deposit_pending_merge_lovelace)
+      : undefined;
 
   const maxQueueSize = infra.health_check?.max_queue_size;
 
@@ -636,11 +943,23 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     : createRealOracleIntentBridge({
         log: debugReport,
         confirmationDepth: cardanoConfirmationDepth,
+        depositMinLovelace,
+        depositMaxPerUpdateFold,
       });
 
   const retryPolicy = createDefaultRetryPolicy({ maxRetries, delayMs: retryDelayMs });
 
+  // Shared in-flight table — the per-(receiverUnit) exclusive-lock map the
+  // submission queue stamps on every successful submit. Passing it in (rather
+  // than letting the queue manager build a private one) lets the auto-merge
+  // path below consult the SAME locks: a deposit merge spends the same
+  // Receiver UTxO as an oracle update, so it must never run while an update is
+  // in-flight on that Receiver. See `shouldAutoMergeDeposits` + the auto-merge
+  // tick for how the lock is honoured.
+  const inflightTable: InflightTable = createInflightTable();
+
   const queueManager = createQueueManager({
+    inflightTable,
     clientFactory: (clientStatePath, protocolStatePath) =>
       createCardanoWriteClient(clientStatePath, protocolStatePath, {
         bridge,
@@ -718,15 +1037,33 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     retryPolicy,
   });
 
-  const coalesceWindowMs = parseDurationMs(infra.event_processor?.coalesce_window, 2_000);
+  const coalesceWindowMs = parseDurationMs(infra.event_processor?.coalesce_window, DEFAULT_COALESCE_WINDOW_MS);
   const maxIntentAgeRaw  = infra.event_processor?.max_intent_age;
   const maxIntentAgeMs   = maxIntentAgeRaw ? parseDurationMs(maxIntentAgeRaw, 0) || undefined : undefined;
   const maxBatchSize = parsePositiveInteger(infra.event_processor?.max_batch_size);
   const sizeFallbackEnabled = infra.event_processor?.size_fallback_enabled === true;
   const parallelMode        = infra.event_processor?.enable_parallel_mode === true;
-  const parallelWorkerCount = parsePositiveInteger(infra.event_processor?.parallel_worker_count) ?? 4;
-  const parallelQueueSize   = parsePositiveInteger(infra.event_processor?.parallel_queue_size) ?? 256;
-  const parallelTimeoutMs   = parseDurationMs(infra.event_processor?.parallel_timeout, 30_000);
+  const parallelWorkerCount = parsePositiveInteger(infra.event_processor?.parallel_worker_count) ?? DEFAULT_PARALLEL_WORKER_COUNT;
+  const parallelQueueSize   = parsePositiveInteger(infra.event_processor?.parallel_queue_size) ?? DEFAULT_PARALLEL_QUEUE_SIZE;
+  const parallelTimeoutMs   = parseDurationMs(infra.event_processor?.parallel_timeout, DEFAULT_PARALLEL_TIMEOUT_MS);
+
+  // Persistent lucid WASM-build failure guard. Counts CONSECUTIVE WASM-
+  // signature failures observed in onResult — i.e. AFTER the worker pool's own
+  // retries are exhausted for that task, so a single transient blip the retries
+  // clear never increments it. Any successful submission resets it to 0. Once
+  // the count reaches the threshold the daemon self-exits with a distinct,
+  // non-zero code so the supervisor (Docker restart: unless-stopped, or
+  // scripts/run-feeder-supervised.sh) restarts with a fresh WASM module; state
+  // persists in the DB and resumes. The common transient glitch is handled
+  // upstream by the CLI tx-build's completeWithRetry + the worker-pool retries.
+  const wasmFatalThreshold = (() => {
+    const raw = process.env.WASM_FATAL_CONSECUTIVE_FAILURES?.trim();
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) && parsed > 0
+      ? Math.floor(parsed)
+      : DEFAULT_WASM_FATAL_CONSECUTIVE_FAILURES;
+  })();
+  let consecutiveWasmFailures = 0;
 
   const coalescerManager = createCoalescerManager({
     queueManager,
@@ -739,6 +1076,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       const clientId = clientIdFromStatePath(req.destination.client_state_path);
       const runtime = intentRuntime.get(result.intentHash);
       if (result.ok) {
+        // Any successful submission clears the persistent-WASM-failure streak.
+        consecutiveWasmFailures = nextWasmFailureCount(consecutiveWasmFailures, {
+          ok: true,
+        });
         healthState.lastConfirmedMs = nowMs;
         const { routerId, destinationIndex, enriched } = req;
         const { symbol, price, timestamp } = enriched.fullIntent;
@@ -933,6 +1274,29 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           },
         });
         intentRuntime.delete(result.intentHash);
+
+        // Persistent lucid WASM-build failure guard. This task has already
+        // exhausted the worker-pool retries (onResult fires post-retry), so a
+        // WASM-signature failure here is one the in-process rebuild could not
+        // clear. Count consecutive WASM failures; any non-WASM failure leaves
+        // the streak unchanged (handled by the normal retry/alert path). Once
+        // the streak reaches the threshold the WASM module is presumed
+        // genuinely corrupted — only a fresh PROCESS gets a fresh WASM module,
+        // so log FATAL and self-exit for the supervisor to restart us.
+        consecutiveWasmFailures = nextWasmFailureCount(consecutiveWasmFailures, {
+          ok: false,
+          error: result.error,
+        });
+        if (shouldExitOnWasmFailures(consecutiveWasmFailures, wasmFatalThreshold)) {
+          report(
+            `[error] daemon: FATAL — ${consecutiveWasmFailures} consecutive lucid WASM ` +
+            `build failures (threshold=${wasmFatalThreshold}). The in-process rebuild ` +
+            `could not clear it, so the WASM module is presumed corrupted. Exiting with ` +
+            `code ${WASM_FATAL_EXIT_CODE} so the supervisor restarts the daemon with a ` +
+            `fresh WASM module; state persists in the DB and resumes on restart.`,
+          );
+          process.exit(WASM_FATAL_EXIT_CODE);
+        }
       }
     },
     onSupersede: async (superseded: SubmitRequest, by: SubmitRequest) => {
@@ -966,9 +1330,9 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   //       Tasks are update requests routed through the coalescer;
   //       all Cardano submission remains serial via the lane queue.
   // ------------------------------------------------------------------
-  const updateWorkerMaxWorkers   = parsePositiveInteger(infra.worker_pool?.max_workers) ?? 4;
-  const updateWorkerQueueSize    = parsePositiveInteger(infra.worker_pool?.task_queue_size) ?? 128;
-  const updateWorkerTimeoutMs    = parseDurationMs(infra.worker_pool?.task_timeout, 60_000);
+  const updateWorkerMaxWorkers   = parsePositiveInteger(infra.worker_pool?.max_workers) ?? DEFAULT_UPDATE_WORKER_MAX_WORKERS;
+  const updateWorkerQueueSize    = parsePositiveInteger(infra.worker_pool?.task_queue_size) ?? DEFAULT_UPDATE_WORKER_QUEUE_SIZE;
+  const updateWorkerTimeoutMs    = parseDurationMs(infra.worker_pool?.task_timeout, DEFAULT_UPDATE_WORKER_TIMEOUT_MS);
 
   const updatePoolManager: UpdateWorkerPoolManager = createUpdateWorkerPoolManager({
     maxWorkers: updateWorkerMaxWorkers,
@@ -984,6 +1348,25 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   updatePoolManagerRef = updatePoolManager;
 
   // ------------------------------------------------------------------
+  // 9.3c. Startup reconciliation + cache hydrate — sync local pair-state
+  //       files with live on-chain UTxOs, then seed priceCache before
+  //       cron/alerting read it.
+  // ------------------------------------------------------------------
+  if (!dryRun) {
+    await reconcileAllDestinations({ config, log: report });
+  }
+  const hydratedPriceCache = await hydratePriceCacheFromPairStateFiles({
+    config,
+    priceCache,
+    metrics,
+    confirmationDepth: cardanoConfirmationDepth,
+    log: report,
+  });
+  if (hydratedPriceCache.maxUpdatedAtMs > 0) {
+    healthState.lastConfirmedMs = hydratedPriceCache.maxUpdatedAtMs;
+  }
+
+  // ------------------------------------------------------------------
   // 9.4. Cron service — Spectra parity. Re-submits the latest known
   //      intent for any cron-enabled destination whose on-chain pair
   //      has gone stale beyond its `time_threshold`. The service runs
@@ -992,7 +1375,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const cronEnabled = config.infrastructure?.cron_service?.enabled === true;
   const cronTickIntervalMs = parseDurationMs(
     config.infrastructure?.cron_service?.tick_interval,
-    30_000,
+    DEFAULT_CRON_TICK_INTERVAL_MS,
   );
   const cronHandle = startCronService({
     enabled: cronEnabled,
@@ -1000,7 +1383,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     routers: config.routers,
     latestIntents,
     priceCache,
-    submit: (req) => queueManager.submit(req),
+    submit: (req) => coalescerManager.accept(req),
     metrics,
     log: report,
     signal,
@@ -1016,10 +1399,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // ------------------------------------------------------------------
   const alertEvalIntervalMs = parseDurationMs(
     (infra.alerting as { evaluation_interval?: string } | undefined)?.evaluation_interval,
-    30_000,
+    DEFAULT_ALERT_EVALUATION_INTERVAL_MS,
   );
   const pairStalenessThresholdMs =
-    (alerting.oracle_pair_stale_seconds ?? 3600) * 1_000;
+    (alerting.oracle_pair_stale_seconds ?? DEFAULT_ORACLE_PAIR_STALE_SECONDS) * 1_000;
   const alertEvaluatorHandle = startAlertEvaluator({
     db,
     priceCache,
@@ -1037,7 +1420,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // the readiness handler only reads (single-threaded JS).
   const healthCheckIntervalMs = parseDurationMs(
     infra.health_check?.check_interval,
-    5_000,
+    DEFAULT_HEALTH_CHECK_INTERVAL_MS,
   );
   let queueDepthTimer: ReturnType<typeof setInterval> | null = setInterval(
     () => {
@@ -1061,22 +1444,116 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   //       Receiver is empty), so we poll chain on the cron cadence rather
   //       than only at post-confirmation. Read-only; never submits.
   // ------------------------------------------------------------------
-  const balanceRefreshDests: Array<{ clientStatePath: string; protocolStatePath: string }> = [];
+  const balanceRefreshDests: Array<{
+    clientStatePath: string;
+    protocolStatePath: string;
+    cardano: CardanoDestinationConfig;
+  }> = [];
   {
     const seenDest = new Set<string>();
     for (const router of Object.values(config.routers)) {
       if (!router.enabled) continue;
       for (const dest of router.destinations) {
         if (!dest.cardano) continue;
-        const key = `${dest.cardano.client_state_path}::${dest.cardano.protocol_state_path}`;
+        const key = laneKey(dest.cardano);
         if (seenDest.has(key)) continue;
         seenDest.add(key);
         balanceRefreshDests.push({
           clientStatePath: dest.cardano.client_state_path,
           protocolStatePath: dest.cardano.protocol_state_path,
+          cardano: dest.cardano,
         });
       }
     }
+  }
+
+  // ------------------------------------------------------------------
+  // 9.4e. Deposit auto-merge — fold each client's pending side-deposits into
+  //       its Receiver balance on the same cadence as the balance refresh.
+  //       Safe-by-default: only when NOT dry-run and only for destinations
+  //       that have a deposit address.
+  //
+  //       The merge spends the SAME Receiver UTxO as an oracle update, so it
+  //       MUST never run concurrently with one. We get that for free by
+  //       dispatching the merge onto the SAME serial lane queue the client's
+  //       updates use (`queueManager.enqueueLaneTask(dest, …)`): the queue
+  //       runs one entry at a time per lane, so an in-flight update finishes
+  //       before the merge body starts, and any update enqueued during the
+  //       merge waits for the merge to finish. Mutual exclusion is structural,
+  //       not a best-effort lock check.
+  // ------------------------------------------------------------------
+  // Per-lane dedup guard. A merge spans many refresh ticks (build → submit →
+  // confirm) and may sit queued behind an in-flight update, so without this we
+  // would enqueue a fresh merge task every tick. It is NOT a safety lock — the
+  // lane queue provides mutual exclusion; this only collapses duplicates.
+  const mergeInProgress = new Set<string>();
+
+  // Log each client's deposit address exactly once (the first refresh that
+  // resolves it) so operators can see / hand it out — a client funds its
+  // Receiver by paying ADA there with a plain wallet payment, no CLI needed.
+  // The address is a derived chain value (not in config), so it is surfaced
+  // from the snapshot rather than read from YAML.
+  const loggedDepositAddrs = new Set<string>();
+
+  async function maybeAutoMergeDeposits(
+    dest: { clientStatePath: string; protocolStatePath: string; cardano: CardanoDestinationConfig },
+    snapshot: { depositPendingLovelace?: bigint; receiverBalanceLovelace?: bigint; receiverUnit?: string; depositAddress?: string; clientId?: string },
+  ): Promise<void> {
+    const lane = laneKey(dest.cardano);
+    const clientId = snapshot.clientId ?? dest.clientStatePath;
+    const decision = shouldAutoMergeDeposits({
+      receiverBalanceLovelace: snapshot.receiverBalanceLovelace,
+      depositPendingLovelace: snapshot.depositPendingLovelace,
+      receiverBalanceLowLovelace,
+      depositPendingMergeLovelace,
+      mergeInProgress: mergeInProgress.has(lane),
+    });
+    if (!decision.merge) {
+      // A merge already enqueued/running for this lane is the only actionable
+      // skip worth logging; the common "nothing to do" cases stay debug-level
+      // to avoid log spam each tick.
+      if (decision.reason === "merge_in_progress") {
+        report(`[debug] auto-merge: skip client=${clientId} reason=${decision.reason}`);
+      }
+      return;
+    }
+
+    // Hold the dedup guard from now until the merge task settles so no second
+    // task is enqueued for this lane while this one is queued/running.
+    mergeInProgress.add(lane);
+    report(
+      `auto-merge: enqueueing merge on lane client=${clientId} reason=${decision.reason} ` +
+      `pending=${snapshot.depositPendingLovelace ?? 0n} receiverBalance=${snapshot.receiverBalanceLovelace ?? "?"} ` +
+      `addr=${snapshot.depositAddress ?? "?"}`,
+    );
+
+    // Dispatch the merge onto the SAME serial lane the client's updates use.
+    // The body runs only when the lane is free (no update mid-submission) and
+    // blocks any later update on this lane until it finishes — hard mutual
+    // exclusion on the shared Receiver UTxO, by construction of the queue. No
+    // separate in-flight lock is needed: the lane queue IS the lock, and the
+    // bridge merge builds, submits, and awaits confirmation before resolving,
+    // so the lane stays held for the whole build→submit→confirm lifecycle. We
+    // do not await the returned promise here so the refresh tick is not
+    // blocked; the dedup guard and lane queue keep subsequent ticks correct.
+    void queueManager
+      .enqueueLaneTask(dest.cardano, async () => {
+        const merged = await bridge.mergeDeposits({
+          clientStatePath: dest.clientStatePath,
+          protocolStatePath: dest.protocolStatePath,
+        });
+        report(
+          `auto-merge: done client=${clientId} confirmed=${merged.confirmed} txHash=${merged.txHash ?? "(none)"}`,
+        );
+      })
+      .catch((err) => {
+        // Non-fatal — log and retry on the next tick. A common cause is a race
+        // where the deposits were already swept, or a transient provider error.
+        report(`[warn] auto-merge: failed client=${clientId} — ${sanitizeLogLine((err as Error).message)}`);
+      })
+      .finally(() => {
+        mergeInProgress.delete(lane);
+      });
   }
 
   async function refreshBalanceGauges(): Promise<void> {
@@ -1084,6 +1561,12 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       try {
         const b = await bridge.snapshotBalances(dest);
         const clientId = b.clientId ?? dest.clientStatePath;
+        // Surface the per-client deposit address once so operators can hand it
+        // to the client. Logged on the first refresh that resolves it.
+        if (b.depositAddress && !loggedDepositAddrs.has(b.depositAddress)) {
+          loggedDepositAddrs.add(b.depositAddress);
+          report(`deposit-address: client=${clientId} addr=${b.depositAddress}`);
+        }
         if (b.receiverBalanceLovelace !== undefined) {
           metrics.cardanoReceiverBalanceLovelace.set(
             { client_id: clientId, receiver_address: b.receiverAddress ?? "" },
@@ -1099,6 +1582,17 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         if (b.adminWalletLovelace !== undefined) {
           metrics.cardanoAdminWalletLovelace.set({}, Number(b.adminWalletLovelace));
         }
+        // Deposit-pending gauge — emit only when the deposit query succeeded
+        // (depositPendingLovelace defined). The address may be present even
+        // when the query failed, so guard on the lovelace field.
+        if (b.depositPendingLovelace !== undefined) {
+          metrics.cardanoDepositPendingLovelace.set(
+            { client_id: clientId, deposit_address: b.depositAddress ?? "" },
+            Number(b.depositPendingLovelace),
+          );
+        }
+        // Auto-merge runs off the same snapshot so we never double-probe chain.
+        await maybeAutoMergeDeposits(dest, b);
       } catch (err) {
         report(`balance-refresh: ${dest.clientStatePath} failed: ${(err as Error).message}`);
       }
@@ -1119,16 +1613,6 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         balanceRefreshTimer = null;
       }
     }, { once: true });
-  }
-
-  // ------------------------------------------------------------------
-  // 9.5. Startup reconciliation — sync local pair-state files with the
-  //      live on-chain pair UTxOs for every Cardano destination. Runs
-  //      once before the scan pipeline starts. Failures are logged as
-  //      warnings; they do not abort startup.
-  // ------------------------------------------------------------------
-  if (!dryRun) {
-    await reconcileAllDestinations({ config, log: report });
   }
 
   // ------------------------------------------------------------------
@@ -1657,10 +2141,10 @@ async function runHttpTransport(inputs: TransportInputs): Promise<void> {
       client,
       eventAbi: inputs.source.eventAbi,
       checkpoint: inputs.checkpoint,
-      startBlock: inputs.startBlock ?? 0n,
-      blockRange: inputs.blockRange ?? 500n,
-      scanIntervalMs: inputs.scanIntervalMs ?? 10_000,
-      confirmations: inputs.confirmations ?? 6n,
+      startBlock: inputs.startBlock ?? DEFAULT_START_BLOCK,
+      blockRange: inputs.blockRange ?? DEFAULT_BLOCK_RANGE,
+      scanIntervalMs: inputs.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS,
+      confirmations: inputs.confirmations ?? DEFAULT_CONFIRMATIONS,
       onBatch: inputs.handleBatch,
       log: inputs.report,
       signal: inputs.signal,
@@ -1688,8 +2172,8 @@ async function runWsTransport(inputs: TransportInputs & { network: CardanoNetwor
     eventAbi: inputs.source.eventAbi,
     checkpoint: inputs.checkpoint,
     onBatch: inputs.handleBatch,
-    reconnectIntervalMs: inputs.reconnectIntervalMs ?? 5_000,
-    maxReconnects: inputs.maxReconnects ?? 60,
+    reconnectIntervalMs: inputs.reconnectIntervalMs ?? DEFAULT_RECONNECT_INTERVAL_MS,
+    maxReconnects: inputs.maxReconnects ?? DEFAULT_MAX_RECONNECTS,
     log: inputs.report,
     signal: inputs.signal,
     metrics: inputs.scannerMetrics,
@@ -1735,6 +2219,14 @@ function makeDryRunBridge(report: (line: string) => void): OracleIntentBridge {
       // Dry-run never touches chain; report no balances (gauges stay absent).
       return {};
     },
+    async mergeDeposits(params) {
+      // Dry-run never submits; the auto-merge path is gated off in dry-run
+      // anyway, so this is only here to satisfy the interface.
+      report(
+        `daemon: [dry-run bridge] mergeDeposits client=${params.clientStatePath} (no-op)`,
+      );
+      return { txHash: null, confirmed: false };
+    },
   };
 }
 
@@ -1768,15 +2260,15 @@ function resolveDbConfig(network: CardanoNetwork): DbConfig {
 function resolveApiAddr(apiConfig?: InfrastructureConfig["api"]): { host: string; port: number } {
   if (apiConfig?.host || apiConfig?.port) {
     return {
-      host: apiConfig.host?.trim() || "127.0.0.1",
-      port: apiConfig.port ?? 8080,
+      host: apiConfig.host?.trim() || DEFAULT_API_HOST,
+      port: apiConfig.port ?? DEFAULT_API_PORT,
     };
   }
 
-  const raw = apiConfig?.listen_addr?.trim() ?? process.env.API_LISTEN_ADDR?.trim() ?? ":8080";
+  const raw = apiConfig?.listen_addr?.trim() ?? process.env.API_LISTEN_ADDR?.trim() ?? `:${DEFAULT_API_PORT}`;
   const colonIdx = raw.lastIndexOf(":");
-  const host = colonIdx > 0 ? raw.slice(0, colonIdx) : colonIdx === 0 ? "0.0.0.0" : "127.0.0.1";
-  const port = parseInt(raw.slice(colonIdx + 1), 10) || 8080;
+  const host = colonIdx > 0 ? raw.slice(0, colonIdx) : colonIdx === 0 ? API_WILDCARD_HOST : DEFAULT_API_HOST;
+  const port = parseInt(raw.slice(colonIdx + 1), 10) || DEFAULT_API_PORT;
   return { host, port };
 }
 

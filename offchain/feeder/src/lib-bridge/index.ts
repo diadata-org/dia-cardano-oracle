@@ -17,6 +17,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import type { EnrichedIntent } from "../source/types.js";
 import type { RouterSigner } from "../submitter/types.js";
+import { DEFAULT_CONFIRMATION_DEPTH } from "../config/constants.js";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -81,6 +82,17 @@ export type PostConfirmChainState = {
   /** The client's on-chain Receiver script address — surfaced as a metric
    *  label so the ReceiverBalanceLow alert can name the exact Receiver. */
   receiverAddress?: string;
+  /** Sum of clean, un-merged ADA deposits (>= 1 ADA, no native tokens /
+   *  datum / dust) sitting at the client's side-deposit address, awaiting a
+   *  `deposit:merge` into the Receiver balance. Populated only by the
+   *  read-only `snapshotBalances` probe (the post-confirm capture does not
+   *  query the deposit address). Undefined when the query failed or the
+   *  client state carries no `receiver.depositValidatorAddress`. */
+  depositPendingLovelace?: bigint;
+  /** The client's side-deposit script address
+   *  (`receiver.depositValidatorAddress`) — surfaced as a metric label and
+   *  logged once at startup so operators can hand it to the client. */
+  depositAddress?: string;
 };
 
 /** Structured result returned by a successful oracle-update submission. */
@@ -138,7 +150,21 @@ export type OracleIntentBridge = {
   snapshotBalances(params: {
     clientStatePath: string;
     protocolStatePath: string;
-  }): Promise<PostConfirmChainState & { clientId?: string }>;
+  }): Promise<PostConfirmChainState & { clientId?: string; receiverUnit?: string }>;
+  /**
+   * Sweep the client's clean, un-merged side-deposit UTxOs into the Receiver
+   * balance by delegating to the CLI's `depositMerge` (spends the Receiver
+   * with the `TopUp` redeemer + the deposit UTxOs). Builds, signs, submits,
+   * and awaits confirmation. The merge spends the SAME Receiver UTxO as an
+   * oracle update, so the CALLER MUST serialize it against the update lane —
+   * this method does no locking of its own. Throws on failure (no eligible
+   * deposits, build/submit/confirm error) so the caller can log and retry on
+   * the next tick. Returns the confirmed tx hash.
+   */
+  mergeDeposits(params: {
+    clientStatePath: string;
+    protocolStatePath: string;
+  }): Promise<{ txHash: string | null; confirmed: boolean }>;
 };
 
 // ---------------------------------------------------------------------------
@@ -171,7 +197,90 @@ export type RealBridgeOptions = {
    * Sourced from `infrastructure.<network>.yaml::cardano.confirmation_depth`.
    */
   confirmationDepth?: number;
+  /**
+   * Minimum lovelace a clean, ADA-only side-deposit UTxO must hold to count
+   * toward the deposit-pending probe in `snapshotBalances`. This is the SAME
+   * floor the CLI's `deposit:merge` sweep applies, so the gauge never counts
+   * dust the sweep would skip. It is a deposit tx-build param read from the
+   * protocol state's `config-bootstrap.json::configState.depositMinLovelace`
+   * (set at the CLI's `protocol:init`) and passed in by the daemon (which loads
+   * it via `readDepositMinLovelace`) — there is NO hardcoded default here.
+   * Required: the factory throws when it is omitted, so the floor can only ever
+   * come from that single CLI-owned protocol state shared with the sweep. It is
+   * NOT a feeder-YAML key.
+   */
+  depositMinLovelace: bigint;
+  /**
+   * Max side-deposit UTxOs an oracle update may opportunistically fold into the
+   * same tx. A deposit tx-build param read from the protocol state's
+   * `config-bootstrap.json::configState.depositMaxPerUpdateFold` (set at the
+   * CLI's protocol:init) and passed in by the daemon (via
+   * `readDepositMaxPerUpdateFold`). When > 0 the bridge attempts to fold up to
+   * this many confirmed, clean (ADA-only, ≥ floor) deposits into each update;
+   * if the combined tx fails to build OR submit it falls back to a pure update
+   * so a bad/contended deposit never blocks a price update. When 0 (or absent)
+   * the fold is disabled and updates are always pure. NOT a feeder-YAML key.
+   */
+  depositMaxPerUpdateFold?: number;
 };
+
+/**
+ * Pure decision: how many side-deposits should this update attempt to fold?
+ *
+ * Returns the deposit UTxOs to fold (already filtered + capped) — empty when
+ * the fold is disabled (`maxPerUpdateFold <= 0`) or there is nothing clean to
+ * fold. Kept pure (no chain, no Lucid) so the fold decision is unit-tested in
+ * isolation from the live build/submit path. The actual best-effort attempt +
+ * fallback-on-failure lives in `submitOracleUpdate`.
+ */
+export function selectFoldUtxos<T extends { assets?: Record<string, bigint | string>; datum?: string | null; datumHash?: string | null }>(
+  candidates: T[],
+  minLovelace: bigint,
+  maxPerUpdateFold: number,
+): T[] {
+  if (maxPerUpdateFold <= 0) return [];
+  return candidates
+    .filter((utxo) => isCleanAdaDepositUtxo(utxo, minLovelace))
+    .slice(0, maxPerUpdateFold);
+}
+
+/**
+ * Best-effort fold orchestration: try the update with the selected deposits
+ * first; if that throws (build OR submit failure), retry the SAME update
+ * WITHOUT deposits so a bad/contended deposit never blocks the price update.
+ *
+ * - When `fold` has 0 deposits the attempt runs once with no fold; a failure
+ *   propagates (there is nothing to fall back to).
+ * - When `fold` has deposits the attempt runs folded; on failure it runs once
+ *   more unfolded. A failure of the UNFOLDED retry propagates.
+ *
+ * `attempt(fold)` performs the actual build → sign → submit and returns its
+ * result. `onFallback(err)` is invoked once, only when the folded attempt
+ * failed and the pure retry is about to run. Pure (no chain/Lucid) so the
+ * fallback semantics are unit-tested in isolation.
+ */
+export async function runWithFoldFallback<
+  F extends { utxos: unknown[] } | undefined,
+  R,
+>(args: {
+  fold: F;
+  attempt: (fold: F | undefined) => Promise<R>;
+  onFallback?: (err: Error) => void;
+}): Promise<R & { foldedDeposits: number }> {
+  const foldCount = args.fold?.utxos.length ?? 0;
+  if (foldCount === 0) {
+    const result = await args.attempt(undefined);
+    return { ...result, foldedDeposits: 0 };
+  }
+  try {
+    const result = await args.attempt(args.fold);
+    return { ...result, foldedDeposits: foldCount };
+  } catch (err) {
+    args.onFallback?.(err instanceof Error ? err : new Error(String(err)));
+    const result = await args.attempt(undefined);
+    return { ...result, foldedDeposits: 0 };
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -192,13 +301,24 @@ export type RealBridgeOptions = {
  * request as failed and continue with the next intent.
  */
 export function createRealOracleIntentBridge(
-  options: RealBridgeOptions = {},
+  options: RealBridgeOptions,
 ): OracleIntentBridge {
   const log = options.log ?? ((line: string) => process.stderr.write(`[bridge] ${line}\n`));
   // Default depth = 1: emit `tx_confirmed` as soon as the tx is observed
   // in any block. Higher values trade latency for rollback safety; see
   // RealBridgeOptions.confirmationDepth and the README finality section.
-  const confirmationDepth = options.confirmationDepth ?? 1;
+  const confirmationDepth = options.confirmationDepth ?? DEFAULT_CONFIRMATION_DEPTH;
+  // Deposit-pending probe floor — a deposit tx-build param from the protocol
+  // state's config-bootstrap.json::configState.depositMinLovelace (set at the
+  // CLI's protocol:init), passed in by the daemon via readDepositMinLovelace.
+  // No hardcoded default: that protocol state is the single source shared with
+  // the CLI's `deposit:merge` sweep. Not a feeder-YAML key.
+  const depositMinLovelace = options.depositMinLovelace;
+  // Opportunistic-fold cap — a deposit tx-build param from the protocol state's
+  // config-bootstrap.json::configState.depositMaxPerUpdateFold (set at the CLI's
+  // protocol:init), passed in by the daemon via readDepositMaxPerUpdateFold.
+  // 0/absent disables the fold (always pure updates). Not a feeder-YAML key.
+  const depositMaxPerUpdateFold = options.depositMaxPerUpdateFold ?? 0;
 
   // Resolve CLI src root once — avoids re-computing on every call.
   // Resolution priority (highest to lowest):
@@ -260,6 +380,7 @@ export function createRealOracleIntentBridge(
       const contractsMod = cliPath("core/contracts.js");
       const preflightMod = cliPath("preflight/index.js");
       const intentPathsMod = cliPath("core/intent-paths.js");
+      const depositMod = cliPath("transactions/deposit.js");
 
       const [
         { getCliConfig },
@@ -303,6 +424,7 @@ export function createRealOracleIntentBridge(
           assertPaymentKeyHashIsConfigSigner,
         },
         { pairSlugFromSymbol },
+        { selectDepositsForUpdateFold },
       ] = await Promise.all([
         import(configMod),
         import(lucidMod),
@@ -318,6 +440,7 @@ export function createRealOracleIntentBridge(
         import(contractsMod),
         import(preflightMod),
         import(intentPathsMod),
+        import(depositMod),
       ]);
 
       // ------------------------------------------------------------------
@@ -524,53 +647,139 @@ export function createRealOracleIntentBridge(
       );
 
       // ------------------------------------------------------------------
-      // 4. Build, sign, submit.
+      // 4. Build, sign, submit — with opportunistic best-effort deposit fold.
+      //
+      // When the fold is enabled (depositMaxPerUpdateFold > 0) we first try to
+      // fold up to that many confirmed, clean (ADA-only, >= floor) side-deposits
+      // into THIS update (absorbed into the Receiver balance via AccrueFee). If
+      // the combined tx fails to BUILD or SUBMIT, we fall back to the SAME update
+      // WITHOUT the deposits (a pure update) so a bad/contended deposit never
+      // blocks a price update. Selection + the fold cap come from the protocol
+      // state's configState (set at the CLI's protocol:init) — no hardcoded
+      // values; the standalone auto-merge still handles bulk sweeps.
       // ------------------------------------------------------------------
-      onStep?.("building");
-      log(`building oracle update tx for symbol=${fullIntent.symbol}`);
-      const { txSignBuilder, nextPairState, nextPairDatumCbor } = await buildOracleUpdateTx(lucid, {
-        isCreate,
-        intent,
-        witness,
-        networkNow,
-        currentConfigUtxo,
-        currentPairUtxo,
-        currentReceiverUtxo,
-        walletPaymentKeyHash: walletDefaults.paymentKeyHash,
-        scripts: state.scripts,
-        compiledScripts: state.compiledScripts,
-        referenceScripts: state.referenceScripts,
-        configState: state.configState,
-        pairState: state.pairState,
-        pair: state.pair,
-        receiver: state.receiver,
-      });
-
-      // Hash is deterministic from the tx body — available before signing.
-      const txHash = txSignBuilder.toHash();
-
-      // Extract the tx fee from the built transaction body. Lucid Evolution
-      // exposes this via txSignBuilder.toTransaction().body().fee().
-      // Wrapped in a try/catch: a future Lucid API change must not break
-      // the happy path.
-      // TODO: validate the exact accessor path against the installed
-      //       @lucid-evolution/lucid version once the production image is built.
-      let feePaidLovelace: string | undefined;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const fee = (txSignBuilder as any).toTransaction?.().body?.().fee?.();
-        if (fee !== undefined && fee !== null) {
-          feePaidLovelace = BigInt(fee).toString();
+      let depositFold:
+        | Awaited<ReturnType<typeof selectDepositsForUpdateFold>>
+        | undefined;
+      if (depositMaxPerUpdateFold > 0) {
+        try {
+          // selectDepositsForUpdateFold reads the floor + the
+          // depositMaxPerUpdateFold cap from configState and filters to clean
+          // ADA deposits — the same eligibility the CLI sweep applies.
+          const selected = await selectDepositsForUpdateFold({ lucid, client, protocol });
+          if (selected.utxos.length > 0) {
+            depositFold = selected;
+            log(
+              `fold: selected ${selected.utxos.length} clean deposit(s) totalling ` +
+              `${selected.sweptLovelace} lovelace to absorb into update symbol=${fullIntent.symbol}`,
+            );
+          }
+        } catch (err) {
+          // Selection failure (provider hiccup, missing deposit script) must
+          // never block the update — proceed with a pure update.
+          log(`fold: deposit selection failed, proceeding pure — ${(err as Error).message}`);
+          depositFold = undefined;
         }
-      } catch {
-        // Fee extraction is best-effort; leave undefined if the accessor is unavailable.
       }
 
-      onStep?.("signing", { txHash });
-      const signedTx = await txSignBuilder.sign.withWallet().complete();
-      onStep?.("submitting", { txHash });
-      await signedTx.submit();
-      onStep?.("submitted", { txHash });
+      // Build the tx for a given fold (or none). Kept as a closure so the
+      // fallback path re-runs it with no deposits. Returns the built artifacts
+      // needed by the confirmation + state-write steps below.
+      async function buildUpdate(fold: typeof depositFold) {
+        const built = await buildOracleUpdateTx(lucid, {
+          isCreate,
+          intent,
+          witness,
+          networkNow,
+          currentConfigUtxo,
+          currentPairUtxo,
+          currentReceiverUtxo,
+          walletPaymentKeyHash: walletDefaults.paymentKeyHash,
+          scripts: state.scripts,
+          compiledScripts: state.compiledScripts,
+          referenceScripts: state.referenceScripts,
+          configState: state.configState,
+          pairState: state.pairState,
+          pair: state.pair,
+          receiver: state.receiver,
+          depositFold:
+            fold && fold.utxos.length > 0
+              ? {
+                  utxos: fold.utxos,
+                  depositValidator: fold.depositValidator,
+                  referenceOutRef: fold.referenceOutRef,
+                }
+              : undefined,
+        });
+        return built;
+      }
+
+      onStep?.("building");
+      log(`building oracle update tx for symbol=${fullIntent.symbol}`);
+
+      let txSignBuilder: Awaited<ReturnType<typeof buildOracleUpdateTx>>["txSignBuilder"];
+      let nextPairState: Awaited<ReturnType<typeof buildOracleUpdateTx>>["nextPairState"];
+      let nextPairDatumCbor: Awaited<ReturnType<typeof buildOracleUpdateTx>>["nextPairDatumCbor"];
+      let txHash: string;
+      let feePaidLovelace: string | undefined;
+
+      // Extract the tx fee from a built tx body (best-effort; a future Lucid API
+      // change must not break the happy path).
+      const extractFee = (
+        builder: Awaited<ReturnType<typeof buildOracleUpdateTx>>["txSignBuilder"],
+      ): string | undefined => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const fee = (builder as any).toTransaction?.().body?.().fee?.();
+          return fee !== undefined && fee !== null ? BigInt(fee).toString() : undefined;
+        } catch {
+          return undefined;
+        }
+      };
+
+      // One build → sign → submit attempt for a given fold (or none). Returns
+      // the built artifacts; throws on build/sign/submit failure so the
+      // fold-fallback wrapper can retry pure.
+      const attemptSubmit = async (fold: typeof depositFold) => {
+        const built = await buildUpdate(fold);
+        const builtHash = built.txSignBuilder.toHash();
+        const builtFee = extractFee(built.txSignBuilder);
+        onStep?.("signing", { txHash: builtHash });
+        const signedTx = await built.txSignBuilder.sign.withWallet().complete();
+        onStep?.("submitting", { txHash: builtHash });
+        await signedTx.submit();
+        onStep?.("submitted", { txHash: builtHash });
+        return {
+          txSignBuilder: built.txSignBuilder,
+          nextPairState: built.nextPairState,
+          nextPairDatumCbor: built.nextPairDatumCbor,
+          txHash: builtHash,
+          feePaidLovelace: builtFee,
+        };
+      };
+
+      // Try the folded tx first; on ANY build/sign/submit failure, fall back to
+      // a pure update (at most one fallback). `runWithFoldFallback` is the pure
+      // orchestration core (unit-tested in lib-bridge/__tests__).
+      const submitted = await runWithFoldFallback({
+        fold: depositFold,
+        attempt: attemptSubmit,
+        onFallback: (err) =>
+          log(
+            `fold: combined update+absorb failed for symbol=${fullIntent.symbol} ` +
+            `(${err.message}); retrying as a PURE update without deposits`,
+          ),
+      });
+      txSignBuilder = submitted.txSignBuilder;
+      nextPairState = submitted.nextPairState;
+      nextPairDatumCbor = submitted.nextPairDatumCbor;
+      txHash = submitted.txHash;
+      feePaidLovelace = submitted.feePaidLovelace;
+      if (submitted.foldedDeposits > 0) {
+        log(
+          `fold: submitted update+absorb txHash=${txHash} deposits=${submitted.foldedDeposits}`,
+        );
+      }
       log(`submitted: txHash=${txHash} intentHash=${intentHash}`);
 
       // ------------------------------------------------------------------
@@ -1145,7 +1354,7 @@ export function createRealOracleIntentBridge(
     async snapshotBalances(params: {
       clientStatePath: string;
       protocolStatePath: string;
-    }): Promise<PostConfirmChainState & { clientId?: string }> {
+    }): Promise<PostConfirmChainState & { clientId?: string; receiverUnit?: string }> {
       // Read-only balance probe used by the daemon's periodic refresh. Reuses
       // the same on-chain reads as the post-confirm capture, but sets up Lucid
       // with no signer override and never builds or submits a tx.
@@ -1202,10 +1411,81 @@ export function createRealOracleIntentBridge(
         },
         log,
       });
+
+      // Deposit-pending probe. The client funds its Receiver by paying ADA to
+      // the per-client deposit script address (CLI artifact field
+      // `receiver.depositValidatorAddress`); that ADA must later be folded into
+      // the Receiver balance with `deposit:merge`. Here we read-only sum the
+      // CLEAN, mergeable deposits sitting there so the daemon can expose how
+      // much is pending and decide whether to auto-merge. A UTxO is counted
+      // only when it is pure ADA (no native tokens), carries no datum, and is
+      // at or above 1 ADA — exactly the eligibility the CLI's `depositMerge`
+      // sweep applies (`isCleanAdaDeposit`), so dust / token-junk / oversized-
+      // datum UTxOs a griefer might park there are skipped and never inflate
+      // the gauge or trigger a no-op merge. Best-effort: a query failure or a
+      // missing deposit address leaves both fields undefined and the daemon
+      // skips emitting the gauge rather than reporting a misleading 0.
+      const depositAddress = receiver.depositValidatorAddress as string | undefined;
+      let depositPendingLovelace: bigint | undefined;
+      if (depositAddress) {
+        try {
+          const depositUtxos = (await (lucid as {
+            utxosAt(addr: string): Promise<
+              Array<{ assets?: Record<string, bigint | string>; datum?: string | null; datumHash?: string | null }>
+            >;
+          }).utxosAt(depositAddress)) ?? [];
+          let total = 0n;
+          for (const utxo of depositUtxos) {
+            if (!isCleanAdaDepositUtxo(utxo, depositMinLovelace)) continue;
+            const lovelace = utxo.assets?.lovelace ?? 0n;
+            total += typeof lovelace === "bigint" ? lovelace : BigInt(lovelace);
+          }
+          depositPendingLovelace = total;
+        } catch (error) {
+          log(`snapshot-balances: deposit query failed for ${depositAddress}: ${(error as Error).message}`);
+        }
+      }
+
       return {
         ...balances,
+        depositAddress,
+        depositPendingLovelace,
         clientId: (client as Record<string, unknown>).clientId as string | undefined,
+        // Receiver NFT unit — the exclusive-lock key the update queue uses in
+        // the in-flight table. Surfaced so the daemon can serialize an auto-
+        // merge against any in-flight update on the same Receiver.
+        receiverUnit: receiver.receiverUnit as string | undefined,
       };
+    },
+
+    async mergeDeposits(params: {
+      clientStatePath: string;
+      protocolStatePath: string;
+    }): Promise<{ txHash: string | null; confirmed: boolean }> {
+      // Delegate to the CLI's `depositMerge` tx builder via the same dynamic-
+      // import pattern the update path uses, so the feeder keeps a single
+      // source of truth for the merge tx shape (TopUp redeemer + deposit
+      // UTxOs). build-only is false: this submits and awaits confirmation.
+      // Serialization against the update lane is the CALLER's responsibility
+      // (the daemon holds the lane lock around this call) — `depositMerge`
+      // itself spends the live Receiver UTxO with no awareness of in-flight
+      // updates.
+      const { depositMerge } = await import(cliPath("transactions/deposit.js"));
+      log(`mergeDeposits: client=${params.clientStatePath}`);
+      const result = (await depositMerge({
+        clientStatePath: path.resolve(params.clientStatePath),
+        protocolStatePath: path.resolve(params.protocolStatePath),
+        buildOnly: false,
+      })) as {
+        transactions?: Array<{ step?: string; submittedTxHash?: string | null; confirmed?: boolean }>;
+      };
+      // `depositMerge` appends a single transaction record carrying the
+      // submitted hash + confirmation flag; the last record is this merge.
+      const record = result.transactions?.[result.transactions.length - 1];
+      const txHash = record?.submittedTxHash ?? null;
+      const confirmed = record?.confirmed === true;
+      log(`mergeDeposits: confirmed=${confirmed} txHash=${txHash ?? "(none)"}`);
+      return { txHash, confirmed };
     },
   };
 
@@ -1319,6 +1599,36 @@ async function capturePostConfirmState(args: {
   }
 
   return result;
+}
+
+/**
+ * A clean, mergeable side-deposit UTxO: pure ADA (only `lovelace`), no inline
+ * datum or datum hash, at or above the configured floor (`minLovelace`).
+ * Native-token, datum-bearing, and dust UTxOs a griefer might park at the
+ * deposit address are rejected — they stay harmlessly at the address and are
+ * never swept, so they must not inflate the deposit-pending gauge either.
+ * This is the read-only counterpart of the CLI's `isCleanAdaDeposit` selection
+ * in `cli/src/transactions/deposit.ts`, applying the SAME floor: both come from
+ * `config-bootstrap.json::configState.depositMinLovelace` (set at the CLI's
+ * protocol:init; the daemon reads it via `readDepositMinLovelace` and passes it
+ * in via `RealBridgeOptions.depositMinLovelace`). Not a feeder-YAML key.
+ */
+export function isCleanAdaDepositUtxo(
+  utxo: {
+    assets?: Record<string, bigint | string>;
+    datum?: string | null;
+    datumHash?: string | null;
+  },
+  minLovelace: bigint,
+): boolean {
+  if (utxo.datum || utxo.datumHash) return false;
+  const assets = utxo.assets ?? {};
+  const assetKeys = Object.keys(assets);
+  const onlyAda = assetKeys.length === 1 && assetKeys[0] === "lovelace";
+  if (!onlyAda) return false;
+  const raw = assets.lovelace ?? 0n;
+  const lovelace = typeof raw === "bigint" ? raw : BigInt(raw);
+  return lovelace >= minLovelace;
 }
 
 /**

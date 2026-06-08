@@ -40,6 +40,7 @@ const ALERT_TO_YAML: Record<string, { yamlKey: string; divisor: number }> = {
   PriceDeviationHigh: { yamlKey: "price_deviation_high_percent", divisor: 1 },
   PriceAgeHigh: { yamlKey: "price_age_high_seconds", divisor: 1 },
   ReorgRateHigh: { yamlKey: "reorg_rate_high_per_hour", divisor: 1 },
+  ReceiverDepositsPending: { yamlKey: "deposit_pending_merge_lovelace", divisor: 1_000_000 },
 };
 
 /** Pull the threshold (the operand of the final `<`/`>` comparison) from a PromQL expr. */
@@ -131,7 +132,7 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
       return `${r.annotations?.summary ?? ""} ${r.annotations?.description ?? ""}`;
     };
     // ADA-denominated alerts must mention "<N> ADA" in their text.
-    for (const alert of ["ReceiverBalanceLow", "SettleOverdue", "PaymentHookWithdrawReady", "AdminWalletLow"]) {
+    for (const alert of ["ReceiverBalanceLow", "SettleOverdue", "PaymentHookWithdrawReady", "AdminWalletLow", "ReceiverDepositsPending"]) {
       const { yamlKey } = ALERT_TO_YAML[alert]!;
       const ada = yaml[yamlKey]! / 1_000_000;
       assert.match(prose(alert), new RegExp(`\\b${ada}\\s*ADA\\b`), `${alert} prose missing "${ada} ADA"`);
@@ -147,6 +148,7 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     assert.equal(step(panelByTitle(panels, "Price deviation p95 — 1 h window (per pair)"), "red"), yaml.price_deviation_high_percent);
     assert.equal(step(panelByTitle(panels, "Reorg counter"), "red"), yaml.reorg_rate_high_per_hour);
     assert.equal(step(panelByTitle(panels, "Receiver balance — ADA (per client)"), "yellow"), yaml.receiver_balance_low_lovelace / 1_000_000);
+    assert.equal(step(panelByTitle(panels, "Deposit pending — ADA (per client)"), "yellow"), yaml.deposit_pending_merge_lovelace / 1_000_000);
 
     const wallets = panelByTitle(panels, "Admin wallet • PaymentHook • Receiver accrued — ADA");
     assert.equal(step(wallets, "green"), yaml.admin_wallet_low_lovelace / 1_000_000);

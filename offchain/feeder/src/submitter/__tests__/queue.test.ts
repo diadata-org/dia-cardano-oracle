@@ -274,4 +274,122 @@ describe("createSubmissionQueue", () => {
     assert.equal(results[1]?.intentHash, "b2");
     assert.equal(results[2]?.intentHash, "b3");
   });
+
+  // -------------------------------------------------------------------------
+  // Lane mutual exclusion: a merge task and an oracle update share one lane.
+  //
+  // On Cardano both a merge tx and an update tx spend the SAME Receiver UTxO,
+  // so they MUST never run concurrently. The merge is dispatched as a lane
+  // task (`enqueueTask`) onto the same serial queue the updates use; the queue
+  // runs one entry at a time, so the two can never interleave. These tests
+  // instrument enter/exit and assert no overlap.
+  // -------------------------------------------------------------------------
+  it("never overlaps a merge task with an in-flight update on the same lane", async () => {
+    const events: string[] = [];
+    let active = 0;
+    // True if two bodies were ever executing at once (the bug we guard against).
+    let overlapped = false;
+
+    function track(tag: string): void {
+      active++;
+      if (active > 1) overlapped = true;
+      events.push(`enter:${tag}`);
+    }
+    function untrack(tag: string): void {
+      active--;
+      events.push(`exit:${tag}`);
+    }
+
+    // A slow client whose submit only completes when we release `gate`. This
+    // keeps the UPDATE body "in-flight" while we enqueue the merge, proving the
+    // merge waits rather than running concurrently.
+    let releaseUpdate!: () => void;
+    const gate = new Promise<void>((res) => { releaseUpdate = res; });
+    const client: CardanoWriteClient = {
+      label: "lane-mx",
+      async submit(req) {
+        track("update");
+        await gate;
+        untrack("update");
+        return { ok: true, cardanoTxHash: "tx-u", intentHash: req.intentHash, receiverUnit: "r", pairUnit: "p" };
+      },
+      async submitBatch(requests) {
+        track("update");
+        await gate;
+        untrack("update");
+        return requests.map((req) => ({
+          ok: true, cardanoTxHash: "tx-u", intentHash: req.intentHash, receiverUnit: "r", pairUnit: "p",
+        }));
+      },
+    };
+
+    const q = createSubmissionQueue({ client, inflight: createInflightTable(), inflightTimeoutMs: 60_000 });
+
+    // 1. Start an update; it parks inside submit() awaiting the gate.
+    const updateP = q.enqueue(makeRequest("u1"));
+    await new Promise((r) => setImmediate(r));
+    assert.equal(active, 1, "update should be running");
+    assert.equal(q.busy, true);
+
+    // 2. Enqueue the merge while the update is still in-flight. It must NOT
+    //    start yet — the lane is busy with the update.
+    let mergeRan = false;
+    const mergeP = q.enqueueTask(async () => {
+      track("merge");
+      mergeRan = true;
+      await new Promise((r) => setImmediate(r));
+      untrack("merge");
+    });
+    await new Promise((r) => setImmediate(r));
+    assert.equal(mergeRan, false, "merge must wait while the update holds the lane");
+
+    // 3. Release the update; the merge then runs after it completes.
+    releaseUpdate();
+    await updateP;
+    await mergeP;
+
+    assert.equal(overlapped, false, "a merge and an update must never run at once on a lane");
+    assert.equal(mergeRan, true);
+    assert.deepEqual(events, ["enter:update", "exit:update", "enter:merge", "exit:merge"]);
+  });
+
+  it("runs an enqueued merge task before a later update on the same lane (FIFO)", async () => {
+    const events: string[] = [];
+    const client = makeOkClient();
+    // Wrap submit to record ordering.
+    const recordingClient: CardanoWriteClient = {
+      ...client,
+      async submit(req) {
+        events.push(`update:${req.intentHash}`);
+        return client.submit(req);
+      },
+    };
+    const q = createSubmissionQueue({ client: recordingClient, inflight: createInflightTable(), inflightTimeoutMs: 60_000 });
+
+    // Enqueue merge first, then an update — FIFO means merge runs first and the
+    // update waits for it (serial lane).
+    const mergeP = q.enqueueTask(async () => {
+      events.push("merge:start");
+      await new Promise((r) => setImmediate(r));
+      events.push("merge:end");
+    });
+    const updateP = q.enqueue(makeRequest("after-merge"));
+
+    await Promise.all([mergeP, updateP]);
+    assert.deepEqual(events, ["merge:start", "merge:end", "update:after-merge"]);
+  });
+
+  it("propagates a thrown merge-task error to the enqueueTask caller without wedging the lane", async () => {
+    const q = createSubmissionQueue({ client: makeOkClient(), inflight: createInflightTable(), inflightTimeoutMs: 60_000 });
+
+    await assert.rejects(
+      () => q.enqueueTask(async () => { throw new Error("merge boom"); }),
+      /merge boom/,
+    );
+
+    // Lane is not wedged: a subsequent update still processes.
+    const result = await q.enqueue(makeRequest("after-throw"));
+    assert.equal(result.ok, true);
+    assert.equal(q.busy, false);
+  });
 });

@@ -251,6 +251,13 @@ export type AlertingConfig = {
    *  it); kept here so every alert threshold has one canonical home and the
    *  threshold-drift test can enforce it against `monitoring/`. */
   reorg_rate_high_per_hour?: number;
+  /** Sum of un-merged client deposits waiting at a per-client deposit address
+   *  (side-deposit funding) above this lovelace value triggers the
+   *  ReceiverDepositsPending alert. A `deposit:merge` folds those deposits into
+   *  the client's Receiver balance. Prometheus-only (the feeder code does not
+   *  consume it); kept here so every alert threshold has one canonical home and
+   *  the threshold-drift test can enforce it against `monitoring/`. */
+  deposit_pending_merge_lovelace?: number;
 };
 
 export type ReplicaConfig = {

@@ -5,6 +5,8 @@
 // labels injected at registry creation time so dashboards can separate
 // Cardano-destination feeders from other bridge deployments.
 
+import { METRICS_NAMESPACE, METRICS_WARN_THROTTLE_MS } from "../config/constants.js";
+
 export type FeedCounter = {
   inc(labels?: Record<string, string>, value?: number): void;
 };
@@ -70,6 +72,12 @@ export type FeederMetrics = {
    *  tx fees. Singleton — no labels. */
   cardanoAdminWalletLovelace: FeedGauge;
   cardanoReceiverTopupWarnings: FeedCounter;
+  /** Sum of clean, un-merged ADA deposits waiting at the client's side-deposit
+   *  address (`receiver.depositValidatorAddress`). A `deposit:merge` folds
+   *  these into the Receiver balance. Per client + deposit address. Above
+   *  `alerting.deposit_pending_merge_lovelace` the daemon auto-merges (and the
+   *  ReceiverDepositsPending alert fires). */
+  cardanoDepositPendingLovelace: FeedGauge;
   cardanoPairIsCreate: FeedGauge;
   /** Cron service resubmissions — Spectra parity. One increment per
    *  cron tick decision, partitioned by `outcome`:
@@ -161,6 +169,7 @@ export const noopMetrics: FeederMetrics = {
   cardanoPaymentHookAccruedLovelace: noopGauge,
   cardanoAdminWalletLovelace: noopGauge,
   cardanoReceiverTopupWarnings: noopCounter,
+  cardanoDepositPendingLovelace: noopGauge,
   cardanoPairIsCreate: noopGauge,
   cronResubmissions: noopCounter,
   httpRequests: noopCounter,
@@ -206,7 +215,7 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     registry.setDefaultLabels(options.defaultLabels);
   }
 
-  const namespace = options.namespace ?? "dia_bridge";
+  const namespace = options.namespace ?? METRICS_NAMESPACE;
   collectDefaultMetrics({ register: registry });
 
   function counter(name: string, help: string, labelNames: string[] = []): FeedCounter {
@@ -419,6 +428,11 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "Number of times the feeder observed a Receiver `balanceLovelace` below `alerting.receiver_balance_low_lovelace` after a confirmed tx.",
       ["client_id"],
     ),
+    cardanoDepositPendingLovelace: gauge(
+      "cardano_deposit_pending_lovelace",
+      "Sum of clean, un-merged ADA deposits (>= 1 ADA, no native tokens / datum / dust) waiting at the client's side-deposit address. A `deposit:merge` folds these into the Receiver `balanceLovelace`. Above `alerting.deposit_pending_merge_lovelace` the daemon auto-merges and the ReceiverDepositsPending alert fires. The `deposit_address` label carries the per-client deposit script address (also logged once at startup) so operators can hand it out. Labelled — prom-client emits no series until a real value is written, so no spurious 0 on restart.",
+      ["client_id", "deposit_address"],
+    ),
     cardanoPairIsCreate: gauge(
       "cardano_pair_is_create",
       "Whether the last confirmed submission for a symbol minted the pair (1) or updated it (0)",
@@ -427,7 +441,7 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     cronResubmissions: counter(
       "cron_resubmissions_total",
       "Cron-service resubmission decisions, partitioned by outcome (Spectra-parity counterpart of `internal/cron`).",
-      ["router_id", "symbol", "client_id", "outcome"],
+      ["router_id", "symbol", "client_id", "customer", "outcome"],
     ),
     httpRequests: counter(
       "http_requests_total",
@@ -590,11 +604,10 @@ export function wrapWithPersistence(
   // Throttle the persistence-failure warning to at most once per minute so a
   // sustained DB outage does not flood the log on every counter increment.
   let lastWarnMs = 0;
-  const WARN_THROTTLE_MS = 60_000;
   function warnPersistFailure(name: string, err: unknown): void {
     if (!log) return;
     const now = Date.now();
-    if (now - lastWarnMs < WARN_THROTTLE_MS) return;
+    if (now - lastWarnMs < METRICS_WARN_THROTTLE_MS) return;
     lastWarnMs = now;
     log(`[warn] metrics: performance_metrics persistence failing (latest: ${name} — ${String(err)}); /performance may be stale`);
   }

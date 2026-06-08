@@ -62,6 +62,15 @@ export type QueueManager = {
   /** Schedule one Cardano submission covering multiple requests for the same
    *  destination lane. Returns per-request results in the same order. */
   submitBatch(requests: SubmitRequest[]): Promise<SubmitResult[]>;
+  /**
+   * Schedule an arbitrary async body on the SAME serial lane an oracle update
+   * for `dest` uses (routed by `laneKey(dest)`). The body runs only when the
+   * lane is free and the next lane entry waits for it to finish — so a
+   * non-update operation that spends the same Receiver UTxO (a side-deposit
+   * merge) is mutually exclusive with updates by construction, not by an
+   * external lock check. Resolves/rejects with the body's outcome.
+   */
+  enqueueLaneTask(dest: CardanoDestinationConfig, run: () => Promise<void>): Promise<void>;
   /** All currently-active queue keys (for diagnostics). */
   queueKeys(): string[];
   /** Total pending items across all queues. */
@@ -132,6 +141,11 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
 
       const queue = getOrCreateQueue(firstDestination);
       return queue.enqueueBatch(requests);
+    },
+
+    async enqueueLaneTask(dest, run) {
+      const queue = getOrCreateQueue(dest);
+      return queue.enqueueTask(run);
     },
 
     queueKeys() {

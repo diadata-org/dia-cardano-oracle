@@ -10,6 +10,7 @@
 // Spectra equivalent: `pkg/api/prices.go`.
 
 import type { PriceCache } from "../processor/price-cache.js";
+import { DEFAULT_CONFIRMATION_DEPTH } from "../config/constants.js";
 
 export type PriceEntry = {
   routerId: string;
@@ -87,7 +88,7 @@ function toPriceEntry(
     timestamp: entry.timestamp.toString(),
     intentHash: entry.intentHash,
     cardanoTxHash: entry.cardanoTxHash,
-    confirmedAtDepth: entry.confirmedAtDepth ?? 1,
+    confirmedAtDepth: entry.confirmedAtDepth ?? DEFAULT_CONFIRMATION_DEPTH,
     updatedAtMs: entry.updatedAtMs,
   };
 }

@@ -17,8 +17,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { AbiEvent } from "viem";
 
 import type { Checkpoint } from "./checkpoint.js";
+import { BACKFILL_CHUNK_BLOCKS } from "../config/constants.js";
 import type { RegistryClient } from "./registry-client.js";
 import { processLogBatch, type ScanHandler } from "./scan-handler.js";
+
+export { BACKFILL_CHUNK_BLOCKS };
 
 /**
  * Minimal Prometheus surface the scanner needs. Decoupled from the full
@@ -39,11 +42,6 @@ export type ScannerMetricsSink = {
   /** Mark a transport (http or ws) as up (1) or down (0). */
   setTransportUp(labels: { chain_id: string; transport: string }, up: number): void;
 };
-
-/** Default chunk size when the gap-recovery loop is active (Spectra parity:
- *  internal/scanner/block_scanner_enhanced.go uses 5000). Larger chunks
- *  let the scanner catch up in fewer round-trips after a long outage. */
-export const BACKFILL_CHUNK_BLOCKS = 5000n;
 
 export type HttpScannerOptions = {
   /** Registry client (HTTP transport). */

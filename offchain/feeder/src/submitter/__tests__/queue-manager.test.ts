@@ -242,6 +242,118 @@ describe("createQueueManager", () => {
     );
   });
 
+  // -------------------------------------------------------------------------
+  // Lane routing of a merge task — the production auto-merge path.
+  //
+  // A deposit merge is dispatched via `enqueueLaneTask(dest, …)`, which routes
+  // to the SAME serial queue (by `laneKey`) the client's updates use. These
+  // tests prove the two guarantees the daemon relies on:
+  //   1. an update and a merge on the SAME lane are mutually exclusive, and
+  //   2. merges on DIFFERENT lanes still run in parallel.
+  // -------------------------------------------------------------------------
+  it("serializes an update and a merge task on the same lane (mutual exclusion)", async () => {
+    let active = 0;
+    let overlapped = false;
+    const events: string[] = [];
+
+    function enter(tag: string): void {
+      active++;
+      if (active > 1) overlapped = true;
+      events.push(`enter:${tag}`);
+    }
+    function exit(tag: string): void {
+      active--;
+      events.push(`exit:${tag}`);
+    }
+
+    // The update parks inside submitBatch until released, holding the lane.
+    let releaseUpdate!: () => void;
+    const gate = new Promise<void>((res) => { releaseUpdate = res; });
+    const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
+      clientFactory: () => ({
+        label: "mx",
+        async submit(req) {
+          enter("update");
+          await gate;
+          exit("update");
+          return { ok: true, cardanoTxHash: "t", intentHash: req.intentHash, receiverUnit: "r", pairUnit: "p" };
+        },
+        async submitBatch(reqs) {
+          enter("update");
+          await gate;
+          exit("update");
+          return reqs.map((req) => ({ ok: true, cardanoTxHash: "t", intentHash: req.intentHash, receiverUnit: "r", pairUnit: "p" }));
+        },
+      }),
+    });
+
+    const dest = makeRequest("c.json", "p.json", "u1").destination;
+
+    // 1. Start the update on the lane; it parks awaiting the gate.
+    const updateP = mgr.submit(makeRequest("c.json", "p.json", "u1"));
+    await new Promise((r) => setImmediate(r));
+    assert.equal(active, 1, "update should be running and holding the lane");
+
+    // 2. Enqueue a merge task on the SAME lane. It must not start yet.
+    let mergeRan = false;
+    const mergeP = mgr.enqueueLaneTask(dest, async () => {
+      enter("merge");
+      mergeRan = true;
+      await new Promise((r) => setImmediate(r));
+      exit("merge");
+    });
+    await new Promise((r) => setImmediate(r));
+    assert.equal(mergeRan, false, "merge must wait behind the in-flight update on the same lane");
+
+    // 3. Release the update; the merge runs only after it completes.
+    releaseUpdate();
+    await Promise.all([updateP, mergeP]);
+
+    assert.equal(overlapped, false, "an update and a merge on one lane must never overlap");
+    assert.deepEqual(events, ["enter:update", "exit:update", "enter:merge", "exit:merge"]);
+    assert.equal(mgr.queueKeys().length, 1, "both ran on the same lane queue");
+  });
+
+  it("runs merge tasks on different lanes in parallel", async () => {
+    let active = 0;
+    let maxActive = 0;
+
+    // Each lane task parks until its own release fires; if the two lanes are
+    // serialized (bug) the second never starts while the first is parked, and
+    // maxActive stays 1. Correct behaviour: both run at once → maxActive == 2.
+    const releases: Array<() => void> = [];
+    const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
+      clientFactory: () => makeOkClient("parallel"),
+    });
+
+    const destA = makeRequest("client-a.json", "p.json").destination;
+    const destB = makeRequest("client-b.json", "p.json").destination;
+
+    function laneBody(): () => Promise<void> {
+      return async () => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await new Promise<void>((res) => { releases.push(res); });
+        active--;
+      };
+    }
+
+    const pA = mgr.enqueueLaneTask(destA, laneBody());
+    const pB = mgr.enqueueLaneTask(destB, laneBody());
+
+    // Let both bodies start.
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    assert.equal(maxActive, 2, "tasks on different lanes must run concurrently");
+    assert.equal(mgr.queueKeys().length, 2);
+
+    // Release both and let them settle.
+    for (const r of releases) r();
+    await Promise.all([pA, pB]);
+  });
+
   it("submitBatch with an empty array returns [] without creating a queue", async () => {
     const mgr = createQueueManager({
       inflightTimeoutMs: 60_000,

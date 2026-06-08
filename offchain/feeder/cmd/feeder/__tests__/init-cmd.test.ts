@@ -1,8 +1,7 @@
 // Tests for the non-interactive parts of init-cmd:
 //   - buildRouterYaml (pure)
 //   - loadExistingPairsFromYaml (filesystem)
-//   - findCliBootstrapCandidates (filesystem)
-//   - findCliClientCandidates (filesystem)
+//   - findConfigClientCandidates (filesystem)
 
 import assert from "node:assert/strict";
 import { describe, it, before, after } from "node:test";
@@ -13,8 +12,7 @@ import { tmpdir } from "node:os";
 import {
   buildRouterYaml,
   loadExistingPairsFromYaml,
-  findCliBootstrapCandidates,
-  findCliClientCandidates,
+  findConfigClientCandidates,
 } from "../init-cmd.js";
 
 // ---------------------------------------------------------------------------
@@ -25,6 +23,7 @@ describe("buildRouterYaml", () => {
   const BASE_OPTS = {
     routerId: "client_a_preview",
     clientId: "client-a",
+    customer: "client-a",
     network: "Preview" as const,
     keyEnv: "CARDANO_WALLET_SEED_TESTNET",
     pairs: ["BTC/USD", "ETH/USD"],
@@ -59,6 +58,16 @@ describe("buildRouterYaml", () => {
   it("includes the key env var", () => {
     const yaml = buildRouterYaml(BASE_OPTS);
     assert.ok(yaml.includes("CARDANO_WALLET_SEED_TESTNET"));
+  });
+
+  it("enables the cron liveness heartbeat on the destination", () => {
+    const yaml = buildRouterYaml(BASE_OPTS);
+    assert.ok(yaml.includes("cron: true"), "destination must set cron: true so a flat pair still updates within time_threshold");
+  });
+
+  it("includes the customer label", () => {
+    const yaml = buildRouterYaml({ ...BASE_OPTS, customer: "acme-corp" });
+    assert.ok(yaml.includes("customer: acme-corp"));
   });
 
   it("includes time_threshold and price_deviation", () => {
@@ -133,68 +142,10 @@ routers:
 });
 
 // ---------------------------------------------------------------------------
-// findCliBootstrapCandidates — filesystem
+// findConfigClientCandidates — filesystem
 // ---------------------------------------------------------------------------
 
-describe("findCliBootstrapCandidates", () => {
-  let tmpDir: string;
-
-  before(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "feeder-test-cli-state-"));
-  });
-
-  after(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
-  });
-
-  it("returns empty array when stateDir does not exist", async () => {
-    const hits = await findCliBootstrapCandidates("preview", join(tmpDir, "nonexistent"));
-    assert.deepEqual(hits, []);
-  });
-
-  it("returns empty array when no matching network dirs exist", async () => {
-    await mkdir(join(tmpDir, "mainnet_run_20260101"));
-    await writeFile(join(tmpDir, "mainnet_run_20260101", "config-bootstrap.json"), "{}", "utf8");
-    const hits = await findCliBootstrapCandidates("preview", tmpDir);
-    assert.deepEqual(hits, []);
-  });
-
-  it("finds a matching bootstrap file", async () => {
-    const runDir = join(tmpDir, "preview_run_20260501");
-    await mkdir(runDir, { recursive: true });
-    await writeFile(join(runDir, "config-bootstrap.json"), "{}", "utf8");
-    const hits = await findCliBootstrapCandidates("preview", tmpDir);
-    assert.equal(hits.length, 1);
-    assert.ok(hits[0].endsWith("config-bootstrap.json"));
-  });
-
-  it("returns newest-first when multiple run dirs exist", async () => {
-    const dir1 = join(tmpDir, "preview_run_20260502");
-    const dir2 = join(tmpDir, "preview_run_20260503");
-    await mkdir(dir1, { recursive: true });
-    await mkdir(dir2, { recursive: true });
-    await writeFile(join(dir1, "config-bootstrap.json"), "{}", "utf8");
-    await writeFile(join(dir2, "config-bootstrap.json"), "{}", "utf8");
-    const hits = await findCliBootstrapCandidates("preview", tmpDir);
-    // newest dir name sorts last alphabetically → should be first in results
-    assert.ok(hits[0].includes("20260503"));
-  });
-
-  it("skips run dirs that have no config-bootstrap.json", async () => {
-    const emptyRun = join(tmpDir, "preview_run_20260504");
-    await mkdir(emptyRun, { recursive: true });
-    const hitsBefore = (await findCliBootstrapCandidates("preview", tmpDir)).length;
-    // emptyRun has no bootstrap file — count should not increase
-    const hitsAfter = (await findCliBootstrapCandidates("preview", tmpDir)).length;
-    assert.equal(hitsBefore, hitsAfter);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// findCliClientCandidates — filesystem
-// ---------------------------------------------------------------------------
-
-describe("findCliClientCandidates", () => {
+describe("findConfigClientCandidates", () => {
   let tmpDir: string;
 
   before(async () => {
@@ -206,7 +157,7 @@ describe("findCliClientCandidates", () => {
   });
 
   it("returns empty array when stateDir does not exist", async () => {
-    const hits = await findCliClientCandidates("preview", join(tmpDir, "nonexistent"));
+    const hits = await findConfigClientCandidates("preview", join(tmpDir, "nonexistent"));
     assert.deepEqual(hits, []);
   });
 
@@ -214,7 +165,7 @@ describe("findCliClientCandidates", () => {
     const clientsDir = join(tmpDir, "preview_run_20260601", "clients");
     await mkdir(clientsDir, { recursive: true });
     await writeFile(join(clientsDir, "client-a.json"), '{"clientId":"client-a"}', "utf8");
-    const hits = await findCliClientCandidates("preview", tmpDir);
+    const hits = await findConfigClientCandidates("preview", tmpDir);
     assert.equal(hits.length, 1);
     assert.ok(hits[0].endsWith("client-a.json"));
   });
@@ -223,7 +174,7 @@ describe("findCliClientCandidates", () => {
     const clientsDir = join(tmpDir, "mainnet_run_20260601", "clients");
     await mkdir(clientsDir, { recursive: true });
     await writeFile(join(clientsDir, "client-m.json"), '{"clientId":"client-m"}', "utf8");
-    const hits = await findCliClientCandidates("preview", tmpDir);
+    const hits = await findConfigClientCandidates("preview", tmpDir);
     assert.ok(!hits.some(h => h.includes("client-m.json")));
   });
 
@@ -232,7 +183,7 @@ describe("findCliClientCandidates", () => {
     await mkdir(clientsDir, { recursive: true });
     await writeFile(join(clientsDir, "README.md"), "# docs", "utf8");
     await writeFile(join(clientsDir, "client-b.json"), '{"clientId":"client-b"}', "utf8");
-    const hits = await findCliClientCandidates("preview", tmpDir);
+    const hits = await findConfigClientCandidates("preview", tmpDir);
     assert.ok(hits.every(h => h.endsWith(".json")));
   });
 });

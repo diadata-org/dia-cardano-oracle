@@ -5,10 +5,10 @@
 // Checks that require on-chain state (balance, UTxO presence, nonce
 // monotonicity) are handled inside the bridge during submission.
 //
-// The preflight is called in `processOneEvent` after routing and before
-// `queueManager.submit()`. A `PreflightResult` with `ok: false` causes
-// the intent to be discarded with a structured log entry rather than
-// being enqueued.
+// The preflight is called in `processOneEvent` after routing and before the
+// request enters the coalescer/queue submission path. A `PreflightResult` with
+// `ok: false` causes the intent to be discarded with a structured log entry
+// rather than being enqueued.
 
 import type { EnrichedIntent } from "../source/types.js";
 import type { FeederErrorCode } from "../errors/codes.js";

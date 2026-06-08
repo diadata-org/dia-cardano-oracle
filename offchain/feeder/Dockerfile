@@ -1,86 +1,85 @@
 # syntax=docker/dockerfile:1
 # ---------------------------------------------------------------------------
-# Stage 1 — build CLI: compile TypeScript → JavaScript
+# DIA Cardano Oracle — single self-contained image.
+#
+# The build context is the REPO ROOT (see docker-compose.yml build.context), so
+# the image mirrors the whole repo under /app:
+#
+#   /app/contracts/aiken      Aiken sources + the compiled plutus.json blueprint
+#   /app/offchain/cli         CLI: src + dist + node_modules + scripts
+#   /app/offchain/feeder      feeder daemon: src + dist + node_modules + public
+#
+# It also carries the full toolchain — Node, the Aiken compiler, and bash — so
+# every workflow (compile contracts, deploy, run the daemon, tear down) runs
+# inside the container with nothing missing and nothing in another place. The
+# paths mirror the host, so a relative path resolves the same here as under npm.
 # ---------------------------------------------------------------------------
-FROM node:22-alpine AS cli-build
-WORKDIR /build/cli
+FROM node:22-bookworm-slim
 
-# Build tools needed by better-sqlite3 / lucid-evolution native deps.
-RUN apk add --no-cache python3 make g++
+# System toolchain.
+#   python3 / make / g++   : native node addons (better-sqlite3)
+#   bash / util-linux       : run-all-cli.sh (bash shebang; `script` keeps a PTY)
+#   curl / ca-certificates  : fetch the Aiken compiler
+#   git                     : `aiken build` pulls stdlib/fuzz from GitHub
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      python3 make g++ bash util-linux curl ca-certificates git \
+ && rm -rf /var/lib/apt/lists/*
 
-COPY cli/package.json cli/package-lock.json* ./
-RUN npm ci --ignore-scripts
+# Aiken compiler, pinned to contracts/aiken/aiken.toml::compiler.
+ENV AIKEN_VERSION=v1.1.21
+RUN curl -sSfL https://install.aiken-lang.org | bash \
+ && /root/.aiken/bin/aikup install "${AIKEN_VERSION}" \
+ && cp -L /root/.aiken/bin/aiken /usr/local/bin/aiken \
+ && aiken --version
 
-COPY cli/tsconfig.json ./
-COPY cli/src ./src
-RUN npm run build
-
-# Prune dev deps for the runtime stage.
-RUN npm prune --omit=dev
-
-# ---------------------------------------------------------------------------
-# Stage 2 — build feeder
-# ---------------------------------------------------------------------------
-FROM node:22-alpine AS feeder-build
-WORKDIR /build/feeder
-
-RUN apk add --no-cache python3 make g++
-
-COPY feeder/package.json feeder/package-lock.json* ./
-# better-sqlite3 needs its install script so the native binding exists in
-# the final Alpine runtime image.
-RUN npm ci
-
-COPY feeder/tsconfig.json ./
-COPY feeder/cmd ./cmd
-COPY feeder/src ./src
-# Static assets served by the API at runtime (the offline Redoc bundle behind
-# /docs). Vendored under feeder/public/ and not part of the TS build.
-COPY feeder/public ./public
-RUN npm run build
-
-RUN npm prune --omit=dev
-
-# ---------------------------------------------------------------------------
-# Stage 3 — runtime: feeder + CLI in one lean image
-# ---------------------------------------------------------------------------
-FROM node:22-alpine AS runtime
 WORKDIR /app
 
-# Feeder build output.
-COPY --from=feeder-build /build/feeder/package.json /app/feeder/package.json
-COPY --from=feeder-build /build/feeder/node_modules /app/feeder/node_modules
-COPY --from=feeder-build /build/feeder/dist /app/feeder/dist
-# Static assets (offline Redoc bundle for /docs). Placed next to dist/ so the
-# API's public-dir locator finds /app/feeder/public at request time.
-COPY --from=feeder-build /build/feeder/public /app/feeder/public
+# --- CLI: install deps (layer cached on package.json) then build ---
+COPY offchain/cli/package.json offchain/cli/package-lock.json* ./offchain/cli/
+RUN cd offchain/cli && npm ci
+COPY offchain/cli/tsconfig.json ./offchain/cli/
+COPY offchain/cli/src ./offchain/cli/src
+COPY offchain/cli/scripts ./offchain/cli/scripts
+RUN cd offchain/cli && npm run build
 
-# CLI build output.
-COPY --from=cli-build /build/cli/package.json /app/cli/package.json
-COPY --from=cli-build /build/cli/node_modules /app/cli/node_modules
-COPY --from=cli-build /build/cli/dist /app/cli/dist
+# --- feeder: install deps then build ---
+COPY offchain/feeder/package.json offchain/feeder/package-lock.json* ./offchain/feeder/
+RUN cd offchain/feeder && npm ci
+COPY offchain/feeder/tsconfig.json ./offchain/feeder/
+COPY offchain/feeder/cmd ./offchain/feeder/cmd
+COPY offchain/feeder/src ./offchain/feeder/src
+# Static assets served by the API at runtime (the offline Redoc bundle behind
+# /docs). Vendored under feeder/public/ and not part of the TS build.
+COPY offchain/feeder/public ./offchain/feeder/public
+RUN cd offchain/feeder && npm run build
 
-# Convenience wrapper for operators: `dia-cli <command>` from any shell.
-RUN printf '#!/bin/sh\nexec node /app/cli/dist/index.js "$@"\n' > /usr/local/bin/dia-cli \
-    && chmod +x /usr/local/bin/dia-cli
+# --- contracts: Aiken sources + the committed plutus.json blueprint ---
+COPY contracts ./contracts
 
-# Mount points for config and the shared state tree used by both the
-# feeder and the CLI inside the container.
-RUN mkdir -p /config /app/state \
-    && chown -R node:node /config /app/state
+# Convenience wrapper: `dia-cli <command>` from any shell / service.
+RUN printf '#!/bin/sh\nexec node /app/offchain/cli/dist/index.js "$@"\n' > /usr/local/bin/dia-cli \
+ && chmod +x /usr/local/bin/dia-cli
+
+# Runtime mount points (config + state trees) must be writable by the
+# unprivileged runtime user. The baked code/node_modules stay root-owned but
+# world-readable, so node reads them fine; only these mount dirs need node
+# ownership (a recursive chown over node_modules adds minutes to every build).
+RUN mkdir -p /app/offchain/state /app/offchain/feeder/config \
+ && chown node:node /app/offchain/state /app/offchain/feeder/config
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:8080/health/live || exit 1
+  CMD curl -fsS http://localhost:8080/health/live >/dev/null || exit 1
 
 USER node
 
-# CLI module root for the lib-bridge dynamic imports. Set here so the feeder
-# inside the container resolves compiled CLI dist instead of the dev src tree.
-# Key: CARDANO_FEEDER_CLI_DIST_ROOT (documented in .env.example).
-ENV CARDANO_FEEDER_CLI_DIST_ROOT=/app/cli/dist
+# CLI module root for the feeder lib-bridge dynamic imports. Set here so the
+# feeder inside the container resolves the compiled CLI dist.
+ENV CARDANO_FEEDER_CLI_DIST_ROOT=/app/offchain/cli/dist
 
-# Default: feeder daemon. Override `command:` in compose to invoke CLI.
-# ENTRYPOINT is intentionally absent so each service specifies its own binary.
-CMD ["node", "/app/feeder/dist/cmd/feeder/main.js", "--config", "/config"]
+# Default service = feeder daemon. Each compose service sets its own working_dir
+# and may override the command (CLI, aiken, run-all, teardown, …).
+WORKDIR /app/offchain/feeder
+CMD ["node", "/app/offchain/feeder/dist/cmd/feeder/main.js", "--config", "/app/offchain/feeder/config"]

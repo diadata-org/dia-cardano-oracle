@@ -44,8 +44,10 @@ import { processLogBatch, type ScanHandler } from "./scan-handler.js";
 import type { ScannerMetricsSink } from "./scanner-http.js";
 
 // Reconnect backoff parameters (sourced from WsScannerOptions defaults).
-const BASE_RECONNECT_MS = 1_000;
-const MAX_RECONNECT_MS = 300_000;
+import {
+  WS_BASE_RECONNECT_MS as BASE_RECONNECT_MS,
+  WS_MAX_RECONNECT_MS as MAX_RECONNECT_MS,
+} from "../config/constants.js";
 
 /**
  * Compute the next reconnect delay with exponential backoff and ±20% jitter.

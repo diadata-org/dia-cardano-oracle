@@ -1,6 +1,8 @@
 # DIA Cardano Oracle — unified feeder + CLI compose.
 #
-# Build context is the parent offchain/ directory so both packages are visible.
+# Build context is the repo ROOT so contracts/ (outside offchain/) and both
+# offchain packages are all baked into the image (see Dockerfile). The image
+# mirrors the repo under /app, so every workflow runs inside the container.
 # Profiles:
 #
 #   sqlite      — feeder daemon, SQLite persistence
@@ -31,17 +33,17 @@ services:
     # and `docker compose stop` do nothing.
     init: true
     build:
-      context: ..
-      dockerfile: feeder/Dockerfile
-      target: runtime
+      context: ../..
+      dockerfile: offchain/feeder/Dockerfile
     image: dia-cardano-feeder:local
     user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app/offchain/feeder
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
-      - ./config:/config:ro
-      - ./state:/app/state
+      - ../state:/app/offchain/state
+      - ./config:/app/offchain/feeder/config
     env_file: [.env]
     environment:
       DATABASE_DRIVER: sqlite
@@ -53,7 +55,7 @@ services:
       # DATABASE_PATH_TESTNET/MAINNET would pin a fixed path and defeat per-run.
       # CARDANO_FEEDER_CLI_DIST_ROOT already set by Dockerfile ENV.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/live"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -63,17 +65,17 @@ services:
     profiles: ["postgres"]
     init: true
     build:
-      context: ..
-      dockerfile: feeder/Dockerfile
-      target: runtime
+      context: ../..
+      dockerfile: offchain/feeder/Dockerfile
     image: dia-cardano-feeder:local
     user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app/offchain/feeder
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
-      - ./config:/config:ro
-      - ./state:/app/state
+      - ../state:/app/offchain/state
+      - ./config:/app/offchain/feeder/config
     env_file: [.env]
     environment:
       DATABASE_DRIVER: postgres
@@ -83,7 +85,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/live"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/live"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -113,16 +115,17 @@ services:
     # tini as PID 1 so Ctrl+C (SIGINT) actually aborts the CLI command.
     init: true
     build:
-      context: ..
-      dockerfile: feeder/Dockerfile
-      target: runtime
+      context: ../..
+      dockerfile: offchain/feeder/Dockerfile
     image: dia-cardano-feeder:local
     user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app/offchain/cli
     entrypoint: ["dia-cli"]
     command: ["help"]
     volumes:
-      - ./config:/app/config
-      - ./state:/app/state
+      - ../state:/app/offchain/state
+      - ../../contracts/aiken:/app/contracts/aiken
+      - ../../docs/milestones/evidence:/app/docs/milestones/evidence
     env_file: [.env]
     stdin_open: true
     tty: true

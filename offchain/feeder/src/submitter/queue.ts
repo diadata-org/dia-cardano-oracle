@@ -27,10 +27,30 @@ import type { RetryPolicy } from "./retry-policy.js";
 // Types
 // ---------------------------------------------------------------------------
 
-export type QueueEntry = {
-  requests: SubmitRequest[];
-  resolve: (result: SubmitResult[]) => void;
-};
+/**
+ * A unit of work the serial queue processes. Two shapes share one lane so
+ * they never overlap on the same Receiver UTxO:
+ *
+ *   - `submit`: a batch of oracle-update `SubmitRequest`s submitted via the
+ *     write client (the normal update path).
+ *   - `task`:   an arbitrary async body run to completion before the next
+ *     entry starts. Used to fold a side-deposit merge onto the SAME lane as
+ *     the client's updates so an update and a merge can never run at once.
+ *     The body itself owns its in-flight lock + confirm-wait (the queue does
+ *     not record an inflight entry for it, unlike a `submit`).
+ */
+export type QueueEntry =
+  | {
+      kind: "submit";
+      requests: SubmitRequest[];
+      resolve: (result: SubmitResult[]) => void;
+    }
+  | {
+      kind: "task";
+      run: () => Promise<void>;
+      resolve: () => void;
+      reject: (err: unknown) => void;
+    };
 
 export type SubmissionQueue = {
   /** Enqueue a request. Resolves when the request has been processed
@@ -38,9 +58,18 @@ export type SubmissionQueue = {
   enqueue(request: SubmitRequest): Promise<SubmitResult>;
   /** Enqueue a batch of requests for one shared Cardano submission. */
   enqueueBatch(requests: SubmitRequest[]): Promise<SubmitResult[]>;
-  /** Number of requests waiting to be processed. */
+  /**
+   * Enqueue an arbitrary async body onto this lane's serial queue. The body
+   * runs only when no other entry (update batch or task) is executing on the
+   * lane, and the next entry waits until it completes — this is the hard
+   * mutual-exclusion guarantee a deposit merge relies on to never race an
+   * oracle update for the same Receiver UTxO. The returned promise settles
+   * when the body settles (its result/throw is propagated to the caller).
+   */
+  enqueueTask(run: () => Promise<void>): Promise<void>;
+  /** Number of entries waiting to be processed. */
   readonly pending: number;
-  /** Whether the queue is currently processing a request. */
+  /** Whether the queue is currently processing an entry. */
   readonly busy: boolean;
 };
 
@@ -91,12 +120,32 @@ export function createSubmissionQueue(options: QueueOptions): SubmissionQueue {
     }
   }
 
+  async function drainTask(entry: Extract<QueueEntry, { kind: "task" }>): Promise<void> {
+    // Run the caller-supplied body to completion before the next lane entry
+    // starts. The body owns its own in-flight lock + confirm-wait, so the
+    // queue records nothing in the inflight table here — it only guarantees
+    // serialization on the lane. Errors propagate to the enqueue caller.
+    try {
+      await entry.run();
+      entry.resolve();
+    } catch (err) {
+      entry.reject(err);
+    }
+  }
+
   async function drain(): Promise<void> {
     if (busy || pending.length === 0) return;
     busy = true;
 
-    const entry = pending.shift()!;
-    const { requests, resolve } = entry;
+    const nextEntry = pending.shift()!;
+    if (nextEntry.kind === "task") {
+      await drainTask(nextEntry);
+      busy = false;
+      setImmediate(drain);
+      return;
+    }
+
+    const { requests, resolve } = nextEntry;
 
     // First attempt.
     let results = await trySubmitBatch(requests);
@@ -145,6 +194,7 @@ export function createSubmissionQueue(options: QueueOptions): SubmissionQueue {
     enqueue(request) {
       return new Promise<SubmitResult>((resolve) => {
         pending.push({
+          kind: "submit",
           requests: [request],
           resolve: (results) => resolve(results[0]!),
         });
@@ -154,7 +204,14 @@ export function createSubmissionQueue(options: QueueOptions): SubmissionQueue {
 
     enqueueBatch(requests) {
       return new Promise<SubmitResult[]>((resolve) => {
-        pending.push({ requests, resolve });
+        pending.push({ kind: "submit", requests, resolve });
+        void drain();
+      });
+    },
+
+    enqueueTask(run) {
+      return new Promise<void>((resolve, reject) => {
+        pending.push({ kind: "task", run, resolve, reject });
         void drain();
       });
     },

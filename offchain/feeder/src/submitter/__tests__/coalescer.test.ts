@@ -88,6 +88,9 @@ describe("createCoalescerManager", () => {
         batchCalls.push(requests.map((request) => request.intentHash));
         return requests.map((request) => okResult(request));
       },
+      async enqueueLaneTask(_dest, run) {
+        await run();
+      },
       queueKeys() {
         return [];
       },
@@ -128,6 +131,9 @@ describe("createCoalescerManager", () => {
           return requests.map((request) => batchSizeError(request));
         }
         return requests.map((request) => okResult(request));
+      },
+      async enqueueLaneTask(_dest, run) {
+        await run();
       },
       queueKeys() {
         return [];
@@ -171,6 +177,9 @@ describe("createCoalescerManager", () => {
         batchCalls.push(requests.map((request) => request.intentHash));
         return requests.map((request) => okResult(request));
       },
+      async enqueueLaneTask(_dest, run) {
+        await run();
+      },
       queueKeys() {
         return [];
       },
@@ -208,6 +217,9 @@ describe("createCoalescerManager", () => {
       },
       async submitBatch(requests) {
         return requests.map((request) => okResult(request));
+      },
+      async enqueueLaneTask(_dest, run) {
+        await run();
       },
       queueKeys() {
         return [];
