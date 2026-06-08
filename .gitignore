@@ -5,6 +5,7 @@
 .playwright-mcp
 .windsurf
 .devin
+.claude
 
 # Local/archive notes are useful while working but are not part of the public docs.
 **/archived/

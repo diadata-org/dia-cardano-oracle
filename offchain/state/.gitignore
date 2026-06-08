@@ -1,0 +1,11 @@
+# Shared state tree (offchain/state/<network>_run_<id>/) used by the CLI and the
+# feeder. The CLI's deployment record — config-bootstrap.json, clients/*.json,
+# intents/, config-updates/, update-batches/ — is committed. The feeder's runtime
+# output below is generated at run time and not committed.
+*/logs/
+*/feeder-checkpoint.json
+*/clients/*/pairs/
+*/feeder.sqlite
+*/feeder.sqlite-journal
+*/feeder.sqlite-shm
+*/feeder.sqlite-wal

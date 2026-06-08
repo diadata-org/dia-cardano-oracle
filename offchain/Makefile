@@ -25,6 +25,10 @@ export GID
 RUN_ID ?=
 export RUN_ID
 
+# Extra arguments forwarded to the runbook targets (run-all / teardown), e.g.
+#   make run-all ARGS="--from-step 28 --run-id 20260608-040304"
+ARGS ?=
+
 # Monitoring toggle. Set MONITORING=1 on any "start" target to ALSO bring up
 # Prometheus + Grafana + the renderer sidecar. Without it, only the feeder
 # starts. One flag, consistent across up / up-postgres / restart-latest /
@@ -38,7 +42,7 @@ MON_PROFILE := $(if $(MONITORING),--profile monitoring,)
 # (NOT dia-cli). They override the daemon command on the feeder-sqlite service
 # so they share its volumes (./state, ./config) and .env. --no-deps avoids
 # pulling in any other services; --rm removes the throwaway container.
-FEEDER_BIN := node /app/feeder/dist/cmd/feeder/main.js --config /config
+FEEDER_BIN := node /app/offchain/feeder/dist/cmd/feeder/main.js --config /app/offchain/feeder/config
 FEEDER_RUN := $(COMPOSE) --profile sqlite run --rm --no-deps feeder-sqlite $(FEEDER_BIN)
 FEEDER_RUN_IT := $(COMPOSE) --profile sqlite run --rm -it --no-deps feeder-sqlite $(FEEDER_BIN)
 
@@ -50,12 +54,22 @@ help: ## Show this help
 build: ## Build the unified feeder + CLI image
 	$(COMPOSE) --profile sqlite build
 
+# Write the monitoring thresholds from infrastructure.<network>.yaml::alerting.*
+# into monitoring/alerts.yml + the Grafana dashboard. NET_TAG (= CARDANO_NETWORK
+# from feeder/.env, lowercased) selects the source YAML. Run by hand to refresh
+# the files, and automatically as a prerequisite of `up` / `up-postgres` so
+# Prometheus + Grafana always load values that match the YAML. It is a fast,
+# host-side tsx run (no Docker) and a no-op when the files are already current.
+.PHONY: generate-monitoring
+generate-monitoring: ## Write monitoring thresholds from infrastructure.<network>.yaml::alerting.* (idempotent)
+	cd feeder && node --import tsx/esm scripts/monitoring/generate-monitoring.ts --network $(NET_TAG)
+
 .PHONY: up
-up: ## Start the feeder daemon (add MONITORING=1 for Prometheus + Grafana)
+up: generate-monitoring ## Start the feeder daemon (add MONITORING=1 for Prometheus + Grafana)
 	$(COMPOSE) --profile sqlite $(MON_PROFILE) up -d
 
 .PHONY: up-postgres
-up-postgres: ## Start the feeder daemon, Postgres backend (add MONITORING=1 for Prometheus + Grafana)
+up-postgres: generate-monitoring ## Start the feeder daemon, Postgres backend (add MONITORING=1 for Prometheus + Grafana)
 	$(COMPOSE) --profile postgres $(MON_PROFILE) up -d
 
 # Every service is gated behind a profile, and `docker compose down` only
@@ -99,9 +113,21 @@ client-init: ## Register one client: init, bootstrap, parameterize, publish refe
 	$(COMPOSE) --profile cli run --rm cli receiver:parameterize
 	$(COMPOSE) --profile cli run --rm cli reference-scripts:publish-client
 
-.PHONY: init-bootstrap
-init-bootstrap: ## Import config-bootstrap.json from CLI state into feeder/state (feeder init bootstrap)
-	$(FEEDER_RUN) init bootstrap
+.PHONY: contracts-build
+contracts-build: ## Compile the Aiken contracts in-image (regenerates contracts/aiken/plutus.json)
+	$(COMPOSE) --profile cli run --rm --workdir /app/contracts/aiken --entrypoint aiken cli build
+
+.PHONY: contracts-check
+contracts-check: ## Run the Aiken contract test suite in-image
+	$(COMPOSE) --profile cli run --rm --workdir /app/contracts/aiken --entrypoint aiken cli check
+
+.PHONY: run-all
+run-all: ## Full on-chain deployment runbook end to end. Pass ARGS="--from-step N --run-id ID"
+	$(COMPOSE) --profile cli run --rm --entrypoint bash cli scripts/run-all-cli.sh $(ARGS)
+
+.PHONY: teardown
+teardown: ## Decommission runbook (recover ADA). Pass ARGS="--run-id ID --from-step N --skip-singleton-burns"
+	$(COMPOSE) --profile cli run --rm --entrypoint bash cli scripts/run-teardown-cli.sh $(ARGS)
 
 .PHONY: init-client
 init-client: ## Import client JSON + generate router YAML interactively (feeder init client)
@@ -159,7 +185,7 @@ evidence: ## Build the COMPLETE M2 evidence pack into ONE dir (network from feed
 	out=docs/milestones/evidence/m2-$$net-$$stamp; \
 	if [ -n "$(RUN_ID)" ]; then sdir=state/$${net}_run_$(RUN_ID); \
 	else sdir=$$(ls -d state/$${net}_run_*/ 2>/dev/null | sort | tail -1); sdir=$${sdir%/}; sdir=$${sdir:-state/$$net}; fi; \
-	db=$$sdir/feeder.sqlite; \
+	db=$$(pwd)/$$sdir/feeder.sqlite; \
 	echo "Building $(EVIDENCE_NETWORK) COMPLETE evidence pack — stamp=$$stamp db=$$db"; \
 	EVIDENCE_STAMP=$$stamp EVIDENCE_NETWORK=$$net \
 	  GRAFANA_ADMIN_PASSWORD=$${GRAFANA_ADMIN_PASSWORD:-admin} \

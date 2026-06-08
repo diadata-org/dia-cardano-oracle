@@ -41,12 +41,11 @@ Component docs:
 ## Prerequisites
 
 - **Node.js 20+** with `npm`, for the off-chain CLI.
-- **Aiken `v1.1.21`** (Plutus V3), only required if you intend to modify or
-  rebuild the on-chain contracts. See the
+- **Aiken `v1.1.21`** (Plutus V3), only needed to modify or rebuild the
+  on-chain contracts. See the
   [official installation instructions](https://aiken-lang.org/installation-instructions).
-  The compiled blueprint `contracts/aiken/plutus.json` is committed in this
-  repository, so a fresh clone can run the CLI runbook without installing
-  Aiken first.
+  The compiled blueprint `contracts/aiken/plutus.json` is committed, so a fresh
+  clone can run the CLI runbook without Aiken installed.
 - A **Blockfrost** project id (or a Koios endpoint) for Cardano Preview, and
   a funded Preview wallet seed. Setup details are in the CLI runbook.
 
@@ -55,40 +54,26 @@ Component docs:
 For a fresh clone, the recommended order is:
 
 1. (Optional) Build and test the on-chain contracts —
-   see [`contracts/aiken/README.md`](contracts/aiken/README.md).
+   see [`contracts/aiken/README.md`](contracts/aiken/README.md). Skip this if
+   you have not changed the contracts; the committed `plutus.json` is what the
+   CLI consumes.
 2. Install and configure the off-chain CLI — see
    [`offchain/cli/README.md`](offchain/cli/README.md).
 3. Follow the CLI runbook end-to-end on Preview.
 
-Step 1 can be skipped if you have not modified the contracts; the committed
-`plutus.json` is the canonical compiled artifact that the CLI consumes.
-
 ## Operator Workflow
 
-Two complementary surfaces:
+Two complementary surfaces, each with its own full manual:
 
-**CLI (admin, one-shot ops)** — full Preview runbook in
-[`offchain/cli/README.md`](offchain/cli/README.md). Phases:
-
-1. Wallet setup.
-2. Protocol deployment (Config, PaymentHook, coordinator).
-3. Client deployment (per-client Receiver and Pair scripts).
-4. Oracle intent flow (create + sign).
-5. Live updates (single and batch).
-6. Maintenance transactions (settle, withdraws, min-UTxO updates, pair burn,
-   reference-script reclaim).
-
-**Feeder daemon (M2, long-running)** — full operator manual in
-[`offchain/feeder/README.md`](offchain/feeder/README.md). Pipeline:
-
-1. Subscribe to DIA Lasernet `OracleIntent` events (WebSocket or HTTP polling).
-2. Enrich, dedup, route by per-router policy (`time_threshold`, `price_deviation`).
-3. Coalesce into per-lane batches and submit Cardano oracle update txs.
-4. Cron-driven liveness — re-push the latest cached intent when a pair has
-   gone stale beyond `time_threshold` (Spectra parity).
-5. Expose `/health`, `/metrics`, `/api/v1/prices` over HTTP.
-6. Optional monitoring profile — Prometheus + Grafana with alert rules covering
-   pair staleness, balance thresholds, price anomalies, reorgs.
+- **CLI (admin, one-shot ops)** — protocol/client bootstrap and maintenance
+  transactions (settle, withdraws, min-UTxO updates, pair burn,
+  reference-script reclaim). Phase-by-phase runbook in
+  [`offchain/cli/README.md`](offchain/cli/README.md).
+- **Feeder daemon (long-running)** — consumes DIA Lasernet `OracleIntent`
+  events, routes and batches them, submits Cardano update txs, and exposes
+  `/health`, `/metrics`, and `/api/v1/prices` over HTTP. Pipeline steps and the
+  optional Prometheus + Grafana monitoring profile are in
+  [`offchain/feeder/README.md`](offchain/feeder/README.md).
 
 The fastest path to a working deployment is the unified Docker image:
 
