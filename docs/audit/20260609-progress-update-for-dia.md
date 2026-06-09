@@ -104,11 +104,11 @@ Live query of the Milestone 1 deployment (operator wallet + the protocol's scrip
 | Config (min-UTxO) | 5.00 | **no** |
 | **Total controlled** | **325.04** | |
 
-> **Note on funding origin.** The initial Mainnet allocation from DIA was **≈ 240 ADA**. An
-> additional **≈ 100 ADA was added by the operator** (Manuel Padilla / Protofire) to ensure the
-> Milestone 1 run had enough margin. Those 100 ADA are part of the 325.04 total above and are
-> **expected to be returned** via the new ADA request once the cycle is complete. They should not
-> be treated as absorbed project cost.
+> **Note on funding origin.** The initial Mainnet allocation from DIA was **245 ADA**. An
+> additional **100 ADA was added by the operator** (Manuel Padilla / Protofire) to ensure the
+> Milestone 1 run had enough margin. Those 100 ADA are part of the 325.04 total above and
+> **must be reimbursed** via the current ADA request — they are not absorbed project cost and
+> are included explicitly in the request below.
 
 ### What teardown of the old deployment recovers (and what it cannot)
 
@@ -166,20 +166,24 @@ network transaction fees:
 | Redeploy locked capital (min-UTxO + pair NFTs) | ≈ −240 | **Yes** — next teardown |
 | **Redeploy tx fees (31 txs, non-recoverable)** | **≈ −20** | **No — permanently spent** |
 | Feeder operation fees (~1 h 30 m, non-recoverable) | ≈ −50 | No — permanently spent |
-| **Net gap to fund** | **≈ −12** | — |
-| **Operator personal contribution to return** | **≈ −100** | To be reimbursed |
-| **Total new ADA to request from DIA** | **≈ −112** | — |
+| **Net gap to fund (protocol only)** | **≈ −12** | — |
+| **Operator personal contribution to reimburse** | **≈ −100** | Must be returned |
+| **Margin (fee variability + stuck ADA + buffer)** | **≈ −88** | — |
+| **Total request from DIA** | **≈ −200** | — |
 
-> **Request: ≈ 150 ADA from DIA.** This covers the ≈ 12 ADA operating gap after teardown +
-> redeploy + feeder fees; the **≈ 100 ADA personal contribution** from the operator (Protofire)
-> that funded the Milestone 1 Mainnet run beyond DIA's initial ≈ 240 ADA allocation — to be
-> returned, not absorbed; and a margin for fee variability, the ≈ 15 ADA permanently stuck in the
-> old Milestone 1 singleton UTxOs, and any feeder runtime beyond 1 h 30 m.
+> **Request: 200 ADA from DIA.** Two distinct components:
+>
+> **100 ADA — operator reimbursement.** The initial DIA allocation was 245 ADA. The operator
+> added 100 ADA of personal funds to cover the Milestone 1 Mainnet run. This is a debt to the
+> operator, not a project surplus, and must be returned in full now.
+>
+> **100 ADA — protocol operating budget.** Covers the ≈ 12 ADA net operating gap (teardown +
+> redeploy tx fees + feeder operation) plus a margin for the ≈ 15 ADA permanently stuck in the
+> old Milestone 1 singleton UTxOs, fee variability, and any feeder runtime beyond 1 h 30 m.
 >
 > The **true unrecoverable cost** of the whole cycle (Milestone-1-teardown → redeploy →
-> Milestone-2 run) is **≈ 35 – 40 ADA in tx fees** (≈ 20 redeploy + ≈ 15 stuck ADA from old
-> singletons) plus feeder operation fees; everything else circulates back to the wallet. The 150
-> ADA request accounts for reimbursing the operator's personal advance on top of that.
+> Milestone-2 run) is ≈ 35 – 40 ADA in tx fees (≈ 20 redeploy + ≈ 15 stuck ADA from old
+> singletons) plus feeder operation fees; everything else circulates back to the wallet.
 
 We will confirm exact figures against a fresh live query before requesting the transfer.
 
