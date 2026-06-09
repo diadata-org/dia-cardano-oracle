@@ -372,6 +372,37 @@ if [ -z "$ALERTS_MD" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Step 5c — capture the active push-policy config (which "when to push" mode
+# each client used this run). The full matrix of modes lives in the audit doc.
+# ---------------------------------------------------------------------------
+echo "[package-m2] step 5c — capturing push-policy config"
+PUSH_BLOCK="$( for f in "$REPO_ROOT"/offchain/feeder/config/routers/"$NETWORK"/*.yaml; do
+    [ -f "$f" ] || continue
+    echo "# $(basename "$f")"
+    grep -E "^[[:space:]]*(price_deviation|time_threshold|max_staleness|cron):" "$f" | sed 's/^[[:space:]]*/  /'
+  done 2>/dev/null )"
+[ -n "$PUSH_BLOCK" ] || PUSH_BLOCK="(router config not found at config/routers/$NETWORK/)"
+PUSH_MD="$(printf '%s\n' \
+  "When the feeder pushes an oracle update is decided per pair by an OR-gate over a few knobs." \
+  "**This run's config** (\`config/routers/$NETWORK/<client>.yaml\`, \`destinations[].*\`):" \
+  "" \
+  '```yaml' \
+  "$PUSH_BLOCK" \
+  '```' \
+  "" \
+  "With \`time_threshold > 0\` + \`cron: true\` + \`price_deviation\`, this is the **classic OR-gate + cron heartbeat**: a pair pushes when the price moves at least \`price_deviation\` **OR** every \`time_threshold\` (the cron heartbeat fires even if no new DIA intent arrives), so **max staleness ≈ \`time_threshold\`**. No \`max_staleness\` key is set — and it would be ignored here anyway, because it only applies when \`time_threshold\` is absent or \`0\`." \
+  "" \
+  "The other modes (and their effect on push frequency / max staleness / tx volume) are documented in full:" \
+  "**[docs/audit/20260609-feeder-push-policy-config.md](../../audit/20260609-feeder-push-policy-config.md)**. In short:" \
+  "" \
+  "- **OR-gate + heartbeat** (this run): move-based fast path + a \`time_threshold\` ceiling guaranteed by cron. Bounded staleness, medium tx." \
+  "- **Deviation-only mode** (\`time_threshold: 0s\` + \`max_staleness\`): push only on a real price move, with \`max_staleness\` as the backstop. Fewest tx, ceiling = \`max_staleness\`." \
+  "- **Periodic only** (\`time_threshold\` + \`cron\`, no \`price_deviation\`): a steady heartbeat every \`time_threshold\`, no fast path on a spike." \
+  "- **Push-everything** (no knobs): every monotonic intent is submitted — highest tx volume." \
+  "" \
+  "In every mode, out-of-order (\`timestamp_regression\`) and duplicate (\`timestamp_duplicate\`) intents are dropped before anything is built." )"
+
+# ---------------------------------------------------------------------------
 # Step 6 — write SUMMARY.json + milestone-2-preview-evidence.md.
 # ---------------------------------------------------------------------------
 echo "[package-m2] step 6/6 — generating SUMMARY.json + evidence markdown"
@@ -436,6 +467,7 @@ Evidence pack location: this directory.
 - [End-to-end latency per pair](#end-to-end-latency-per-pair)
 - [Failures (grouped by error_code)](#failures-grouped-by-error_code)
 - [Raw artefacts in this pack](#raw-artefacts-in-this-pack)
+- [Push policy (this run)](#push-policy-this-run)
 - [Dashboards](#dashboards)
   - [Overview dashboard](#overview-dashboard)
   - [Overview panels](#overview-panels)
@@ -505,7 +537,12 @@ Failure semantics for each code are documented in
 | \`dashboards/dashboard-full.png\` | Full Grafana dashboard at pack time. |
 | \`dashboards/panel-*.png\`       | Per-panel snapshots. |
 | \`stats/\`                       | Intermediate TSV files this markdown was built from. |
+| \`alerts-active.json\`           | Prometheus \`/api/v1/alerts\` snapshot at pack time. |
 | \`SUMMARY.json\`                 | Machine-readable totals (top of this document, as JSON). |
+
+## Push policy (this run)
+
+$PUSH_MD
 
 ## Dashboards
 
