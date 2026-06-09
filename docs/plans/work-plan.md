@@ -23,6 +23,8 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 - [Milestone 1 Mainnet Evidence](../milestones/evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) — M1 Mainnet verification log (latest run).
 - [**Milestone Feeder Plan**](./milestone-feeder-plan.md) — **start here for the feeder.**
   Done / M2 pending / Mainnet / deferred / open DIA decisions.
+- [**M3 & M4 Plan**](./m3-m4-plan.md) — what's left for Monitoring (M3) and End-to-End
+  Mainnet (M4), grounded in the official milestone text.
 - [Audit report](../audit/20260515-audit-report.md) — `20260515-audit-report.md`.
 
 ## Scope
@@ -131,10 +133,11 @@ High-level deliverables tracked here:
 - [x] OpenAPI/Swagger surface: a metadata route table (`src/api/routes.ts`, TypeBox schemas)
   drives an OpenAPI 3.0.3 doc at `/api/v1/openapi.json` and an offline Redoc UI at `/docs`
   (vendored, no CDN; shipped in the Docker image).
-- [ ] M2 evidence packs (sustained Preview window, all 10 pairs, Grafana screenshots,
-  error-counts TSV, alert firing demonstration) — pending live run. Tracked in detail in
-  [milestone-feeder-plan.md](./milestone-feeder-plan.md) §2 (the feeder core itself is
-  done and verified; 555 tests pass).
+- [x] M2 Preview evidence pack captured — `docs/milestones/evidence/m2-preview-20260609-071122/`
+  (~18 h window, 10 pairs, Grafana PNGs from both dashboards, error-counts TSV, alerts section).
+  564 feeder tests pass. Tracked in detail in [milestone-feeder-plan.md](./milestone-feeder-plan.md) §2.
+  Remaining for the M2 submission: the `milestone-2-poa.md` PoA doc and the demo video (mainnet
+  feeder tx logs are the formal evidence, tracked under Mainnet).
 
 ## Workstream D — Indexer
 
@@ -152,8 +155,11 @@ Tasks:
   and failed-transaction rate via Prometheus metrics (`dia_bridge_*`).
 - [x] In-process alert evaluator writing `OraclePairStale` and `PriceDeviationHigh`
   events to `alert_log`; Prometheus alert rules in `monitoring/alerts.yml`.
-- [x] Grafana dashboards: `feeder-overview.json`, `feeder-latency.json`,
-  `feeder-cardano.json` (provisioned at `monitoring/grafana/`).
+- [x] Grafana dashboards (provisioned at `monitoring/grafana/dashboards/`): `feeder.json`
+  (operational overview — balances, staleness, per-symbol throughput, latency, price quality,
+  billing) and `feeder.json`'s companion `feeder-tx.json` (the per-transaction axis — tx-stage
+  latency, confirmed-vs-failed, success ratio, batch size). Both cascade-filter by
+  customer → client → symbol.
 - [x] Thresholds single-sourced from `infrastructure.<network>.yaml::alerting.*`: the
   `generate-monitoring.ts` generator (`make generate-monitoring`, a prerequisite of `make up`)
   writes the thresholds into `monitoring/alerts.yml` and the Grafana dashboard, and a drift
@@ -164,12 +170,17 @@ Tasks:
   (sum of clean un-merged deposits per client, labelled with the deposit address), a Grafana
   "Deposit pending — ADA (per client)" panel, the Prometheus alert `ReceiverDepositsPending`,
   and the threshold key `deposit_pending_merge_lovelace`.
-- [ ] **New metrics dashboard** (separate from `feeder.json`) covering the registered-but-unshown
-  metric families (per-stage latency, scanner RPC errors + backfill, worker pool counters,
-  `transaction_fee_lovelace`, HTTP/db/component-health, cron resubmissions, node/process defaults).
-  Still open.
-- [ ] QA validation report and anomaly-detection evidence (requires a sustained live run).
-- [ ] Dashboard screenshots capturing real data from the live evidence window.
+- [x] Per-transaction dashboard `feeder-tx.json` (tx-stage latency, confirmed-vs-failed, success
+  ratio, batch size) + per-tx metric family (`transactions_total`, `transaction_pairs`,
+  `tx_pair_membership_total`, tx-stage latency histograms), counted once per tx.
+- [ ] **Broad metrics dashboard** (still open; separate from the two above) covering the remaining
+  registered-but-unshown families: the 5 per-symbol latency phases, scanner RPC errors + backfill,
+  worker pool counters, HTTP/db/component-health, cron resubmissions, node/process defaults.
+- [x] Dashboard screenshots capturing real data — captured in the M2 Preview evidence pack
+  (`m2-preview-20260609-071122/dashboards/`, both dashboards).
+- [ ] QA validation report and anomaly-detection evidence — this is an **M3** deliverable (QA
+  validation report, alert-trigger logs, sanity checks per feed). Tracked in
+  [`m3-m4-plan.md`](./m3-m4-plan.md).
 
 ## Workstream F — Deployment, operations and developer documentation
 
@@ -178,11 +189,17 @@ Tasks:
 - [x] **Preview evidence pack — fresh capture** on the current bytecode: full bootstrap (Config, PaymentHook, Receiver), reference-script publication, Receiver top-up, single oracle update, batch oracle update, **Settle**, Receiver withdraw, PaymentHook withdraw, reference-script reclaim + republish. Latest capture under `docs/milestones/evidence/m1-preview-20260516-090057/`. Historical packs `docs/milestones/evidence/m1-preview-20260427/` and `preview_20260504/` predate the current contracts and are kept only as historical proof.
 - [ ] Mainnet deployment scripts and evidence (contract addresses, reference-script UTxOs, verified mainnet tx hashes).
 - [x] Operator runbook (onboarding a new client, subscribing a new pair, rotating signers, withdrawing accrued fees).
-- [ ] Developer documentation published via DIA's developer documentation website, covering:
+- [ ] Developer documentation published via DIA's developer documentation website — **deferred to
+  M4** per the accepted M1 PoA (`m1-mainnet-20260517-063917/milestone-1-poa.md` §AC #3): the
+  publication clause is identical in M2/M3/M4, in-repo docs are complete and meet the substantive
+  content requirement, and publishing the final stable surface once at M4 avoids a moving target.
+  M4 scope of the published page:
   - configuration of the oracle
   - on-chain contracts available for consumption
   - procedure to request any of DIA's 2,500+ price feeds or 10,000+ real-world asset feeds
-- [ ] Final closeout report and video.
+- [x] Per-milestone PoA documents mapping AC → evidence (accepted format): M1 done
+  (`m1-mainnet-20260517-063917/milestone-1-poa.md`). M2 PoA pending (tracked in milestone-feeder-plan).
+- [ ] Final closeout report and video (M4).
 
 ---
 
