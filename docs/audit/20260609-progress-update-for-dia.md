@@ -131,27 +131,43 @@ free plus ≈ 229 recovered, less fees).
 ### What the new cycle costs
 
 - **Redeploy (full `run-all`, current contracts).** The same end-to-end bootstrap + exercise we run
-  on Preview consumes **≈ 290 ADA** of working capital (`m1-preview-20260608-040304`). Almost all of
-  that is min-UTxO locked into the new contracts — **recoverable on the next teardown**, not a spend.
+  on Preview executes **31 CLI transactions** (measured from `m1-preview-20260608-040304`):
+
+  | Phase | Txs | Tx fees (non-recoverable) | Capital locked (recoverable) |
+  | --- | --- | --- | --- |
+  | Protocol bootstrap (config, hook, receiver, ref scripts) | 7 | ≈ 3.65 ADA | ≈ 30–40 ADA |
+  | Pair bootstrap (11 pairs × 1 update tx) | 11 | ≈ 8.97 ADA | ≈ 55 ADA (5 ADA/pair NFT) |
+  | Exercise: batch-10 update, settle, withdraw, reclaim | 8 | ≈ 5.78 ADA | — (funds returned to wallet) |
+  | Deposit demo (fund × 3, merge, update-fold) | 5 | ≈ 1.88 ADA | — |
+  | **Total** | **31** | **≈ 20.3 ADA** | **≈ 230–250 ADA** |
+
+  The **≈ 20 ADA in tx fees is permanently spent** (network cost — not capital). The locked capital
+  (min-UTxO in script UTxOs + pair NFTs) is **fully recoverable** on the next teardown because the
+  new contracts include the `Burn` redeemers the old ones lacked.
+
 - **Feeder operation.** Recurring network fees for the ~1 h 30 m evidence window: **≈ 29 – 42 ADA**
   (see [`20260609-mainnet-cost-forecast.md`](./20260609-mainnet-cost-forecast.md)); budget ~50 ADA.
 
 ### The number to present
 
 Because teardown returns **≈ 295 – 300 ADA** to the wallet *before* we redeploy, the new cycle is
-funded almost entirely by recycling existing ADA:
+funded almost entirely by recycling existing ADA. The **only money that is permanently spent** is the
+network transaction fees:
 
-| Item | ADA |
-| --- | --- |
-| Available after teardown | ≈ +298 |
-| Redeploy working capital (recoverable later) | ≈ −290 |
-| Feeder operation (1 h 30 m) | ≈ −50 |
-| **Net gap to fund** | **≈ −42** |
+| Item | ADA | Recoverable? |
+| --- | --- | --- |
+| Available after teardown | ≈ +298 | — |
+| Redeploy locked capital (min-UTxO + pair NFTs) | ≈ −240 | **Yes** — next teardown |
+| **Redeploy tx fees (31 txs, non-recoverable)** | **≈ −20** | **No — permanently spent** |
+| Feeder operation fees (~1 h 30 m, non-recoverable) | ≈ −50 | No — permanently spent |
+| **Net gap to fund** | **≈ −12** | — |
 
-> **Request: ≈ 100 ADA of new ADA** — the ≈ 42 ADA gap plus a margin for fee variability and the
-> ≈ 15 ADA permanently stuck in the old deployment. The **true permanent cost** of the whole
-> Milestone-1-teardown → redeploy → Milestone-2 run cycle is only **≈ 15 ADA stuck + transaction
-> fees**; everything else is recycled or recoverable.
+> **Request: ≈ 100 ADA of new ADA** — covers the ≈ 12 ADA net gap plus a margin for fee
+> variability, the ≈ 15 ADA permanently stuck in the old Milestone 1 singleton UTxOs, and any
+> additional feeder runtime beyond 1 h 30 m. The **true unrecoverable cost** of the whole
+> Milestone-1-teardown → redeploy → Milestone-2 run cycle is **≈ 35 – 40 ADA in tx fees** (≈ 20
+> redeploy + ≈ 15 stuck ADA from old singletons) plus the feeder operation fees; everything else
+> circulates back to the wallet.
 
 We will confirm exact figures against a fresh live query before requesting the transfer.
 
