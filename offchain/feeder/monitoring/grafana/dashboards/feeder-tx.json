@@ -1,0 +1,562 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "description": "DIA Cardano Oracle Feeder — per-TRANSACTION view: stage latency, throughput by outcome, batch size. Counts are per tx (a batch of N pairs is one tx), not per symbol or intent.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 300,
+      "title": "Transaction latency — by stage (p50/p95/p99)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Tx-level seconds from processing start to submission (build + queue + sign), one observation per confirmed tx. p50/p95/p99 over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "id": 301,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Stage 1 — processing → submission",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Tx-level seconds from broadcast to on-chain confirmation (chain settlement), one observation per confirmed tx. p50/p95/p99 over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "id": 302,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Stage 2 — submission → confirmation",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Tx-level total seconds from feeder processing start to on-chain confirmation, one observation per confirmed tx. p50/p95/p99 over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "id": 303,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "End-to-end — processing → confirmation",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 310,
+      "title": "Transaction throughput & outcome",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Transactions per 5-minute window, counted once per tx (a batch of N pairs is ONE tx), by outcome. Condemned no-ops excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
+      "id": 311,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (increase(dia_bridge_transactions_total{client_id=~\"$client\", customer=~\"$customer\"}[5m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx confirmed vs failed (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Confirmed transactions as a percentage of all real tx attempts (confirmed + failed) over a 5-minute window. Condemned no-ops are excluded from both.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 10
+      },
+      "id": 312,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(increase(dia_bridge_transactions_total{outcome=\"confirmed\", client_id=~\"$client\", customer=~\"$customer\"}[5m])) / clamp_min(sum(increase(dia_bridge_transactions_total{client_id=~\"$client\", customer=~\"$customer\"}[5m])), 1)",
+          "legendFormat": "success %",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx success ratio (5m)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Transactions per 5-minute window grouped by client (receiver identity). Counted once per tx.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 10
+      },
+      "id": 313,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (client_id) (increase(dia_bridge_transactions_total{client_id=~\"$client\", customer=~\"$customer\"}[5m]))",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx by client (5m)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 320,
+      "title": "Batch size & pair membership",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Batch size distribution: pairs per transaction, p50/p95/p99 over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 19
+      },
+      "id": 321,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Pairs per tx (p50/p95/p99)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Distribution of pairs-per-transaction (batch size) over time. Bright bands show the typical batch size.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 19
+      },
+      "id": 322,
+      "options": {
+        "calculate": false,
+        "yAxis": {
+          "unit": "short"
+        },
+        "color": {
+          "mode": "scheme",
+          "scheme": "Spectral"
+        },
+        "cellGap": 1
+      },
+      "targets": [
+        {
+          "expr": "sum by (le) (rate(dia_bridge_transaction_pairs_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m]))",
+          "legendFormat": "le={{le}}",
+          "refId": "A",
+          "format": "heatmap"
+        }
+      ],
+      "title": "Batch size distribution (heatmap)",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Transactions that included each pair per 5-minute window, split by outcome. Filter by $symbol to see the txs that touched a given pair (their batch size is in 'Pairs per tx'); filter by $customer to scope to one customer. Unlike a plain symbol-update count this carries confirmed vs failed and the customer dimension.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 19
+      },
+      "id": 323,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (symbol, outcome) (increase(dia_bridge_tx_pair_membership_total{symbol=~\"$symbol\", client_id=~\"$client\", customer=~\"$customer\"}[5m]))",
+          "legendFormat": "{{symbol}} · {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx touching pair (5m, by symbol & outcome)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "dia",
+    "cardano",
+    "oracle",
+    "transactions"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Customer",
+        "name": "customer",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total, customer)",
+          "refId": "customer"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Client",
+        "name": "client",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total{customer=~\"$customer\"}, client_id)",
+          "refId": "client"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Symbol",
+        "name": "symbol",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_tx_pair_membership_total{customer=~\"$customer\", client_id=~\"$client\"}, symbol)",
+          "refId": "symbol"
+        },
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DIA Cardano Oracle Feeder — Transactions",
+  "uid": "dia-cardano-feeder-tx",
+  "version": 2
+}

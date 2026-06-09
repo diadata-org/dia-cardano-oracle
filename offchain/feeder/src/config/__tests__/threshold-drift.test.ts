@@ -73,8 +73,10 @@ type Panel = {
   };
 };
 
-function loadDashboard(): { panels: Panel[]; templating: { list: Array<{ name: string }> } } {
-  return JSON.parse(read("monitoring/grafana/dashboards/feeder.json"));
+function loadDashboard(
+  file = "feeder.json",
+): { panels: Panel[]; templating: { list: Array<{ name: string }> } } {
+  return JSON.parse(read(`monitoring/grafana/dashboards/${file}`));
 }
 
 const panelByTitle = (panels: Panel[], title: string): Panel => {
@@ -163,7 +165,7 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     };
     assert.deepEqual(
       dashboard.templating.list.map((v) => v.name),
-      ["datasource", "client", "symbol", "customer", "error_code"],
+      ["datasource", "customer", "client", "symbol", "error_code"],
       "remove unused template vars or wire them to a panel",
     );
     // Every non-datasource var must be referenced by at least one panel target expr.
@@ -176,7 +178,26 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     }
   });
 
-  it("count panels show counts (increase), not per-second rates, and keep the symbol label", () => {
+  it("transactions dashboard (feeder-tx.json) has no dead template variables", () => {
+    const dashboard = loadDashboard("feeder-tx.json") as unknown as {
+      templating: { list: Array<{ name: string }> };
+      panels: Array<{ targets?: Array<{ expr?: string }> }>;
+    };
+    assert.deepEqual(
+      dashboard.templating.list.map((v) => v.name),
+      ["datasource", "customer", "client", "symbol"],
+      "feeder-tx.json: remove unused template vars or wire them to a panel",
+    );
+    const exprs = dashboard.panels.flatMap((p) => (p.targets ?? []).map((t) => t.expr ?? ""));
+    for (const name of ["client", "symbol", "customer"]) {
+      assert.ok(
+        exprs.some((e) => e.includes(`$${name}`)),
+        `feeder-tx.json: template var $${name} is not referenced by any panel target expr`,
+      );
+    }
+  });
+
+  it("count panels show counts (increase), not per-second rates, grouped by the right label", () => {
     const { panels } = loadDashboard();
     const exprOf = (title: string): string => {
       const p = panels.find((x) => x.title === title) as Panel & {
@@ -185,11 +206,18 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
       assert.ok(p, `panel not found: "${title}"`);
       return p.targets?.[0]?.expr ?? "";
     };
-    for (const title of ["Tx confirmed (5m count)", "Tx failed (5m count)", "Intents filtered (5m count)"]) {
+    // title -> the label the panel aggregates by (`sum by (<group>)`).
+    const countPanels: Array<{ title: string; group: string }> = [
+      { title: "Symbol updates confirmed (5m)", group: "symbol" },
+      { title: "Symbol-update failures (5m, by error code)", group: "error_code" },
+      { title: "Intents filtered (5m, by reason)", group: "reason" },
+      { title: "Tx confirmed vs failed (5m)", group: "outcome" },
+    ];
+    for (const { title, group } of countPanels) {
       const expr = exprOf(title);
       assert.match(expr, /increase\(/, `"${title}" should use increase() (a count), not rate()`);
       assert.doesNotMatch(expr, /\brate\(/, `"${title}" should not use rate() (per-second average)`);
-      assert.match(expr, /\bsymbol\b/, `"${title}" should keep the symbol label in sum by(...)`);
+      assert.match(expr, new RegExp(`sum by \\(${group}\\)`), `"${title}" should aggregate by ${group}`);
     }
   });
 });

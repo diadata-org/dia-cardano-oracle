@@ -1,10 +1,22 @@
 {
   "__inputs": [],
   "__requires": [
-    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
-    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" }
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    }
   ],
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "description": "DIA Cardano Oracle Feeder — operational overview and M2 evidence",
   "editable": true,
   "fiscalYearStartMonth": 0,
@@ -14,13 +26,21 @@
   "panels": [
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 200,
       "title": "Oracle Feed Liveness — M2 Evidence (10 Asset Price Pairs)",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Cumulative count of confirmed Cardano oracle update transactions per price pair. Non-zero values for all 10 pairs confirm oracle liveness. This is the primary M2 evidence metric.",
       "fieldConfig": {
         "defaults": {
@@ -28,19 +48,37 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red",    "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "green",  "value": 5 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "green",
+                "value": 5
+              }
             ]
           },
           "custom": {}
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
       "id": 11,
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "background",
@@ -57,7 +95,10 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "95th-percentile age of incoming DIA price data at the moment it was processed (1-hour window per pair). Values above 600 s indicate the DIA source is publishing stale prices and may trigger the PriceAgeHigh alert.",
       "fieldConfig": {
         "defaults": {
@@ -65,19 +106,37 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green",  "value": null },
-              { "color": "yellow", "value": 300 },
-              { "color": "red",    "value": 600 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              },
+              {
+                "color": "red",
+                "value": 600
+              }
             ]
           },
           "custom": {}
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
       "id": 12,
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "background",
@@ -95,13 +154,21 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
       "id": 100,
       "title": "Row 1 — Balances & Staleness",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Seconds since each pair was last confirmed on-chain. Values above 3600 s (alerting.oracle_pair_stale_seconds) trigger the OraclePairStale alert.",
       "fieldConfig": {
         "defaults": {
@@ -109,19 +176,37 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green",  "value": null },
-              { "color": "yellow", "value": 1800 },
-              { "color": "red",    "value": 3600 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1800
+              },
+              {
+                "color": "red",
+                "value": 3600
+              }
             ]
           },
           "custom": {}
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 10 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
       "id": 1,
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "background",
@@ -138,7 +223,10 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Receiver prepaid balance in ADA. Below 2 ADA (alerting.receiver_balance_low_lovelace) triggers ReceiverBalanceLow. The backing metric labels include receiver_address and deposit_address; fund the deposit address, not the Receiver script address.",
       "fieldConfig": {
         "defaults": {
@@ -148,19 +236,37 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red",    "value": null },
-              { "color": "yellow", "value": 2 },
-              { "color": "green",  "value": 10 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "green",
+                "value": 10
+              }
             ]
           },
           "custom": {}
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 10 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 10
+      },
       "id": 2,
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "showThresholdLabels": false,
         "showThresholdMarkers": true
@@ -176,7 +282,10 @@
       "type": "gauge"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Operational wallet balances in ADA (all clients). Admin (signer) wallet — fires AdminWalletLow below 5 ADA. PaymentHook accrued — fires PaymentHookWithdrawReady above 50 ADA. Receiver accrued (sum) — fires SettleOverdue above 10 ADA.",
       "fieldConfig": {
         "defaults": {
@@ -186,38 +295,62 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red",   "value": null },
-              { "color": "green", "value": 5 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 5
+              }
             ]
           },
           "custom": {}
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "PaymentHook accrued" },
+            "matcher": {
+              "id": "byName",
+              "options": "PaymentHook accrued"
+            },
             "properties": [
               {
                 "id": "thresholds",
                 "value": {
                   "mode": "absolute",
                   "steps": [
-                    { "color": "green",  "value": null },
-                    { "color": "yellow", "value": 50 }
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 50
+                    }
                   ]
                 }
               }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Receiver accrued (sum)" },
+            "matcher": {
+              "id": "byName",
+              "options": "Receiver accrued (sum)"
+            },
             "properties": [
               {
                 "id": "thresholds",
                 "value": {
                   "mode": "absolute",
                   "steps": [
-                    { "color": "green",  "value": null },
-                    { "color": "yellow", "value": 10 }
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 10
+                    }
                   ]
                 }
               }
@@ -225,10 +358,19 @@
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 10 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 10
+      },
       "id": 3,
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "textMode": "value_and_name",
         "colorMode": "background",
@@ -255,7 +397,10 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Un-merged client deposits (side-deposit funding) waiting at the per-client deposit address, in ADA. Above 5 ADA (alerting.deposit_pending_merge_lovelace) triggers the ReceiverDepositsPending alert — run `deposit:merge` to fold the deposits into the Receiver balance.",
       "fieldConfig": {
         "defaults": {
@@ -265,18 +410,33 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green",  "value": null },
-              { "color": "yellow", "value": 5 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              }
             ]
           },
           "custom": {}
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 18
+      },
       "id": 15,
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "showThresholdLabels": false,
         "showThresholdMarkers": true
@@ -293,57 +453,92 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
       "id": 101,
-      "title": "Row 2 — Throughput & Latency",
+      "title": "Row 2 — Symbol Throughput & Latency",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "End-to-end submission latency percentiles (p50, p95, p99) per symbol over a 5-minute window.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Per-symbol pipeline latency (processing start to confirmation), p50/p95/p99 over a 5-minute window, aggregated across all pairs. For TRANSACTION-level latency per stage, see the 'Feeder — Transactions' dashboard.",
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "custom": { "lineWidth": 2 }
+          "custom": {
+            "lineWidth": 2
+          }
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 27 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 27
+      },
       "id": 4,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, symbol) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
-          "legendFormat": "p50 {{symbol}}",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
+          "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
-          "legendFormat": "p95 {{symbol}}",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
+          "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le, symbol) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
-          "legendFormat": "p99 {{symbol}}",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
+          "legendFormat": "p99",
           "refId": "C"
         }
       ],
-      "title": "End-to-end latency (p50/p95/p99)",
+      "title": "Symbol-update latency (p50/p95/p99)",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Confirmed Cardano oracle update transactions in each 5-minute window, per symbol (a count, not a per-second rate).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Confirmed symbol updates in each 5-minute window, per pair (a batch tx of N pairs adds 1 to each of its N symbols). A count, not a rate. For pure per-TRANSACTION counts see 'Tx confirmed vs failed'.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": { "lineWidth": 2 }
+          "custom": {
+            "lineWidth": 2
+          }
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 27 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 27
+      },
       "id": 5,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
       "targets": [
         {
           "expr": "sum by (symbol) (increase(dia_bridge_transactions_confirmed_total{symbol=~\"$symbol\", client_id=~\"$client\"}[5m]))",
@@ -351,41 +546,157 @@
           "refId": "A"
         }
       ],
-      "title": "Tx confirmed (5m count)",
+      "title": "Symbol updates confirmed (5m)",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Failed Cardano oracle update transactions in each 5-minute window, by symbol and error code (a count, not a per-second rate).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Failed symbol updates in each 5-minute window grouped by error code (a count, not a rate). Condemned/superseded intents the feeder declined to submit appear here as NonMonotonicNonce (no tx, no fee).",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": { "lineWidth": 2 }
+          "custom": {
+            "lineWidth": 2
+          }
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 27 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 27
+      },
       "id": 6,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
       "targets": [
         {
-          "expr": "sum by (symbol, error_code) (increase(dia_bridge_transactions_failed_total{symbol=~\"$symbol\", client_id=~\"$client\", error_code=~\"$error_code\"}[5m]))",
-          "legendFormat": "{{symbol}} · {{error_code}}",
+          "expr": "sum by (error_code) (increase(dia_bridge_transactions_failed_total{symbol=~\"$symbol\", client_id=~\"$client\", error_code=~\"$error_code\"}[5m]))",
+          "legendFormat": "{{error_code}}",
           "refId": "A"
         }
       ],
-      "title": "Tx failed (5m count)",
+      "title": "Symbol-update failures (5m, by error code)",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "id": 105,
+      "title": "Row 2b — Transactions (per tx)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Cardano TRANSACTIONS in each 5-minute window, counted once per tx (a batch of N pairs is ONE tx), by outcome. Condemned no-ops are excluded — these are real transactions only.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (increase(dia_bridge_transactions_total{client_id=~\"$client\", customer=~\"$customer\"}[5m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx confirmed vs failed (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Batch size distribution: how many pairs travel in each transaction, p50/p95 over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "title": "Pairs per tx (p50/p95)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
       "id": 102,
       "title": "Row 3 — Chain & Scanner Health",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Total reorgs detected in the last hour. Non-zero values indicate chain instability.",
       "fieldConfig": {
         "defaults": {
@@ -393,19 +704,37 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green",  "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red",    "value": 3 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
             ]
           },
           "custom": {}
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 36 },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 45
+      },
       "id": 7,
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "background",
@@ -422,18 +751,33 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Blocks behind the chain tip. High values indicate the scanner is falling behind (all clients).",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": { "lineWidth": 2 }
+          "custom": {
+            "lineWidth": 2
+          }
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 9, "x": 6, "y": 36 },
+      "gridPos": {
+        "h": 8,
+        "w": 9,
+        "x": 6,
+        "y": 45
+      },
       "id": 8,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
       "targets": [
         {
           "expr": "dia_bridge_scanner_block_lag",
@@ -445,37 +789,60 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Intents filtered before routing in each 5-minute window, by symbol and filter reason (a count, not a per-second rate).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Intents suppressed before routing in each 5-minute window grouped by filter reason (a count, not a rate). High counts are normal: the deviation/time-threshold policy suppresses most intents by design.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": { "lineWidth": 2 }
+          "custom": {
+            "lineWidth": 2
+          }
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 9, "x": 15, "y": 36 },
+      "gridPos": {
+        "h": 8,
+        "w": 9,
+        "x": 15,
+        "y": 45
+      },
       "id": 9,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
       "targets": [
         {
-          "expr": "sum by (symbol, reason) (increase(dia_bridge_intents_filtered_total{symbol=~\"$symbol\"}[5m]))",
-          "legendFormat": "{{symbol}} · {{reason}}",
+          "expr": "sum by (reason) (increase(dia_bridge_intents_filtered_total{symbol=~\"$symbol\"}[5m]))",
+          "legendFormat": "{{reason}}",
           "refId": "A"
         }
       ],
-      "title": "Intents filtered (5m count)",
+      "title": "Intents filtered (5m, by reason)",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 44 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 53
+      },
       "id": 103,
       "title": "Row 4 — Price Quality & Anomaly Detection",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "95th-percentile price deviation per symbol over the last hour. Values above 5% trigger the PriceDeviationHigh alert (potential misreport). Green = within normal bounds.",
       "fieldConfig": {
         "defaults": {
@@ -483,19 +850,37 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green",  "value": null },
-              { "color": "yellow", "value": 2 },
-              { "color": "red",    "value": 5 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
             ]
           },
           "custom": {}
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 45 },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
       "id": 13,
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "background",
@@ -512,7 +897,10 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Distribution of price deviation percentages across all submitted intents. Bright bands at high deviation values indicate anomalous prices.",
       "fieldConfig": {
         "defaults": {
@@ -521,12 +909,22 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 53 },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 62
+      },
       "id": 10,
       "options": {
         "calculate": false,
-        "yAxis": { "unit": "short" },
-        "color": { "mode": "scheme", "scheme": "Spectral" },
+        "yAxis": {
+          "unit": "short"
+        },
+        "color": {
+          "mode": "scheme",
+          "scheme": "Spectral"
+        },
         "cellGap": 1
       },
       "targets": [
@@ -542,24 +940,44 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 61 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 70
+      },
       "id": 104,
       "title": "Row 5 — Billing (per client / customer)",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "Median Cardano transaction fee (lovelace) paid per oracle update over a 5-minute window, broken out by customer. Filter with $client, $symbol, and $customer.",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "custom": { "lineWidth": 2 }
+          "custom": {
+            "lineWidth": 2
+          }
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 62 },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 71
+      },
       "id": 14,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum by (le, customer) (rate(dia_bridge_transaction_fee_lovelace_bucket{symbol=~\"$symbol\", client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
@@ -573,7 +991,11 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["dia", "cardano", "oracle"],
+  "tags": [
+    "dia",
+    "cardano",
+    "oracle"
+  ],
   "templating": {
     "list": [
       {
@@ -589,35 +1011,10 @@
       },
       {
         "current": {},
-        "datasource": { "type": "prometheus", "uid": "${datasource}" },
-        "hide": 0,
-        "includeAll": true,
-        "allValue": ".*",
-        "multi": true,
-        "label": "Client",
-        "name": "client",
-        "options": [],
-        "query": { "query": "label_values(dia_bridge_cardano_receiver_balance_lovelace, client_id)", "refId": "client" },
-        "refresh": 2,
-        "type": "query"
-      },
-      {
-        "current": {},
-        "datasource": { "type": "prometheus", "uid": "${datasource}" },
-        "hide": 0,
-        "includeAll": true,
-        "allValue": ".*",
-        "multi": true,
-        "label": "Symbol",
-        "name": "symbol",
-        "options": [],
-        "query": { "query": "label_values(dia_bridge_cardano_pair_is_create{client_id=~\"$client\"}, symbol)", "refId": "symbol" },
-        "refresh": 2,
-        "type": "query"
-      },
-      {
-        "current": {},
-        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
         "hide": 0,
         "includeAll": true,
         "allValue": ".*",
@@ -625,13 +1022,59 @@
         "label": "Customer",
         "name": "customer",
         "options": [],
-        "query": { "query": "label_values(dia_bridge_transaction_fee_lovelace_count, customer)", "refId": "customer" },
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total, customer)",
+          "refId": "customer"
+        },
         "refresh": 2,
         "type": "query"
       },
       {
         "current": {},
-        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Client",
+        "name": "client",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total{customer=~\"$customer\"}, client_id)",
+          "refId": "client"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Symbol",
+        "name": "symbol",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_tx_pair_membership_total{customer=~\"$customer\", client_id=~\"$client\"}, symbol)",
+          "refId": "symbol"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
         "hide": 0,
         "includeAll": true,
         "allValue": ".*",
@@ -639,16 +1082,22 @@
         "label": "Error code",
         "name": "error_code",
         "options": [],
-        "query": { "query": "label_values(dia_bridge_transactions_failed_total, error_code)", "refId": "error_code" },
+        "query": {
+          "query": "label_values(dia_bridge_transactions_failed_total{client_id=~\"$client\"}, error_code)",
+          "refId": "error_code"
+        },
         "refresh": 2,
         "type": "query"
       }
     ]
   },
-  "time": { "from": "now-3h", "to": "now" },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "browser",
   "title": "DIA Cardano Oracle Feeder",
   "uid": "dia-cardano-feeder",
-  "version": 2
+  "version": 4
 }
