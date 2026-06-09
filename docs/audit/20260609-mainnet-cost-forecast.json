@@ -1,0 +1,39 @@
+{
+  "generatedAt": "2026-06-09T09:53:36.800Z",
+  "disclaimer": "Recurring feeder network-fee forecast only. Excludes one-off deploy/bootstrap/teardown fees and client-paid protocol fees. No chain interaction.",
+  "scenario": {
+    "pairs": 10,
+    "clients": 1,
+    "heartbeatMinutes": 10,
+    "forecastMinutes": 90,
+    "configNote": "Same router config as Preview: 10m time_threshold + 0.1% price_deviation + cron heartbeat."
+  },
+  "observed": {
+    "pack": "docs/milestones/evidence/m2-preview-20260609-093407",
+    "packStamp": "20260609-093407",
+    "windowMinutes": 57.31,
+    "txConfirmed": 30,
+    "txFailed": 12,
+    "avgNetworkFeeLovelacePerTx": 886333,
+    "avgNetworkFeeAdaPerTx": 0.886333,
+    "feeSampleCount": 19,
+    "txPerMinute": 0.5234
+  },
+  "forecastObservedRate": {
+    "method": "observed confirmed-tx rate x observed avg fee/tx, scaled to the window",
+    "projectedTx": 47.1,
+    "projectedNetworkFeeAda": 41.753615
+  },
+  "forecastHeartbeatModel": {
+    "method": "cron-heartbeat floor: one coalesced batch tx per client per cycle",
+    "cycles": 9,
+    "batchTx": 9,
+    "feePerBatchTxAda": 3.261708,
+    "batchCurve": {
+      "base": 0.456511,
+      "perPair": 0.28052,
+      "source": "docs/milestones/evidence/_archived/m1-fee-benchmark-20260506-162133/fee-report.json"
+    },
+    "projectedNetworkFeeAda": 29.35537
+  }
+}
