@@ -351,6 +351,27 @@ if [[ -f "$TX_LOG" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Step 5b — capture alert evidence: the live Prometheus alert state at pack time
+# plus the canonical catalog + remediation rendered from alerts.yml. Degrades
+# gracefully — a missing Prometheus or toolchain falls back to a static catalog.
+# ---------------------------------------------------------------------------
+echo "[package-m2] step 5b — capturing alert state + remediation"
+PROM_URL="${PROM_URL:-http://localhost:9090}"
+ALERTS_ACTIVE_JSON="$OUT_DIR/alerts-active.json"
+if curl -fsS --max-time 5 "$PROM_URL/api/v1/alerts" -o "$ALERTS_ACTIVE_JSON" 2>/dev/null; then
+  echo "[package-m2]   captured live alert state from Prometheus"
+else
+  echo '{"status":"unavailable","data":{"alerts":[]}}' > "$ALERTS_ACTIVE_JSON"
+  echo "[package-m2]   Prometheus not reachable — alerts-active.json marked unavailable" >&2
+fi
+ALERTS_MD="$(cd "$REPO_ROOT/offchain/feeder" \
+  && node --import tsx/esm scripts/m2-evidence/build-alerts.ts "$ALERTS_ACTIVE_JSON" 2>/dev/null)" || true
+if [ -z "$ALERTS_MD" ]; then
+  echo "[package-m2]   build-alerts.ts unavailable — falling back to static catalog" >&2
+  ALERTS_MD=$'Source of truth: [`offchain/feeder/monitoring/alerts.yml`](../../../offchain/feeder/monitoring/alerts.yml).\nCanonical thresholds: `infrastructure.<network>.yaml::alerting.*`.\n\nThe 9 alert rules (OraclePairStale, ReceiverBalanceLow, SettleOverdue, PaymentHookWithdrawReady, AdminWalletLow, PriceDeviationHigh, PriceAgeHigh, ReorgRateHigh, ReceiverDepositsPending) and their exact remediation commands are defined in `alerts.yml`; the live snapshot is in `alerts-active.json`.'
+fi
+
+# ---------------------------------------------------------------------------
 # Step 6 — write SUMMARY.json + milestone-2-preview-evidence.md.
 # ---------------------------------------------------------------------------
 echo "[package-m2] step 6/6 — generating SUMMARY.json + evidence markdown"
@@ -506,19 +527,7 @@ for the canonical operator instructions.
 
 ## Alerts active during the window
 
-Source of truth: [\`offchain/feeder/monitoring/alerts.yml\`](../../../offchain/feeder/monitoring/alerts.yml).
-Canonical thresholds: \`infrastructure.<network>.yaml::alerting.*\`.
-
-| Alert | Metric | Operator action |
-| --- | --- | --- |
-| OraclePairStale          | \`dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds\` | Investigate scanner / DIA source. |
-| ReceiverBalanceLow       | \`dia_bridge_cardano_receiver_balance_lovelace\`               | Fund the labelled \`deposit_address\`; fallback \`dia-cli receiver:top-up\`. |
-| SettleOverdue            | \`dia_bridge_cardano_receiver_accrued_lovelace\`               | \`dia-cli settle\`. |
-| PaymentHookWithdrawReady | \`dia_bridge_cardano_payment_hook_accrued_lovelace\`           | \`dia-cli payment-hook:withdraw\`. |
-| AdminWalletLow           | \`dia_bridge_cardano_admin_wallet_lovelace\`                   | Refill operator wallet. |
-| PriceDeviationHigh       | \`dia_bridge_price_deviation_percent_bucket\` (p95)            | Investigate DIA source (possible misreport). |
-| PriceAgeHigh             | \`dia_bridge_price_age_seconds_bucket\` (p95)                  | Investigate DIA Lasernet scanner. |
-| ReorgRateHigh            | \`dia_bridge_transactions_reorg_total\`                        | Check provider lag + scanner block-lag panel. |
+$ALERTS_MD
 EOF
 
 echo "[package-m2] done."
