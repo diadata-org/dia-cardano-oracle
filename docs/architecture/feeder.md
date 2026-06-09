@@ -416,8 +416,42 @@ segments**, so we know *where* time is spent (a Spectra idea).
 **Why it matters:** if total latency spikes, the phases tell you *whose fault* it is:
 DIA slow to register (phase 1)? RPC slow (phase 2)? Cardano congested (phase 5)?
 
-> Today Grafana shows **only phase 6** (end-to-end). Phases 1–5 **are emitted but not
-> dashboarded** — they're in the "metrics to add" list (§19).
+> The main dashboard shows **phase 6** (end-to-end, per symbol). Phases 1–5 (the
+> per-symbol/intent axis) **are emitted but not dashboarded** — they're in the "metrics
+> to add" list (§19).
+
+### Two axes: per symbol vs per transaction
+
+The 6 phases above are the **per-symbol/intent** axis: each price (each symbol) has its
+own DIA timestamp and travels its own path. But a Cardano transaction is **atomic and
+can batch many pairs** — so "how many pairs landed" (per-symbol) and "how many
+transactions we sent" (per-tx) are different questions. The feeder emits a second,
+**per-transaction** family so a batch of 5 pairs counts as *one* tx, not five:
+
+| Metric | Axis | Meaning |
+| --- | --- | --- |
+| `dia_bridge_transactions_total{client_id,customer,outcome}` | per tx | Transactions, counted once per tx, by outcome (`confirmed`/`failed`). |
+| `dia_bridge_transaction_pairs{client_id,customer,outcome}` | per tx | Histogram of pairs-per-tx (batch size). |
+| `dia_bridge_tx_pair_membership_total{client_id,customer,symbol,outcome}` | per (tx, pair) | Which pairs each tx touched — filter by symbol to find the txs that included a pair without inflating the pure tx counts. |
+| `dia_bridge_tx_processing_to_submission_seconds` | per tx | Tx-level stage latency (the per-symbol counterpart is phase 4). |
+| `dia_bridge_tx_submission_to_confirmation_seconds` | per tx | Tx-level stage latency (per-symbol counterpart: phase 5). |
+| `dia_bridge_tx_end_to_end_seconds` | per tx | Tx-level end-to-end (per-symbol counterpart: phase 6). |
+
+**Counted once per tx.** The result handler fires once per intent, so a batch of N pairs
+fires N times with the same tx hash. The first batch member is the stateless
+**representative** (`isTransactionRepresentative`) that emits the tx-scoped metrics
+exactly once; the membership counter fires for every member.
+
+**No-tx failures excluded.** A condemned/superseded intent the feeder declined to submit
+(the build-time monotonicity assertion refuses, or the coalescer pre-filter drops it)
+surfaces as a `NonMonotonicNonce` failure with **no tx broadcast and no fee**. These are
+correct no-ops, not failed transactions, so `isNoTransactionFailure` excludes them from
+the tx-level counts.
+
+The dedicated **`monitoring/grafana/dashboards/feeder-tx.json`** dashboard ("DIA Cardano
+Oracle Feeder — Transactions") renders this axis: tx-stage latency (p50/p95/p99),
+confirmed-vs-failed throughput, success ratio, and batch-size distribution. The main
+dashboard's "Row 2b — Transactions (per tx)" carries a condensed view.
 
 ---
 
@@ -762,8 +796,9 @@ prerequisites, env vars, and the full output description.
 
 ## 19. Metrics that exist but are NOT in Grafana
 
-The feeder exposes ~50 `dia_bridge_*` metrics at `/metrics`. The current dashboard
-(`monitoring/grafana/dashboards/feeder.json`) uses **13**. Below is what's missing —
+The feeder exposes ~55 `dia_bridge_*` metrics at `/metrics`, across **two** dashboards:
+`monitoring/grafana/dashboards/feeder.json` (operational overview) and
+`feeder-tx.json` (the per-transaction axis — see §6). Below is what neither shows yet —
 split into **metrics with real data** (worth adding) and **metrics defined but with no
 emitter yet** (do NOT add: they'd read 0/empty).
 
@@ -774,7 +809,10 @@ emitter yet** (do NOT add: they'd read 0/empty).
 `price_deviation_percent`, `price_age_seconds`, `scanner_block_lag`,
 `cardano_receiver_balance_lovelace`, `cardano_receiver_accrued_lovelace`,
 `cardano_payment_hook_accrued_lovelace`, `cardano_admin_wallet_lovelace`,
-`cardano_oracle_last_confirmed_timestamp_seconds`.
+`cardano_oracle_last_confirmed_timestamp_seconds`, `transaction_fee_lovelace`.
+Per-transaction axis (`feeder-tx.json`): `transactions_total`, `transaction_pairs`,
+`tx_pair_membership_total`, `tx_processing_to_submission_seconds`,
+`tx_submission_to_confirmation_seconds`, `tx_end_to_end_seconds`.
 
 ### A — Missing, with real data (candidates to add)
 
@@ -1019,7 +1057,7 @@ purpose, so it is clear where to look.
 
 ### Evidence — proof it works
 
-- [`docs/milestones/evidence/m2-preview-20260604-100120/milestone-2-preview-evidence.md`](../milestones/evidence/m2-preview-20260604-100120/milestone-2-preview-evidence.md)
+- [`docs/milestones/evidence/m2-preview-20260609-071122/milestone-2-preview-evidence.md`](../milestones/evidence/m2-preview-20260609-071122/milestone-2-preview-evidence.md)
   — the **auto-generated M2 evidence report**: per-pair confirmed-tx counts, sample tx
   hashes, end-to-end latency, failures by error code, embedded Grafana dashboard/panel
   PNGs, and the alerts active at capture time. Regenerate any time with `make evidence`

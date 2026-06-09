@@ -273,8 +273,12 @@ make down              # stops everything
 - Prometheus: `http://localhost:9090` — raw metrics and alert state
   (`/alerts` shows the configured alert rules).
 - Grafana: `http://localhost:3000` — login `admin` / value of
-  `GRAFANA_ADMIN_PASSWORD` in `.env` (defaults to `admin`). The
-  **DIA Cardano Oracle Feeder** dashboard is pre-provisioned.
+  `GRAFANA_ADMIN_PASSWORD` in `.env` (defaults to `admin`). Two dashboards are
+  pre-provisioned: **DIA Cardano Oracle Feeder** (operational overview, balances,
+  per-symbol throughput) and **DIA Cardano Oracle Feeder — Transactions**
+  (per-transaction view: stage latency, confirmed-vs-failed, batch size). Both filter
+  by **customer → client → symbol** (cascading). A batch tx of N pairs counts as one
+  transaction in the tx view and as N symbol updates in the overview.
 - Renderer: a `grafana/grafana-image-renderer` sidecar that produces PNG
   snapshots of the dashboard for Grafana. No exposed port; intra-compose only.
 
