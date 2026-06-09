@@ -1,0 +1,12 @@
+{
+  "pack_stamp": "20260609-132545",
+  "window": {
+    "first_event_iso": "2026-06-09T08:36:49.436Z",
+    "last_event_iso": "2026-06-09T13:25:37.203Z"
+  },
+  "totals": {
+    "tx_confirmed": 174,
+    "tx_failed": 60,
+    "reorgs": 0
+  }
+}
