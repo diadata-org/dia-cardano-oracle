@@ -58,7 +58,7 @@ This is a status note, not a remediation document. Every claim links to the in-r
 ## Milestone 2 status
 
 Essentially complete. The Preview evidence pack is captured —
-[`m2-preview-20260609-093407`](../milestones/evidence/m2-preview-20260609-093407/milestone-2-preview-evidence.md)
+[`m2-preview-20260609-132545`](../milestones/evidence/m2-preview-20260609-132545/milestone-2-preview-evidence.md)
 — with per-pair confirmed-transaction counts, sample tx hashes verifiable on Cardanoscan,
 end-to-end latency, failures by error code, and both Grafana dashboards embedded.
 
@@ -238,4 +238,4 @@ validation artifacts and a live-Mainnet demonstration:
   [`20260609-mainnet-cost-forecast.md`](./20260609-mainnet-cost-forecast.md)
 - **Security:** [`../security/security-notes.md`](../security/security-notes.md)
 - **Milestones:** [`../milestones/final-cardano-milestones.md`](../milestones/final-cardano-milestones.md) ·
-  [`m2-preview-20260609-093407`](../milestones/evidence/m2-preview-20260609-093407/milestone-2-preview-evidence.md)
+  [`m2-preview-20260609-132545`](../milestones/evidence/m2-preview-20260609-132545/milestone-2-preview-evidence.md)

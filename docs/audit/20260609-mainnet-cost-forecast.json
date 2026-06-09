@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-09T09:53:36.800Z",
+  "generatedAt": "2026-06-09T14:37:28.820Z",
   "disclaimer": "Recurring feeder network-fee forecast only. Excludes one-off deploy/bootstrap/teardown fees and client-paid protocol fees. No chain interaction.",
   "scenario": {
     "pairs": 10,
@@ -9,20 +9,20 @@
     "configNote": "Same router config as Preview: 10m time_threshold + 0.1% price_deviation + cron heartbeat."
   },
   "observed": {
-    "pack": "docs/milestones/evidence/m2-preview-20260609-093407",
-    "packStamp": "20260609-093407",
-    "windowMinutes": 57.31,
-    "txConfirmed": 30,
-    "txFailed": 12,
-    "avgNetworkFeeLovelacePerTx": 886333,
-    "avgNetworkFeeAdaPerTx": 0.886333,
-    "feeSampleCount": 19,
-    "txPerMinute": 0.5234
+    "pack": "docs/milestones/evidence/m2-preview-20260609-132545",
+    "packStamp": "20260609-132545",
+    "windowMinutes": 288.8,
+    "txConfirmed": 174,
+    "txFailed": 60,
+    "avgNetworkFeeLovelacePerTx": 886545,
+    "avgNetworkFeeAdaPerTx": 0.886545,
+    "feeSampleCount": 83,
+    "txPerMinute": 0.6025
   },
   "forecastObservedRate": {
     "method": "observed confirmed-tx rate x observed avg fee/tx, scaled to the window",
-    "projectedTx": 47.1,
-    "projectedNetworkFeeAda": 41.753615
+    "projectedTx": 54.2,
+    "projectedNetworkFeeAda": 48.073019
   },
   "forecastHeartbeatModel": {
     "method": "cron-heartbeat floor: one coalesced batch tx per client per cycle",
