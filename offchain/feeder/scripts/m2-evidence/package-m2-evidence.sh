@@ -146,36 +146,56 @@ PANELS=(
   '1|Pair staleness (per symbol)|Metric `time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds`, in seconds. Wall-clock age of the most recent confirmed on-chain update for each pair — how stale the value currently living on Cardano is. Drives the `OraclePairStale` alert.'
   '2|Receiver balance — ADA (per client)|Metric `dia_bridge_cardano_receiver_balance_lovelace / 1000000`, in ADA. Current spendable balance of each Receiver address, converted from lovelace. The metric labels include both `receiver_address` and the client `deposit_address` operators should fund when `ReceiverBalanceLow` fires.'
   '3|Admin wallet • PaymentHook • Receiver accrued — ADA|Three ADA series (lovelace ÷ 1e6): `dia_bridge_cardano_admin_wallet_lovelace` (operator admin wallet), `dia_bridge_cardano_payment_hook_accrued_lovelace` (fees accrued inside the PaymentHook awaiting withdraw), and `sum(dia_bridge_cardano_receiver_accrued_lovelace)` (amounts accrued at receivers awaiting settle). Together they track the fee / settlement money flow.'
-  '4|End-to-end latency (p50/p95/p99)|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_end_to_end_latency_seconds_bucket[5m]))`, in seconds. End-to-end pipeline latency — from the DIA `IntentRegistered` event to the Cardano `tx_confirmed` — at the median, 95th and 99th percentiles. How fast a price becomes a confirmed on-chain update.'
-  '5|Tx confirmed rate (5m)|Metric `sum by (symbol) (rate(dia_bridge_transactions_confirmed_total[5m]))`, in ops/s. Rate of successfully confirmed update transactions over a 5-minute window, per pair. The positive-side throughput of the feeder.'
-  '6|Tx failed rate (5m)|Metric `sum by (error_code) (rate(dia_bridge_transactions_failed_total[5m]))`, in ops/s. Rate of failed transaction attempts over 5 minutes, grouped by `error_code`. A spike on a given code points straight at the failing subsystem; codes are documented in `offchain/feeder/src/errors/codes.ts`.'
+  '4|Symbol-update latency (p50/p95/p99)|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_end_to_end_latency_seconds_bucket[5m]))`, in seconds, aggregated across all pairs. Per-symbol pipeline latency from feeder processing start to Cardano confirmation, at the median, 95th and 99th percentiles. For per-TRANSACTION stage latency see the Transactions dashboard below.'
+  '5|Symbol updates confirmed (5m)|Metric `sum by (symbol) (increase(dia_bridge_transactions_confirmed_total[5m]))` — a 5-minute count (not a rate), per pair. A batch transaction of N pairs adds 1 to each of its N symbols, so this is symbol-update throughput; for pure per-transaction counts see "Tx confirmed vs failed" below.'
+  '6|Symbol-update failures (5m, by error code)|Metric `sum by (error_code) (increase(dia_bridge_transactions_failed_total[5m]))` — a 5-minute count grouped by `error_code`. Condemned/superseded intents the feeder declined to submit surface as `NonMonotonicNonce` (no tx, no fee); codes are documented in `offchain/feeder/src/errors/codes.ts`.'
+  '16|Tx confirmed vs failed (5m)|Metric `sum by (outcome) (increase(dia_bridge_transactions_total[5m]))` — Cardano TRANSACTIONS per 5-minute window, counted once per tx (a batch of N pairs is ONE tx), by `outcome`. Condemned no-ops are excluded. This is pure transaction throughput, distinct from the per-symbol counts above.'
+  '17|Pairs per tx (p50/p95)|Metric `histogram_quantile(0.50 / 0.95, rate(dia_bridge_transaction_pairs_bucket[5m]))` — batch size: how many pairs travel in each transaction, at the median and 95th percentile.'
   '7|Reorg counter|Metric `sum(increase(dia_bridge_transactions_reorg_total[1h]))`. Count of already-confirmed transactions dropped by a chain reorganisation in the last hour. Should sit at 0; a sustained non-zero value triggers `ReorgRateHigh` and points at provider lag.'
   '8|Scanner block lag|Metric `dia_bridge_scanner_block_lag`, in blocks. How many blocks behind the chain tip the DIA-side scanner currently is. A steadily rising lag means the scanner is falling behind the source chain and updates will be delayed.'
-  '9|Intents filtered by reason|Metric `sum by (reason) (rate(dia_bridge_intents_filtered_total[5m]))`, in ops/s. Rate of incoming intents the feeder deliberately discarded before submitting a transaction, grouped by `reason` (e.g. below deviation threshold, duplicate, stale). Explains why some updates are intentionally skipped.'
+  '9|Intents filtered (5m, by reason)|Metric `sum by (reason) (increase(dia_bridge_intents_filtered_total[5m]))` — a 5-minute count grouped by `reason`. Intents the feeder deliberately suppressed before submitting. High counts are normal: the deviation/time-threshold policy suppresses most intents by design.'
   '13|Price deviation p95 — 1 h window (per pair)|Metric `histogram_quantile(0.95, rate(dia_bridge_price_deviation_percent_bucket[1h]))` per `symbol`, in percent. 95th percentile of the percentage gap between the price the feeder published and the reference price, per pair. A high value suggests a possible misreport and feeds the `PriceDeviationHigh` alert.'
   '10|Price deviation distribution (heatmap)|Metric `sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket[5m]))`, percent buckets. Heatmap of the full price-deviation distribution over time (histogram `le` buckets, colour = frequency). Healthy feeds cluster near 0%; a vertical spread means deviations are growing.'
 )
 
+# Transactions dashboard (feeder-tx.json, uid dia-cardano-feeder-tx) — the
+# per-TRANSACTION axis: a batch of N pairs is ONE tx. Same "id|title|description"
+# shape; keep in sync with monitoring/grafana/dashboards/feeder-tx.json.
+GRAFANA_TX_DASHBOARD_UID="dia-cardano-feeder-tx"
+PANELS_TX=(
+  '301|Stage 1 — processing → submission|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_tx_processing_to_submission_seconds_bucket[5m]))`, in seconds, one observation per confirmed tx. Time to build, queue and sign a transaction before broadcast.'
+  '302|Stage 2 — submission → confirmation|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket[5m]))`, in seconds. Pure Cardano settlement time from broadcast to on-chain confirmation, per tx.'
+  '303|End-to-end — processing → confirmation|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_tx_end_to_end_seconds_bucket[5m]))`, in seconds. Total per-transaction latency from feeder processing start to confirmation.'
+  '311|Tx confirmed vs failed (5m)|Metric `sum by (outcome) (increase(dia_bridge_transactions_total[5m]))` — transactions per 5-minute window counted once per tx, by outcome. Condemned no-ops excluded.'
+  '312|Tx success ratio (5m)|Confirmed transactions as a percentage of all real attempts (confirmed + failed) over 5 minutes: `100 * confirmed / (confirmed + failed)` from `dia_bridge_transactions_total`. Condemned no-ops are excluded from both terms.'
+  '313|Tx by client (5m)|Metric `sum by (client_id) (increase(dia_bridge_transactions_total[5m]))` — transactions per 5-minute window grouped by client (receiver identity), counted once per tx.'
+  '321|Pairs per tx (p50/p95/p99)|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_transaction_pairs_bucket[5m]))` — batch size distribution: pairs per transaction at the median, 95th and 99th percentiles.'
+  '322|Batch size distribution (heatmap)|Metric `sum by (le) (rate(dia_bridge_transaction_pairs_bucket[5m]))`, batch-size buckets. Heatmap of pairs-per-transaction over time; bright bands show the typical batch size.'
+  '323|Tx touching pair (5m, by symbol & outcome)|Metric `sum by (symbol, outcome) (increase(dia_bridge_tx_pair_membership_total[5m]))` — one increment per (tx, pair). Filter by `$symbol` to find the transactions that included a given pair (their size is in "Pairs per tx"); carries confirmed vs failed and the customer dimension.'
+)
+
 render_dashboard() {
-  local slug="dia-cardano-oracle-feeder"
+  local uid="$1"
+  local slug="$2"
+  local out_png="$3"
   local from="now-3h"
   local to="now"
-  local out_png="$1"
   curl -fsS --max-time 30 \
     -u "$GRAFANA_USER:$GRAFANA_PASS" \
     -o "$out_png" \
-    "$GRAFANA_URL/render/d/$GRAFANA_DASHBOARD_UID/$slug?orgId=1&from=$from&to=$to&width=1600&height=2400&kiosk=tv&tz=UTC"
+    "$GRAFANA_URL/render/d/$uid/$slug?orgId=1&from=$from&to=$to&width=1600&height=2400&kiosk=tv&tz=UTC"
 }
 
 render_panel() {
-  local panel_id="$1"
-  local out_png="$2"
+  local uid="$1"
+  local panel_id="$2"
+  local out_png="$3"
   local from="now-3h"
   local to="now"
   curl -fsS --max-time 30 \
     -u "$GRAFANA_USER:$GRAFANA_PASS" \
     -o "$out_png" \
-    "$GRAFANA_URL/render/d-solo/$GRAFANA_DASHBOARD_UID/panel?orgId=1&panelId=$panel_id&from=$from&to=$to&width=1200&height=400&tz=UTC"
+    "$GRAFANA_URL/render/d-solo/$uid/panel?orgId=1&panelId=$panel_id&from=$from&to=$to&width=1200&height=400&tz=UTC"
 }
 
 # Markdown for the report's "## Dashboards" section, built as PNGs land so the
@@ -183,22 +203,42 @@ render_panel() {
 DASHBOARDS_MD=""
 
 if curl -fsS --max-time 5 "$GRAFANA_URL/api/health" >/dev/null 2>&1; then
-  if render_dashboard "$OUT_DIR/dashboards/dashboard-full.png" 2>/dev/null; then
+  if render_dashboard "$GRAFANA_DASHBOARD_UID" "dia-cardano-oracle-feeder" "$OUT_DIR/dashboards/dashboard-full.png" 2>/dev/null; then
     echo "[package-m2]   full dashboard PNG captured"
-    DASHBOARDS_MD=$'### Full dashboard\n\n![DIA Cardano Oracle Feeder — full dashboard](dashboards/dashboard-full.png)\n\n_Each panel is also captured individually below. Every caption names the underlying Prometheus metric and explains what it measures._\n\n### Panels\n'
+    DASHBOARDS_MD=$'### Overview dashboard\n\n![DIA Cardano Oracle Feeder — full dashboard](dashboards/dashboard-full.png)\n\n_Each panel is also captured individually below. Every caption names the underlying Prometheus metric and explains what it measures. A batch transaction of N pairs counts as N symbol updates in the per-symbol panels and as ONE transaction in the per-tx panels._\n\n### Overview panels\n'
     # Per-panel snapshots — embed each one under its title, then explain the metric.
     for entry in "${PANELS[@]}"; do
       panel_id="${entry%%|*}"
       rest="${entry#*|}"
       panel_title="${rest%%|*}"
       panel_desc="${rest#*|}"
-      if render_panel "$panel_id" "$OUT_DIR/dashboards/panel-$panel_id.png" 2>/dev/null; then
+      if render_panel "$GRAFANA_DASHBOARD_UID" "$panel_id" "$OUT_DIR/dashboards/panel-$panel_id.png" 2>/dev/null; then
         echo "[package-m2]   panel $panel_id PNG captured"
         DASHBOARDS_MD+=$'\n'"**${panel_title}**"$'\n\n'"![${panel_title}](dashboards/panel-${panel_id}.png)"$'\n\n'"${panel_desc}"$'\n'
       else
         echo "[package-m2]   panel $panel_id PNG FAILED — skipping in report" >&2
       fi
     done
+
+    # Transactions dashboard (per-tx axis) — full render + per-panel snapshots.
+    if render_dashboard "$GRAFANA_TX_DASHBOARD_UID" "dia-cardano-oracle-feeder-transactions" "$OUT_DIR/dashboards/tx-dashboard-full.png" 2>/dev/null; then
+      echo "[package-m2]   tx dashboard PNG captured"
+      DASHBOARDS_MD+=$'\n### Transactions dashboard\n\n![DIA Cardano Oracle Feeder — Transactions — full dashboard](dashboards/tx-dashboard-full.png)\n\n_The per-transaction view: a batch of N pairs is ONE transaction here. Stage latency, confirmed-vs-failed throughput, success ratio and batch size._\n\n### Transactions panels\n'
+      for entry in "${PANELS_TX[@]}"; do
+        panel_id="${entry%%|*}"
+        rest="${entry#*|}"
+        panel_title="${rest%%|*}"
+        panel_desc="${rest#*|}"
+        if render_panel "$GRAFANA_TX_DASHBOARD_UID" "$panel_id" "$OUT_DIR/dashboards/tx-panel-$panel_id.png" 2>/dev/null; then
+          echo "[package-m2]   tx panel $panel_id PNG captured"
+          DASHBOARDS_MD+=$'\n'"**${panel_title}**"$'\n\n'"![${panel_title}](dashboards/tx-panel-${panel_id}.png)"$'\n\n'"${panel_desc}"$'\n'
+        else
+          echo "[package-m2]   tx panel $panel_id PNG FAILED — skipping in report" >&2
+        fi
+      done
+    else
+      echo "[package-m2]   tx dashboard render FAILED — skipping in report" >&2
+    fi
   else
     cat > "$OUT_DIR/dashboards/README.txt" <<EOF
 Grafana reachable but renderer plugin is not responding. Either bring up
@@ -376,8 +416,10 @@ Evidence pack location: this directory.
 - [Failures (grouped by error_code)](#failures-grouped-by-error_code)
 - [Raw artefacts in this pack](#raw-artefacts-in-this-pack)
 - [Dashboards](#dashboards)
-  - [Full dashboard](#full-dashboard)
-  - [Panels](#panels)
+  - [Overview dashboard](#overview-dashboard)
+  - [Overview panels](#overview-panels)
+  - [Transactions dashboard](#transactions-dashboard)
+  - [Transactions panels](#transactions-panels)
 - [Alerts active during the window](#alerts-active-during-the-window)
 
 ## Official Milestone 2 Outputs
