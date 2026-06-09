@@ -104,6 +104,12 @@ Live query of the Milestone 1 deployment (operator wallet + the protocol's scrip
 | Config (min-UTxO) | 5.00 | **no** |
 | **Total controlled** | **325.04** | |
 
+> **Note on funding origin.** The initial Mainnet allocation from DIA was **≈ 240 ADA**. An
+> additional **≈ 100 ADA was added by the operator** (Manuel Padilla / Protofire) to ensure the
+> Milestone 1 run had enough margin. Those 100 ADA are part of the 325.04 total above and are
+> **expected to be returned** via the new ADA request once the cycle is complete. They should not
+> be treated as absorbed project cost.
+
 ### What teardown of the old deployment recovers (and what it cannot)
 
 The current Mainnet contracts predate the `Burn` redeemers. As documented in
@@ -161,13 +167,19 @@ network transaction fees:
 | **Redeploy tx fees (31 txs, non-recoverable)** | **≈ −20** | **No — permanently spent** |
 | Feeder operation fees (~1 h 30 m, non-recoverable) | ≈ −50 | No — permanently spent |
 | **Net gap to fund** | **≈ −12** | — |
+| **Operator personal contribution to return** | **≈ −100** | To be reimbursed |
+| **Total new ADA to request from DIA** | **≈ −112** | — |
 
-> **Request: ≈ 100 ADA of new ADA** — covers the ≈ 12 ADA net gap plus a margin for fee
-> variability, the ≈ 15 ADA permanently stuck in the old Milestone 1 singleton UTxOs, and any
-> additional feeder runtime beyond 1 h 30 m. The **true unrecoverable cost** of the whole
-> Milestone-1-teardown → redeploy → Milestone-2 run cycle is **≈ 35 – 40 ADA in tx fees** (≈ 20
-> redeploy + ≈ 15 stuck ADA from old singletons) plus the feeder operation fees; everything else
-> circulates back to the wallet.
+> **Request: ≈ 150 ADA from DIA.** This covers the ≈ 12 ADA operating gap after teardown +
+> redeploy + feeder fees; the **≈ 100 ADA personal contribution** from the operator (Protofire)
+> that funded the Milestone 1 Mainnet run beyond DIA's initial ≈ 240 ADA allocation — to be
+> returned, not absorbed; and a margin for fee variability, the ≈ 15 ADA permanently stuck in the
+> old Milestone 1 singleton UTxOs, and any feeder runtime beyond 1 h 30 m.
+>
+> The **true unrecoverable cost** of the whole cycle (Milestone-1-teardown → redeploy →
+> Milestone-2 run) is **≈ 35 – 40 ADA in tx fees** (≈ 20 redeploy + ≈ 15 stuck ADA from old
+> singletons) plus feeder operation fees; everything else circulates back to the wallet. The 150
+> ADA request accounts for reimbursing the operator's personal advance on top of that.
 
 We will confirm exact figures against a fresh live query before requesting the transfer.
 
