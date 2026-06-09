@@ -133,8 +133,8 @@ High-level deliverables tracked here:
 - [x] OpenAPI/Swagger surface: a metadata route table (`src/api/routes.ts`, TypeBox schemas)
   drives an OpenAPI 3.0.3 doc at `/api/v1/openapi.json` and an offline Redoc UI at `/docs`
   (vendored, no CDN; shipped in the Docker image).
-- [x] M2 Preview evidence pack captured — `docs/milestones/evidence/m2-preview-20260609-071122/`
-  (~18 h window, 10 pairs, Grafana PNGs from both dashboards, error-counts TSV, alerts section).
+- [x] M2 Preview evidence pack captured — `docs/milestones/evidence/m2-preview-20260609-093407/`
+  (10 pairs, Grafana PNGs from both dashboards, error-counts TSV, alerts section).
   564 feeder tests pass. Tracked in detail in [milestone-feeder-plan.md](./milestone-feeder-plan.md) §2.
   Remaining for the M2 submission: the `milestone-2-poa.md` PoA doc and the demo video (mainnet
   feeder tx logs are the formal evidence, tracked under Mainnet).
@@ -177,7 +177,7 @@ Tasks:
   registered-but-unshown families: the 5 per-symbol latency phases, scanner RPC errors + backfill,
   worker pool counters, HTTP/db/component-health, cron resubmissions, node/process defaults.
 - [x] Dashboard screenshots capturing real data — captured in the M2 Preview evidence pack
-  (`m2-preview-20260609-071122/dashboards/`, both dashboards).
+  (`m2-preview-20260609-093407/dashboards/`, both dashboards).
 - [ ] QA validation report and anomaly-detection evidence — this is an **M3** deliverable (QA
   validation report, alert-trigger logs, sanity checks per feed). Tracked in
   [`m3-m4-plan.md`](./m3-m4-plan.md).

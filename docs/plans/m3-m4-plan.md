@@ -103,7 +103,7 @@ listings, the DIA-site documentation publication, and the closeout report/video.
   pair staleness (stale data), reorg counter (chain instability).
 - [x] Anomaly/QA HTTP surface: `/api/v1/alerts`, `/api/v1/performance`, `/health/*`, `/metrics`.
 - [x] Evidence packaging (`make evidence`) captures dashboards (both), error-counts, alerts
-  section, per-intent logs, db CSVs — demonstrated on Preview (`m2-preview-20260609-071122`).
+  section, per-intent logs, db CSVs — demonstrated on Preview (`m2-preview-20260609-093407`).
 
 ### M3 — remaining
 

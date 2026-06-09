@@ -4,13 +4,17 @@ Tasks for the DIA Cardano Oracle feeder: done, left for M2, Mainnet, and deferre
 
 ## Contents
 
-- [Done](#done)
-- [Pending — Milestone 2](#pending--milestone-2)
-  - [Evidence pack](#evidence-pack)
-  - [Monitoring, config \& API](#monitoring-config--api)
-- [Pending — Mainnet](#pending--mainnet)
-- [Deferred — M3 / M4](#deferred--m3--m4)
-- [Open — DIA decisions](#open--dia-decisions-operational-not-code)
+- [Milestone — Feeder Plan](#milestone--feeder-plan)
+  - [Contents](#contents)
+  - [Done](#done)
+  - [Pending — Milestone 2](#pending--milestone-2)
+    - [Evidence pack](#evidence-pack)
+    - [Monitoring, config \& API](#monitoring-config--api)
+    - [Recent contract + decommission work (2026-06-07)](#recent-contract--decommission-work-2026-06-07)
+    - [Receiver funding — side-deposit + merge (Option A, from the 2026-06-05 audit)](#receiver-funding--side-deposit--merge-option-a-from-the-2026-06-05-audit)
+  - [Pending — Mainnet](#pending--mainnet)
+  - [Deferred — M3 / M4](#deferred--m3--m4)
+  - [Open — DIA decisions (operational, not code)](#open--dia-decisions-operational-not-code)
 
 ## Done
 
@@ -29,14 +33,14 @@ Tasks for the DIA Cardano Oracle feeder: done, left for M2, Mainnet, and deferre
 - [x] `make evidence` writes one folder; network read from `feeder/.env`.
 - [x] `make down` stops all profiles; `init: true` so Ctrl+C / stop reach the container.
 - [x] Network-scoped router config: routers live under `config/routers/<network>/`; the loader reads only the active network's folder, with `cardano.network` as a warn-and-skip guard. `client-a.preview.yaml` → `routers/preview/client-a.yaml`; `routers/mainnet/` ready for the Mainnet client.
-- [x] M2 Preview evidence pack captured — `docs/milestones/evidence/m2-preview-20260609-071122/`: ~18 h window (2026-06-08 13:11 → 2026-06-09 07:11 UTC), 10 pairs (ARB, BTC, DOGE, ETH, LTC, NEIRO, SHIB, USDC, USDT, XVG), real Grafana PNGs from BOTH dashboards (overview `dashboard-full.png` + `panel-1..17`, and the Transactions dashboard `tx-dashboard-full.png` + `tx-panel-301..323`) embedded in the writeup `milestone-2-preview-evidence.md`, plus db CSVs, API snapshots, per-intent logs, `error-counts.tsv`, and an "Alerts active during the window" section. In-window totals: 667 confirmed / 847 failed / 0 reorgs. The failures are overwhelmingly benign: per `error-counts.tsv` (DB-wide) the failed rows are 1589 legacy un-coded + 488 daemon crash-recovery restarts + 436 `NonMonotonicNonce` (condemned/superseded — no tx, no fee) + only **18 real `BuilderError`**.
+- [x] M2 Preview evidence pack captured — `docs/milestones/evidence/m2-preview-20260609-093407/`: 10 pairs (ARB, BTC, DOGE, ETH, LTC, NEIRO, SHIB, USDC, USDT, XVG), real Grafana PNGs from BOTH dashboards (overview `dashboard-full.png` + `panel-1..17`, and the Transactions dashboard `tx-dashboard-full.png` + `tx-panel-301..323`) embedded in the writeup `milestone-2-preview-evidence.md`, plus db CSVs, API snapshots, per-intent logs, `error-counts.tsv`, and an "Alerts active" section.
 - [x] Mainnet protocol + client bootstrapped on-chain via CLI — `docs/milestones/evidence/m1-mainnet-20260517-063917/`: protocol-init, config (parameterize/bootstrap/reference-scripts), payment-hook (parameterize/bootstrap/reference-script), client-init, receiver (parameterize/bootstrap), client reference-scripts, receiver top-ups, and the 10 pairs.
 
 ## Pending — Milestone 2
 
 ### Evidence pack
 
-The Preview evidence pack is captured and complete (see Done — `m2-preview-20260609-071122`: ~18 h window, 10 pairs, real PNGs from both dashboards embedded in the writeup, db/api/logs/error-counts, alerts section). Remaining for the M2 submission:
+The Preview evidence pack is captured and complete (see Done — `m2-preview-20260609-093407`: 10 pairs, real PNGs from both dashboards embedded in the writeup, db/api/logs/error-counts, alerts section). Remaining for the M2 submission:
 
 - [ ] **Milestone 2 PoA document** (`milestone-2-poa.md`), mirroring the accepted M1 PoA (`docs/milestones/evidence/m1-mainnet-20260517-063917/milestone-1-poa.md`): submission commit, AC→evidence tables, outputs-delivered table, how-to-verify, and the same "developer-docs publication on DIA's site deferred to M4" paragraph (the M1 deferral reasoning was accepted).
 - [ ] **Demo video** (explicit M2 acceptance — the "QA review logs" demo): lightweight preview of the system feeding the 10 asset price feeds + real-time Grafana dashboards + anomaly/alert behaviour. This is the one M2 deliverable with no in-repo substitute.
