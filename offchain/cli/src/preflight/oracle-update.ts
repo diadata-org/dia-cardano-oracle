@@ -35,15 +35,15 @@ export function assertOracleIntentTimestampAndNonceMonotonic(args: {
   if (!args.isCreate && args.intentTimestamp <= BigInt(args.pairStateTimestamp)) {
     throw new Error(
       args.batchStatePath !== undefined
-        ? `Intent timestamp must be greater than current timestamp for ${args.batchStatePath}.`
-        : "Oracle intent timestamp must be greater than the current timestamp.",
+        ? `Intent timestamp must be greater than the current on-chain timestamp for ${args.batchStatePath}; intent superseded, not submitted.`
+        : "Oracle intent timestamp must be greater than the current on-chain timestamp; intent superseded, not submitted.",
     );
   }
   if (!args.isCreate && args.intentNonce <= BigInt(args.pairStateNonce)) {
     throw new Error(
       args.batchStatePath !== undefined
-        ? `Intent nonce must be greater than current nonce for ${args.batchStatePath}.`
-        : "Oracle intent nonce must be greater than the current nonce.",
+        ? `Intent nonce must be greater than the current on-chain nonce for ${args.batchStatePath}; intent superseded, not submitted.`
+        : "Oracle intent nonce must be greater than the current on-chain nonce; intent superseded, not submitted.",
     );
   }
 }

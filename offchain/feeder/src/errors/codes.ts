@@ -104,7 +104,20 @@ export function classifyError(err: unknown): ClassifiedError {
     };
   }
 
-  if (msg.includes("monoton") || msg.includes("nonce is not") || msg.includes("nonce must be greater")) {
+  // Both the nonce AND the timestamp branch of the build-time monotonicity
+  // assertion (cli preflight/oracle-update.ts) land here: the intent is
+  // superseded on chain, the builder refuses, no tx is broadcast. Matching
+  // "greater than (the) current" catches the timestamp variant too, so it is
+  // not misread as a real BuilderError (which would count it as a failed
+  // transaction). "greater than zero" (min-UTxO config validation) is NOT
+  // matched.
+  if (
+    msg.includes("monoton") ||
+    msg.includes("nonce is not") ||
+    msg.includes("nonce must be greater") ||
+    msg.includes("greater than the current") ||
+    msg.includes("greater than current")
+  ) {
     return {
       code: "NonMonotonicNonce",
       remediation:

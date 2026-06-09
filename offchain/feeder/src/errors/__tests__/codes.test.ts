@@ -37,6 +37,26 @@ describe("classifyError", () => {
     assert.equal(r3.code, "NonMonotonicNonce");
   });
 
+  it("classifies BOTH the nonce and the timestamp branch of the build-time monotonicity assertion", () => {
+    // The build-time assertion (cli preflight/oracle-update.ts) throws a nonce
+    // OR a timestamp message; both mean the intent is superseded on chain and
+    // no tx was broadcast, so both must be NonMonotonicNonce (not BuilderError,
+    // which would count as a real failed transaction). Non-batch + batch forms.
+    for (const message of [
+      "Oracle intent nonce must be greater than the current on-chain nonce; intent superseded, not submitted.",
+      "Oracle intent timestamp must be greater than the current on-chain timestamp; intent superseded, not submitted.",
+      "Intent timestamp must be greater than the current on-chain timestamp for /tmp/oracle-batch.json; intent superseded, not submitted.",
+    ]) {
+      assert.equal(classifyError(new Error(message)).code, "NonMonotonicNonce", message);
+    }
+    // Guard: the min-UTxO validation message ("greater than zero") must NOT be
+    // swept into NonMonotonicNonce by the broadened match.
+    assert.notEqual(
+      classifyError(new Error("Config min_utxo_lovelace must be greater than zero")).code,
+      "NonMonotonicNonce",
+    );
+  });
+
   it("classifies signer-authorisation errors", () => {
     const r1 = classifyError(new Error("Wallet is not a config admin"));
     const r2 = classifyError(new Error("wallet is not a config signer"));
