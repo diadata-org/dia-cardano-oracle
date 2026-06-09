@@ -89,6 +89,7 @@ import {
 } from "../../src/submitter/index.js";
 import type { CardanoDestinationConfig } from "../../src/config/types.js";
 import type { SubmitRequest, SubmitResult, RouterSigner } from "../../src/submitter/types.js";
+import { isNoTransactionFailure, isTransactionRepresentative } from "../../src/submitter/types.js";
 import {
   createUpdateWorkerPoolManager,
   type UpdateWorkerPoolManager,
@@ -1098,6 +1099,33 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         metrics.transactionsConfirmed.inc({ symbol, client_id: clientId });
         const customer = routerCustomers.get(routerId) ?? "unknown";
         metrics.bridgeIntentsConfirmed.inc({ symbol, client_id: clientId, customer });
+
+        // Tx-level metrics — counted once per TRANSACTION, not per symbol.
+        // onResult fires once per intent, so a batch of N pairs fires N times
+        // with the same cardanoTxHash; the first batch member is the stateless
+        // representative that emits the tx-scoped metrics exactly once. A
+        // single (non-batch) confirmation is its own representative.
+        metrics.txPairMembership.inc({ client_id: clientId, customer, symbol, outcome: "confirmed" });
+        if (isTransactionRepresentative(result)) {
+          metrics.transactionsTotal.inc({ client_id: clientId, customer, outcome: "confirmed" });
+          metrics.transactionPairs.observe({ client_id: clientId, customer, outcome: "confirmed" }, batchSize);
+          if (runtime?.submittedAtMs !== undefined) {
+            metrics.txProcessingToSubmissionSeconds.observe(
+              { client_id: clientId, customer },
+              (runtime.submittedAtMs - runtime.observedAtMs) / 1_000,
+            );
+            metrics.txSubmissionToConfirmationSeconds.observe(
+              { client_id: clientId, customer },
+              (nowMs - runtime.submittedAtMs) / 1_000,
+            );
+          }
+          if (runtime) {
+            metrics.txEndToEndSeconds.observe(
+              { client_id: clientId, customer },
+              (nowMs - runtime.observedAtMs) / 1_000,
+            );
+          }
+        }
         if (result.feePaidLovelace !== undefined) {
           metrics.bridgeTransactionFeeLovelace.observe(
             { symbol, client_id: clientId, customer },
@@ -1263,12 +1291,25 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           client_id: clientId,
           error_code: result.code,
         });
+        const customer = routerCustomers.get(req.routerId) ?? "unknown";
         metrics.bridgeIntentsFailed.inc({
           symbol,
           client_id: clientId,
-          customer: routerCustomers.get(req.routerId) ?? "unknown",
+          customer,
           reason: result.code,
         });
+
+        // Tx-level failure metrics — counted once per TRANSACTION. Condemned/
+        // superseded intents the feeder declined to submit (no tx, no fee) are
+        // correct no-ops and excluded; a real batch failure shares one
+        // representative (the first batch member) so it counts once.
+        if (!isNoTransactionFailure(result)) {
+          metrics.txPairMembership.inc({ client_id: clientId, customer, symbol, outcome: "failed" });
+          if (isTransactionRepresentative(result)) {
+            metrics.transactionsTotal.inc({ client_id: clientId, customer, outcome: "failed" });
+            metrics.transactionPairs.observe({ client_id: clientId, customer, outcome: "failed" }, batchSize);
+          }
+        }
         if (result.code === "TxDroppedFromChain") {
           metrics.transactionsReorg.inc({ symbol, client_id: clientId });
         }

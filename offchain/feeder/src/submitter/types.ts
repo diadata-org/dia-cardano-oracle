@@ -109,6 +109,33 @@ export type SubmitResultErr = {
 
 export type SubmitResult = SubmitResultOk | SubmitResultErr;
 
+/** Failure codes that mean the feeder DECLINED to submit a transaction rather
+ *  than one being broadcast and rejected. A `NonMonotonicNonce` failure is
+ *  raised by the build-time monotonicity assertion (the builder reads the live
+ *  on-chain pair datum and refuses to build a losing tx) and by the coalescer
+ *  pre-filter that drops superseded batch members — in both cases no tx is
+ *  broadcast and no fee is paid. Such failures must NOT count as failed
+ *  transactions; they are correct no-ops. */
+const NO_TRANSACTION_FAILURE_CODES: ReadonlySet<FeederErrorCode> = new Set<FeederErrorCode>([
+  "NonMonotonicNonce",
+]);
+
+/** True when a failed result represents a deliberately-skipped intent (no tx
+ *  broadcast), so tx-level metrics can exclude it. See
+ *  `NO_TRANSACTION_FAILURE_CODES`. */
+export function isNoTransactionFailure(result: SubmitResultErr): boolean {
+  return NO_TRANSACTION_FAILURE_CODES.has(result.code);
+}
+
+/** True when this result is the representative member of its transaction — the
+ *  single result (one fires per intent) that should emit tx-scoped metrics, so
+ *  a batch of N pairs counts as ONE tx instead of N. The first batch member is
+ *  the stateless representative; a single (non-batch) result is its own. */
+export function isTransactionRepresentative(result: SubmitResult): boolean {
+  const representativeIntentHash = result.batch?.members[0]?.intentHash ?? result.intentHash;
+  return result.intentHash === representativeIntentHash;
+}
+
 // ---------------------------------------------------------------------------
 // Thin Lucid facade — only the methods the submitter calls.
 // ---------------------------------------------------------------------------

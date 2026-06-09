@@ -30,6 +30,29 @@ export type FeederMetrics = {
   transactionsConfirmed: FeedCounter;
   transactionsFailed: FeedCounter;
   transactionsReorg: FeedCounter;
+  /** One increment per Cardano TRANSACTION (not per symbol), partitioned by
+   *  `outcome` (confirmed|failed). A batch of N pairs is a single tx → a single
+   *  increment, unlike `transactionsConfirmed`/`transactionsFailed` which count
+   *  per symbol. Condemned/superseded intents the feeder declined to submit
+   *  (no tx broadcast, no fee) are excluded — see `isNoTransactionFailure`. */
+  transactionsTotal: FeedCounter;
+  /** Distribution of pairs-per-transaction (batch size), one observation per
+   *  tx, partitioned by `outcome`. Answers "how big are our batches". */
+  transactionPairs: FeedHistogram;
+  /** One increment per (transaction, symbol): which pairs each tx touched,
+   *  partitioned by `outcome`. Lets a dashboard filtered by symbol surface the
+   *  transactions that included that pair without inflating the pure tx counts
+   *  in `transactionsTotal` (a 5-pair tx adds 5 here, 1 there). */
+  txPairMembership: FeedCounter;
+  /** Tx-level seconds from processing start to submission, one observation per
+   *  confirmed tx (the per-symbol counterpart is `processingToSubmissionSeconds`). */
+  txProcessingToSubmissionSeconds: FeedHistogram;
+  /** Tx-level seconds from submission to confirmation, one observation per
+   *  confirmed tx (per-symbol counterpart: `submissionToConfirmationSeconds`). */
+  txSubmissionToConfirmationSeconds: FeedHistogram;
+  /** Tx-level end-to-end seconds (processing start → confirmation), one
+   *  observation per confirmed tx (per-symbol counterpart: `endToEndLatencySeconds`). */
+  txEndToEndSeconds: FeedHistogram;
   /** Spectra phase 1: seconds from oracle intent creation (price timestamp) to
    *  on-chain registration (block timestamp). Requires `blockTimestamp` in
    *  `ExtractedEvent`. Zero-valued when blockTimestamp is unavailable. */
@@ -150,6 +173,12 @@ export const noopMetrics: FeederMetrics = {
   transactionsConfirmed: noopCounter,
   transactionsFailed: noopCounter,
   transactionsReorg: noopCounter,
+  transactionsTotal: noopCounter,
+  transactionPairs: noopHistogram,
+  txPairMembership: noopCounter,
+  txProcessingToSubmissionSeconds: noopHistogram,
+  txSubmissionToConfirmationSeconds: noopHistogram,
+  txEndToEndSeconds: noopHistogram,
   intentToRegistrationSeconds: noopHistogram,
   registrationToScanSeconds: noopHistogram,
   scanToProcessingSeconds: noopHistogram,
@@ -200,6 +229,7 @@ export type MetricsOptions = {
 };
 
 const LATENCY_BUCKETS = [0.5, 1, 5, 15, 30, 60, 120, 300, 600];
+const BATCH_SIZE_BUCKETS = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20];
 const PRICE_DEVIATION_BUCKETS = [0.01, 0.1, 0.5, 1, 5, 10];
 const PRICE_AGE_BUCKETS = [1, 5, 30, 60, 300, 1800];
 const HTTP_LATENCY_BUCKETS = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5];
@@ -322,6 +352,40 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "transactions_reorg_total",
       "Cardano transactions dropped by a rollback after submission",
       ["symbol", "client_id"],
+    ),
+    transactionsTotal: counter(
+      "transactions_total",
+      "Cardano transactions, counted once per tx (not per symbol), by outcome",
+      ["client_id", "customer", "outcome"],
+    ),
+    transactionPairs: histogram(
+      "transaction_pairs",
+      "Pairs per Cardano transaction (batch size), one observation per tx",
+      ["client_id", "customer", "outcome"],
+      BATCH_SIZE_BUCKETS,
+    ),
+    txPairMembership: counter(
+      "tx_pair_membership_total",
+      "One increment per (transaction, symbol) — which pairs each tx touched, by outcome",
+      ["client_id", "customer", "symbol", "outcome"],
+    ),
+    txProcessingToSubmissionSeconds: histogram(
+      "tx_processing_to_submission_seconds",
+      "Tx-level seconds from processing start to submission, one observation per confirmed tx",
+      ["client_id", "customer"],
+      LATENCY_BUCKETS,
+    ),
+    txSubmissionToConfirmationSeconds: histogram(
+      "tx_submission_to_confirmation_seconds",
+      "Tx-level seconds from submission to confirmation, one observation per confirmed tx",
+      ["client_id", "customer"],
+      LATENCY_BUCKETS,
+    ),
+    txEndToEndSeconds: histogram(
+      "tx_end_to_end_seconds",
+      "Tx-level end-to-end seconds (processing start to confirmation), one observation per confirmed tx",
+      ["client_id", "customer"],
+      LATENCY_BUCKETS,
     ),
     intentToRegistrationSeconds: histogram(
       "intent_to_registration_seconds",

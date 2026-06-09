@@ -47,6 +47,12 @@ describe("createMetrics", () => {
     metrics.transactionsConfirmed.inc({ symbol: "BTC/USD", client_id: "c1" });
     metrics.transactionsFailed.inc({ symbol: "BTC/USD", client_id: "c1", error_code: "Err" });
     metrics.transactionsReorg.inc({ symbol: "BTC/USD", client_id: "c1" });
+    metrics.transactionsTotal.inc({ client_id: "c1", customer: "acme", outcome: "confirmed" });
+    metrics.transactionPairs.observe({ client_id: "c1", customer: "acme", outcome: "confirmed" }, 3);
+    metrics.txPairMembership.inc({ client_id: "c1", customer: "acme", symbol: "BTC/USD", outcome: "confirmed" });
+    metrics.txProcessingToSubmissionSeconds.observe({ client_id: "c1", customer: "acme" }, 1.0);
+    metrics.txSubmissionToConfirmationSeconds.observe({ client_id: "c1", customer: "acme" }, 10.0);
+    metrics.txEndToEndSeconds.observe({ client_id: "c1", customer: "acme" }, 12.0);
     metrics.intentToRegistrationSeconds.observe({ symbol: "BTC/USD" }, 0.5);
     metrics.registrationToScanSeconds.observe({ symbol: "BTC/USD" }, 0.5);
     metrics.scanToProcessingSeconds.observe({ symbol: "BTC/USD" }, 0.1);
@@ -135,6 +141,13 @@ describe("createMetrics", () => {
       "dia_bridge_cardano_admin_wallet_lovelace",
       "dia_bridge_cardano_receiver_topup_warnings_total",
       "dia_bridge_transactions_reorg_total",
+      // Tx-level metrics (counted once per transaction, not per symbol)
+      "dia_bridge_transactions_total",
+      "dia_bridge_transaction_pairs",
+      "dia_bridge_tx_pair_membership_total",
+      "dia_bridge_tx_processing_to_submission_seconds",
+      "dia_bridge_tx_submission_to_confirmation_seconds",
+      "dia_bridge_tx_end_to_end_seconds",
       // Core pipeline metrics
       "dia_bridge_events_detected_total",
       "dia_bridge_events_duplicate_total",
