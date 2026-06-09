@@ -8,6 +8,7 @@
   - [Output](#output)
 - [Other scripts](#other-scripts)
   - [`scan-dia-intents.ts`](#scan-dia-intentsts)
+  - [`cost-forecast/forecast-mainnet-cost.ts`](#cost-forecastforecast-mainnet-costts)
 
 ## Evidence pack
 
@@ -70,3 +71,44 @@ Options:
 | `--blocks N` | `100` | Number of blocks to scan from chain head |
 | `--top N` | `10` | Maximum pairs to display in the summary table |
 | `--chunk N` | `100` | Block range per RPC `eth_getLogs` call |
+
+### `cost-forecast/forecast-mainnet-cost.ts`
+
+Pure calculator that forecasts the **recurring on-chain network-fee cost of
+keeping the feeder alive**, from data that already exists in an M2 evidence
+pack. It reads files only — it never touches a chain and never submits a
+transaction.
+
+It uses the pack's window-scoped `SUMMARY.json` (confirmed-tx throughput) and
+`api/metrics.txt` (`dia_bridge_transaction_fee_lovelace` → average fee per tx)
+to project a forecast window, and — when given a CLI fee-benchmark report — adds
+a heartbeat-floor cross-check from the `batch-N` fee curve.
+
+It deliberately **excludes** one-off deploy/bootstrap/teardown fees (a separate,
+largely recoverable spend) and client-paid protocol fees (`0.6 ADA + 0.4 ADA ×
+pairs`).
+
+```sh
+# Run from offchain/feeder/
+npm run forecast:cost                              # newest m2-preview-* pack, 90 min
+npm run forecast:cost -- --minutes 120             # forecast a 2-hour window
+npm run forecast:cost -- \
+  --fee-report ../../docs/milestones/evidence/_archived/m1-fee-benchmark-20260506-162133/fee-report.json \
+  --out ../../docs/audit/cost-forecast.md \
+  --json ../../docs/audit/cost-forecast.json
+```
+
+Options:
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--pack DIR` | newest `m2-preview-*` | Evidence pack to read (excludes `_archived`) |
+| `--minutes N` | `90` | Forecast window in minutes |
+| `--pairs N` | `10` | Pairs in the forecast scenario |
+| `--clients N` | `1` | Clients in the forecast scenario |
+| `--heartbeat-min N` | `10` | Cron heartbeat (`time_threshold`) in minutes |
+| `--fee-report PATH` | — | CLI fee-benchmark `fee-report.json` for the batch-curve cross-check |
+| `--out PATH` | — | Write the Markdown report (else stdout JSON only) |
+| `--json PATH` | — | Write the JSON report (else stdout JSON only) |
+
+Always prints the JSON report to stdout.
