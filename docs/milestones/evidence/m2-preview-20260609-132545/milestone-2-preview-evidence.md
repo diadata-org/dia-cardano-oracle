@@ -48,8 +48,9 @@ Evidence pack location: this directory.
 | Metric | Value |
 | --- | ---: |
 | Confirmed Cardano oracle update txs | 174 |
-| Failed Cardano tx attempts          | 60 |
-| Chain reorgs that dropped a tx      | 0 |
+| Failed Cardano tx attempts (real, tx broadcast) | 0 |
+| Condemned intents (NonMonotonicNonce — no tx, no fee) | 60 |
+| Chain reorgs that dropped a tx | 0 |
 
 ## Confirmed Cardano tx count per pair
 
@@ -103,7 +104,11 @@ DIA `IntentRegistered` → Cardano `tx_confirmed`, milliseconds.
 
 ## Failures (grouped by error_code)
 
-_(no data)_
+Real Cardano tx failures only (tx broadcast but failed on-chain). Condemned intents
+(`NonMonotonicNonce` — intent superseded before submission, no tx broadcast, no fee
+paid) are counted separately in the Totals table above and excluded here.
+
+_(no data)_ — 0 real tx failures in this window.
 
 Failure semantics for each code are documented in
 [`offchain/feeder/src/errors/codes.ts`](../../../offchain/feeder/src/errors/codes.ts).

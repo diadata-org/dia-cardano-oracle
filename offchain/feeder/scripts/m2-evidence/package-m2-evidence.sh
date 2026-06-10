@@ -275,6 +275,7 @@ TX_LOG="$OUT_DIR/logs/transactions.jsonl"
 
 stat_total_confirmed=0
 stat_total_failed=0
+stat_total_condemned=0
 stat_total_reorgs=0
 stat_first_event_iso=""
 stat_last_event_iso=""
@@ -284,10 +285,10 @@ SYMBOL_COUNTS="$OUT_DIR/stats/symbol-counts.tsv"
 SYMBOL_HASHES="$OUT_DIR/stats/symbol-tx-hashes.tsv"
 ERROR_COUNTS="$OUT_DIR/stats/error-counts.tsv"
 LATENCY_FILE="$OUT_DIR/stats/symbol-latency.tsv"
+DB_LOG="$OUT_DIR/db/transaction_log.csv"
 
 if [[ -f "$TX_LOG" ]]; then
   stat_total_confirmed=$(jq -rs '[.[] | select(.event=="tx_confirmed")] | length' "$TX_LOG" 2>/dev/null || echo 0)
-  stat_total_failed=$(jq -rs '[.[] | select(.event=="tx_failed")] | length' "$TX_LOG" 2>/dev/null || echo 0)
   stat_first_event_iso=$(jq -rs '[.[].ts] | min // ""' "$TX_LOG" 2>/dev/null || echo "")
   stat_last_event_iso=$(jq -rs '[.[].ts] | max // ""' "$TX_LOG" 2>/dev/null || echo "")
 
@@ -308,14 +309,42 @@ if [[ -f "$TX_LOG" ]]; then
     | .[] | "\(.symbol)\t\(.txHash)"
   ' "$TX_LOG" > "$SYMBOL_HASHES" 2>/dev/null || true
 
-  # Failures grouped by error_code.
-  jq -rs '
-    [.[] | select(.event=="tx_failed")]
-    | group_by(.errorCode // "Unknown")
-    | map({code: .[0].errorCode // "Unknown", count: length})
-    | sort_by(-.count)
-    | .[] | "\(.code)\t\(.count)"
-  ' "$TX_LOG" > "$ERROR_COUNTS" 2>/dev/null || true
+  # Real tx failures + condemned intents — sourced from the DB CSV (it carries
+  # error_code; the JSONL tx_failed events do not). NonMonotonicNonce = intent
+  # superseded on-chain before submission: no Cardano tx broadcast, no fee paid.
+  # All other codes = a tx was submitted to the chain but failed.
+  if [[ -f "$DB_LOG" ]]; then
+    stat_total_failed=$(python3 - "$DB_LOG" <<'PYEOF'
+import csv, sys
+with open(sys.argv[1]) as f:
+    rows = list(csv.DictReader(f))
+real = [r for r in rows if r['status'] == 'failed' and r.get('error_code','') not in ('NonMonotonicNonce', '')]
+print(len(real))
+PYEOF
+    )
+    stat_total_condemned=$(python3 - "$DB_LOG" <<'PYEOF'
+import csv, sys
+with open(sys.argv[1]) as f:
+    rows = list(csv.DictReader(f))
+condemned = [r for r in rows if r['status'] == 'failed' and r.get('error_code','') == 'NonMonotonicNonce']
+print(len(condemned))
+PYEOF
+    )
+    # Real failures grouped by error_code (excludes NonMonotonicNonce).
+    python3 - "$DB_LOG" "$ERROR_COUNTS" <<'PYEOF'
+import csv, sys
+from collections import Counter
+with open(sys.argv[1]) as f:
+    rows = list(csv.DictReader(f))
+codes = Counter(
+    r['error_code'] for r in rows
+    if r['status'] == 'failed' and r.get('error_code','') not in ('NonMonotonicNonce', '')
+)
+with open(sys.argv[2], 'w') as out:
+    for code, count in codes.most_common():
+        out.write(f'{code}\t{count}\n')
+PYEOF
+  fi
 
   # End-to-end latency per symbol — from the final summary line per tx
   # that carries `total_ms`. p50/p95 with awk.
@@ -409,19 +438,21 @@ echo "[package-m2] step 6/6 — generating SUMMARY.json + evidence markdown"
 
 # SUMMARY.json — single machine-readable record of the pack.
 jq -n \
-  --arg stamp "$STAMP" \
-  --arg first "$stat_first_event_iso" \
-  --arg last  "$stat_last_event_iso" \
-  --argjson confirmed "$stat_total_confirmed" \
-  --argjson failed    "$stat_total_failed" \
-  --argjson reorgs    "$stat_total_reorgs" \
+  --arg stamp     "$STAMP" \
+  --arg first     "$stat_first_event_iso" \
+  --arg last      "$stat_last_event_iso" \
+  --argjson confirmed  "$stat_total_confirmed" \
+  --argjson failed     "$stat_total_failed" \
+  --argjson condemned  "$stat_total_condemned" \
+  --argjson reorgs     "$stat_total_reorgs" \
   '{
     pack_stamp: $stamp,
     window: { first_event_iso: $first, last_event_iso: $last },
     totals: {
-      tx_confirmed: $confirmed,
-      tx_failed:    $failed,
-      reorgs:       $reorgs
+      tx_confirmed:   $confirmed,
+      tx_failed:      $failed,
+      tx_condemned:   $condemned,
+      reorgs:         $reorgs
     }
   }' > "$OUT_DIR/SUMMARY.json"
 
@@ -492,8 +523,9 @@ Evidence pack location: this directory.
 | Metric | Value |
 | --- | ---: |
 | Confirmed Cardano oracle update txs | $stat_total_confirmed |
-| Failed Cardano tx attempts          | $stat_total_failed |
-| Chain reorgs that dropped a tx      | $stat_total_reorgs |
+| Failed Cardano tx attempts (real, tx broadcast) | $stat_total_failed |
+| Condemned intents (NonMonotonicNonce — no tx, no fee) | $stat_total_condemned |
+| Chain reorgs that dropped a tx | $stat_total_reorgs |
 
 ## Confirmed Cardano tx count per pair
 
@@ -513,6 +545,10 @@ DIA \`IntentRegistered\` → Cardano \`tx_confirmed\`, milliseconds.
 $(tsv_to_md_table "$LATENCY_FILE" "Pair" "Samples" "p50 (ms)" "p95 (ms)")
 
 ## Failures (grouped by error_code)
+
+Real Cardano tx failures only (tx was broadcast but failed on-chain).
+Condemned intents (NonMonotonicNonce — superseded before submission, no tx, no fee)
+are counted separately in the Totals table above and excluded here.
 
 $(tsv_to_md_table "$ERROR_COUNTS" "FeederErrorCode" "Count")
 

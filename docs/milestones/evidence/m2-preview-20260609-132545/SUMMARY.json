@@ -6,7 +6,8 @@
   },
   "totals": {
     "tx_confirmed": 174,
-    "tx_failed": 60,
+    "tx_failed": 0,
+    "tx_condemned": 60,
     "reorgs": 0
   }
 }
