@@ -259,5 +259,52 @@ describe("routeIntent — policy gating", () => {
     assert.equal(result.dispatched.length, 0);
     assert.equal(result.policyFiltered.length, 1);
     assert.equal("reason" in result.policyFiltered[0].verdict && result.policyFiltered[0].verdict.reason, "time_threshold");
+    // Deviation is surfaced even when the gate suppresses for a non-deviation
+    // reason: cache price 100 vs intent price 100_000 == 99900%.
+    assert.equal(result.policyFiltered[0].deviationPct, 99900);
+  });
+});
+
+describe("routeIntent — deviation surfacing", () => {
+  it("attaches deviationPct to a dispatched result when a prior price exists", () => {
+    const router = makeRouter({
+      destinations: [
+        {
+          cardano: {
+            network: "Preview",
+            client_state_path: "state/preview/clients/client-a.json",
+            protocol_state_path: "state/preview/config-bootstrap.json",
+          },
+        },
+      ],
+    });
+    const registry = createRouterRegistry({ r1: router });
+    const cache = createPriceCache({ now: () => 0 });
+    cache.set(
+      { routerId: "r1", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100_000n, timestamp: 0n, intentHash: "0xold", updatedAtMs: 0 },
+    );
+    // 100_000 -> 110_000 == +10%.
+    const result = routeIntent(registry, cache, "IntentRegistered", makeEnriched("BTC/USD", 110_000n));
+    assert.equal(result.dispatched.length, 1);
+    assert.equal(result.dispatched[0].deviationPct, 10);
+  });
+
+  it("leaves deviationPct undefined on the first update (empty cache)", () => {
+    const router = makeRouter({
+      destinations: [
+        {
+          cardano: {
+            network: "Preview",
+            client_state_path: "state/preview/clients/client-a.json",
+            protocol_state_path: "state/preview/config-bootstrap.json",
+          },
+        },
+      ],
+    });
+    const registry = createRouterRegistry({ r1: router });
+    const result = routeIntent(registry, createPriceCache(), "IntentRegistered", makeEnriched("BTC/USD"));
+    assert.equal(result.dispatched.length, 1);
+    assert.equal(result.dispatched[0].deviationPct, undefined);
   });
 });

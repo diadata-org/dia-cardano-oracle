@@ -299,6 +299,19 @@ export function createPolicyGate(
 }
 
 /**
+ * Compute the absolute price deviation between two prices, in percent:
+ * `|new - old| / old * 100`. Uses bigint arithmetic scaled by 10^6 before
+ * the divide to keep fractional precision. Returns `undefined` when
+ * `oldPrice` is 0 (no baseline to deviate from; also avoids division by
+ * zero) — callers treat that as "no measurable deviation".
+ */
+export function computePriceDeviationPct(oldPrice: bigint, newPrice: bigint): number | undefined {
+  if (oldPrice === 0n) return undefined;
+  const diff = newPrice > oldPrice ? newPrice - oldPrice : oldPrice - newPrice;
+  return Number((diff * 100_000_000n) / oldPrice) / 1_000_000;
+}
+
+/**
  * Evaluate the price-deviation check for one (oldPrice → newPrice) move.
  * Returns `undefined` when the deviation passes the gate (move is large
  * enough, or oldPrice is 0 which is treated as passing to avoid a
@@ -310,22 +323,18 @@ function evaluatePriceDeviation(
   newPrice: bigint,
   thresholdPct: number,
 ): Extract<PolicyVerdict, { reason: "price_deviation" }> | undefined {
-  // Division-by-zero guard: old price is zero, treat as passing.
-  if (oldPrice === 0n) return undefined;
-
-  const diff = newPrice > oldPrice ? newPrice - oldPrice : oldPrice - newPrice;
-  // deviation% = diff / old * 100.  All bigint arithmetic; multiply by
-  // 10^6 before dividing to keep fractional precision.
-  const deviationMilliPct = Number((diff * 100_000_000n) / oldPrice) / 1_000_000;
-  if (deviationMilliPct >= thresholdPct) return undefined;
+  const deviationPct = computePriceDeviationPct(oldPrice, newPrice);
+  // oldPrice 0 → no measurable deviation, treat as passing.
+  if (deviationPct === undefined) return undefined;
+  if (deviationPct >= thresholdPct) return undefined;
 
   return {
     allowed: false,
     reason: "price_deviation",
     oldPrice,
     newPrice,
-    deviationPct: deviationMilliPct,
+    deviationPct,
     thresholdPct,
-    filterReason: `price_deviation: ${deviationMilliPct.toFixed(4)}% < ${thresholdPct}%`,
+    filterReason: `price_deviation: ${deviationPct.toFixed(4)}% < ${thresholdPct}%`,
   };
 }

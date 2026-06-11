@@ -901,7 +901,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Distribution of price deviation percentages across all submitted intents. Bright bands at high deviation values indicate anomalous prices.",
+      "description": "Distribution of price deviation (|new − last on-chain price| ÷ last × 100) measured at policy-gating time for every evaluated intent — both submitted and gate-suppressed. Healthy feeds cluster near 0%; bright bands at high deviation indicate large price moves or possible source anomalies.",
       "fieldConfig": {
         "defaults": {
           "unit": "percent",

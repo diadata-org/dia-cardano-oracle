@@ -23,7 +23,7 @@
 import type { RouterConfig, RouterDestination, TriggerCondition, TriggerConditionOperator } from "../config/types.js";
 import type { PriceCache } from "../processor/price-cache.js";
 import type { EnrichedIntent } from "../source/types.js";
-import { createPolicyGate, parseDurationMs, parseDeviationPct, type PolicyVerdict } from "./policy.js";
+import { computePriceDeviationPct, createPolicyGate, parseDurationMs, parseDeviationPct, type PolicyVerdict } from "./policy.js";
 import type { RouterRegistry } from "./registry.js";
 
 // ---------------------------------------------------------------------------
@@ -37,6 +37,10 @@ export type DispatchResult = {
   destinationIndex: number;
   destination: RouterDestination;
   verdict: PolicyVerdict;
+  /** Price deviation vs the last cached price for this (router, dest, symbol)
+   *  at gate time, in percent. Undefined when no prior price existed (first
+   *  update for the symbol) or the prior price was 0. */
+  deviationPct?: number;
 };
 
 export type RouterOutput = {
@@ -45,7 +49,7 @@ export type RouterOutput = {
   /** Routers that matched the event but were suppressed by a condition. */
   conditionFiltered: Array<{ routerId: string; reason: string }>;
   /** (router, destination) pairs blocked by policy (time or deviation). */
-  policyFiltered: Array<{ routerId: string; destinationIndex: number; verdict: PolicyVerdict }>;
+  policyFiltered: Array<{ routerId: string; destinationIndex: number; verdict: PolicyVerdict; deviationPct?: number }>;
 };
 
 // ---------------------------------------------------------------------------
@@ -85,6 +89,15 @@ export function routeIntent(
       const symbol = enriched.fullIntent.symbol;
       const cacheKey = { routerId: router.id, destinationIndex: i, symbol };
 
+      // Price deviation vs the last cached price, computed for EVERY evaluated
+      // destination (whether the gate passes or suppresses) so the deviation
+      // metric reflects the full distribution of price moves, not only the
+      // sub-threshold ones the deviation gate happens to suppress.
+      const last = priceCache.get(cacheKey);
+      const deviationPct = last
+        ? computePriceDeviationPct(last.price, enriched.fullIntent.price)
+        : undefined;
+
       const gate = createPolicyGate(priceCache, {
         timeThresholdMs: parseDurationMs(destination.time_threshold),
         priceDeviationPct: parseDeviationPct(destination.price_deviation),
@@ -94,9 +107,9 @@ export function routeIntent(
       const verdict = gate(cacheKey, enriched.fullIntent.price, enriched.fullIntent.timestamp);
 
       if (verdict.allowed) {
-        dispatched.push({ routerId: router.id, customer: router.customer, destinationIndex: i, destination, verdict });
+        dispatched.push({ routerId: router.id, customer: router.customer, destinationIndex: i, destination, verdict, deviationPct });
       } else {
-        policyFiltered.push({ routerId: router.id, destinationIndex: i, verdict });
+        policyFiltered.push({ routerId: router.id, destinationIndex: i, verdict, deviationPct });
       }
     }
   }

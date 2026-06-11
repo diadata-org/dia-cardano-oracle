@@ -2011,7 +2011,7 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     });
     report(`[debug] daemon: condition-filtered router=${routerId} reason="${reason}"`);
   }
-  for (const { routerId, destinationIndex, verdict } of output.policyFiltered) {
+  for (const { routerId, destinationIndex, verdict, deviationPct } of output.policyFiltered) {
     // Even though the router policy filtered this intent, the cron
     // service may later resubmit it when the on-chain pair goes stale.
     // Update the latest-intent cache so cron has the freshest payload.
@@ -2019,10 +2019,10 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
       { routerId, destinationIndex, symbol: enriched.fullIntent.symbol },
       { routerId, destinationIndex, symbol: enriched.fullIntent.symbol, enriched, intentHash: event.intentHash },
     );
-    if (!verdict.allowed && verdict.reason === "price_deviation") {
+    if (deviationPct !== undefined) {
       metrics.priceDeviationPercent.observe(
         { symbol: enriched.fullIntent.symbol },
-        verdict.deviationPct,
+        deviationPct,
       );
     }
     const reason = verdict.allowed ? "policy" : verdict.reason;
@@ -2043,6 +2043,12 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
       symbol: enriched.fullIntent.symbol,
       customer: dispatch.customer ?? "unknown",
     });
+    if (dispatch.deviationPct !== undefined) {
+      metrics.priceDeviationPercent.observe(
+        { symbol: enriched.fullIntent.symbol },
+        dispatch.deviationPct,
+      );
+    }
 
     // Keep the latest-intent cache in sync for the cron service. For
     // dispatched intents the priceCache will eventually carry this

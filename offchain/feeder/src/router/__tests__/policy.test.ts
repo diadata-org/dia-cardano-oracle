@@ -1,8 +1,37 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseDurationMs, parseDeviationPct, createPolicyGate } from "../policy.js";
+import { parseDurationMs, parseDeviationPct, createPolicyGate, computePriceDeviationPct } from "../policy.js";
 import { createPriceCache } from "../../processor/price-cache.js";
+
+// ---------------------------------------------------------------------------
+// computePriceDeviationPct
+// ---------------------------------------------------------------------------
+
+describe("computePriceDeviationPct", () => {
+  it("returns undefined when oldPrice is 0 (no baseline)", () => {
+    assert.equal(computePriceDeviationPct(0n, 100n), undefined);
+  });
+
+  it("returns 0 when the price is unchanged", () => {
+    assert.equal(computePriceDeviationPct(100n, 100n), 0);
+  });
+
+  it("computes a symmetric absolute deviation (up move)", () => {
+    // 100 -> 110 == +10%
+    assert.equal(computePriceDeviationPct(100n, 110n), 10);
+  });
+
+  it("computes a symmetric absolute deviation (down move)", () => {
+    // 100 -> 90 == 10% (absolute, sign-independent)
+    assert.equal(computePriceDeviationPct(100n, 90n), 10);
+  });
+
+  it("keeps fractional precision below 1%", () => {
+    // 1_000_000 -> 1_001_000 == 0.1%
+    assert.equal(computePriceDeviationPct(1_000_000n, 1_001_000n), 0.1);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // parseDurationMs
