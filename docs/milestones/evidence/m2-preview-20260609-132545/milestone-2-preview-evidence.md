@@ -202,6 +202,12 @@ Metric `dia_bridge_cardano_receiver_balance_lovelace / 1000000`, in ADA. Current
 
 Three ADA series (lovelace ÷ 1e6): `dia_bridge_cardano_admin_wallet_lovelace` (operator admin wallet), `dia_bridge_cardano_payment_hook_accrued_lovelace` (fees accrued inside the PaymentHook awaiting withdraw), and `sum(dia_bridge_cardano_receiver_accrued_lovelace)` (amounts accrued at receivers awaiting settle). Together they track the fee / settlement money flow.
 
+**Deposit pending — ADA (per client)**
+
+![Deposit pending — ADA (per client)](dashboards/panel-15.png)
+
+Metric `dia_bridge_cardano_deposit_pending_lovelace / 1000000`, in ADA. Side-deposits a client has sent to its per-client deposit address that the feeder has not yet folded into the Receiver balance. The daemon merges these automatically once the Receiver balance falls below `receiver_balance_low_lovelace` or the pending pile reaches `deposit_pending_merge_lovelace`; a steadily growing value with no merges is worth a look.
+
 **Symbol-update latency (p50/p95/p99)**
 
 ![Symbol-update latency (p50/p95/p99)](dashboards/panel-4.png)
@@ -260,7 +266,13 @@ Metric `histogram_quantile(0.95, rate(dia_bridge_price_deviation_percent_bucket[
 
 ![Price deviation distribution (heatmap)](dashboards/panel-10.png)
 
-Metric `sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket[5m]))`, percent buckets. Heatmap of the full price-deviation distribution over time (histogram `le` buckets, colour = frequency). Healthy feeds cluster near 0%; a vertical spread means deviations are growing.
+Metric `sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket[5m]))`, percent buckets. Heatmap of the price-deviation distribution over time (histogram `le` buckets, colour = frequency), measured at policy-gating time for every evaluated intent — submitted and gate-suppressed alike. Healthy feeds cluster near 0%; a vertical spread means deviations are growing.
+
+**Tx fee p50 — lovelace (per customer)**
+
+![Tx fee p50 — lovelace (per customer)](dashboards/panel-14.png)
+
+Metric `histogram_quantile(0.50, sum by (le, customer) (rate(dia_bridge_transaction_fee_lovelace_bucket[5m])))`, in lovelace (1 ADA = 1,000,000 lovelace). Median Cardano network fee paid per oracle-update transaction, grouped by `customer` — the basis for per-customer cost attribution / billing. A batch of N pairs is one tx and one fee observation.
 
 ### Transactions dashboard
 
