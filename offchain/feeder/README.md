@@ -68,11 +68,31 @@ For how it works internally and how it diverges from its EVM ancestor, see
 
 Pick one; full setup for each is in its section below.
 
-| Form | Command | Restart on crash? | Use when |
-| --- | --- | --- | --- |
-| **Docker** (recommended) | `make up` (`+ MONITORING=1`) | Yes — Compose `restart: unless-stopped` | Any real deployment |
-| **npm (local/dev)** | `npm run feeder:dev -- daemon` | No supervisor | Quick local dev / debugging |
-| **npm supervised** | `npm run feeder:supervised -- daemon` | Yes — restart loop with backoff | Local runs that need resilience |
+| Form | Command | Restart on crash? | Grafana / Prometheus? | Use when |
+| --- | --- | --- | --- | --- |
+| **Docker** (recommended) | `make up` (`+ MONITORING=1`) | Yes — Compose `restart: unless-stopped` | Yes — with `MONITORING=1` | Any real deployment |
+| **npm (local/dev)** | `npm run feeder:dev -- daemon` | No supervisor | No — `/metrics` only | Quick local dev / debugging |
+| **npm supervised** | `npm run feeder:supervised -- daemon` | Yes — restart loop with backoff | No — `/metrics` only | Local runs that need resilience |
+
+Two things to know before you read the rest of this manual:
+
+> **`daemon` is the default command — typing it is optional.** Every
+> `feeder:dev` / `feeder:supervised` invocation runs the daemon even without the
+> word `daemon` (the examples further down omit it). What you **cannot** omit is
+> the `--`: it is npm's argument separator, so any flag must come after it —
+> `npm run feeder:dev -- --from-latest`. Drop the `--` and npm swallows the flag.
+> Sub-commands (`init client`, `checkpoint …`, `reset`, `prune`) are likewise
+> passed after the `--`.
+
+> **Grafana and Prometheus are Docker-only.** The monitoring stack
+> (Grafana + Prometheus + renderer) exists **only** through Docker
+> (`make up MONITORING=1`) — there is no npm equivalent and no `npm run`
+> script that starts it. The npm forms run the feeder alone: it still exposes
+> `/metrics` (Prometheus format) and the full HTTP API on `:8080`, but no
+> dashboard server comes up. To graph an npm run you must either use the Docker
+> path or point your own Grafana/Prometheus at `localhost:8080/metrics`. Every
+> Grafana/Prometheus URL and `MONITORING=1` instruction below therefore assumes
+> the Docker path.
 
 A note on lucid WASM: a transient lucid WASM build error (`detached ArrayBuffer`)
 is auto-retried in-process and never reaches the operator. A rare *persistent*
@@ -454,6 +474,12 @@ Run the feeder directly on your machine, without Docker. Requires
 (`better-sqlite3`, `lucid-evolution`). Everything below runs from
 `offchain/feeder/`. This is the **mirror** of the Docker path above — pick
 one or the other, do not mix them.
+
+> **No Grafana/Prometheus on this path.** The npm forms start the feeder only;
+> the monitoring stack is Docker-only (see
+> [How to run — three forms](#how-to-run--three-forms)). You still get
+> `/metrics` and the HTTP API on `:8080` — bring your own dashboard server if
+> you want graphs.
 
 The bare `npm run feeder:dev -- daemon` runs **without a supervisor**: if the
 daemon self-exits on a persistent lucid WASM fault (code 17) it stays stopped.
