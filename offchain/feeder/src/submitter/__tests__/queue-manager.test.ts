@@ -44,6 +44,7 @@ function makeRequest(
   clientStatePath: string,
   protocolStatePath: string,
   intentHash = "0xhash",
+  overrides: Partial<Pick<SubmitRequest, "routerId" | "destinationIndex">> = {},
 ): SubmitRequest {
   return {
     intentHash,
@@ -53,8 +54,8 @@ function makeRequest(
       client_state_path: clientStatePath,
       protocol_state_path: protocolStatePath,
     },
-    routerId: "r1",
-    destinationIndex: 0,
+    routerId: overrides.routerId ?? "r1",
+    destinationIndex: overrides.destinationIndex ?? 0,
   };
 }
 
@@ -121,6 +122,23 @@ describe("createQueueManager", () => {
 
     assert.equal(factoryCalls, 1);
     assert.equal(mgr.queueKeys().length, 1);
+  });
+
+  it("reuses the same queue across different routers when the lane matches", async () => {
+    let factoryCalls = 0;
+    const mgr = createQueueManager({
+      inflightTimeoutMs: 60_000,
+      clientFactory: (_csp, _psp) => {
+        factoryCalls++;
+        return makeOkClient("shared-lane");
+      },
+    });
+
+    await mgr.submit(makeRequest("c.json", "p.json", "h1", { routerId: "router-a", destinationIndex: 0 }));
+    await mgr.submit(makeRequest("c.json", "p.json", "h2", { routerId: "router-b", destinationIndex: 1 }));
+
+    assert.equal(factoryCalls, 1);
+    assert.deepEqual(mgr.queueKeys(), ["c.json::p.json"]);
   });
 
   it("queueKeys returns one key per distinct destination", async () => {

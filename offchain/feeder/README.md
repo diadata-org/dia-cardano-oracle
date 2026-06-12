@@ -14,6 +14,7 @@ For how it works internally and how it diverges from its EVM ancestor, see
 ## Contents
 
 - [Directory guide](#directory-guide)
+- [Core terms: consumer, client, router, lane](#core-terms-consumer-client-router-lane)
 - [How to run — three forms](#how-to-run--three-forms)
 - [Service URLs — where to look (once it's running)](#service-urls--where-to-look-once-its-running)
 - [Per-run state (RUN_ID)](#per-run-state-run_id)
@@ -63,6 +64,24 @@ For how it works internally and how it diverges from its EVM ancestor, see
 | [`scripts/`](./scripts/README.md) | Evidence-pack tooling (`make evidence`) and the on-chain pair-scan helper. |
 | [`state/`](./state/README.md) | Per-run, per-network state (`state/<network>_run_<id>/`): imported CLI artifacts (committed) + runtime DB/logs (gitignored). |
 | `src/`, `cmd/` | The feeder daemon source (TypeScript). |
+
+## Core terms: consumer, client, router, lane
+
+The feeder uses these names precisely:
+
+| Term | Meaning |
+| --- | --- |
+| **Consumer / customer** | The external party DIA serves; mainly a label for metrics, logs, and dashboards. |
+| **Client deployment** | The Cardano-side deployment for a consumer: one Receiver UTxO, one deposit address, one Receiver NFT, and one pair namespace. |
+| **Router** | An off-chain YAML config group that selects symbols and policy thresholds, then points to a destination. A router is not an on-chain object. |
+| **Destination** | The `cardano:` block inside a router, pointing at `client_state_path` + `protocol_state_path`. |
+| **Lane** | The runtime submission key `client_state_path :: protocol_state_path`; one lane means one serial queue protecting one Receiver UTxO. |
+
+**Sharing** means **one on-chain client deployment, many off-chain routers**. Multiple
+routers can point to the same `client_state_path` + `protocol_state_path` to reuse the
+same Receiver, deposit address, and pair namespace while applying different policies to
+different symbol sets. Those symbol sets must be disjoint; the config validator rejects
+overlap on a shared lane.
 
 ## How to run — three forms
 
@@ -740,9 +759,15 @@ config/
 ├── events.yaml                     # IntentRegistered ABI + getIntent enrichment
 └── routers/                        # network-scoped: only the active network's folder loads
     ├── preview/
-    │   └── client-a.yaml           # 10 active DIA testnet pairs → one Cardano client
-    └── mainnet/                    # one file per client when onboarding Mainnet
+    │   └── client-a.yaml           # router YAML; may point to a shared Cardano client deployment
+    └── mainnet/                    # one or more routers per network
 ```
+
+A router YAML is not a Cardano client by itself. It points to a Cardano client
+deployment through `cardano.client_state_path` and `cardano.protocol_state_path`. Create
+another router when you need another off-chain symbol/policy group; create another
+on-chain client deployment only when you need a separate Receiver balance, deposit
+address, pair namespace, or lane throughput.
 
 ### Validation
 
@@ -754,6 +779,7 @@ Every YAML is checked at load time. A subset of what the validator catches:
 - unknown `triggers.conditions[].operator`
 - `cardano:` block with invalid `network` or missing
   `client_state_path` / `protocol_state_path`
+- two enabled routers sharing one lane while declaring overlapping symbols
 - non-conventional `private_key_env` name (warning)
 
 Run `npm run feeder:dev -- --validate-only` to see the full report.

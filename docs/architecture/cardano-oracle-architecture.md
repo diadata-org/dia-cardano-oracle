@@ -1238,6 +1238,16 @@ After a full teardown the only residue is dust below the deposit floor and any U
 2. **Fees live in Config.** `base_fee_lovelace` and `per_pair_fee_lovelace` are admin-tunable in Config and the charged total is `base_fee_lovelace + N × per_pair_fee_lovelace`.
 3. **Pair NFT asset names are hashed.** Pair asset name = `blake2b_256(pair_id)`, where `pair_id` is the UTF-8 bytes of the DIA symbol such as `USDC/USD`.
 4. **Decoupled fee settlement.** Update transactions accrue fees locally on the Receiver (`balance -= fee`, `accrued_to_hook += fee`). Fees are settled to the PaymentHook in a separate admin-initiated Settle transaction. This eliminates contention on the global PaymentHook UTxO during high-frequency updates.
+5. **Router is off-chain only.** There is no on-chain "router" object. A new router
+   YAML does **not** require a new Receiver, deposit address, or NFT set. Multiple
+   feeder routers may point at the same client artifact (`client_state_path`) and
+   protocol artifact (`protocol_state_path`), which means they share that one client's
+   Receiver UTxO, deposit address, Receiver NFT, pair policy, and pair script address.
+   In other words, sharing means **one on-chain client deployment with many off-chain
+   routers**, not many on-chain clients. A fresh on-chain client deployment is only
+   needed when DIA wants a distinct Receiver/deposit/pair namespace or separate lane
+   throughput. Shared-lane routers must use disjoint symbol sets; the feeder validates
+   this at startup because the lane coalescer buffers by symbol within the shared lane.
 
 ---
 

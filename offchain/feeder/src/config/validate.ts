@@ -22,6 +22,7 @@ import type {
   TriggerConditionOperator,
 } from "./types.js";
 import { IssueCollector, type ValidationIssue } from "./issues.js";
+import { extractRouterSymbols } from "../router/symbols.js";
 
 export { type ValidationIssue } from "./issues.js";
 
@@ -561,6 +562,7 @@ function validateRoutersMap(
   for (const [key, router] of Object.entries(routers)) {
     validateRouter(key, router, c.scope(key), config);
   }
+  validateSharedLaneSymbolCollisions(routers, c);
 }
 
 function validateRouter(
@@ -580,6 +582,87 @@ function validateRouter(
   validatePrivateKey(router, c);
   validateProcessing(router.processing, c.scope("processing"));
   validateDestinations(router.destinations, c.scope("destinations"), config);
+}
+
+type LaneDestinationSymbols = {
+  routerId: string;
+  destinationIndex: number;
+  lane: string;
+  symbols: string[];
+};
+
+function validateSharedLaneSymbolCollisions(
+  routers: Record<string, RouterConfig>,
+  c: IssueCollector,
+): void {
+  const byLane = new Map<string, LaneDestinationSymbols[]>();
+
+  for (const [routerId, router] of Object.entries(routers)) {
+    if (!router.enabled) {
+      continue;
+    }
+
+    const symbols = extractRouterSymbols(router);
+    if (symbols.length === 0) {
+      continue;
+    }
+
+    for (const [destinationIndex, destination] of router.destinations.entries()) {
+      if (!destination.cardano) {
+        continue;
+      }
+
+      const lane =
+        `${destination.cardano.client_state_path}::` +
+        `${destination.cardano.protocol_state_path}`;
+      const entries = byLane.get(lane) ?? [];
+      entries.push({
+        routerId,
+        destinationIndex,
+        lane,
+        symbols,
+      });
+      byLane.set(lane, entries);
+    }
+  }
+
+  for (const entries of byLane.values()) {
+    for (let i = 0; i < entries.length; i += 1) {
+      for (let j = i + 1; j < entries.length; j += 1) {
+        const left = entries[i]!;
+        const right = entries[j]!;
+        const overlap = intersectSymbols(left.symbols, right.symbols);
+        if (overlap.length === 0) {
+          continue;
+        }
+
+        const message =
+          `Shares Cardano lane "${left.lane}" with ` +
+          `${right.routerId}.destinations[${right.destinationIndex}] and overlaps on symbol(s) ` +
+          `${overlap.join(", ")}. Shared lanes reuse one Receiver/deposit/pair deployment and ` +
+          `one per-symbol coalescer buffer, so overlapping symbols are unsafe here. ` +
+          "Keep symbol sets disjoint or use a separate client deployment.";
+
+        c.scope(left.routerId)
+          .scope(`destinations[${left.destinationIndex}]`)
+          .error("cardano.client_state_path", message);
+        c.scope(right.routerId)
+          .scope(`destinations[${right.destinationIndex}]`)
+          .error(
+            "cardano.client_state_path",
+            message.replace(
+              `${right.routerId}.destinations[${right.destinationIndex}]`,
+              `${left.routerId}.destinations[${left.destinationIndex}]`,
+            ),
+          );
+      }
+    }
+  }
+}
+
+function intersectSymbols(left: string[], right: string[]): string[] {
+  const rightSet = new Set(right);
+  return left.filter((symbol, index) => rightSet.has(symbol) && left.indexOf(symbol) === index);
 }
 
 /**

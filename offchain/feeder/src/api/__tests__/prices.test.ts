@@ -60,6 +60,28 @@ describe("buildPricesResponse", () => {
     assert.equal(r.prices[3].routerId, "z-router");
   });
 
+  it("keeps separate rows for the same symbol when different routers own the policy state", () => {
+    const cache = createPriceCache({ now: () => 1_000 });
+    cache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100_000n, timestamp: 1_700_000_000n, intentHash: "0xa", updatedAtMs: 1_000 },
+    );
+    cache.set(
+      { routerId: "router-b", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 101_000n, timestamp: 1_700_000_100n, intentHash: "0xb", updatedAtMs: 2_000 },
+    );
+
+    const r = buildPricesResponse(cache);
+    assert.equal(r.count, 2);
+    assert.deepEqual(
+      r.prices.map((price) => [price.routerId, price.symbol, price.intentHash]),
+      [
+        ["router-a", "BTC/USD", "0xa"],
+        ["router-b", "BTC/USD", "0xb"],
+      ],
+    );
+  });
+
   it("includes cardanoTxHash when set", () => {
     const cache = createPriceCache({ now: () => 1_000 });
     cache.set(

@@ -123,6 +123,82 @@ describe("validateModularConfig", () => {
     assert.deepEqual(issues, []);
   });
 
+  it("accepts multiple routers that share one Cardano client/protocol destination", () => {
+    const config = makeConfig(false);
+    config.routers["router-a"]!.triggers.conditions = [
+      { field: "event.symbol", operator: "in", value: ["BTC/USD"] },
+    ];
+    config.routers["router-b"] = {
+      ...config.routers["router-a"]!,
+      id: "router-b",
+      name: "Router B",
+      private_key_env: "CARDANO_WALLET_SEED_TESTNET_ALT",
+      triggers: {
+        events: ["IntentRegistered"],
+        conditions: [{ field: "event.symbol", operator: "in", value: ["ETH/USD"] }],
+      },
+      destinations: [
+        {
+          cardano: {
+            network: "Preview",
+            client_state_path: "state/preview/clients/client-a.json",
+            protocol_state_path: "state/preview/config-bootstrap.json",
+          },
+          time_threshold: "30m",
+          price_deviation: "1%",
+        },
+      ],
+    };
+
+    assert.deepEqual(validateModularConfig(config), []);
+  });
+
+  it("rejects overlapping symbols across routers that share one Cardano lane", () => {
+    const config = makeConfig(false);
+    config.routers["router-a"]!.triggers.conditions = [
+      { field: "event.symbol", operator: "in", value: ["BTC/USD", "ETH/USD"] },
+    ];
+    config.routers["router-b"] = {
+      ...config.routers["router-a"]!,
+      id: "router-b",
+      name: "Router B",
+      private_key_env: "CARDANO_WALLET_SEED_TESTNET_ALT",
+      triggers: {
+        events: ["IntentRegistered"],
+        conditions: [{ field: "event.symbol", operator: "in", value: ["BTC/USD", "ADA/USD"] }],
+      },
+      destinations: [
+        {
+          cardano: {
+            network: "Preview",
+            client_state_path: "state/preview/clients/client-a.json",
+            protocol_state_path: "state/preview/config-bootstrap.json",
+          },
+        },
+      ],
+    };
+
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some(
+        (issue) =>
+          issue.severity === "error" &&
+          issue.path === "routers.router-a.destinations[0].cardano.client_state_path" &&
+          /overlaps on symbol\(s\) BTC\/USD/.test(issue.message),
+      ),
+      `expected a shared-lane overlap error on router-a; got ${JSON.stringify(issues)}`,
+    );
+    assert.ok(
+      issues.some(
+        (issue) =>
+          issue.severity === "error" &&
+          issue.path === "routers.router-b.destinations[0].cardano.client_state_path" &&
+          /overlaps on symbol\(s\) BTC\/USD/.test(issue.message),
+      ),
+      `expected a shared-lane overlap error on router-b; got ${JSON.stringify(issues)}`,
+    );
+  });
+
   // tx_mode is no longer rejected — the guard was removed as a rename leftover.
 
   // R10.A.10 — EVM payload-reshaping config is rejected for Cardano routers,

@@ -11,6 +11,7 @@ infrastructure files is documented inline and summarised in
 - [Feeder config](#feeder-config)
   - [Contents](#contents)
   - [Files](#files)
+  - [Terminology: router vs client](#terminology-router-vs-client)
   - [Routers](#routers)
   - [Side-deposit thresholds](#side-deposit-thresholds)
 
@@ -22,20 +23,56 @@ infrastructure files is documented inline and summarised in
 | `chains.yaml` | EVM source-chain definitions (chain id → RPC/WS endpoints, names). |
 | `contracts.yaml` | Source contract addresses + ABIs the scanner watches. |
 | `events.yaml` | Event signatures the extractor decodes (`IntentRegistered`). |
-| `routers/<network>/*.yaml` | One file per client, per network — which symbols map to which Cardano destination, with trigger conditions and the per-destination policy (`time_threshold` / `price_deviation`). |
+| `routers/<network>/*.yaml` | One file per router, per network — which symbols map to which Cardano destination, with trigger conditions and the per-destination policy (`time_threshold` / `price_deviation`). Several routers may point to the same on-chain client deployment. |
+
+## Terminology: router vs client
+
+In feeder config, **router** and **client** are not the same thing.
+
+| Name | Meaning |
+| --- | --- |
+| **Consumer / customer** | The business/operator label used in metrics, dashboards, and logs. |
+| **Client deployment** | The Cardano-side deployment: one Receiver UTxO, one deposit address, one Receiver NFT, and one pair namespace. It is represented by `client_state_path`. |
+| **Router** | An off-chain YAML config group: symbols, trigger conditions, destination, and policy thresholds. It does not exist on-chain. |
+| **Destination** | The router entry that points to a Cardano client deployment through `cardano.client_state_path` and `cardano.protocol_state_path`. |
+| **Lane** | The feeder submission key `client_state_path :: protocol_state_path`. One lane means one serial queue protecting one Receiver UTxO. |
+
+**Sharing** means one on-chain client deployment with many off-chain routers. It does
+not mean many on-chain clients. Use this when one consumer needs different
+`time_threshold` / `price_deviation` policies for different, non-overlapping symbol
+sets, while keeping one Receiver and one deposit address.
 
 ## Routers
 
-Routers are **network-scoped**: each client gets one file under
+Routers are **network-scoped**: each router gets one file under
 `routers/<network>/` (e.g. `routers/preview/client-a.yaml`,
 `routers/mainnet/client-a.yaml`). The feeder loads **only** the folder matching
 the active `CARDANO_NETWORK`, so a Preview router never loads on Mainnet; each
 router's `cardano.network` field is a second guard (a mismatch is skipped with a
 warning).
 
-**Add a client:** drop a file in the right network folder; nothing else changes.
-The pair set lives in that router's `triggers.conditions`. See
-[`../README.md`](../README.md) for how routers, lanes, and the policy gate work.
+**Add a router:** drop a file in the right network folder. The pair set lives in that
+router's `triggers.conditions`. See [`../README.md`](../README.md) for how routers,
+lanes, and the policy gate work.
+
+**Add a new on-chain client deployment:** run the CLI receiver/bootstrap flow to create
+a new `clients/<id>.json` only when the consumer needs a separate Receiver balance,
+separate deposit address, separate pair namespace, or separate lane throughput.
+
+A router is an **off-chain config grouping**, not an on-chain identity. Multiple
+router files may point at the **same** `cardano.client_state_path` +
+`cardano.protocol_state_path`, which means they share one on-chain client
+deployment: the same Receiver UTxO, deposit address, and per-client pair
+scripts/policy. This is the intended way to give one consumer different
+`time_threshold` / `price_deviation` policies across different pair sets.
+
+When routers share one Cardano destination, keep their symbol sets
+**disjoint**. Policy state is tracked per `(routerId, destinationIndex, symbol)`,
+but the submission lane is shared per
+`client_state_path :: protocol_state_path`, and the coalescer buffers by
+`symbol` inside that lane. The validator rejects overlapping symbols across routers
+that share the same lane, because they would overwrite each other in the per-symbol
+lane buffer.
 
 ## Side-deposit thresholds
 

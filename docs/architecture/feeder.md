@@ -10,6 +10,7 @@
 ## Contents
 
 - [Overview: what it is, and how it maps to Spectra](#overview-what-it-is-and-how-it-maps-to-spectra)
+- [Concept glossary: consumer, client, router, lane](#concept-glossary-consumer-client-router-lane)
 - [Client funding: side-deposit address + merge](#client-funding-side-deposit-address--merge)
 - [1. What the feeder is (high level)](#1-what-the-feeder-is-high-level)
 - [2. End-to-end flow (from an intent to a Cardano tx)](#2-end-to-end-flow-from-an-intent-to-a-cardano-tx)
@@ -58,6 +59,65 @@ is in §15.
 
 The rest of this document walks the pipeline in order. §15 holds the
 full Spectra-parity table; §17 lists exactly what is implemented vs. deferred.
+
+---
+
+## Concept glossary: consumer, client, router, lane
+
+Read this section before the pipeline. Most confusion in the feeder comes from using
+"client" to mean two different things. In this repo the terms below are deliberately
+separate.
+
+| Term | What it means | Where it lives | Does it exist on-chain? |
+| --- | --- | --- | --- |
+| **Consumer / customer** | The external party DIA is serving. It is an operational/reporting label. | Router metadata, logs, metrics, dashboards. | No. |
+| **Client deployment** | One Cardano oracle namespace for a consumer: one Receiver UTxO, one deposit address, one Receiver NFT, one per-client pair policy/script set. | `state/<network>_run_<id>/clients/<client>.json` plus the live UTxOs on Cardano. | Yes. |
+| **Router** | An off-chain feeder config group: which intents are relevant, which destination they go to, and which `time_threshold` / `price_deviation` policy applies. | `offchain/feeder/config/routers/<network>/*.yaml`. | No. |
+| **Destination** | One output target inside a router. For this Cardano feeder, a destination points to `client_state_path` + `protocol_state_path`. | Router YAML. | No, but it references on-chain state files. |
+| **Lane** | The submission/concurrency key: `client_state_path :: protocol_state_path`. One lane means one serial writer for one Receiver. | Feeder runtime (`src/submitter/lane-key.ts`). | No, but it protects one on-chain Receiver UTxO. |
+| **Receiver** | The per-client UTxO that holds prepaid balance, accrued fees, and the Receiver NFT. Every update spends and recreates it. | Cardano, described by the client state JSON. | Yes. |
+| **Deposit address** | The per-client funding address tied to the Receiver NFT. A consumer can send ordinary ADA there; the feeder/CLI later merges it into the Receiver. | Cardano script address derived from the client deployment. | Yes. |
+| **Pair** | One DIA symbol under one client deployment, e.g. `BTC/USD`. It has a Pair UTxO and Pair NFT under that client's pair policy. | Cardano + `<run>/clients/<client>/pairs/*.json`. | Yes. |
+
+**The rule:** sharing means **one on-chain client deployment, many off-chain routers**.
+It does **not** mean many on-chain clients. A router is not a client deployment; it is
+just feeder configuration.
+
+This is the supported shape for one consumer that wants different policies across
+different pair groups:
+
+```text
+consumer/customer: ACME
+  on-chain client deployment: acme.json
+    Receiver UTxO: one
+    deposit address: one
+    pair policy/script namespace: one
+  router: acme-majors.yaml    symbols BTC/USD, ETH/USD   policy 0.5% OR 10m
+  router: acme-stables.yaml   symbols USDC/USD, USDT/USD policy 0.1% OR 30m
+  both routers point to the same client_state_path + protocol_state_path
+```
+
+That setup reuses the same Receiver, deposit address, and pair namespace. The routers
+still keep independent policy/cache state because feeder policy is keyed by
+`(routerId, destinationIndex, symbol)`.
+
+The hard boundary is symbol overlap on a shared lane. If two routers point to the same
+`client_state_path :: protocol_state_path`, their symbol sets must be **disjoint**.
+The lane coalescer buffers by `symbol` inside that shared lane, so two routers both
+claiming `BTC/USD` are not two independent consumers. The config validator rejects that
+dangerous shape at startup.
+
+Create a second on-chain client deployment only when DIA needs a separate Receiver,
+separate deposit address, separate pair namespace, or independent lane throughput.
+
+**Artifact ownership at a glance:**
+
+| Scope | Artifacts | When to create another one |
+| --- | --- | --- |
+| **Per protocol/run** | Config UTxO/NFT, PaymentHook UTxO/NFT, global reference scripts, protocol state JSON. | New network/run/protocol deployment. |
+| **Per on-chain client deployment** | Receiver UTxO/NFT, deposit address, per-client reference scripts, pair policy/script namespace, client state JSON. | Separate balance/deposit/pair namespace or separate lane throughput. |
+| **Per pair** | Pair UTxO/NFT and local pair-state JSON for one symbol under one client deployment. | New DIA symbol for that client deployment. |
+| **Per router** | YAML file, trigger conditions, policy thresholds, router id, destination index, policy cache rows. | New off-chain routing/policy group; no new on-chain artifacts by itself. |
 
 ---
 
@@ -148,7 +208,7 @@ The feeder is a **single Node.js process** that:
 1. Watches DIA's EVM chain (Lasernet) for `IntentRegistered` events.
 2. Enriches each event into a full intent (symbol, price, timestamp, nonce).
 3. Decides whether that intent is worth an on-chain update.
-4. Groups intents per client and writes an oracle-update transaction to Cardano.
+4. Groups intents per lane/client deployment and writes an oracle-update transaction to Cardano.
 5. Tracks the result, exposes metrics/health over HTTP, and guarantees liveness.
 
 There is **no "intent file" being polled** — the source of truth is the EVM chain.
@@ -220,14 +280,14 @@ Symbol ∈ [BTC/USD, ETH/USD, USDC/USD, USDT/USD, DOGE/USD, LTC/USD, ARB/USD, SH
 
 An intent whose symbol is **not in that list** fails the condition and is dropped as
 **"filtered by condition"**. This is the first question: *"is this intent even
-relevant to this client?"* — it runs **before** the OR-gate. (Conditions can match any
+relevant to this router?"* — it runs **before** the OR-gate. (Conditions can match any
 enriched field, not just symbol; all listed conditions must pass.)
 
-**This is per client, evaluated independently.** Each client is its own router with its
-own `conditions`, and every intent is checked against every router separately — there is
-no single global pass/fail. So the same intent can be **dispatched for one client and
-filtered for another at the same time** (e.g. BTC/USD is in client-a's list but not
-client-b's → it passes for client-a and is filtered for client-b). That is why
+**This is per router, evaluated independently.** Every intent is checked against every
+router separately — there is no single global pass/fail. So the same intent can be
+**accepted by one router and filtered by another at the same time** (e.g. BTC/USD is in
+`client-a-majors.yaml` but not `client-a-stables.yaml`). Those two routers may point to
+different on-chain client deployments, or to the same one. That is why
 `intents_filtered_total{reason="condition"}` is counted per `(router_id, symbol)`.
 
 ### Stage 2 — the OR-gate (freshness filter) — `reason: "time_threshold" | "price_deviation" | "timestamp_*"`
@@ -274,10 +334,10 @@ These are **two distinct stages**, often confused:
   empty/idle**, and — more importantly — **for free while the previous tx is still
   confirming** (the lane is busy, so intents pile up at no extra latency cost). See the
   state machine below for the exact rule.
-- **Queue Manager = the single cashier per client.** It takes the assembled package
+- **Queue Manager = the single cashier per Receiver.** It takes the assembled package
   and sends it to Cardano **one at a time**: grabs the Receiver UTxO, builds the tx,
   signs it, submits it, **waits for confirmation**, and only then handles the next
-  package for that same client. While a tx is in flight, **nobody else touches that
+  package for that same Receiver. While a tx is in flight, **nobody else touches that
   UTxO**.
 
 ### Why both exist
@@ -291,17 +351,20 @@ These are **two distinct stages**, often confused:
 
 ### The core reason: the UTxO lock
 
-In Cardano a transaction **spends** a specific UTxO (the client's Receiver). If you
+In Cardano a transaction **spends** a specific UTxO (the client deployment's Receiver). If you
 send two txs at once both trying to spend the **same** UTxO, one fails. So the Queue
-Manager keeps **one serial queue per lane** (= per client/receiver): submit → wait for
+Manager keeps **one serial queue per lane** (= per on-chain client deployment/Receiver):
+submit → wait for
 confirmation → release the lock → submit the next.
 
-A **lane = (client, receiver UTxO)**. Parallelism across clients comes from having
-**multiple lanes** (multiple receivers), NOT multiple workers within one lane.
+A **lane = `client_state_path :: protocol_state_path`**. In on-chain terms, that is one
+client deployment and one Receiver UTxO. Parallelism across client deployments comes
+from having **multiple lanes** (multiple Receivers), NOT multiple workers within one
+lane.
 
-> **One-liner:** *"The coalescer gathers a client's intents and keeps the freshest
+> **One-liner:** *"The coalescer gathers one lane's intents and keeps the freshest
 > price per symbol in a single transaction; the queue manager takes that transaction
-> and writes it to Cardano one at a time per client, waiting for confirmation before
+> and writes it to Cardano one at a time per Receiver, waiting for confirmation before
 > the next, because EUTxO does not allow two simultaneous writes against the same
 > UTxO."*
 
@@ -322,47 +385,53 @@ beat the on-chain one.
   tx and reverts the whole batch. The remaining valid pairs still go out together —
   batching stays the main path. The builder re-asserts the same check as a final guard.
 
-### Where does the client come in? (both stages are per-client)
+### Where does the client come in? (both stages are per lane)
 
-A common confusion: *which* stage knows the client? **Both do**, and they use the
-**exact same key** to partition their work (`src/submitter/lane-key.ts`):
+A common confusion: *which* stage knows the client deployment? **Both do**, and they use
+the **exact same key** to partition their work (`src/submitter/lane-key.ts`):
 
 ```text
-lane = client_state_path :: protocol_state_path   →  one client (its Receiver UTxO)
+lane = client_state_path :: protocol_state_path   →  one on-chain client deployment (its Receiver UTxO)
 ```
 
-The client is attached **upstream**: the router emits each `SubmitRequest` already
-carrying its `destination` (which points at one client's state files). So by the time
-anything reaches the coalescer, every request already knows its client. Nothing has to
-"sort by client" afterward — work is **partitioned by client**, not ordered:
+The destination is attached **upstream**: the router emits each `SubmitRequest` already
+carrying the Cardano destination, which points at one client deployment's state files.
+So by the time anything reaches the coalescer, every request already knows its lane.
+Nothing has to "sort by client" afterward — work is **partitioned by lane**, not
+ordered:
 
-- **Coalescer** keeps **one buffer per lane (= per client)**. Inside each buffer it's
-  `Map<symbol, newest>`. When a lane flushes, it flushes **that one client's symbols**
-  → that's the batch. It **never mixes two clients in a batch**.
-- **Queue Manager** keeps **one serial queue per lane (= per client)**, routing each
-  request to its client's queue by the same key. `submitBatch` even **rejects** a
-  batch whose requests don't all share one lane.
+- **Coalescer** keeps **one buffer per lane (= per Receiver)**. Inside each buffer it's
+  `Map<symbol, newest>`. When a lane flushes, it flushes **that one Receiver's symbols**
+  → that's the batch. It **never mixes two lanes in a batch**.
+- **Queue Manager** keeps **one serial queue per lane (= per Receiver)**, routing each
+  request to its queue by the same key. `submitBatch` even **rejects** a batch whose
+  requests don't all share one lane.
 
-So client-A and client-B run on **separate queues → concurrently**; within client-A,
-**serial**. Neither stage is "the client-aware one" — both partition by the same lane.
-The real difference between them is the *job* (group/filter vs. write safely), not the
-client.
+So two different on-chain client deployments run on **separate queues → concurrently**;
+within one deployment/Receiver, **serial**. Neither stage is "the client-aware one" —
+both partition by the same lane. The real difference between them is the *job*
+(group/filter vs. write safely), not the client.
 
-### Batch vs simple update — decided automatically, per client
+One subtle but important consequence, defined up front in the glossary: **router !=
+client deployment**. Multiple routers may target the same lane and therefore share one
+Receiver/deposit/pair deployment, while still keeping different policy state. The safe
+operating shape is: **shared lane, disjoint symbol sets**.
+
+### Batch vs simple update — decided automatically, per lane
 
 There is **no manual "batch mode"**. At flush time the write client looks at **how many
-symbols that one client accumulated during the window**
+symbols that one lane accumulated during the window**
 (`src/submitter/cardano-write-client.ts`):
 
-| Symbols buffered for the client | What is sent |
+| Symbols buffered for the lane | What is sent |
 | --- | --- |
 | **1** | a **simple update** (1 tx, 1 pair) |
-| **2–10** | **one batch tx** updating several pairs of the **same client** |
+| **2–10** | **one batch tx** updating several pairs of the **same Receiver** |
 | **>10** (`max_batch_size`) | split into multiple txs |
 
-Calm market → mostly simple updates. A burst across several of a client's pairs — or
+Calm market → mostly simple updates. A burst across several of a lane's pairs — or
 several pairs arriving **while the previous tx was still confirming** — flushes as a
-batch. Either way it's always **one client per tx** (one Receiver UTxO, one signer).
+batch. Either way it's always **one Receiver per tx** (one lane, one signer).
 
 ### The coalescer state machine
 
@@ -802,8 +871,8 @@ prerequisites, env vars, and the full output description.
 1. **Single-instance, no HA.** If the process dies, Docker restarts it, but there's a
    gap until restart. Failover (`replica`) is M3 (§14).
 2. **Per-lane throughput bounded by Cardano confirmation.** One tx in flight per
-   receiver at a time (~30s–2min). Scale with more clients/receivers, not more workers
-   per lane.
+   receiver at a time (~30s–2min). Scale with more client deployments/receivers, not
+   more workers per lane.
 3. **Sequential processing** (parallel mode off). A ceiling, not a current problem (§12).
 4. **Gap-detection/head-tracker run inline**, not as dedicated loops (M3).
 5. **API has no auth** (rate-limited only). Don't expose it publicly as-is.
@@ -1105,9 +1174,9 @@ Not blockers — items to confirm with the data owner or measure during real use
 - **Throughput headroom under load.** DIA emits intents frequently; the bottleneck is
   **Cardano confirmation** (one tx per receiver at a time, ~30 s–2 min), not the feeder's
   enrichment. The open item is whether the per-lane submission rate keeps every pair
-  within its freshness target at peak emission — and, if not, whether to scale out (more
-  receivers/lanes per client) rather than rely on parallel enrichment. Best measured once
-  live volumes are known.
+  within its freshness target at peak emission — and, if not, whether to scale out with
+  more client deployments/receivers/lanes rather than rely on parallel enrichment. Best
+  measured once live volumes are known.
 - **Rollback tolerance.** The feeder runs at `confirmation_depth: 1` — a tx is treated as
   final as soon as it lands in a block (practically final for an oracle, lowest latency).
   To verify: is depth 1 acceptable, or should it wait extra Cardano blocks to ride out
