@@ -65,7 +65,10 @@ infrastructure:
   event_processor:
     dedup_cache_size: 4096
     dedup_cache_ttl: 1h
-    coalesce_window: 2s
+    # Wider window = more eligible pairs gather into one batch (lower fee/pair)
+    # at the cost of up to this much added latency on the first batch out of an
+    # idle lane. Kept identical to Preview (canonical).
+    coalesce_window: 30s
     max_intent_age: 15m
     max_batch_size: 10
     size_fallback_enabled: true
@@ -149,6 +152,11 @@ infrastructure:
   cron_service:
     enabled: true
     tick_interval: 30s
+    # Fire the heartbeat on a shared wall-clock boundary so all pairs batch into
+    # one tx every time_threshold (lower fee/pair; max staleness unchanged).
+    # Only affects destinations with time_threshold > 0. Kept identical to
+    # Preview (canonical). See infrastructure.preview.yaml for the full note.
+    aligned_heartbeat: true
 
   # --------------------------------------------------------------------------
   # alerting — canonical thresholds for feeder warnings + Prometheus rules.

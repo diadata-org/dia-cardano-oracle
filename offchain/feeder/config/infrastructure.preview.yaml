@@ -95,8 +95,10 @@ infrastructure:
     dedup_cache_ttl: 1h
     # coalesce_window: accumulation window before a lane flushes its first
     #   buffered batch. New intents arriving while a tx is in flight are
-    #   flushed immediately after confirmation with no extra wait.
-    coalesce_window: 2s
+    #   flushed immediately after confirmation with no extra wait. Wider window
+    #   = more eligible pairs gather into one batch (lower fee/pair) at the cost
+    #   of up to this much added latency on the first batch out of an idle lane.
+    coalesce_window: 30s
     # max_intent_age: drop buffered intents older than this at flush time.
     #   Omit to disable age-based dropping.
     max_intent_age: 15m
@@ -251,6 +253,13 @@ infrastructure:
     #   destination. Each destination's own `time_threshold` gates per-pair
     #   cadence; this is just the scan interval. Duration string ("30s", "1m").
     tick_interval: 30s
+    # aligned_heartbeat: fire the heartbeat on a shared wall-clock boundary
+    #   (floor(now / time_threshold) * time_threshold) so all pairs become due
+    #   in the same tick and coalesce into ONE batch every time_threshold,
+    #   instead of each pair drifting on its own timer (small, staggered txs).
+    #   Lower fee per pair; max staleness unchanged (~time_threshold). Only
+    #   affects destinations with time_threshold > 0. Default false.
+    aligned_heartbeat: true
 
   # --------------------------------------------------------------------------
   # alerting — canonical thresholds for both feeder-emitted warnings and

@@ -19,6 +19,20 @@
 //                                  Fewer Cardano txs, lower fees.
 //   - neither set               → no cron cadence; the destination is skipped.
 //
+// Heartbeat timing (`aligned_heartbeat`):
+//   - per-pair (default)        → a pair is due once ITS OWN last confirm is
+//                                  older than the ceiling. Each pair's timer
+//                                  drifts independently, so in any one tick only
+//                                  the few pairs that just crossed the ceiling
+//                                  are due → small, staggered batches.
+//   - aligned                   → a pair is due once the shared wall-clock
+//                                  boundary `floor(now/T)*T` is newer than its
+//                                  last confirm. All pairs cross the boundary in
+//                                  the same tick → one full batch every T. Only
+//                                  applies to the `time_threshold` heartbeat
+//                                  (T > 0); ignored in deviation-only mode.
+//                                  Max staleness is unchanged (~T) either way.
+//
 // Why this exists: the router policy can filter every incoming intent
 // because the price barely moved (deviation below threshold). Without
 // cron, the on-chain pair would stay stale even though DIA is emitting
@@ -51,6 +65,11 @@ export type CronServiceOptions = {
   enabled: boolean;
   /** Tick interval (ms). Sourced from `cron_service.tick_interval`. */
   tickIntervalMs: number;
+  /** When true, the heartbeat is due on a shared wall-clock boundary
+   *  (`floor(now / time_threshold) * time_threshold`) so all pairs fire in one
+   *  tick and coalesce into a single batch. Per-pair cadence when false/absent.
+   *  Sourced from `cron_service.aligned_heartbeat`. */
+  alignedHeartbeat?: boolean;
   /** Map of routerId → RouterConfig. */
   routers: Record<string, RouterConfig>;
   /** Holds the latest known intent per (routerId, destIdx, symbol). */
@@ -152,6 +171,12 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
       // enforce; the deviation gate alone drives this destination.
       if (ceilingMs === undefined || ceilingMs === 0) continue;
 
+      // Aligned heartbeat applies only to the time_threshold heartbeat, not the
+      // deviation-only max_staleness ceiling: when on, all pairs become due at
+      // the same wall-clock boundary instead of each pair's own last confirm.
+      const useAligned =
+        (options.alignedHeartbeat ?? false) && timeThresholdMs !== undefined && timeThresholdMs > 0;
+
       const clientId = clientIdFromCardanoDestination(dest.cardano);
 
       for (const symbol of symbols) {
@@ -172,8 +197,16 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
           continue;
         }
 
-        // The pair is fresh enough — no resubmission needed.
-        if (now - confirmed.updatedAtMs <= ceilingMs) {
+        // Freshness gate. Aligned mode: due once the shared period boundary is
+        // newer than this pair's last confirm, so every pair becomes due in the
+        // same tick and batches together. Per-pair mode: due once this pair's
+        // own confirm is older than the ceiling. Max staleness stays ~ceilingMs
+        // in both: a pair confirmed at time t is due again at the next boundary,
+        // at most ceilingMs later.
+        if (useAligned) {
+          const boundaryMs = Math.floor(now / ceilingMs) * ceilingMs;
+          if (confirmed.updatedAtMs >= boundaryMs) continue;
+        } else if (now - confirmed.updatedAtMs <= ceilingMs) {
           continue;
         }
 

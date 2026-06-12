@@ -794,6 +794,7 @@ Read from `infrastructure.<network>.yaml::event_processor`:
 |---|---|
 | `enabled` | Master switch for the periodic resubmission loop |
 | `tick_interval` | How often the cron service inspects every cron-enabled destination |
+| `aligned_heartbeat` | When `true`, the heartbeat fires on a shared `time_threshold` boundary so all pairs become due together and coalesce into one batch (fewer, fuller txs); per-pair cadence when `false`. Only affects `time_threshold` destinations. |
 
 ### `api` knobs
 

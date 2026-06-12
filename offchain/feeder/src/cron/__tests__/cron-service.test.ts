@@ -590,3 +590,134 @@ describe("runOneTick", () => {
     assert.equal(cronCalls[0]!.outcome, "submitted");
   });
 });
+
+describe("runOneTick — aligned_heartbeat", () => {
+  // Period = 10m (600_000 ms). Pick `now` 30s past a clean period boundary so
+  // boundary = floor(now / P) * P is exact.
+  const P = 600_000;
+  const BOUNDARY = 1_700_000_400_000; // divisible by 600_000
+  const NOW = BOUNDARY + 30_000;
+
+  function primeCaches(opts: {
+    updatedAtMs: number;
+    confirmedHash: string;
+    latestHash: string;
+    symbol?: string;
+  }) {
+    const symbol = opts.symbol ?? "BTC/USD";
+    const priceCache = createPriceCache({ now: () => NOW });
+    priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol },
+      { symbol, price: 100n, timestamp: 1n, intentHash: opts.confirmedHash, cardanoTxHash: "tx", updatedAtMs: opts.updatedAtMs },
+    );
+    const latestIntents = createLatestIntentCache({ now: () => NOW });
+    latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol },
+      { routerId: "router-a", destinationIndex: 0, symbol, enriched: FAKE_ENRICHED, intentHash: opts.latestHash },
+    );
+    return { priceCache, latestIntents };
+  }
+
+  it("resubmits a pair confirmed in the PREVIOUS period (per-pair logic would skip it)", async () => {
+    // Confirmed 5 min before the boundary → only 330s old, well inside the 10m
+    // per-pair ceiling, so per-pair mode would NOT resubmit. Aligned mode is due
+    // because the last confirm predates the current boundary.
+    const router = makeRouter("BTC/USD", true, "10m");
+    const { priceCache, latestIntents } = primeCaches({
+      updatedAtMs: BOUNDARY - 300_000,
+      confirmedHash: "0xold",
+      latestHash: "0xnew",
+    });
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      alignedHeartbeat: true,
+      now: () => NOW,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 1, "predates the boundary → due in aligned mode");
+    assert.equal(submits[0]!.intentHash, "0xnew");
+    assert.equal(cronCalls[0]!.outcome, "submitted");
+  });
+
+  it("does NOT resubmit a pair already updated in the CURRENT period", async () => {
+    // Confirmed 10s after the boundary → already fresh for this period; the next
+    // resubmission waits for the next boundary.
+    const router = makeRouter("BTC/USD", true, "10m");
+    const { priceCache, latestIntents } = primeCaches({
+      updatedAtMs: BOUNDARY + 10_000,
+      confirmedHash: "0xold",
+      latestHash: "0xnew",
+    });
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      alignedHeartbeat: true,
+      now: () => NOW,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 0, "updated this period → not due until next boundary");
+    assert.equal(cronCalls.length, 0, "freshness skip emits no outcome");
+  });
+
+  it("is ignored in deviation-only mode (no time_threshold) — falls back to per-pair max_staleness", async () => {
+    // Same last-confirm as the first test (330s ago, inside the 10m ceiling), but
+    // the ceiling now comes from max_staleness (deviation-only mode). aligned_heartbeat
+    // must NOT apply, so the pair is still fresh and is skipped.
+    const router = makeRouter("BTC/USD", true, undefined, "10m");
+    const { priceCache, latestIntents } = primeCaches({
+      updatedAtMs: BOUNDARY - 300_000,
+      confirmedHash: "0xold",
+      latestHash: "0xnew",
+    });
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      alignedHeartbeat: true,
+      now: () => NOW,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 0, "aligned ignored without time_threshold; max_staleness ceiling not crossed");
+    assert.equal(cronCalls.length, 0);
+  });
+
+  it("makes all due pairs fire in one tick → a single batch", async () => {
+    // Two subscribed pairs, both confirmed in the previous period: aligned mode
+    // makes both due at the same boundary, so one tick submits both (the
+    // coalescer then batches them into one Cardano tx).
+    const router = makeRouter("BTC/USD", true, "10m");
+    router.triggers.conditions = [
+      { field: "event.symbol", operator: "in", value: ["BTC/USD", "ETH/USD"] },
+    ];
+    const a = primeCaches({ updatedAtMs: BOUNDARY - 300_000, confirmedHash: "0xa", latestHash: "0xa2", symbol: "BTC/USD" });
+    // Reuse one priceCache/latestIntents pair holding BOTH symbols.
+    a.priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "ETH/USD" },
+      { symbol: "ETH/USD", price: 200n, timestamp: 1n, intentHash: "0xb", cardanoTxHash: "tx", updatedAtMs: BOUNDARY - 300_000 },
+    );
+    a.latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "ETH/USD" },
+      { routerId: "router-a", destinationIndex: 0, symbol: "ETH/USD", enriched: FAKE_ENRICHED, intentHash: "0xb2" },
+    );
+    const { options, submits } = makeOptions({
+      routers: { "router-a": router },
+      priceCache: a.priceCache,
+      latestIntents: a.latestIntents,
+      alignedHeartbeat: true,
+      now: () => NOW,
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 2, "both pairs due at the same boundary → submitted together");
+  });
+});

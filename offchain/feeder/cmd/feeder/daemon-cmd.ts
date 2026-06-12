@@ -134,6 +134,7 @@ import {
   DEFAULT_UPDATE_WORKER_QUEUE_SIZE,
   DEFAULT_UPDATE_WORKER_TIMEOUT_MS,
   DEFAULT_CRON_TICK_INTERVAL_MS,
+  DEFAULT_ALIGNED_HEARTBEAT,
   DEFAULT_HEALTH_CHECK_INTERVAL_MS,
   DEFAULT_ALERT_EVALUATION_INTERVAL_MS,
   DEFAULT_ORACLE_PAIR_STALE_SECONDS,
@@ -1466,6 +1467,8 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const cronHandle = startCronService({
     enabled: cronEnabled,
     tickIntervalMs: cronTickIntervalMs,
+    alignedHeartbeat:
+      config.infrastructure?.cron_service?.aligned_heartbeat ?? DEFAULT_ALIGNED_HEARTBEAT,
     routers: config.routers,
     latestIntents,
     priceCache,

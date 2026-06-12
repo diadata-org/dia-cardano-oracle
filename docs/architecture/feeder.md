@@ -242,14 +242,14 @@ For a symbol that *is* relevant, two thresholds are evaluated (`src/router/polic
 | Neither | always |
 | Time only | `time_threshold` elapsed |
 | Price only | deviation ≥ `price_deviation` |
-| **Both** (client-a: `5m` + `0.1%`) | **time OR price** (whichever happens first) |
+| **Both** (client-a: `10m` + `0.5%`) | **time OR price** (whichever happens first) |
 | No prior cached price | always (first update) |
 
 Before the OR-gate there is a **timestamp monotonicity** check: a smaller timestamp →
 suppress (`timestamp_regression`); an equal timestamp → suppress
 (`timestamp_duplicate`).
 
-> **One-liner:** *"We push an update when the price moves more than 0.1%, OR when 5
+> **One-liner:** *"We push an update when the price moves more than 0.5%, OR when 10
 > minutes have passed without an update — whichever happens first."*
 
 (A third `reason` value exists — a **preflight** check that runs right before
@@ -270,7 +270,7 @@ These are **two distinct stages**, often confused:
 - **Coalescer = the packer.** Many loose intents arrive. Per symbol it keeps **only
   the newest** (*supersede*: if a fresher BTC arrives, the old one is dropped) and
   assembles **one package** (the batch: up to `max_batch_size: 10` symbols). It gathers
-  symbols in two situations: a short `coalesce_window` (2s) **only when the lane was
+  symbols in two situations: a short `coalesce_window` (30s) **only when the lane was
   empty/idle**, and — more importantly — **for free while the previous tx is still
   confirming** (the lane is busy, so intents pile up at no extra latency cost). See the
   state machine below for the exact rule.
@@ -369,20 +369,21 @@ batch. Either way it's always **one client per tx** (one Receiver UTxO, one sign
 The lane buffer is **not FIFO** — it's a `Map<symbol, newest-intent>`. Three states:
 `idle → accumulating → in-flight`.
 
-- **`idle` → first intent arrives → `accumulating`**: starts the `coalesce_window` (2s)
-  timer. This 2s wait happens **only here** — when the lane was empty. Whatever lands
-  in those 2s flushes together.
+- **`idle` → first intent arrives → `accumulating`**: starts the `coalesce_window` (30s)
+  timer. This wait happens **only here** — when the lane was empty. Whatever lands
+  in those 30s flushes together (a wider window gathers more pairs into the first batch).
 - **`in-flight` (a tx is confirming) → intents arrive**: they just accumulate
   (supersede per symbol), **no timer**. The lane is already "waiting" on the chain, so
   this costs zero extra latency.
-- **tx confirms with a non-empty buffer**: flush **immediately** — no second 2s window.
+- **tx confirms with a non-empty buffer**: flush **immediately** — no second window.
   This is where most multi-symbol batches come from: everything that piled up while the
   previous tx was confirming goes out in one batch.
 - `max_intent_age: 15m` — drops buffered intents that are too old at flush time.
 
-> **One-liner:** *"We only pause 2 seconds when the lane is idle. Once a transaction is
-> in flight, new prices accumulate for free — keeping the newest per symbol — and the
-> moment the chain confirms, the whole accumulated batch goes out with no extra wait."*
+> **One-liner:** *"We only pause for the `coalesce_window` when the lane is idle. Once a
+> transaction is in flight, new prices accumulate for free — keeping the newest per
+> symbol — and the moment the chain confirms, the whole accumulated batch goes out with
+> no extra wait."*
 
 ---
 
@@ -476,7 +477,7 @@ Key `(router, dest, symbol)` → last price + timestamp + when it was updated.
 Two consumers:
 
 1. **The policy gate.** When a new BTC/USD intent arrives, the gate compares against
-   the last confirmed price/time to decide *"did it move >0.1%? has 5m passed?"*. That
+   the last confirmed price/time to decide *"did it move >0.5%? has 10m passed?"*. That
    "last" comes from the price cache.
 2. **The cron service.** To know whether a pair is stale (last confirmed older than
    `time_threshold`), it reads the age from the price cache.
@@ -557,6 +558,25 @@ Every **30s** it walks each destination with `cron: true`, and per symbol:
    `(timestamp, nonce)`, so the resubmission would be rejected on chain. DIA advances the
    per-pair nonce slowly, so this is common — skipping it here avoids a wasted pipeline
    pass and fee (the build-time on-chain datum check is the final guard).
+
+**Heartbeat timing — per-pair vs aligned (`cron_service.aligned_heartbeat`).** Step 2's
+"fresher than `time_threshold`" check runs in one of two modes:
+
+- **per-pair (default):** a pair is due once *its own* last confirm is older than
+  `time_threshold`. Each pair's timer drifts independently, so any single 30s tick finds
+  only the handful of pairs that just crossed — they go out as small, staggered txs
+  (≈ 1 pair/tx in practice).
+- **aligned (`aligned_heartbeat: true`):** a pair is due once the shared wall-clock
+  boundary `floor(now / time_threshold) * time_threshold` is newer than its last confirm.
+  All pairs cross the boundary in the **same** tick, so they reach the coalescer together
+  and flush as **one batch every `time_threshold`** — far fewer, fuller txs and a lower
+  fee per pair. Max staleness is unchanged (≈ `time_threshold`); the deviation arm still
+  pushes a volatile pair immediately between boundaries, and that pair rejoins the batch
+  at the next boundary. Only applies when `time_threshold > 0`; in deviation-only mode
+  the `max_staleness` backstop stays per-pair.
+
+For the full knob matrix and the per-pair-vs-aligned timeline, see
+[push-policy config](../audit/20260609-feeder-push-policy-config.md#heartbeat-timing-per-pair-vs-aligned).
 
 > The cron service is globally enabled (`cron_service.enabled`) and **opt-in per
 > destination** via `cron: true` in the router YAML. `client-a` sets `cron: true`, so its
@@ -658,7 +678,7 @@ That's exactly why it's a later milestone.
 | `database` | local sqlite (run-scoped `<run>/feeder.sqlite`); postgres supported for prod |
 | `source` | the EVM chain it scans: `chain_id 10050`, RPC + WS, `start_block` |
 | `block_scanner` | HTTP poller knobs (10s, 500 blocks, 6 confirmations, backfill 5000) |
-| `event_processor` | `dedup_cache_ttl 1h`, `coalesce_window 2s`, `max_batch_size 10`, `max_intent_age 15m`, **`enable_parallel_mode: false`** |
+| `event_processor` | `dedup_cache_ttl 1h`, `coalesce_window 30s`, `max_batch_size 10`, `max_intent_age 15m`, **`enable_parallel_mode: false`** |
 | `worker_pool` | `inflight_timeout_ms 900000` (15min, Cardano-specific: releases the lane lock if a tx hangs) |
 | `cardano` | `confirmation_depth: 1` (see §11) |
 | `cron_service` | `tick_interval 30s` |

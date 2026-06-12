@@ -110,6 +110,10 @@ export const DEFAULT_CONFIRMATION_DEPTH = 1;
 
 /** Cron + balance-refresh tick interval (ms). YAML fallback: `cron_service.tick_interval`. */
 export const DEFAULT_CRON_TICK_INTERVAL_MS = 30_000;
+/** Whether the cron heartbeat fires on a shared wall-clock boundary (all pairs
+ *  due together → one batch) instead of each pair's own last-confirm time.
+ *  YAML fallback: `cron_service.aligned_heartbeat`. */
+export const DEFAULT_ALIGNED_HEARTBEAT = false;
 /** Health-check sampling interval (ms). YAML fallback: `health_check.check_interval`. */
 export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 5_000;
 /** Max processing-lag staleness before /health/ready degrades (ms). 5 minutes.

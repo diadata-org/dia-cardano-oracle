@@ -284,6 +284,14 @@ export type CronServiceConfig = {
    *  per-destination cadence is gated by each destination's own
    *  `time_threshold`. */
   tick_interval?: string;
+  /** When true, the heartbeat fires on a shared wall-clock boundary
+   *  (`floor(now / time_threshold) * time_threshold`) instead of each pair's
+   *  own last-confirm time. All pairs then become due in the same tick and
+   *  coalesce into one batch — fewer, fuller transactions. Only affects
+   *  destinations with `time_threshold > 0` (the heartbeat modes); ignored in
+   *  deviation-only mode, where `max_staleness` is the ceiling. Default false
+   *  (per-pair cadence). */
+  aligned_heartbeat?: boolean;
 };
 
 // ---------------------------------------------------------------------------

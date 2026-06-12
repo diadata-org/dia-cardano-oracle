@@ -40,8 +40,12 @@ routers:
           network: Preview
           client_state_path: ../state/preview_run_20260608-040304/clients/client-a.json
           protocol_state_path: ../state/preview_run_20260608-040304/config-bootstrap.json
-        # Push an update as soon as the price moves at least this much.
-        price_deviation: "0.1%"
+        # Push an update as soon as the price moves at least this much. Raised
+        # from 0.1% to 0.5% so sporadic small moves stop desyncing the per-pair
+        # heartbeats — pairs cluster on the 10m cadence and batch together,
+        # lowering fee per pair. Trade-off: on-chain price tracks the source a
+        # little less tightly between heartbeats.
+        price_deviation: "0.5%"
         # The cron heartbeat guarantees an update at least this often (the max
         # staleness per pair), even when the price is flat. Needs cron: true below.
         time_threshold: 10m
