@@ -32,6 +32,11 @@ export type HealthState = {
   /** Whether the scanner is reporting healthy. When false, readiness fails
    *  with component "scanner". */
   scannerIsHealthy?: boolean;
+  /** Whether the primary Cardano API provider (the lucid build/submit provider)
+   *  is reachable. When false, readiness fails with component
+   *  "cardano_provider" — the feeder cannot build any update. Set by the
+   *  daemon's balance-refresh pass; undefined skips the check. */
+  primaryProviderHealthy?: boolean;
   /** Injectable clock for tests. Defaults to Date.now. */
   now?: () => number;
 };
@@ -97,6 +102,17 @@ export function readinessResult(state: HealthState): HealthResult {
     checks.scanner = {
       ok: state.scannerIsHealthy,
       detail: state.scannerIsHealthy ? "scanner healthy" : "scanner unhealthy",
+    };
+  }
+
+  // Primary Cardano provider check — when the build/submit provider is
+  // unreachable, the feeder cannot produce any update, so readiness fails.
+  if (state.primaryProviderHealthy !== undefined) {
+    checks.cardano_provider = {
+      ok: state.primaryProviderHealthy,
+      detail: state.primaryProviderHealthy
+        ? "primary provider reachable"
+        : "primary provider unreachable",
     };
   }
 

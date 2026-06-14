@@ -975,6 +975,8 @@ Price deviation is **percent** (0–100).
 | `PriceDeviationHigh` | `dia_bridge_price_deviation_percent_bucket` (p95) | `price_deviation_high_percent` | `5` % | Investigate DIA source — possible misreport. |
 | `PriceAgeHigh` | `dia_bridge_price_age_seconds_bucket` (p95) | `price_age_high_seconds` | `600` s | DIA source publishing stale prices. |
 | `ReorgRateHigh` | `dia_bridge_transactions_reorg_total` | `reorg_rate_high_per_hour` | `> 3 / 1 h` | Check provider lag + scanner block-lag panel. |
+| `PrimaryProviderDown` | `dia_bridge_provider_last_ok_timestamp_seconds{role="primary"}` | `provider_primary_unhealthy_seconds` | `600` s | **Critical** — the build/submit provider (selected by `CARDANO_PROVIDER`) is down → nothing builds, every pair freezes. Often a Blockfrost `402` (quota). Rotate `BLOCKFROST_PROJECT_ID_<NET>` / `KOIOS_API_URL_<NET>` in `feeder/.env` or switch `CARDANO_PROVIDER`, then `make restart`. |
+| `SecondaryProviderDown` | `dia_bridge_provider_last_ok_timestamp_seconds{role="secondary"}` | `provider_secondary_unhealthy_seconds` | `900` s | **Warning** — the confirmation/reorg redundancy provider is down; core operation continues. Fix/rotate its endpoint in `feeder/.env`, then `make restart`. |
 
 ### Operational wallets at a glance
 
@@ -1021,6 +1023,26 @@ collateral to build, so it recovers even an all-dust wallet. Full rationale (the
 the fragmentation failure, the alert→automatic ordering, and the WASM self-heal) is in
 [Architecture → Fee loop & automatic maintenance](../../docs/architecture/feeder.md#fee-loop--automatic-maintenance-settle--withdraw--consolidate)
 and the [at-a-glance table](../../docs/architecture/feeder.md#alerts--automatic-remediation--at-a-glance).
+
+### Provider health (primary vs secondary)
+
+The feeder reaches Cardano through **two** API providers, with roles set by
+`CARDANO_PROVIDER`: a **primary** (the build/submit provider lucid uses for everything)
+and a **secondary** (confirmation/reorg redundancy). A primary outage — classically a
+Blockfrost `402 Payment Required` quota wall — freezes **every** pair at once; a secondary
+outage only loses redundancy. The daemon emits, per `{provider, role}`,
+`dia_bridge_component_health` (1/0) and `dia_bridge_provider_last_ok_timestamp_seconds`
+(the alert signal). The primary is measured passively from the balance-refresh calls (no
+extra provider load); the secondary is probed actively once per tick. Because the alerts
+key off **role**, they always track whichever provider actually builds — see
+`PrimaryProviderDown` / `SecondaryProviderDown` above. The primary also gates
+`/health/ready` (component `cardano_provider`).
+
+> **`NonMonotonicNonce` is not a failure.** When a newer intent already won on chain the
+> feeder declines to submit (no tx, no fee). Those are counted in
+> `dia_bridge_intents_superseded_total{reason}` and logged at info as `intent superseded
+> (no tx)` — **not** in `transactions_failed_total` / the `TRANSACTION FAILED` log — so the
+> failure counters and the dashboard success ratio reflect only real failures.
 
 ## Architecture (see also)
 

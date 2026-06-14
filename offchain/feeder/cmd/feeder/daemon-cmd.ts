@@ -118,9 +118,13 @@ import {
   createMetrics,
   noopMetrics,
   wrapWithPersistence,
+  resolveProviderRoles,
+  createProviderHealthRecorder,
+  probeProvider,
   type FeederMetrics,
   type HealthState,
 } from "../../src/api/index.js";
+import { getCliConfig } from "@diadata-org/dia-cardano-oracle-cli/core/config";
 import { createDb, type Db, type DbConfig } from "../../src/persistence/index.js";
 import { startAlertEvaluator } from "../../src/alerting/evaluator.js";
 import { createFileLogger, type FileLogger } from "../../src/logger/file-logger.js";
@@ -149,6 +153,7 @@ import {
   DEFAULT_CRON_TICK_INTERVAL_MS,
   DEFAULT_ALIGNED_HEARTBEAT,
   DEFAULT_HEALTH_CHECK_INTERVAL_MS,
+  DEFAULT_PROVIDER_PROBE_TIMEOUT_MS,
   DEFAULT_ALERT_EVALUATION_INTERVAL_MS,
   DEFAULT_ORACLE_PAIR_STALE_SECONDS,
   DEFAULT_API_HOST,
@@ -1343,16 +1348,28 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         const batchSize = result.batch?.size ?? 1;
         const customerId = routerCustomers.get(req.routerId)!;
         const labels = clientLabels({ clientId, customerId });
-        metrics.transactionsFailed.inc({
-          symbol,
-          ...labels,
-          error_code: result.code,
-        });
-        metrics.bridgeIntentsFailed.inc({
-          symbol,
-          ...labels,
-          reason: result.code,
-        });
+        // A NonMonotonicNonce result means the feeder DECLINED to submit (a
+        // newer intent already won on chain) — no tx was broadcast and no fee
+        // was paid. It is a correct no-op, not a failure, so it is counted in
+        // `intentsSuperseded` and kept out of the failure counters/log.
+        if (isNoTransactionFailure(result)) {
+          metrics.intentsSuperseded.inc({
+            symbol,
+            ...labels,
+            reason: result.code,
+          });
+        } else {
+          metrics.transactionsFailed.inc({
+            symbol,
+            ...labels,
+            error_code: result.code,
+          });
+          metrics.bridgeIntentsFailed.inc({
+            symbol,
+            ...labels,
+            reason: result.code,
+          });
+        }
 
         // Tx-level failure metrics — counted once per TRANSACTION. Condemned/
         // superseded intents the feeder declined to submit (no tx, no fee) are
@@ -1387,11 +1404,20 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         if (result.code === "TxDroppedFromChain") {
           metrics.transactionsReorg.inc({ symbol, ...labels });
         }
-        report(
-          `[error] daemon: TRANSACTION FAILED — code=${result.code} intentHash=${sanitizeLogLine(result.intentHash)} ` +
-          `symbol=${sanitizeLogLine(symbol)} batchSize=${batchSize} error="${sanitizeLogLine(result.error.message)}"`,
-        );
-        report(`[warn] daemon: REMEDIATION — ${sanitizeLogLine(result.remediation)}`);
+        if (isNoTransactionFailure(result)) {
+          // No tx broadcast, no fee — a newer intent already won on chain.
+          // Logged at info level so it never reads as a transaction failure.
+          report(
+            `[info] daemon: intent superseded (no tx) — code=${result.code} intentHash=${sanitizeLogLine(result.intentHash)} ` +
+            `symbol=${sanitizeLogLine(symbol)} batchSize=${batchSize}`,
+          );
+        } else {
+          report(
+            `[error] daemon: TRANSACTION FAILED — code=${result.code} intentHash=${sanitizeLogLine(result.intentHash)} ` +
+            `symbol=${sanitizeLogLine(symbol)} batchSize=${batchSize} error="${sanitizeLogLine(result.error.message)}"`,
+          );
+          report(`[warn] daemon: REMEDIATION — ${sanitizeLogLine(result.remediation)}`);
+        }
         // Await + catch: a lost failure-insert means the system has no
         // record an intent was even attempted — failure metrics and
         // post-mortem reconciliation go blind. We are in an async handler.
@@ -1858,10 +1884,33 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       });
   }
 
+  // Cardano API provider health — primary (the lucid build/submit provider) vs
+  // secondary (confirmation/reorg redundancy), keyed off CARDANO_PROVIDER so the
+  // critical alert always tracks whichever provider actually builds.
+  const providerRoles = resolveProviderRoles(process.env.CARDANO_PROVIDER);
+  const providerHealth = createProviderHealthRecorder(metrics);
+  // Endpoints for the secondary liveness probe, resolved once. Tolerate a
+  // missing config (e.g. dry-run) by skipping the probe instead of crashing.
+  let providerProbeConfig:
+    | { koiosApiUrl?: string; blockfrostApiUrl?: string; blockfrostProjectId?: string }
+    | undefined;
+  try {
+    const cli = getCliConfig();
+    providerProbeConfig = {
+      koiosApiUrl: cli.koiosApiUrl,
+      blockfrostApiUrl: cli.blockfrostApiUrl,
+      blockfrostProjectId: cli.blockfrostProjectId,
+    };
+  } catch {
+    providerProbeConfig = undefined;
+  }
+
   async function refreshBalanceGauges(): Promise<void> {
+    let primaryOk = false;
     for (const dest of balanceRefreshDests) {
       try {
         const b = await bridge.snapshotBalances(dest);
+        primaryOk = true;
         const clientId = b.clientId ?? dest.clientStatePath;
         // Surface the per-client deposit address once so operators can hand it
         // to the client. Logged on the first refresh that resolves it.
@@ -1910,6 +1959,21 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       } catch (err) {
         report(`balance-refresh: ${dest.clientStatePath} failed: ${(err as Error).message}`);
       }
+    }
+    // PRIMARY provider health — passive: lucid uses it for the snapshot above,
+    // so any success in this pass means it is reachable. Drives readiness +
+    // the PrimaryProviderDown alert (e.g. a Blockfrost 402 quota wall freezes
+    // every build → no success → the last-ok gauge ages → alert).
+    providerHealth.record("primary", providerRoles.primary, primaryOk);
+    healthState.primaryProviderHealthy = primaryOk;
+    // SECONDARY provider health — active liveness probe, since it is only called
+    // on demand (confirmation/reorg) and "idle" can't be told from "down".
+    if (providerProbeConfig) {
+      const secondaryOk = await probeProvider(providerRoles.secondary, {
+        ...providerProbeConfig,
+        timeoutMs: DEFAULT_PROVIDER_PROBE_TIMEOUT_MS,
+      });
+      providerHealth.record("secondary", providerRoles.secondary, secondaryOk);
     }
   }
 

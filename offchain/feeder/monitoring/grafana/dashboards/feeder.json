@@ -1085,6 +1085,98 @@
       ],
       "title": "Tx involving router (5m, by router & outcome)",
       "type": "timeseries"
+    },
+    {
+      "type": "row",
+      "title": "Row 6 — Provider Health (primary vs secondary)",
+      "collapsed": false,
+      "id": 202,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 87
+      },
+      "panels": []
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Health of the two Cardano API providers, by role. PRIMARY is the lucid build/submit provider (selected by CARDANO_PROVIDER) — if it is down NOTHING can be built and every pair freezes together (e.g. a Blockfrost 402 quota wall) → PrimaryProviderDown (critical). SECONDARY backs confirmation/reorg redundancy — losing it is a warning, not an outage → SecondaryProviderDown. 1 = up, 0 = down.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 88
+      },
+      "id": 203,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "dia_bridge_component_health{component=~\"blockfrost|koios\",network=~\"$network\"}",
+          "legendFormat": "{{component}} ({{role}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Cardano provider health — primary vs secondary (1 = up)",
+      "type": "stat"
     }
   ],
   "refresh": "30s",

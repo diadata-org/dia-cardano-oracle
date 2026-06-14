@@ -116,6 +116,10 @@ export const DEFAULT_CRON_TICK_INTERVAL_MS = 30_000;
 export const DEFAULT_ALIGNED_HEARTBEAT = false;
 /** Health-check sampling interval (ms). YAML fallback: `health_check.check_interval`. */
 export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 5_000;
+/** Per-call timeout for the secondary Cardano provider liveness probe (ms). The
+ *  probe runs on the balance-refresh tick; it must finish well within that tick.
+ *  Drives the SecondaryProviderDown signal — see `provider-health.ts`. */
+export const DEFAULT_PROVIDER_PROBE_TIMEOUT_MS = 8_000;
 /** Max processing-lag staleness before /health/ready degrades (ms). 5 minutes.
  *  YAML fallback: `health_check.max_processing_lag`; also the readiness default. */
 export const DEFAULT_MAX_STALENESS_MS = 5 * 60_000;

@@ -33,3 +33,13 @@ export { buildStatusResponse, buildComponentsResponse, type StatusResponse, type
 export { buildEventsResponse, buildEventNamesResponse, buildEventByHashResponse, type EventEntry, type EventsResponse } from "./events.js";
 export { buildAlertsResponse, buildAlertResponse, type AlertEntry, type AlertsResponse } from "./alerts.js";
 export { buildPerformanceResponse, type PerformanceEntry, type PerformanceResponse } from "./performance.js";
+export {
+  resolveProviderRoles,
+  createProviderHealthRecorder,
+  probeProvider,
+  type CardanoProviderName,
+  type ProviderRole,
+  type ProviderRoles,
+  type ProviderHealthRecorder,
+  type ProbeProviderOptions,
+} from "./provider-health.js";

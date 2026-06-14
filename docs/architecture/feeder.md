@@ -34,6 +34,7 @@
 - [20. lucid WASM build resilience (submission/finality hardening)](#20-lucid-wasm-build-resilience-submissionfinality-hardening)
 - [Fee loop & automatic maintenance (settle / withdraw / consolidate)](#fee-loop--automatic-maintenance-settle--withdraw--consolidate)
 - [Alerts & automatic remediation — at a glance](#alerts--automatic-remediation--at-a-glance)
+  - [Cardano API provider health (primary vs secondary)](#cardano-api-provider-health-primary-vs-secondary)
 - [Where to find everything (documentation map)](#where-to-find-everything-documentation-map)
 - [Open questions & constraints to verify](#open-questions--constraints-to-verify)
 
@@ -1223,6 +1224,8 @@ network-agnostic). Current values:
 | `price_deviation_high_percent` | 5 % | **PriceDeviationHigh** alert | critical — possible misreport |
 | `price_age_high_seconds` | 600 s | **PriceAgeHigh** alert | warning — DIA source stale |
 | `reorg_rate_high_per_hour` | 3 | **ReorgRateHigh** alert | warning — chain provider lagging |
+| `provider_primary_unhealthy_seconds` | 600 s | **PrimaryProviderDown** alert | critical — build/submit provider down → everything freezes |
+| `provider_secondary_unhealthy_seconds` | 900 s | **SecondaryProviderDown** alert | warning — confirmation/reorg redundancy lost |
 
 Read each automatic step against the alert directly above/below it: the **alert fires
 first**, the **automatic step follows** only if the condition keeps developing
@@ -1231,6 +1234,35 @@ first**, the **automatic step follows** only if the condition keeps developing
 `..._receiver_accrued_lovelace`, `..._payment_hook_accrued_lovelace`,
 `..._admin_wallet_lovelace` (total) and `..._admin_wallet_max_utxo_lovelace` (largest
 pure-ADA UTxO — the fragmentation signal), `..._deposit_pending_lovelace`.
+
+### Cardano API provider health (primary vs secondary)
+
+The feeder reaches Cardano through **two** API providers with different roles, selected by
+`CARDANO_PROVIDER`:
+
+- **Primary** — the provider lucid uses to fetch protocol parameters, read UTxOs, build,
+  sign, and submit. If it is down, **nothing can be built** and every pair freezes
+  together — this is the single point of failure behind the classic Blockfrost
+  `402 Payment Required` (quota) outage. Measured **passively** from the calls the
+  balance-refresh tick already makes (no extra provider load) → **PrimaryProviderDown**
+  (critical) once it goes `provider_primary_unhealthy_seconds` without a success.
+- **Secondary** — the redundancy provider used for tx confirmation and reorg checks.
+  Losing it degrades redundancy but not core operation. It is only called on demand, so
+  passive tracking cannot tell "idle" from "down"; it is **probed actively** with one
+  cheap read per tick → **SecondaryProviderDown** (warning).
+
+Both roles emit `dia_bridge_component_health{component,role}` (1/0) and
+`dia_bridge_provider_last_ok_timestamp_seconds{provider,role}` (the alert signal:
+`time() - last_ok > threshold`). Because the **role** is derived from `CARDANO_PROVIDER`,
+the critical alert always tracks whichever provider actually builds — swap the env and the
+roles, alerts, and the "Cardano provider health" Grafana panel follow. The primary's health
+also gates `/health/ready` (component `cardano_provider`).
+
+> **Not a transaction failure.** A `NonMonotonicNonce` result means a newer intent already
+> won on chain, so the feeder declines to submit — **no tx, no fee**. These are counted in
+> `dia_bridge_intents_superseded_total{reason}` and logged at info level as `intent
+> superseded (no tx)`; they are kept out of `transactions_failed_total` and the
+> `TRANSACTION FAILED` log so the failure counters reflect only real failures.
 
 ## Where to find everything (documentation map)
 

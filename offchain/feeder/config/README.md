@@ -15,6 +15,7 @@ infrastructure files is documented inline and summarised in
   - [Routers](#routers)
   - [Side-deposit thresholds](#side-deposit-thresholds)
   - [Automatic fee-loop maintenance thresholds](#automatic-fee-loop-maintenance-thresholds)
+  - [Cardano provider health thresholds](#cardano-provider-health-thresholds)
 
 ## Files
 
@@ -110,3 +111,22 @@ defaulted). The **ordering invariant** (each `auto_*` beyond its paired alert, s
 the alert fires first and the automatic step only follows) is enforced by the
 `threshold-drift` test. Full rationale:
 [Architecture → Fee loop & automatic maintenance](../../../docs/architecture/feeder.md#fee-loop--automatic-maintenance-settle--withdraw--consolidate).
+
+## Cardano provider health thresholds
+
+The feeder reaches Cardano through two API providers, with roles set by the
+`CARDANO_PROVIDER` env var: a **primary** (the build/submit provider lucid uses
+for everything) and a **secondary** (confirmation/reorg redundancy). These
+`alerting.*` keys say how long a provider may go without a successful
+call/probe before its alert fires:
+
+| Key | Role |
+| --- | --- |
+| `provider_primary_unhealthy_seconds` | Seconds without a successful primary call → `PrimaryProviderDown` (critical). A primary outage (e.g. a Blockfrost `402` quota wall) freezes every build. Measured passively from the balance-refresh calls. |
+| `provider_secondary_unhealthy_seconds` | Seconds without a successful secondary liveness probe → `SecondaryProviderDown` (warning). Losing it drops confirmation/reorg redundancy only. Measured by an active probe. |
+
+Backed by `dia_bridge_provider_last_ok_timestamp_seconds{provider,role}` and
+`dia_bridge_component_health{component,role}`. The alerts key off **role**, so the
+critical one always tracks whichever provider `CARDANO_PROVIDER` selects to build.
+Full rationale:
+[Architecture → Cardano API provider health](../../../docs/architecture/feeder.md#cardano-api-provider-health-primary-vs-secondary).

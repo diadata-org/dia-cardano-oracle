@@ -104,6 +104,8 @@ const ALERT_TO_YAML: Record<string, { yamlKey: string; divisor: number }> = {
   PriceAgeHigh: { yamlKey: "price_age_high_seconds", divisor: 1 },
   ReorgRateHigh: { yamlKey: "reorg_rate_high_per_hour", divisor: 1 },
   ReceiverDepositsPending: { yamlKey: "deposit_pending_merge_lovelace", divisor: 1_000_000 },
+  PrimaryProviderDown: { yamlKey: "provider_primary_unhealthy_seconds", divisor: 1 },
+  SecondaryProviderDown: { yamlKey: "provider_secondary_unhealthy_seconds", divisor: 1 },
 };
 
 // Alerts whose summary/description prose names the threshold as "<N> ADA".

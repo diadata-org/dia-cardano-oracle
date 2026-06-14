@@ -309,6 +309,14 @@ infrastructure:
     # look healthy while every build traps. Action: `wallet:consolidate` (the
     # daemon auto-consolidates below `auto_consolidate_below_lovelace`).
     admin_wallet_min_collateral_lovelace: 10000000     # 10 ADA largest-UTxO floor
+    # Cardano API provider health. PRIMARY = the lucid build/submit provider
+    # (selected by CARDANO_PROVIDER); if it is down NOTHING can be built and all
+    # pairs freeze together (e.g. a Blockfrost 402 quota wall). SECONDARY = the
+    # confirmation/reorg redundancy provider; losing it degrades redundancy only.
+    # Seconds without a successful call/probe before the alert fires. Measured
+    # via `dia_bridge_provider_last_ok_timestamp_seconds{role}`. Prometheus-only.
+    provider_primary_unhealthy_seconds: 600            # 10 min → PrimaryProviderDown (critical)
+    provider_secondary_unhealthy_seconds: 900          # 15 min → SecondaryProviderDown (warning)
 
     # --- Automatic remediation thresholds -------------------------------------
     # The feeder ACTS on these itself, on the balance-refresh tick, as a lane

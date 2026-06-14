@@ -30,6 +30,12 @@ export type FeederMetrics = {
   transactionsConfirmed: FeedCounter;
   transactionsFailed: FeedCounter;
   transactionsReorg: FeedCounter;
+  /** Intents the feeder DECLINED to submit because a newer one already won on
+   *  chain (`NonMonotonicNonce`) — no tx broadcast, no fee. These are correct
+   *  no-ops, counted here instead of `transactionsFailed`/`bridgeIntentsFailed`
+   *  so the failure counters and the error log reflect only real failures.
+   *  Partitioned by `reason` (the FeederErrorCode). See `isNoTransactionFailure`. */
+  intentsSuperseded: FeedCounter;
   /** One increment per Cardano TRANSACTION (not per symbol), partitioned by
    *  `outcome` (confirmed|failed). A batch of N pairs is a single tx → a single
    *  increment, unlike `transactionsConfirmed`/`transactionsFailed` which count
@@ -148,8 +154,18 @@ export type FeederMetrics = {
   bridgeDbOperations: FeedCounter;
   /** bridge_db_operation_duration_seconds — latency histogram for DB ops. */
   bridgeDbOperationDuration: FeedHistogram;
-  /** bridge_component_health{component} — 1 = healthy, 0 = unhealthy. */
+  /** bridge_component_health{component,role} — 1 = healthy, 0 = unhealthy.
+   *  `role` is `primary` (the lucid build/submit provider) or `secondary`
+   *  (the confirmation/reorg redundancy provider), derived from
+   *  `CARDANO_PROVIDER`. */
   bridgeComponentHealth: FeedGauge;
+  /** bridge_provider_last_ok_timestamp_seconds{provider,role} — unix seconds of
+   *  the last successful interaction with each Cardano API provider. The
+   *  PrimaryProviderDown / SecondaryProviderDown alerts fire on
+   *  `time() - this > alerting.provider_*_unhealthy_seconds`. `role` follows the
+   *  configured `CARDANO_PROVIDER`, so the critical alert always tracks whichever
+   *  provider actually builds transactions. */
+  bridgeProviderLastOkTimestampSeconds: FeedGauge;
   /** bridge_recovery_attempts_total — number of recovery attempts after transient errors. */
   bridgeRecoveryAttempts: FeedCounter;
   getMetricsText(): Promise<string>;
@@ -178,6 +194,7 @@ export const noopMetrics: FeederMetrics = {
   transactionsConfirmed: noopCounter,
   transactionsFailed: noopCounter,
   transactionsReorg: noopCounter,
+  intentsSuperseded: noopCounter,
   transactionsTotal: noopCounter,
   transactionPairs: noopHistogram,
   transactionRouterMembership: noopCounter,
@@ -226,6 +243,7 @@ export const noopMetrics: FeederMetrics = {
   bridgeDbOperations: noopCounter,
   bridgeDbOperationDuration: noopHistogram,
   bridgeComponentHealth: noopGauge,
+  bridgeProviderLastOkTimestampSeconds: noopGauge,
   bridgeRecoveryAttempts: noopCounter,
   getMetricsText: async () => "",
 };
@@ -359,6 +377,11 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "transactions_reorg_total",
       "Cardano transactions dropped by a rollback after submission",
       ["symbol", "client_id", "customer_id"],
+    ),
+    intentsSuperseded: counter(
+      "intents_superseded_total",
+      "Intents the feeder declined to submit because a newer one already won on chain (no tx, no fee) — correct no-ops, not failures",
+      ["symbol", "client_id", "customer_id", "reason"],
     ),
     transactionsTotal: counter(
       "transactions_total",
@@ -612,8 +635,13 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     ),
     bridgeComponentHealth: gauge(
       "component_health",
-      "Component health status: 1 = healthy, 0 = unhealthy",
-      ["component"],
+      "Component health status: 1 = healthy, 0 = unhealthy. For Cardano API providers, `role` is primary (the build/submit provider) or secondary (confirmation/reorg redundancy).",
+      ["component", "role"],
+    ),
+    bridgeProviderLastOkTimestampSeconds: gauge(
+      "provider_last_ok_timestamp_seconds",
+      "Unix seconds of the last successful interaction with each Cardano API provider, labelled by provider name and role (primary/secondary). Absent until the first success so the down-alert only evaluates against real data.",
+      ["provider", "role"],
     ),
     bridgeRecoveryAttempts: counter(
       "recovery_attempts_total",
@@ -670,7 +698,7 @@ type PromClientLike = {
  * `performance_metrics` table. Counters wrapped are those whose values
  * survive a restart and are useful for historical trend queries:
  * transactionsSubmitted, transactionsConfirmed, transactionsFailed,
- * intentsFiltered, cronResubmissions.
+ * intentsSuperseded, intentsFiltered, cronResubmissions.
  *
  * Wrapping is transparent — callers use the same FeederMetrics interface.
  * Persistence failures are non-fatal (Prometheus metrics still work) but are
@@ -712,6 +740,7 @@ export function wrapWithPersistence(
     transactionsSubmitted: persistentCounter(metrics.transactionsSubmitted, "transactions_submitted_total"),
     transactionsConfirmed: persistentCounter(metrics.transactionsConfirmed, "transactions_confirmed_total"),
     transactionsFailed: persistentCounter(metrics.transactionsFailed, "transactions_failed_total"),
+    intentsSuperseded: persistentCounter(metrics.intentsSuperseded, "intents_superseded_total"),
     intentsFiltered: persistentCounter(metrics.intentsFiltered, "intents_filtered_total"),
     cronResubmissions: persistentCounter(metrics.cronResubmissions, "cron_resubmissions_total"),
   };

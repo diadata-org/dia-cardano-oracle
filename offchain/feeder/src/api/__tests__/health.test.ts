@@ -94,4 +94,35 @@ describe("readinessResult", () => {
     });
     assert.equal(r.checks.confirmation?.ok, true);
   });
+
+  it("skips the cardano_provider check when primaryProviderHealthy is undefined", () => {
+    const r = readinessResult({
+      lastRegistryPollMs: now - 10_000,
+      lastConfirmedMs: 0,
+      now: clock,
+    });
+    assert.equal(r.checks.cardano_provider, undefined);
+  });
+
+  it("degraded when the primary Cardano provider is unreachable", () => {
+    const r = readinessResult({
+      lastRegistryPollMs: now - 10_000,
+      lastConfirmedMs: 0,
+      primaryProviderHealthy: false,
+      now: clock,
+    });
+    assert.equal(r.status, "degraded");
+    assert.equal(r.checks.cardano_provider?.ok, false);
+    assert.match(r.checks.cardano_provider?.detail ?? "", /unreachable/);
+  });
+
+  it("ok when the primary Cardano provider is reachable", () => {
+    const r = readinessResult({
+      lastRegistryPollMs: now - 10_000,
+      lastConfirmedMs: 0,
+      primaryProviderHealthy: true,
+      now: clock,
+    });
+    assert.equal(r.checks.cardano_provider?.ok, true);
+  });
 });

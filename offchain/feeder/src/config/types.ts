@@ -268,6 +268,23 @@ export type AlertingConfig = {
    *  traps. The daemon auto-consolidates below `auto_consolidate_below_lovelace`
    *  (which must be < this, so the alert fires first). */
   admin_wallet_min_collateral_lovelace?: number;
+  /** Seconds the PRIMARY Cardano API provider (the lucid build/submit provider,
+   *  selected by `CARDANO_PROVIDER`) may go without a successful call before the
+   *  PrimaryProviderDown alert (critical) fires. A primary outage freezes every
+   *  build (e.g. a Blockfrost 402 quota wall) → all pairs go stale together.
+   *  Measured passively from the balance-refresh calls via
+   *  `dia_bridge_provider_last_ok_timestamp_seconds{role="primary"}`.
+   *  Prometheus-only (the feeder code emits the gauge, the rule owns the
+   *  threshold); kept here so every alert threshold has one canonical home and
+   *  the threshold-drift test can enforce it against `monitoring/`. */
+  provider_primary_unhealthy_seconds?: number;
+  /** Seconds the SECONDARY Cardano API provider (confirmation/reorg redundancy)
+   *  may go without a successful liveness probe before the SecondaryProviderDown
+   *  alert (warning) fires. Losing it degrades redundancy but not core
+   *  operation, so it is a warning, not critical. Measured by an active probe
+   *  via `dia_bridge_provider_last_ok_timestamp_seconds{role="secondary"}`.
+   *  Prometheus-only; same single-source rationale as the primary key. */
+  provider_secondary_unhealthy_seconds?: number;
 
   // --- Automatic remediation thresholds -------------------------------------
   // The feeder ACTS on these itself, on the balance-refresh tick, as a lane task

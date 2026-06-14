@@ -401,3 +401,59 @@ groups:
               npm:    cd offchain/cli && npm run cli -- deposit:merge --protocol-state ../state/{{ $labels.run_dir }}/config-bootstrap.json --client-state ../state/{{ $labels.run_dir }}/clients/{{ $labels.client_id }}.json
             After it confirms, the deposit-pending total drops to 0 and the alert
             clears within ~1 minute.
+
+      # ---------------------------------------------------------------------
+      - alert: PrimaryProviderDown
+        expr: >
+          time() - dia_bridge_provider_last_ok_timestamp_seconds{role="primary"} > 600
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Primary Cardano provider ({{ $labels.provider }}) is down — no transactions can be built"
+          description: >
+            The PRIMARY Cardano API provider ({{ $labels.provider }}, selected by
+            CARDANO_PROVIDER) has not answered a successful call for
+            {{ $value | printf "%.0f" }} s (alert fires past the configured
+            `alerting.provider_primary_unhealthy_seconds` window). This provider
+            is what lucid uses to fetch protocol parameters, read UTxOs, build,
+            and submit — when it is down NOTHING can be built and EVERY pair
+            freezes together (a single point of failure). The classic cause is a
+            Blockfrost `402 Payment Required` (the API key hit its quota), or an
+            invalid key / provider outage.
+
+            WHAT TO DO:
+            1. Check the running feeder for the provider error:
+                 cd offchain && make logs
+               A "402 Payment Required" means the key's quota is exhausted.
+            2. Rotate the key: set BLOCKFROST_PROJECT_ID_<NET> (or KOIOS_API_URL_<NET>)
+               in offchain/feeder/.env to a fresh project/key, then restart:
+                 cd offchain && make restart
+            3. Or switch provider entirely: set CARDANO_PROVIDER in
+               offchain/feeder/.env (Blockfrost <-> Koios) and restart. The role
+               labels and this alert follow CARDANO_PROVIDER automatically.
+
+      # ---------------------------------------------------------------------
+      - alert: SecondaryProviderDown
+        expr: >
+          time() - dia_bridge_provider_last_ok_timestamp_seconds{role="secondary"} > 900
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Secondary Cardano provider ({{ $labels.provider }}) is down — confirmation/reorg redundancy lost"
+          description: >
+            The SECONDARY Cardano API provider ({{ $labels.provider }}) has not
+            answered a successful liveness probe for {{ $value | printf "%.0f" }} s
+            (alert fires past `alerting.provider_secondary_unhealthy_seconds`).
+            The secondary backs tx confirmation and reorg checks; the feeder keeps
+            operating through the primary, so this is a WARNING, not an outage —
+            it means the redundant confirmation/reorg path is unavailable.
+
+            WHAT TO DO:
+            1. Check the secondary provider's status / quota.
+            2. Fix or rotate its endpoint in offchain/feeder/.env
+               (KOIOS_API_URL_<NET> or BLOCKFROST_API_URL_<NET> /
+               BLOCKFROST_PROJECT_ID_<NET>), then restart:
+                 cd offchain && make restart
+            No price updates are at risk while only the secondary is down.
