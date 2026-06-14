@@ -2,6 +2,11 @@
 
 Tasks for the DIA Cardano Oracle feeder: done, left for M2, Mainnet, and deferred.
 
+Terminology (`customer -> client -> router`, with `lane` as the Cardano EUTxO
+serialization concept) is defined in the living architecture doc:
+[`../architecture/feeder.md` §Concept glossary](../architecture/feeder.md#concept-glossary-customer-client-router-lane).
+The one-off normalization that introduced it is complete (archived 2026-06-13).
+
 ## Contents
 
 - [Milestone — Feeder Plan](#milestone--feeder-plan)
@@ -40,11 +45,25 @@ Tasks for the DIA Cardano Oracle feeder: done, left for M2, Mainnet, and deferre
 
 ### Evidence pack
 
-The Preview evidence pack is captured and complete (see Done — `m2-preview-20260609-132545`: 10 pairs, real PNGs from both dashboards embedded in the writeup, db/api/logs/error-counts, alerts section). Remaining for the M2 submission:
+> The three earlier Preview packs (`m2-preview-20260609-*`, `m2-preview-20260611-114820`) predate the
+> terminology migration (`customer/client/router` naming) and the cron-path runtime fix that records
+> cron-confirmed txs in `transaction_log`. They are **superseded** — kept only as historical snapshots.
+> The M2 submission uses a **fresh** Preview pack from the current run.
+
+M2 closeout sequence (agreed 2026-06-13 — Preview first, then Mainnet):
+
+**Fase 1 — Preview (the demo, no ADA cost):**
+
+- [ ] **Fresh Preview evidence pack** from the current run (`preview_run_20260608-040304`, customer/client/router naming + cron fix): let it run ~3–4 h, then `make evidence`. 10 pairs, real Grafana PNGs from both dashboards, db/api/logs CSVs, latency p50/p95, error-counts, alerts section. (No 48 h requirement — the only time window is Grafana's `now-3h` render; the script has no hardcoded wait.)
+- [ ] **Demo video** (explicit M2 acceptance — the "QA review logs" demo): lightweight preview of the system feeding the 10 asset price feeds + real-time Grafana dashboards + anomaly/alert behaviour. Forces 2–3 safe alerts on Preview (`OraclePairStale`, `SettleOverdue`, `ReceiverBalanceLow` — never `AdminWalletLow`). Script: `docs/milestones/m2-demo-video-script.md`. This is the one M2 deliverable with no in-repo substitute.
+
+**Fase 2 — Mainnet (the formal tx evidence, ≤1 h run):**
+
+- [ ] **Mainnet feeder update tx logs** — the formal M2 evidence is confirmed-tx logs on Cardano **Mainnet** (the Preview pack is supporting evidence, as it was for M1). Short run (≤1 h to bound ADA cost) is enough to harvest confirmed tx hashes for the 10 feeds. Tracked under Mainnet below.
+
+**Fase 3 — Closeout:**
 
 - [ ] **Milestone 2 PoA document** (`milestone-2-poa.md`), mirroring the accepted M1 PoA (`docs/milestones/evidence/m1-mainnet-20260517-063917/milestone-1-poa.md`): submission commit, AC→evidence tables, outputs-delivered table, how-to-verify, and the same "developer-docs publication on DIA's site deferred to M4" paragraph (the M1 deferral reasoning was accepted).
-- [ ] **Demo video** (explicit M2 acceptance — the "QA review logs" demo): lightweight preview of the system feeding the 10 asset price feeds + real-time Grafana dashboards + anomaly/alert behaviour. This is the one M2 deliverable with no in-repo substitute.
-- [ ] **Mainnet feeder update tx logs** — the formal M2 evidence is confirmed-tx logs on Cardano **Mainnet** (the Preview pack is supporting evidence, as the Preview pack was for M1). Tracked under Mainnet below; excluded from the Preview-readiness scope.
 
 > Developer-documentation **publication on DIA's main developer-documentation website** is NOT an M2 blocker: per the accepted M1 PoA it is deferred to M4 (the clause is identical in M2/M3/M4; in-repo docs are complete and meet the substantive content requirement). Do not re-list it as an M2 gap.
 
@@ -77,9 +96,13 @@ The Preview evidence pack is captured and complete (see Done — `m2-preview-202
 
 ## Pending — Mainnet
 
-Protocol + client are already bootstrapped on-chain (see Done — `m1-mainnet-20260517-063917`). Remaining:
+Protocol + client were bootstrapped on-chain in M1 (`m1-mainnet-20260517-063917`). The live signer set is
+**confirmed** — it is the same set used for the accepted M1 Mainnet PoA, so the daemon run is no longer gated.
+Remaining (Fase 2 of the M2 closeout):
 
-- [ ] **Run the M2 feeder daemon on Mainnet** and capture verified update tx logs — gated on DIA confirming the live signer set + WebSocket credentials. The bootstrap above used the CLI, not the daemon.
+- [ ] **Teardown the old Mainnet deployment** (`mainnet_run_20260517-063917`) before redeploying: `run-teardown-cli.sh` (reclaim reference scripts incl. per-client `deposit`; `receiver/payment-hook/config:burn`; `--skip-singleton-burns` for the contracts deployed without the burn action). Recovers ADA where the next-gen hashes allow.
+- [ ] **Redeploy Mainnet** (protocol/config/payment-hook/client/receiver + reference scripts + 10 pairs) with the current contracts.
+- [ ] **Run the M2 feeder daemon on Mainnet** (≤1 h to bound ADA cost) and capture verified update tx logs for the 10 feeds. The M1 bootstrap used the CLI, not the daemon — this is the first daemon-driven Mainnet run.
 
 ## Deferred — M3 / M4
 

@@ -23,6 +23,9 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 - [Milestone 1 Mainnet Evidence](../milestones/evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) — M1 Mainnet verification log (latest run).
 - [**Milestone Feeder Plan**](./milestone-feeder-plan.md) — **start here for the feeder.**
   Done / M2 pending / Mainnet / deferred / open DIA decisions.
+- [**Feeder concept glossary**](../architecture/feeder.md#concept-glossary-customer-client-router-lane)
+  — living definition of `customer -> client -> router` (with `lane` as the Cardano EUTxO
+  serialization concept). The one-off terminology normalization is complete (archived 2026-06-13).
 - [**M3 & M4 Plan**](./m3-m4-plan.md) — what's left for Monitoring (M3) and End-to-End
   Mainnet (M4), grounded in the official milestone text.
 - [Audit report](../audit/20260515-audit-report.md) — `20260515-audit-report.md`.
@@ -133,11 +136,12 @@ High-level deliverables tracked here:
 - [x] OpenAPI/Swagger surface: a metadata route table (`src/api/routes.ts`, TypeBox schemas)
   drives an OpenAPI 3.0.3 doc at `/api/v1/openapi.json` and an offline Redoc UI at `/docs`
   (vendored, no CDN; shipped in the Docker image).
-- [x] M2 Preview evidence pack captured — `docs/milestones/evidence/m2-preview-20260609-132545/`
-  (10 pairs, Grafana PNGs from both dashboards, error-counts TSV, alerts section).
-  564 feeder tests pass. Tracked in detail in [milestone-feeder-plan.md](./milestone-feeder-plan.md) §2.
-  Remaining for the M2 submission: the `milestone-2-poa.md` PoA doc and the demo video (mainnet
-  feeder tx logs are the formal evidence, tracked under Mainnet).
+- [~] M2 Preview evidence: the earlier packs (`m2-preview-20260609-*`, `m2-preview-20260611-114820`)
+  predate the terminology migration + cron-path fix and are **superseded**. A **fresh** Preview pack
+  from the current run (customer/client/router naming, 606 feeder tests pass) is captured as Fase 1
+  of the M2 closeout. Remaining for the M2 submission: fresh Preview pack + demo video (Preview),
+  then Mainnet daemon tx logs (formal evidence, ≤1 h run) and the `milestone-2-poa.md` PoA doc.
+  Sequence tracked in detail in [milestone-feeder-plan.md](./milestone-feeder-plan.md) §2.
 
 ## Workstream D — Indexer
 

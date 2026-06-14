@@ -14,7 +14,7 @@ For how it works internally and how it diverges from its EVM ancestor, see
 ## Contents
 
 - [Directory guide](#directory-guide)
-- [Core terms: consumer, client, router, lane](#core-terms-consumer-client-router-lane)
+- [Core terms: customer, client, router, lane](#core-terms-customer-client-router-lane)
 - [How to run — three forms](#how-to-run--three-forms)
 - [Service URLs — where to look (once it's running)](#service-urls--where-to-look-once-its-running)
 - [Per-run state (RUN_ID)](#per-run-state-run_id)
@@ -54,6 +54,7 @@ For how it works internally and how it diverges from its EVM ancestor, see
   - [Client funding (side-deposits)](#client-funding-side-deposits)
   - [Full alert map](#full-alert-map)
   - [Operational wallets at a glance](#operational-wallets-at-a-glance)
+  - [Automatic fee-loop maintenance (settle / withdraw / consolidate)](#automatic-fee-loop-maintenance-settle--withdraw--consolidate)
 - [Architecture (see also)](#architecture-see-also)
 
 ## Directory guide
@@ -65,14 +66,14 @@ For how it works internally and how it diverges from its EVM ancestor, see
 | [`state/`](./state/README.md) | Per-run, per-network state (`state/<network>_run_<id>/`): imported CLI artifacts (committed) + runtime DB/logs (gitignored). |
 | `src/`, `cmd/` | The feeder daemon source (TypeScript). |
 
-## Core terms: consumer, client, router, lane
+## Core terms: customer, client, router, lane
 
 The feeder uses these names precisely:
 
 | Term | Meaning |
 | --- | --- |
-| **Consumer / customer** | The external party DIA serves; mainly a label for metrics, logs, and dashboards. |
-| **Client deployment** | The Cardano-side deployment for a consumer: one Receiver UTxO, one deposit address, one Receiver NFT, and one pair namespace. |
+| **Customer** | The external party DIA serves; in YAML/metrics this is `customer_id`, and in TypeScript/API this is `customerId`. |
+| **Client deployment** | The Cardano-side deployment for a customer: one Receiver UTxO, one deposit address, one Receiver NFT, and one pair namespace. |
 | **Router** | An off-chain YAML config group that selects symbols and policy thresholds, then points to a destination. A router is not an on-chain object. |
 | **Destination** | The `cardano:` block inside a router, pointing at `client_state_path` + `protocol_state_path`. |
 | **Lane** | The runtime submission key `client_state_path :: protocol_state_path`; one lane means one serial queue protecting one Receiver UTxO. |
@@ -100,7 +101,7 @@ Two things to know before you read the rest of this manual:
 > word `daemon` (the examples further down omit it). What you **cannot** omit is
 > the `--`: it is npm's argument separator, so any flag must come after it —
 > `npm run feeder:dev -- --from-latest`. Drop the `--` and npm swallows the flag.
-> Sub-commands (`init client`, `checkpoint …`, `reset`, `prune`) are likewise
+> Sub-commands (`init router`, `checkpoint …`, `reset`, `prune`) are likewise
 > passed after the `--`.
 
 > **Grafana and Prometheus are Docker-only.** The monitoring stack
@@ -131,6 +132,8 @@ on `localhost`.
 | --- | --- | --- |
 | **Grafana** dashboards | <http://localhost:3000> — login `admin` / `${GRAFANA_ADMIN_PASSWORD:-admin}` | `make up MONITORING=1` |
 | **Prometheus** (raw metrics, alert state) | <http://localhost:9090> | `make up MONITORING=1` |
+| Feeder **API reference** (Redoc, interactive) | <http://localhost:8080/docs> | `make up` |
+| Feeder **OpenAPI schema** (3.0 JSON) | <http://localhost:8080/api/v1/openapi.json> | `make up` |
 | Feeder **liveness** | <http://localhost:8080/health/live> | `make up` |
 | Feeder **readiness** | <http://localhost:8080/health/ready> | `make up` |
 | Feeder **metrics** (Prometheus scrape) | <http://localhost:8080/metrics> | `make up` |
@@ -139,11 +142,13 @@ Feeder HTTP API (all under `http://localhost:8080`):
 
 | Endpoint | Shows |
 | --- | --- |
-| `/api/v1/prices` | Latest confirmed price per symbol |
+| `/docs` | Interactive API reference (Redoc), rendered offline from the OpenAPI schema |
+| `/api/v1/openapi.json` | The OpenAPI 3.0 schema itself, generated from the route table |
+| `/api/v1/prices` | Latest confirmed price per symbol (each entry carries `routerId` + `customerId`/`clientId`/`network`) |
 | `/api/v1/prices/:symbol` | One symbol across destinations |
 | `/api/v1/symbols` | Symbols from the active router YAMLs |
 | `/api/v1/transactions` | Recent Cardano submissions |
-| `/api/v1/transactions/:txHash` | One tx + its member intents |
+| `/api/v1/transactions/:txHash` | One tx + its member intents; tx-level `customerId`/`clientId`/`network` + `routerIds` (a batch can mix routers on the shared lane) |
 | `/api/v1/chains` · `/api/v1/chains/:id/status` | Source-chain status |
 | `/api/v1/alerts` · `/api/v1/alerts/:id` | Active + recent alerts |
 | `/api/v1/performance` | DB-backed latency/throughput samples |
@@ -183,7 +188,7 @@ under Docker (`make … RUN_ID=…`) and npm (`RUN_ID=… npm run …`).
 - **Commands that operate on a run** (the daemon, `checkpoint`, `reset`, `prune`,
   the evidence pack): with `RUN_ID` set they use `state/<network>_run_<RUN_ID>/`;
   with it empty they use the **newest** `state/<network>_run_*/`.
-- **`init client`**: scans `../state/` for the run (the **newest**
+- **`init router`**: scans `../state/` for the run (the **newest**
   `../state/<network>_run_*` by default; pass `--from <path>` to choose one) and
   generates the router YAML pointing the daemon at it. Pass that run id as
   `RUN_ID` to start the daemon.
@@ -293,6 +298,12 @@ Open `http://localhost:8080/health/live` to verify the daemon is running.
 > `offchain/feeder/` or `offchain/cli/` changes (including after a `git pull`),
 > re-run `make build` before `make up` / `make reset-restart` / any `make`
 > sub-command, otherwise the container keeps running the old binary.
+>
+> **`make fresh` is the one-shot that can't forget the rebuild** — it runs
+> `build` + wipes the Prometheus/Grafana volumes + the feeder DB/logs/pairs +
+> reseeds the checkpoint + starts, all in order (the on-chain deploy in
+> `../state` is kept). Use it after **code** changes. For **config-only** (YAML)
+> changes no rebuild is needed — `make reset-restart` is enough.
 
 ### Daemon + monitoring
 
@@ -306,7 +317,9 @@ There is no separate `up-monitoring` target. Monitoring stays up until
 cd offchain
 make up MONITORING=1   # feeder-sqlite + Prometheus + Grafana + renderer
 make up                # feeder only (monitoring untouched)
-make down              # stops everything
+make down              # stops everything (DB + volumes kept)
+make down VOLUMES=1    # stops + DELETES the Prometheus + Grafana volumes (fresh metrics; ../state/contracts untouched)
+make fresh             # code changed? rebuild image + wipe volumes/DB/logs + reseed + start (keeps on-chain deploy)
 ```
 
 - Prometheus: `http://localhost:9090` — raw metrics and alert state
@@ -316,8 +329,9 @@ make down              # stops everything
   pre-provisioned: **DIA Cardano Oracle Feeder** (operational overview, balances,
   per-symbol throughput) and **DIA Cardano Oracle Feeder — Transactions**
   (per-transaction view: stage latency, confirmed-vs-failed, batch size). Both filter
-  by **customer → client → symbol** (cascading). A batch tx of N pairs counts as one
-  transaction in the tx view and as N symbol updates in the overview.
+  by **network → customer → client → router → symbol** (cascading; `router` and the
+  per-router panels read the tx↔router membership metric). A batch tx of N pairs counts
+  as one transaction in the tx view and as N symbol updates in the overview.
 - Renderer: a `grafana/grafana-image-renderer` sidecar that produces PNG
   snapshots of the dashboard for Grafana. No exposed port; intra-compose only.
 
@@ -411,7 +425,7 @@ import the CLI deployment and start:
 
 ```sh
 make build             # only if the image isn't built yet
-make init-client       # generate config/routers/<net>/<client>.yaml for the run (interactive)
+make init-router       # generate config/routers/<net>/<client>-router-<name>.yaml (interactive)
 make checkpoint-latest # seed scanner to chain tip
 make up MONITORING=1   # start the daemon
 ```
@@ -441,13 +455,15 @@ These targets run the **feeder** binary as one-off containers (not `dia-cli`):
 
 | Target | What it does |
 | --- | --- |
-| `make init-client` | Generate the client's router YAML for the run, interactively (`feeder init client`) |
+| `make init-router` | Generate a router YAML from a client's JSON, interactively (`feeder init router`) |
 | `make checkpoint-get` | Print the current scanner checkpoint |
 | `make checkpoint-latest` | Seed the checkpoint to the current chain tip (only new intents) |
 | `make restart` | Restart the daemon with **no** data changes |
 | `make restart-latest` | Restart skipping the backlog: reseed checkpoint to tip, **keep** DB + logs |
 | `make reset` | Delete runtime state (DB + logs + pairs) and exit; keeps CLI bootstrap files |
-| `make reset-restart` | Stop → `reset` → reseed checkpoint → start the daemon |
+| `make reset-restart` | Stop → `reset` → reseed checkpoint → start the daemon (no rebuild — config-only changes) |
+| `make fresh` | After **code** changes: rebuild image → wipe Prometheus/Grafana volumes + DB/logs/pairs → reseed → start. Keeps on-chain deploy. (`MONITORING=1` opt) |
+| `make down VOLUMES=1` | Stop the stack **and** delete the Prometheus + Grafana volumes (fresh metrics; `../state`/contracts untouched) |
 | `make prune` | Prune only **old** rows/logs (keeps DB). `make prune MAX_AGE=30m` |
 
 ### Deploy, contracts & teardown (Docker)
@@ -470,7 +486,7 @@ bind-mounted so their contents persist on the host:
 
 | Host / named volume | Container path | Used by | Contents |
 | --- | --- | --- | --- |
-| `feeder/config/` | `/app/offchain/feeder/config` | feeder | Modular YAML config (router YAML written by `init-client`) |
+| `feeder/config/` | `/app/offchain/feeder/config` | feeder | Modular YAML config (router YAML written by `init-router`) |
 | `offchain/state/` | `/app/offchain/state` | feeder, cli | Shared per-run state: the CLI deployment record (config-bootstrap.json, clients) **and** the feeder runtime (DB, logs, pair state). One tree, used by both. |
 | `contracts/aiken/` | `/app/contracts/aiken` | cli | Aiken sources + `plutus.json` (so `contracts-build` persists) |
 | `docs/milestones/evidence/` | `/app/docs/milestones/evidence` | cli | `run-all` / `teardown` evidence logs |
@@ -534,7 +550,7 @@ First set the target network in `.env`: `CARDANO_NETWORK=Preview` or `Mainnet`
 (plus that network's secrets). Then import the CLI deployment and start:
 
 ```sh
-npm run feeder:dev -- init client                   # generate the client's router YAML for the run
+npm run feeder:dev -- init router                   # generate the client's router YAML for the run
 npm run feeder:dev -- checkpoint set --from-latest  # seed scanner to chain tip
 npm run feeder:dev                                  # start the daemon
 ```
@@ -584,9 +600,9 @@ Every useful invocation, grouped by purpose. Copy the one you need.
 
 ```sh
 # ── Configure the router for a deployment ──────────────────────────
-npm run feeder:dev -- init client                            # auto-scan ../state/ + interactive router YAML wizard
-npm run feeder:dev -- init client --from ../state/preview_run_20260516-090057/clients/client-a.json
-npm run feeder:dev -- init client --force                    # overwrite without prompting
+npm run feeder:dev -- init router                            # auto-scan ../state/ + interactive router YAML wizard
+npm run feeder:dev -- init router --from ../state/preview_run_20260516-090057/clients/client-a.json
+npm run feeder:dev -- init router --force                    # overwrite without prompting
 
 # ── Start the daemon ───────────────────────────────────────────────
 npm run feeder:dev                                           # normal start (resume from persisted checkpoint)
@@ -759,7 +775,7 @@ config/
 ├── events.yaml                     # IntentRegistered ABI + getIntent enrichment
 └── routers/                        # network-scoped: only the active network's folder loads
     ├── preview/
-    │   └── client-a.yaml           # router YAML; may point to a shared Cardano client deployment
+    │   └── client-a-router-default.yaml  # router YAML; may point to a shared Cardano client deployment
     └── mainnet/                    # one or more routers per network
 ```
 
@@ -955,6 +971,7 @@ Price deviation is **percent** (0–100).
 | `SettleOverdue` | `dia_bridge_cardano_receiver_accrued_lovelace` | `settle_overdue_lovelace` | `10 000 000` (10 ADA) | `make cli CMD="settle --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json --client-state /app/offchain/state/preview_run_<id>/clients/<client>.json"` |
 | `PaymentHookWithdrawReady` | `dia_bridge_cardano_payment_hook_accrued_lovelace` | `payment_hook_withdraw_ready_lovelace` | `50 000 000` (50 ADA) | `make cli CMD="payment-hook:withdraw --amount-lovelace <lovelace> --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json"` |
 | `AdminWalletLow` | `dia_bridge_cardano_admin_wallet_lovelace` | `admin_wallet_low_lovelace` | `5 000 000` (5 ADA) | Collect protocol revenue into this wallet: `settle` then `payment-hook:withdraw` (the withdraw_address is this wallet). Only if there is no accrued revenue, fund the address in `state/<net>_run_<id>/config-bootstrap.json` externally (Preview: faucet). |
+| `AdminWalletFragmented` | `dia_bridge_cardano_admin_wallet_max_utxo_lovelace` | `admin_wallet_min_collateral_lovelace` | `10 000 000` (10 ADA) | The wallet's **largest** pure-ADA UTxO fell below the collateral floor — no UTxO can back collateral and builds trap, even if the total looks fine. The daemon auto-consolidates below `auto_consolidate_below_lovelace`; to force it: `make cli CMD="wallet:consolidate"`. |
 | `PriceDeviationHigh` | `dia_bridge_price_deviation_percent_bucket` (p95) | `price_deviation_high_percent` | `5` % | Investigate DIA source — possible misreport. |
 | `PriceAgeHigh` | `dia_bridge_price_age_seconds_bucket` (p95) | `price_age_high_seconds` | `600` s | DIA source publishing stale prices. |
 | `ReorgRateHigh` | `dia_bridge_transactions_reorg_total` | `reorg_rate_high_per_hour` | `> 3 / 1 h` | Check provider lag + scanner block-lag panel. |
@@ -969,7 +986,8 @@ in the oracle update flow:
 | `dia_bridge_cardano_receiver_balance_lovelace{client_id,receiver_address,deposit_address}` | Per-client Receiver UTxO `balanceLovelace` | Drains by `protocolFee` per oracle update. Fund the labelled `deposit_address` when low; the feeder auto-merges/folds it into the Receiver. |
 | `dia_bridge_cardano_receiver_accrued_lovelace{client_id}` | Per-client Receiver UTxO `accruedToHookLovelace` | Grows by `protocolFee` per oracle update. Settle drains it to the PaymentHook. |
 | `dia_bridge_cardano_payment_hook_accrued_lovelace` | Singleton PaymentHook `accruedFeesLovelace` (DIA-managed) | Grows on each `settle`. DIA withdraws via `payment-hook:withdraw`. |
-| `dia_bridge_cardano_admin_wallet_lovelace` | Operator/signer wallet (off-chain) | Pays Cardano tx fees for every oracle update. Receives PaymentHook withdrawals. |
+| `dia_bridge_cardano_admin_wallet_lovelace` | Operator/signer wallet (off-chain) — total | Pays Cardano tx fees for every oracle update. Receives PaymentHook withdrawals. |
+| `dia_bridge_cardano_admin_wallet_max_utxo_lovelace` | Operator/signer wallet — **largest pure-ADA UTxO** | The collateral signal: a script tx needs a collateral UTxO distinct from its fee inputs, so this — not the total — says whether the wallet can build. Below `admin_wallet_min_collateral_lovelace` the wallet is fragmented; the daemon auto-consolidates. |
 
 All four are refreshed two ways: (1) post-confirm, right after each
 `tx_confirmed`, and (2) on a periodic **balance-refresh poll** that runs
@@ -979,6 +997,30 @@ dashboard shows real balances even when no update is flowing — e.g. when a
 Receiver is empty and updates are stalled, you can still see the Admin wallet
 and PaymentHook balances. A transient provider failure leaves an individual
 gauge unchanged (no misleading 0).
+
+### Automatic fee-loop maintenance (settle / withdraw / consolidate)
+
+The admin/signer wallet drains as it pays Cardano fees; it is refilled by collecting
+protocol revenue (`settle`: Receiver accrued → PaymentHook; `payment-hook:withdraw`:
+PaymentHook → admin wallet). The daemon runs this loop **itself** on the balance-refresh
+poll, each step as a serial lane task (mutually exclusive with updates on the same
+Receiver). Each automatic threshold sits **beyond** its paired alert, so the **alert
+fires first and the automatic step only follows** — enforced by the `threshold-drift`
+test. Each `auto_*` key is optional; unset disables that step.
+
+| Key | Default | Acts when | Paired alert (fires first) |
+| --- | --- | --- | --- |
+| `auto_settle_lovelace` | `30 000 000` (30 ADA) | Receiver accrued ≥ this → auto `settle` | `SettleOverdue` (10 ADA) |
+| `auto_withdraw_lovelace` | `100 000 000` (100 ADA) | PaymentHook accrued ≥ this → auto `payment-hook:withdraw` | `PaymentHookWithdrawReady` (50 ADA) |
+| `auto_consolidate_below_lovelace` | `7 000 000` (7 ADA) | largest wallet UTxO < this → auto `wallet:consolidate` | `AdminWalletFragmented` (10 ADA) |
+
+`wallet:consolidate` is also a manual command (`make cli CMD="wallet:consolidate"` /
+`npm run cli -- wallet:consolidate [--max-inputs 60]`): a plain self-payment that folds
+the wallet's dust into one **dedicated collateral UTxO** + working balance. It needs no
+collateral to build, so it recovers even an all-dust wallet. Full rationale (the fee loop,
+the fragmentation failure, the alert→automatic ordering, and the WASM self-heal) is in
+[Architecture → Fee loop & automatic maintenance](../../docs/architecture/feeder.md#fee-loop--automatic-maintenance-settle--withdraw--consolidate)
+and the [at-a-glance table](../../docs/architecture/feeder.md#alerts--automatic-remediation--at-a-glance).
 
 ## Architecture (see also)
 

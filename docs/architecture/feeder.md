@@ -10,7 +10,7 @@
 ## Contents
 
 - [Overview: what it is, and how it maps to Spectra](#overview-what-it-is-and-how-it-maps-to-spectra)
-- [Concept glossary: consumer, client, router, lane](#concept-glossary-consumer-client-router-lane)
+- [Concept glossary: customer, client, router, lane](#concept-glossary-customer-client-router-lane)
 - [Client funding: side-deposit address + merge](#client-funding-side-deposit-address--merge)
 - [1. What the feeder is (high level)](#1-what-the-feeder-is-high-level)
 - [2. End-to-end flow (from an intent to a Cardano tx)](#2-end-to-end-flow-from-an-intent-to-a-cardano-tx)
@@ -32,6 +32,8 @@
 - [18. Current limitations](#18-current-limitations)
 - [19. Metrics that exist but are NOT in Grafana](#19-metrics-that-exist-but-are-not-in-grafana)
 - [20. lucid WASM build resilience (submission/finality hardening)](#20-lucid-wasm-build-resilience-submissionfinality-hardening)
+- [Fee loop & automatic maintenance (settle / withdraw / consolidate)](#fee-loop--automatic-maintenance-settle--withdraw--consolidate)
+- [Alerts & automatic remediation — at a glance](#alerts--automatic-remediation--at-a-glance)
 - [Where to find everything (documentation map)](#where-to-find-everything-documentation-map)
 - [Open questions & constraints to verify](#open-questions--constraints-to-verify)
 
@@ -62,7 +64,7 @@ full Spectra-parity table; §17 lists exactly what is implemented vs. deferred.
 
 ---
 
-## Concept glossary: consumer, client, router, lane
+## Concept glossary: customer, client, router, lane
 
 Read this section before the pipeline. Most confusion in the feeder comes from using
 "client" to mean two different things. In this repo the terms below are deliberately
@@ -70,30 +72,30 @@ separate.
 
 | Term | What it means | Where it lives | Does it exist on-chain? |
 | --- | --- | --- | --- |
-| **Consumer / customer** | The external party DIA is serving. It is an operational/reporting label. | Router metadata, logs, metrics, dashboards. | No. |
-| **Client deployment** | One Cardano oracle namespace for a consumer: one Receiver UTxO, one deposit address, one Receiver NFT, one per-client pair policy/script set. | `state/<network>_run_<id>/clients/<client>.json` plus the live UTxOs on Cardano. | Yes. |
+| **Customer** | The external party DIA is serving. It is an operational/reporting label: `customer_id` in YAML/metrics, `customerId` in TypeScript/API. | Router metadata, logs, metrics, dashboards. | No. |
+| **Client deployment** | One Cardano oracle namespace for a customer: one Receiver UTxO, one deposit address, one Receiver NFT, one per-client pair policy/script set. | `state/<network>_run_<id>/clients/<client>.json` plus the live UTxOs on Cardano. | Yes. |
 | **Router** | An off-chain feeder config group: which intents are relevant, which destination they go to, and which `time_threshold` / `price_deviation` policy applies. | `offchain/feeder/config/routers/<network>/*.yaml`. | No. |
 | **Destination** | One output target inside a router. For this Cardano feeder, a destination points to `client_state_path` + `protocol_state_path`. | Router YAML. | No, but it references on-chain state files. |
 | **Lane** | The submission/concurrency key: `client_state_path :: protocol_state_path`. One lane means one serial writer for one Receiver. | Feeder runtime (`src/submitter/lane-key.ts`). | No, but it protects one on-chain Receiver UTxO. |
 | **Receiver** | The per-client UTxO that holds prepaid balance, accrued fees, and the Receiver NFT. Every update spends and recreates it. | Cardano, described by the client state JSON. | Yes. |
-| **Deposit address** | The per-client funding address tied to the Receiver NFT. A consumer can send ordinary ADA there; the feeder/CLI later merges it into the Receiver. | Cardano script address derived from the client deployment. | Yes. |
+| **Deposit address** | The per-client funding address tied to the Receiver NFT. A customer can send ordinary ADA there; the feeder/CLI later merges it into the Receiver. | Cardano script address derived from the client deployment. | Yes. |
 | **Pair** | One DIA symbol under one client deployment, e.g. `BTC/USD`. It has a Pair UTxO and Pair NFT under that client's pair policy. | Cardano + `<run>/clients/<client>/pairs/*.json`. | Yes. |
 
 **The rule:** sharing means **one on-chain client deployment, many off-chain routers**.
 It does **not** mean many on-chain clients. A router is not a client deployment; it is
 just feeder configuration.
 
-This is the supported shape for one consumer that wants different policies across
+This is the supported shape for one customer that wants different policies across
 different pair groups:
 
 ```text
-consumer/customer: ACME
+customer: ACME
   on-chain client deployment: acme.json
     Receiver UTxO: one
     deposit address: one
     pair policy/script namespace: one
-  router: acme-majors.yaml    symbols BTC/USD, ETH/USD   policy 0.5% OR 10m
-  router: acme-stables.yaml   symbols USDC/USD, USDT/USD policy 0.1% OR 30m
+  router: acme-router-majors.yaml    symbols BTC/USD, ETH/USD   policy 0.5% OR 10m
+  router: acme-router-stables.yaml   symbols USDC/USD, USDT/USD policy 0.1% OR 30m
   both routers point to the same client_state_path + protocol_state_path
 ```
 
@@ -104,7 +106,7 @@ still keep independent policy/cache state because feeder policy is keyed by
 The hard boundary is symbol overlap on a shared lane. If two routers point to the same
 `client_state_path :: protocol_state_path`, their symbol sets must be **disjoint**.
 The lane coalescer buffers by `symbol` inside that shared lane, so two routers both
-claiming `BTC/USD` are not two independent consumers. The config validator rejects that
+claiming `BTC/USD` are not two independent customers. The config validator rejects that
 dangerous shape at startup.
 
 Create a second on-chain client deployment only when DIA needs a separate Receiver,
@@ -286,7 +288,7 @@ enriched field, not just symbol; all listed conditions must pass.)
 **This is per router, evaluated independently.** Every intent is checked against every
 router separately — there is no single global pass/fail. So the same intent can be
 **accepted by one router and filtered by another at the same time** (e.g. BTC/USD is in
-`client-a-majors.yaml` but not `client-a-stables.yaml`). Those two routers may point to
+`client-a-router-majors.yaml` but not `client-a-router-stables.yaml`). Those two routers may point to
 different on-chain client deployments, or to the same one. That is why
 `intents_filtered_total{reason="condition"}` is counted per `(router_id, symbol)`.
 
@@ -500,9 +502,10 @@ transactions we sent" (per-tx) are different questions. The feeder emits a secon
 
 | Metric | Axis | Meaning |
 | --- | --- | --- |
-| `dia_bridge_transactions_total{client_id,customer,outcome}` | per tx | Transactions, counted once per tx, by outcome (`confirmed`/`failed`). |
-| `dia_bridge_transaction_pairs{client_id,customer,outcome}` | per tx | Histogram of pairs-per-tx (batch size). |
-| `dia_bridge_tx_pair_membership_total{client_id,customer,symbol,outcome}` | per (tx, pair) | Which pairs each tx touched — filter by symbol to find the txs that included a pair without inflating the pure tx counts. |
+| `dia_bridge_transactions_total{client_id,customer_id,outcome}` | per tx | Transactions, counted once per tx, by outcome (`confirmed`/`failed`). |
+| `dia_bridge_transaction_pairs{client_id,customer_id,outcome}` | per tx | Histogram of pairs-per-tx (batch size). |
+| `dia_bridge_transaction_router_membership_total{client_id,customer_id,router_id,outcome}` | per (tx, router) | Which routers contributed at least one member to a tx. This is how mixed-router batches are represented without adding a scalar `router_id` to tx-level counters. |
+| `dia_bridge_tx_pair_membership_total{client_id,customer_id,router_id,destination_index,symbol,outcome}` | per (tx, router destination, pair) | Which router/destination/symbol members each tx touched — filter by symbol or router to find the txs that included that member without inflating pure tx counts. |
 | `dia_bridge_tx_processing_to_submission_seconds` | per tx | Tx-level stage latency (the per-symbol counterpart is phase 4). |
 | `dia_bridge_tx_submission_to_confirmation_seconds` | per tx | Tx-level stage latency (per-symbol counterpart: phase 5). |
 | `dia_bridge_tx_end_to_end_seconds` | per tx | Tx-level end-to-end (per-symbol counterpart: phase 6). |
@@ -574,7 +577,7 @@ confirmed pair-state files before cron/alerting can read it.
 | --- | --- |
 | `processed_events` | Audit log of every `IntentRegistered` + persistent dedup |
 | `chain_state` | **The checkpoint**: up to which block we've scanned — where the scanner resumes |
-| `transaction_log` | In-flight and confirmed Cardano txs (pending→submitted→confirmed/failed) |
+| `transaction_log` | In-flight and confirmed Cardano txs (pending→submitted→confirmed/failed); each row carries the `router_id` / `client_id` / `customer_id` identity of the update |
 | `contract_symbol_updates` | Latest confirmed value per `(chain, contract, symbol)`, upserted on confirm. Cardano keying: `chain` = network magic, `contract` = the client's pair validator address, `symbol` = the pair. Stores `last_price`/`last_timestamp`/`last_nonce`/intent hash/tx hash/`update_count`/fee; `last_nonce` rehydrates the cron's nonce baseline on restart |
 | `performance_metrics` | Time-series of metrics (feeds `/api/v1/performance`) |
 | `alert_log` | Alerts fired / resolved |
@@ -592,6 +595,20 @@ confirmed pair-state files before cron/alerting can read it.
    reconciled `<run>/clients/*/pairs/*.json` files.
 6. Start cron/alerting only after that warm-up, so a restart does not emit false
    `skipped_uninitialised` decisions.
+
+**Operator lifecycle (Docker).** The steps above are the daemon's *warm* restart
+(same persisted state). Operators drive the lifecycle via the Makefile, and the
+**image bakes the compiled binary** — so a source change needs a rebuild:
+
+- `make restart` — warm restart, no data change.
+- `make reset-restart` — wipe runtime state (DB/logs/pairs) + reseed checkpoint + start. For **config-only** (YAML) changes; no rebuild.
+- `make fresh` — **rebuild the image** (so source changes take effect), then wipe the Prometheus/Grafana volumes + DB/logs/pairs, reseed, start. The command to use after **code** changes.
+- `make down VOLUMES=1` — stop and also delete the Prometheus + Grafana named volumes (fresh metrics).
+
+The on-chain deploy (`<run>/config-bootstrap.json`, `<run>/clients/<id>.json`) is a
+bind-mounted artifact and is **never** touched by any of these — only the feeder's
+own runtime state and the monitoring volumes are. See
+[`offchain/feeder/README.md`](../../offchain/feeder/README.md) for the full command reference.
 
 ---
 
@@ -803,19 +820,28 @@ Porting a deployment FROM Spectra to this feeder:
 ## 16. HTTP API
 
 Server on `0.0.0.0:8080`. **No authentication**, rate-limited 60 req/min per IP, CORS
-off by default. **No Swagger/OpenAPI or playground** — it's hand-written REST (a
-possible future improvement).
+off by default. The route table is described by an auto-generated OpenAPI 3.0 document
+(`GET /api/v1/openapi.json`, rendered at `GET /docs`) built from the TypeBox schemas in
+`src/api/routes.ts`.
 
 | Endpoint | Returns |
 | --- | --- |
 | `GET /health`, `/health/ready` | liveness / readiness |
 | `GET /metrics` | **Prometheus, ~50 metrics** (feeds Grafana) |
-| `GET /api/v1/prices` | last confirmed prices per symbol |
+| `GET /api/v1/prices` | last confirmed prices per symbol; each entry carries `routerId` + the resolved `customerId` / `clientId` / `network` |
 | `GET /api/v1/status` | health snapshot (uptime, network, scanner, db) |
 | `GET /api/v1/transactions` | Cardano tx history with status |
+| `GET /api/v1/transactions/{txHash}` | one tx's members; tx-level `network` / `clientId` / `customerId` + `routerIds` (a batch can mix routers on the shared lane), and per-member `routerId` / `clientId` / `customerId` |
 | `GET /api/v1/alerts?active=true` | active alerts |
 | `GET /api/v1/events` | processed `IntentRegistered` events |
 | `GET /api/v1/pools` | worker-pool stats |
+| `GET /api/v1/openapi.json`, `/docs` | generated OpenAPI document |
+
+Every routed update resolves once to a **runtime identity** (`network`, `customerId`,
+`clientId`, `routerId`, `destinationIndex`, `laneKey` — `src/runtime/identity.ts`) that
+is carried through cron, queue, submission, result handling, metrics, logs, the
+`transaction_log` rows, and these API responses, so no stage re-derives the client from a
+path or the customer from a side map.
 
 ---
 
@@ -914,7 +940,7 @@ Per-transaction axis (`feeder-tx.json`): `transactions_total`, `transaction_pair
 | `dia_bridge_events_invalid_total{reason}` | Events rejected at decode/enrich time (malformed, `getIntent` failed). |
 | `dia_bridge_intents_scanned_total{symbol,scanner_type}` | Enriched intents **entering** the routing pipeline. |
 | `dia_bridge_intents_routed_total{symbol,router_id}` | Intents **accepted** by a destination (passed trigger conditions). |
-| `dia_bridge_transactions_submitted_total{symbol,client_id}` | Submission attempts **broadcast** to Cardano (the denominator for success rate, with confirmed/failed). |
+| `dia_bridge_transactions_submitted_total{symbol,client_id,customer_id}` | Submission attempts **broadcast** to Cardano (the denominator for success rate, with confirmed/failed). |
 
 **Latency breakdown (phases 1–5)** — today only phase 6 (end-to-end) is shown. These
 show **WHERE** latency lives:
@@ -924,8 +950,8 @@ show **WHERE** latency lives:
 | `dia_bridge_intent_to_registration_seconds{symbol}` | **Phase 1**: price created → registered on-chain (EVM). DIA/EVM side. |
 | `dia_bridge_registration_to_scan_seconds{symbol}` | **Phase 2**: registered → scanner delivers it. Transport + polling. |
 | `dia_bridge_scan_to_processing_seconds{symbol}` | **Phase 3**: delivered → processing starts. Internal backlog. |
-| `dia_bridge_processing_to_submission_seconds{symbol,client_id}` | **Phase 4**: processing → submitted to Cardano. enrich + route + coalesce time. |
-| `dia_bridge_submission_to_confirmation_seconds{symbol,client_id}` | **Phase 5**: submitted → confirmed. Pure Cardano-chain latency. |
+| `dia_bridge_processing_to_submission_seconds{symbol,client_id,customer_id}` | **Phase 4**: processing → submitted to Cardano. enrich + route + coalesce time. |
+| `dia_bridge_submission_to_confirmation_seconds{symbol,client_id,customer_id}` | **Phase 5**: submitted → confirmed. Pure Cardano-chain latency. |
 
 **Scanner health** (today only `block_lag`):
 
@@ -940,9 +966,9 @@ show **WHERE** latency lives:
 
 | Metric | What it measures |
 | --- | --- |
-| `dia_bridge_transaction_fee_lovelace{symbol,client_id,customer}` | Histogram of lovelace paid **per oracle-update tx** (the Cardano equivalent of EVM gas). Key for cost tracking. |
+| `dia_bridge_transaction_fee_lovelace{symbol,client_id,customer_id}` | Histogram of lovelace paid **per oracle-update tx** (the Cardano equivalent of EVM gas). Key for cost tracking. |
 | `dia_bridge_cardano_receiver_topup_warnings_total{client_id}` | How many times the receiver balance was below threshold after a confirmed tx. |
-| `dia_bridge_cardano_pair_is_create{symbol,client_id}` | Whether the last submission **minted** the pair (1) or **updated** it (0). |
+| `dia_bridge_cardano_pair_is_create{symbol,client_id,customer_id}` | Whether the last submission **minted** the pair (1) or **updated** it (0). |
 
 **Cron service** (today none shown):
 
@@ -967,7 +993,7 @@ show **WHERE** latency lives:
 | `dia_bridge_worker_tasks_dropped_total{pool_type}` | Tasks dropped because the queue was full. **Backpressure signal.** |
 
 **Spectra lifecycle aliases** — duplicate the funnel with Spectra's canonical naming
-(`bridge_intents_*`) plus a `customer` label. Useful if DIA compares dashboards
+(`bridge_intents_*`) plus a `customer_id` label. Useful if DIA compares dashboards
 between Spectra and this feeder:
 
 `dia_bridge_intents_scanned_lifecycle_total`, `dia_bridge_intents_processed_lifecycle_total`,
@@ -1028,6 +1054,20 @@ identical build, retried, succeeds. It is non-deterministic: a full Preview run 
 at `payment-hook:withdraw` immediately after the byte-identical `receiver:withdraw`
 builder had completed cleanly.
 
+There is a second, harder failure form — a **WASM trap**:
+
+```text
+{ Complete: RuntimeError: unreachable }
+```
+
+Unlike the detached-ArrayBuffer blip, a trap can **poison the WASM module for the rest
+of the process**: every subsequent `.complete()` in that process keeps failing while a
+**fresh process** builds the identical tx fine. A live Preview run proved both halves of
+that: the long-running daemon kept trapping for ~13 h while the CLI (a fresh process)
+built the same tx on the first try. The daemon only recovered on restart. Both
+signatures — `detached`/`%TypedArray%` and `unreachable` — are therefore treated as
+"only a fresh process clears this" by the self-exit guard (Layer 3).
+
 ### Why we did NOT upgrade lucid
 
 We investigated the obvious "just bump the dependency" route and rejected it:
@@ -1079,7 +1119,14 @@ module. So the daemon layers on top of Layer 1:
 3. If a WASM-signature build failure still persists *after* the pool retries are
    exhausted, the daemon counts it as a **consecutive** WASM failure (the counter
    resets to 0 on any successful submission — see `src/submitter/wasm-failure-guard.ts`,
-   kept pure for unit testing). Once the count reaches
+   kept pure for unit testing). The classifier (`isProcessRecoverableWasmError`) matches
+   **both** signatures — the detached-ArrayBuffer family **and** the `unreachable` trap —
+   precisely because both only clear on a fresh process. (This is the fix for the ~13 h
+   outage: the classifier previously matched only `detached`, so an `unreachable` trap
+   storm never incremented the counter and the self-exit never fired.) A *non*-WASM
+   failure — e.g. `NonMonotonicNonce`, or a collateral-exhaustion build error that
+   auto-consolidate resolves — leaves the streak unchanged, so the daemon never restarts
+   for a condition a restart cannot fix. Once the count reaches
    `WASM_FATAL_CONSECUTIVE_FAILURES` (default **5**), the daemon logs FATAL and calls
    `process.exit(WASM_FATAL_EXIT_CODE)` — exit code **17**, distinct so a supervisor can
    recognise it.
@@ -1099,6 +1146,91 @@ from persisted DB + pair-state files (§7–§8): Docker Compose uses
 > already-submitted tx."*
 
 ---
+
+## Fee loop & automatic maintenance (settle / withdraw / consolidate)
+
+The admin/signer wallet signs **every** Cardano tx the feeder submits and pays its
+network fee + collateral, so it drains over time. It is refilled by collecting the
+protocol's own revenue — there is no faucet in the loop:
+
+```
+client prepays ─→ [Receiver UTxO]  (balance)
+   each UPDATE deducts a service fee → accumulates as `accrued` inside the Receiver
+   + the admin wallet pays the Cardano network fee and provides collateral
+        │
+  settle ────────┘ drains Receiver.accrued ─→ [PaymentHook]  (revenue contract)
+                                                   │
+  payment-hook:withdraw ───────────────────────────┘ pays withdraw_address
+                                                   = the ADMIN WALLET
+```
+
+Run by hand, this loop is forgettable, and two failure shapes stall the feeder:
+
+- **Wallet empties** — never settled/withdrawn, so network fees bleed it dry.
+- **Wallet fragments** — change accrues into many sub-collateral UTxOs. A script tx
+  needs a collateral UTxO **distinct from its fee inputs**; once every UTxO is below
+  the collateral need the builder traps (`RuntimeError: unreachable`) even though the
+  **total** balance still looks healthy. (This caused a ~13 h Preview outage.)
+
+The daemon therefore runs the loop **itself**, on the balance-refresh tick (the cron
+cadence, `cron_service.tick_interval`), off the same `snapshotBalances` probe that feeds
+the gauges. Each step is a pure decision (`src/submitter/auto-remediation.ts`,
+unit-tested) + a dedup guard + a fire-and-forget **lane task** dispatched on the SAME
+serial per-lane queue the oracle updates use — so an automatic step and an update on the
+same Receiver are **mutually exclusive by construction**, never racing.
+
+| Automatic step | Fires when | Action | Threshold key |
+|---|---|---|---|
+| **auto-merge** | pending side-deposits ≥ floor, or Receiver balance low | fold deposits into the Receiver (`deposit:merge`) | `deposit_pending_merge_lovelace` (+ `receiver_balance_low_lovelace`) |
+| **auto-settle** | Receiver `accrued` ≥ threshold | drain accrued → PaymentHook (`settle`) | `auto_settle_lovelace` |
+| **auto-withdraw** | PaymentHook `accrued` ≥ threshold | PaymentHook → admin wallet (`payment-hook:withdraw`), refilling the wallet | `auto_withdraw_lovelace` |
+| **auto-consolidate** | largest pure-ADA wallet UTxO < threshold | fold dust into a dedicated collateral UTxO + working balance (`wallet:consolidate`) | `auto_consolidate_below_lovelace` |
+
+**Ordering invariant — alert first, automatic after.** Every `auto_*` threshold sits
+**beyond** its paired alert so the operator-facing alert fires *first* and the automatic
+step only follows if the condition keeps developing. For accruals (settle/withdraw) that
+means the auto value is **greater** than the alert; for the shrinking collateral floor it
+is **smaller**. The `threshold-drift` test fails the build if any pairing is violated, so
+an automatic step can never silently pre-empt its alert. Each `auto_*` key is **optional**:
+left unset, that automatic step is disabled (never defaulted).
+
+**Self-heal vs. prevention.** Auto-consolidate is *prevention* — it keeps a
+collateral-capable UTxO so the wallet never collapses. The WASM self-exit (§20) is
+*recovery* — if a hard trap poisons the in-process WASM module anyway, the daemon exits
+17 and the supervisor hands it a fresh process. Together they mean a wedged feeder neither
+happens (prevention) nor needs a human restart (recovery).
+
+## Alerts & automatic remediation — at a glance
+
+Every operational threshold lives in **one** place —
+`infrastructure.<network>.yaml::alerting.*` — mirrored into `monitoring/alerts.yml`
+(Prometheus) and the Grafana panels, with the `threshold-drift` test failing the build on
+any divergence. Preview and Mainnet carry **identical values** (the alerts/dashboard are
+network-agnostic). Current values:
+
+| Key | Value | Drives | Severity / effect |
+|---|---|---|---|
+| `receiver_balance_low_lovelace` | 2 ADA | **ReceiverBalanceLow** alert (+ auto-merge arm) | warning — top up the Receiver |
+| `settle_overdue_lovelace` | 10 ADA | **SettleOverdue** alert | warning — settle is due |
+| `auto_settle_lovelace` | 30 ADA | **auto-settle** (daemon) | acts: drain accrued → PaymentHook |
+| `payment_hook_withdraw_ready_lovelace` | 50 ADA | **PaymentHookWithdrawReady** alert | info — withdraw is available |
+| `auto_withdraw_lovelace` | 100 ADA | **auto-withdraw** (daemon) | acts: PaymentHook → admin wallet |
+| `admin_wallet_low_lovelace` | 5 ADA | **AdminWalletLow** alert (total balance) | critical — wallet near empty |
+| `admin_wallet_min_collateral_lovelace` | 10 ADA | **AdminWalletFragmented** alert (largest UTxO) | critical — no collateral-capable UTxO |
+| `auto_consolidate_below_lovelace` | 7 ADA | **auto-consolidate** (daemon) | acts: defragment + rebuild collateral UTxO |
+| `deposit_pending_merge_lovelace` | 5 ADA | **ReceiverDepositsPending** alert + auto-merge | info — deposits awaiting merge |
+| `oracle_pair_stale_seconds` | 3600 s | **OraclePairStale** alert | warning — no confirm in 1 h |
+| `price_deviation_high_percent` | 5 % | **PriceDeviationHigh** alert | critical — possible misreport |
+| `price_age_high_seconds` | 600 s | **PriceAgeHigh** alert | warning — DIA source stale |
+| `reorg_rate_high_per_hour` | 3 | **ReorgRateHigh** alert | warning — chain provider lagging |
+
+Read each automatic step against the alert directly above/below it: the **alert fires
+first**, the **automatic step follows** only if the condition keeps developing
+(accruals grow past the higher `auto_*`; the largest UTxO shrinks past the lower
+`auto_consolidate_below`). Backing gauges: `dia_bridge_cardano_receiver_balance_lovelace`,
+`..._receiver_accrued_lovelace`, `..._payment_hook_accrued_lovelace`,
+`..._admin_wallet_lovelace` (total) and `..._admin_wallet_max_utxo_lovelace` (largest
+pure-ADA UTxO — the fragmentation signal), `..._deposit_pending_lovelace`.
 
 ## Where to find everything (documentation map)
 

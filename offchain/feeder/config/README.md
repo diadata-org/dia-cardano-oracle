@@ -14,6 +14,7 @@ infrastructure files is documented inline and summarised in
   - [Terminology: router vs client](#terminology-router-vs-client)
   - [Routers](#routers)
   - [Side-deposit thresholds](#side-deposit-thresholds)
+  - [Automatic fee-loop maintenance thresholds](#automatic-fee-loop-maintenance-thresholds)
 
 ## Files
 
@@ -31,22 +32,22 @@ In feeder config, **router** and **client** are not the same thing.
 
 | Name | Meaning |
 | --- | --- |
-| **Consumer / customer** | The business/operator label used in metrics, dashboards, and logs. |
+| **Customer** | The business/operator label used in metrics, dashboards, and logs. In YAML this is `customer_id`. |
 | **Client deployment** | The Cardano-side deployment: one Receiver UTxO, one deposit address, one Receiver NFT, and one pair namespace. It is represented by `client_state_path`. |
 | **Router** | An off-chain YAML config group: symbols, trigger conditions, destination, and policy thresholds. It does not exist on-chain. |
 | **Destination** | The router entry that points to a Cardano client deployment through `cardano.client_state_path` and `cardano.protocol_state_path`. |
 | **Lane** | The feeder submission key `client_state_path :: protocol_state_path`. One lane means one serial queue protecting one Receiver UTxO. |
 
 **Sharing** means one on-chain client deployment with many off-chain routers. It does
-not mean many on-chain clients. Use this when one consumer needs different
+not mean many on-chain clients. Use this when one customer needs different
 `time_threshold` / `price_deviation` policies for different, non-overlapping symbol
 sets, while keeping one Receiver and one deposit address.
 
 ## Routers
 
 Routers are **network-scoped**: each router gets one file under
-`routers/<network>/` (e.g. `routers/preview/client-a.yaml`,
-`routers/mainnet/client-a.yaml`). The feeder loads **only** the folder matching
+`routers/<network>/` (e.g. `routers/preview/client-a-router-default.yaml`,
+`routers/mainnet/client-a-router-majors.yaml`). The feeder loads **only** the folder matching
 the active `CARDANO_NETWORK`, so a Preview router never loads on Mainnet; each
 router's `cardano.network` field is a second guard (a mismatch is skipped with a
 warning).
@@ -56,14 +57,14 @@ router's `triggers.conditions`. See [`../README.md`](../README.md) for how route
 lanes, and the policy gate work.
 
 **Add a new on-chain client deployment:** run the CLI receiver/bootstrap flow to create
-a new `clients/<id>.json` only when the consumer needs a separate Receiver balance,
+a new `clients/<id>.json` only when the customer needs a separate Receiver balance,
 separate deposit address, separate pair namespace, or separate lane throughput.
 
 A router is an **off-chain config grouping**, not an on-chain identity. Multiple
 router files may point at the **same** `cardano.client_state_path` +
 `cardano.protocol_state_path`, which means they share one on-chain client
 deployment: the same Receiver UTxO, deposit address, and per-client pair
-scripts/policy. This is the intended way to give one consumer different
+scripts/policy. This is the intended way to give one customer different
 `time_threshold` / `price_deviation` policies across different pair sets.
 
 When routers share one Cardano destination, keep their symbol sets
@@ -89,3 +90,23 @@ built. The tx-build params (`depositMinLovelace`, `depositMaxPerMerge`,
 `depositMaxPerUpdateFold`) live in the CLI protocol state
 `config-bootstrap.json::configState`, not in this YAML.
 See [`../README.md` → Client funding (side-deposits)](../README.md#client-funding-side-deposits).
+
+## Automatic fee-loop maintenance thresholds
+
+The daemon also keeps the fee loop healthy on its own — `settle` (Receiver
+accrued → PaymentHook), `payment-hook:withdraw` (PaymentHook → admin wallet),
+and `wallet:consolidate` (defragment the admin wallet into a dedicated collateral
+UTxO). These `alerting.*` keys decide **when** each automatic step acts:
+
+| Key | Role |
+| --- | --- |
+| `auto_settle_lovelace` | Daemon auto-runs `settle` once a Receiver's accrued reaches this. Must be **>** `settle_overdue_lovelace` (the alert fires first). |
+| `auto_withdraw_lovelace` | Daemon auto-runs `payment-hook:withdraw` once the PaymentHook accrued reaches this. Must be **>** `payment_hook_withdraw_ready_lovelace`. |
+| `admin_wallet_min_collateral_lovelace` | Largest pure-ADA wallet UTxO below this → `AdminWalletFragmented` alert (the wallet can't back collateral). |
+| `auto_consolidate_below_lovelace` | Daemon auto-runs `wallet:consolidate` once the largest wallet UTxO falls below this. Must be **<** `admin_wallet_min_collateral_lovelace` (the alert fires first). |
+
+Each `auto_*` key is **optional**: unset disables that automatic step (never
+defaulted). The **ordering invariant** (each `auto_*` beyond its paired alert, so
+the alert fires first and the automatic step only follows) is enforced by the
+`threshold-drift` test. Full rationale:
+[Architecture → Fee loop & automatic maintenance](../../../docs/architecture/feeder.md#fee-loop--automatic-maintenance-settle--withdraw--consolidate).

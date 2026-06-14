@@ -38,6 +38,14 @@ ARGS ?=
 #   make down              → stops everything (feeder + monitoring)
 MON_PROFILE := $(if $(MONITORING),--profile monitoring,)
 
+# Volume toggle. Set VOLUMES=1 on `down` to ALSO delete this network's named
+# volumes (Prometheus TSDB + Grafana data) → fresh metrics/dashboards on the next
+# `up`. The bind-mounted ../state (feeder DB, logs, on-chain deploy) is NOT a
+# named volume and is therefore NEVER touched by this. `make fresh` always wipes.
+#   make down              → stop, keep volumes (safe default)
+#   make down VOLUMES=1    → stop + delete Prometheus + Grafana volumes
+VOL_FLAG := $(if $(VOLUMES),--volumes,)
+
 # One-off feeder sub-commands run through the FEEDER binary inside the image
 # (NOT dia-cli). They override the daemon command on the feeder-sqlite service
 # so they share its volumes (./state, ./config) and .env. --no-deps avoids
@@ -76,8 +84,8 @@ up-postgres: generate-monitoring ## Start the feeder daemon, Postgres backend (a
 # touches services whose profile is active. Without listing them all here,
 # `down` matches nothing and leaves the feeder + monitoring stack running.
 .PHONY: down
-down: ## Stop everything for the CURRENT network (all profiles; other network untouched)
-	$(COMPOSE) --profile sqlite --profile postgres --profile cli --profile monitoring down --remove-orphans
+down: ## Stop everything for the CURRENT network (all profiles; other network untouched). Add VOLUMES=1 to ALSO delete the Prometheus + Grafana volumes (fresh metrics; ../state/contracts untouched).
+	$(COMPOSE) --profile sqlite --profile postgres --profile cli --profile monitoring down $(VOL_FLAG) --remove-orphans
 
 # Stops BOTH network stacks regardless of feeder/.env — use it when you are not
 # sure which network is up, or to tear everything down before maintenance.
@@ -129,9 +137,9 @@ run-all: ## Full on-chain deployment runbook end to end. Pass ARGS="--from-step 
 teardown: ## Decommission runbook (recover ADA). Pass ARGS="--run-id ID --from-step N --skip-singleton-burns"
 	$(COMPOSE) --profile cli run --rm --entrypoint bash cli scripts/run-teardown-cli.sh $(ARGS)
 
-.PHONY: init-client
-init-client: ## Import client JSON + generate router YAML interactively (feeder init client)
-	$(FEEDER_RUN_IT) init client
+.PHONY: init-router
+init-router: ## Generate a router YAML from a client's JSON, interactively (feeder init router)
+	$(FEEDER_RUN_IT) init router
 
 .PHONY: checkpoint-get
 checkpoint-get: ## Print the current scanner checkpoint
@@ -156,8 +164,20 @@ reset: ## Delete feeder runtime state (DB + logs + pairs) and exit; keeps CLI bo
 	$(FEEDER_RUN) reset
 
 .PHONY: reset-restart
-reset-restart: ## Restart clean - wipe DB + logs + pairs, reseed checkpoint, start daemon (MONITORING=1 opt)
+reset-restart: ## Restart clean - wipe DB + logs + pairs, reseed checkpoint, start daemon (MONITORING=1 opt). Does NOT rebuild the image — use `fresh` after CODE changes.
 	-$(COMPOSE) --profile sqlite stop feeder-sqlite
+	$(FEEDER_RUN) reset
+	$(FEEDER_RUN) checkpoint set --from-latest
+	$(COMPOSE) --profile sqlite $(MON_PROFILE) up -d
+
+# THE command after changing CODE (TypeScript): rebuilds the image so the new
+# code actually runs, then wipes ALL runtime state for a clean slate. The
+# on-chain deploy in ../state (config-bootstrap.json, clients/<id>.json) is kept.
+# For config-only (YAML) changes, `reset-restart` is enough (no rebuild needed).
+.PHONY: fresh
+fresh: generate-monitoring ## FULL clean restart on CURRENT code — stop + wipe Prometheus/Grafana volumes, REBUILD image, wipe feeder DB+logs+pairs, reseed checkpoint, start. Keeps on-chain deploy. (MONITORING=1 for Prom+Grafana)
+	$(COMPOSE) --profile sqlite --profile postgres --profile cli --profile monitoring down --volumes --remove-orphans
+	$(COMPOSE) --profile sqlite build
 	$(FEEDER_RUN) reset
 	$(FEEDER_RUN) checkpoint set --from-latest
 	$(COMPOSE) --profile sqlite $(MON_PROFILE) up -d
