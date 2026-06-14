@@ -73,9 +73,21 @@
       "types": "./dist/transactions/deposit.d.ts",
       "default": "./dist/transactions/deposit.js"
     },
+    "./transactions/settle": {
+      "types": "./dist/transactions/settle.d.ts",
+      "default": "./dist/transactions/settle.js"
+    },
+    "./transactions/payment-hook-withdraw": {
+      "types": "./dist/transactions/payment-hook-withdraw.d.ts",
+      "default": "./dist/transactions/payment-hook-withdraw.js"
+    },
     "./wallet/wallet": {
       "types": "./dist/wallet/wallet.d.ts",
       "default": "./dist/wallet/wallet.js"
+    },
+    "./wallet/wallet-consolidate": {
+      "types": "./dist/wallet/wallet-consolidate.d.ts",
+      "default": "./dist/wallet/wallet-consolidate.js"
     }
   },
   "scripts": {

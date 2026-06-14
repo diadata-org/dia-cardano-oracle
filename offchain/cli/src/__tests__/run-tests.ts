@@ -75,6 +75,7 @@ import { collectTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { buildPairApplyUpdateRedeemer } from "../core/redeemers.js";
 import { writeStateJsonFile } from "../core/state.js";
 import { depositFund, isCleanAdaDeposit } from "../transactions/deposit.js";
+import { selectConsolidationUtxos } from "../wallet/wallet-consolidate.js";
 import { resolveClientUtxoRefs } from "../transactions/reclaim-reference-script.js";
 import { completeWithRetry } from "../core/tx-build.js";
 import { resolveRunStateDir, latestRunDir } from "../core/run-state.js";
@@ -94,6 +95,7 @@ testProtocolInitAuthorizedKeysFromEnv();
 testClientStateInit();
 await testDepositFundReadsFloorFromConfigState();
 testDepositMergeSelectionFiltersAndCaps();
+testConsolidationUtxoSelection();
 await testRunStateResolution();
 
 // --- Datum encoder/decoder regression tests ---------------------------------
@@ -718,6 +720,46 @@ function testDepositMergeSelectionFiltersAndCaps(): void {
     select([mkUtxo({ assets: { lovelace: 500_000n } }), mkUtxo({ assets: { lovelace: 9n, [TOKEN_UNIT]: 1n } })], FLOOR, 20).length,
     0,
     "all-dust / all-token-junk yields no eligible deposits",
+  );
+}
+
+// wallet:consolidate selection — pure-ADA UTxOs only (collateral must be pure
+// ADA), smallest first (the dust is what blocks collateral), capped at maxInputs.
+function testConsolidationUtxoSelection(): void {
+  const TOKEN_UNIT = `${"aa".repeat(28)}4449415f5245434549564552`;
+  const mk = (txHash: string, assets: Record<string, bigint>): UTxO => ({
+    txHash,
+    outputIndex: 0,
+    address: "addr_test1qpgtest",
+    assets,
+  });
+
+  // Mixed wallet: pure-ADA of various sizes + one token-bearing UTxO.
+  const utxos = [
+    mk("03".repeat(32), { lovelace: 3_000_000n }),
+    mk("01".repeat(32), { lovelace: 1_000_000n }),
+    mk("tk".padEnd(64, "a"), { lovelace: 9_000_000n, [TOKEN_UNIT]: 1n }), // token → excluded
+    mk("02".repeat(32), { lovelace: 2_000_000n }),
+  ];
+
+  const selected = selectConsolidationUtxos(utxos, 60);
+  assert.deepEqual(
+    selected.map((u) => u.assets.lovelace),
+    [1_000_000n, 2_000_000n, 3_000_000n],
+    "pure-ADA only, smallest first; the token UTxO is left untouched",
+  );
+
+  // Cap bounds the input count (tx-size safety); smallest first means the dust
+  // that blocks collateral is always swept first.
+  const many = Array.from({ length: 10 }, (_u, i) =>
+    mk(i.toString().padStart(64, "0"), { lovelace: BigInt((i + 1) * 1_000_000) }),
+  );
+  const capped = selectConsolidationUtxos(many, 4);
+  assert.equal(capped.length, 4, "selection is capped at maxInputs");
+  assert.deepEqual(
+    capped.map((u) => u.assets.lovelace),
+    [1_000_000n, 2_000_000n, 3_000_000n, 4_000_000n],
+    "the four smallest pure-ADA UTxOs are chosen",
   );
 }
 
@@ -2114,6 +2156,22 @@ async function testEmulatorProtocolFlowConfigBootstrap(): Promise<void> {
     absorbStep!.ok,
     true,
     `update:absorb-deposit should succeed; got error: ${"error" in absorbStep! ? absorbStep!.error : ""}`,
+  );
+  // Multi-client / multi-receiver coverage: the flow onboards a second client
+  // (client-b) and runs ONE `settle:multi` tx that drains BOTH client-a and
+  // client-b receivers into the shared PaymentHook (its in-body assertions check
+  // exactly 2 settled receivers, each drained > 0, and both accrued cleared to 0).
+  // Asserting the step by name guards that the multi-client path can never
+  // silently drop out of the orchestrator.
+  const settleMultiStep = report.steps.find((s) => s.label === "settle:multi");
+  assert.ok(
+    settleMultiStep,
+    "emulator flow should include a settle:multi step draining two receivers (client-a + client-b)",
+  );
+  assert.equal(
+    settleMultiStep!.ok,
+    true,
+    `settle:multi should succeed; got error: ${"error" in settleMultiStep! ? settleMultiStep!.error : ""}`,
   );
   for (const step of report.steps) {
     assert.equal(

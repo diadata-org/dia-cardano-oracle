@@ -46,6 +46,7 @@ function printUsage(): void {
   npm run cli -- wallet:create
   npm run cli -- wallet
   npm run cli -- wallet:utxos
+  npm run cli -- wallet:consolidate [--max-inputs 60] [--build-only]
   npm run cli -- wallet:defaults
   npm run cli -- ethereum-wallet:create
   Paths use ../state/<network>_run_<id>/...; when omitted, commands use RUN_ID or the newest run dir.
@@ -258,6 +259,22 @@ async function run(): Promise<void> {
       const { walletUtxos } = await import("./wallet/wallet.js");
       getCliConfig();
       const result = await walletUtxos();
+      printJson(result);
+      return;
+    }
+
+    case "wallet:consolidate": {
+      const { consolidateWallet } = await import("./wallet/wallet-consolidate.js");
+      getCliConfig();
+      const maxInputsRaw = optionalFlagValue("--max-inputs");
+      const maxInputs = maxInputsRaw === undefined ? 60 : Number(maxInputsRaw);
+      if (!Number.isInteger(maxInputs) || maxInputs < 2) {
+        throw new Error("--max-inputs must be an integer >= 2.");
+      }
+      const result = await consolidateWallet({
+        maxInputs,
+        buildOnly: hasBuildOnlyFlag(),
+      });
       printJson(result);
       return;
     }
