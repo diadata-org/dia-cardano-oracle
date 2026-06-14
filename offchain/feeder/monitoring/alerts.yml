@@ -251,6 +251,38 @@ groups:
             a minute before acting — the 5-minute `for:` window usually covers it.
 
       # ---------------------------------------------------------------------
+      - alert: AdminWalletFragmented
+        expr: >
+          dia_bridge_cardano_admin_wallet_max_utxo_lovelace / 1000000 < 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Admin wallet has no collateral-capable UTxO — builds will trap"
+          description: >
+            The Admin (signer) wallet's LARGEST pure-ADA UTxO is
+            {{ $value | printf "%.2f" }} ADA (alert fires below 10 ADA). A Cardano
+            script tx (every oracle update, settle, withdraw) needs a collateral
+            UTxO DISTINCT from its fee inputs. When the wallet shatters into many
+            sub-collateral UTxOs the TOTAL balance can still look healthy while
+            NO single UTxO can back collateral — every build then traps with
+            "RuntimeError: unreachable" and all updates stall. This alert watches
+            the largest UTxO precisely because AdminWalletLow (which watches the
+            total) is blind to fragmentation.
+
+            WHAT TO DO: consolidate the wallet's dust into one fat UTxO + a
+            dedicated collateral UTxO. The feeder AUTO-CONSOLIDATES below
+            `alerting.auto_consolidate_below_lovelace` (this alert fires first, at
+            a higher value), so usually no action is needed — it self-heals on the
+            next balance tick. If you need to force it:
+              Docker: cd offchain && make cli CMD="wallet:consolidate"
+              npm:    cd offchain/cli && npm run cli -- wallet:consolidate
+
+            NOTE: right after a restart this metric can briefly read 0 before the
+            feeder reads the real on-chain balance; the 5-minute `for:` window
+            usually covers it.
+
+      # ---------------------------------------------------------------------
       - alert: PriceDeviationHigh
         expr: >
           histogram_quantile(0.95,

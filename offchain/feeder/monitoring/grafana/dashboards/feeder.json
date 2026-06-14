@@ -86,7 +86,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (symbol) (dia_bridge_transactions_confirmed_total{symbol=~\"$symbol\", client_id=~\"$client\"})",
+          "expr": "sum by (symbol) (dia_bridge_transactions_confirmed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"})",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -144,7 +144,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_age_seconds_bucket{symbol=~\"$symbol\"}[1h])))",
+          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_age_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\"}[1h])))",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -214,7 +214,7 @@
       },
       "targets": [
         {
-          "expr": "time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds{symbol=~\"$symbol\", client_id=~\"$client\"}",
+          "expr": "time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -273,7 +273,7 @@
       },
       "targets": [
         {
-          "expr": "dia_bridge_cardano_receiver_balance_lovelace{client_id=~\"$client\"} / 1000000",
+          "expr": "dia_bridge_cardano_receiver_balance_lovelace{network=~\"$network\", client_id=~\"$client\"} / 1000000",
           "legendFormat": "{{client_id}}",
           "refId": "A"
         }
@@ -378,22 +378,82 @@
       },
       "targets": [
         {
-          "expr": "dia_bridge_cardano_admin_wallet_lovelace / 1000000",
+          "expr": "dia_bridge_cardano_admin_wallet_lovelace{network=~\"$network\"} / 1000000",
           "legendFormat": "Admin wallet",
           "refId": "A"
         },
         {
-          "expr": "dia_bridge_cardano_payment_hook_accrued_lovelace / 1000000",
+          "expr": "dia_bridge_cardano_payment_hook_accrued_lovelace{network=~\"$network\"} / 1000000",
           "legendFormat": "PaymentHook accrued",
           "refId": "B"
         },
         {
-          "expr": "sum(dia_bridge_cardano_receiver_accrued_lovelace) / 1000000",
+          "expr": "sum(dia_bridge_cardano_receiver_accrued_lovelace{network=~\"$network\"}) / 1000000",
           "legendFormat": "Receiver accrued (sum)",
           "refId": "C"
         }
       ],
       "title": "Admin wallet • PaymentHook • Receiver accrued — ADA",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Largest single pure-ADA UTxO in the admin/signer wallet (all clients). A script tx needs a collateral UTxO distinct from its fee inputs, so THIS — not the total — determines whether the wallet can build. Below the collateral floor the wallet is fragmented (AdminWalletFragmented, critical) even if the total looks healthy; the daemon auto-consolidates below auto_consolidate_below_lovelace.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ADA",
+          "decimals": 2,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 10
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 18
+      },
+      "id": 201,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "dia_bridge_cardano_admin_wallet_max_utxo_lovelace{network=~\"$network\"} / 1000000",
+          "legendFormat": "Largest UTxO",
+          "refId": "A"
+        }
+      ],
+      "title": "Admin wallet — largest UTxO — ADA (collateral floor)",
       "type": "stat"
     },
     {
@@ -427,7 +487,7 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 0,
+        "x": 8,
         "y": 18
       },
       "id": 15,
@@ -443,7 +503,7 @@
       },
       "targets": [
         {
-          "expr": "dia_bridge_cardano_deposit_pending_lovelace{client_id=~\"$client\"} / 1000000",
+          "expr": "dia_bridge_cardano_deposit_pending_lovelace{network=~\"$network\", client_id=~\"$client\"} / 1000000",
           "legendFormat": "{{client_id}}",
           "refId": "A"
         }
@@ -493,17 +553,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -541,7 +601,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (symbol) (increase(dia_bridge_transactions_confirmed_total{symbol=~\"$symbol\", client_id=~\"$client\"}[5m]))",
+          "expr": "sum by (symbol) (increase(dia_bridge_transactions_confirmed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[5m]))",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -579,7 +639,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (error_code) (increase(dia_bridge_transactions_failed_total{symbol=~\"$symbol\", client_id=~\"$client\", error_code=~\"$error_code\"}[5m]))",
+          "expr": "sum by (error_code) (increase(dia_bridge_transactions_failed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", error_code=~\"$error_code\"}[5m]))",
           "legendFormat": "{{error_code}}",
           "refId": "A"
         }
@@ -629,7 +689,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (outcome) (increase(dia_bridge_transactions_total{client_id=~\"$client\", customer=~\"$customer\"}[5m]))",
+          "expr": "sum by (outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
           "legendFormat": "{{outcome}}",
           "refId": "A"
         }
@@ -667,12 +727,12 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         }
@@ -742,7 +802,7 @@
       },
       "targets": [
         {
-          "expr": "sum(increase(dia_bridge_transactions_reorg_total{symbol=~\"$symbol\", client_id=~\"$client\"}[1h]))",
+          "expr": "sum(increase(dia_bridge_transactions_reorg_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[1h]))",
           "legendFormat": "reorgs / 1h",
           "refId": "A"
         }
@@ -780,7 +840,7 @@
       },
       "targets": [
         {
-          "expr": "dia_bridge_scanner_block_lag",
+          "expr": "dia_bridge_scanner_block_lag{network=~\"$network\"}",
           "legendFormat": "block lag",
           "refId": "A"
         }
@@ -818,7 +878,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (reason) (increase(dia_bridge_intents_filtered_total{symbol=~\"$symbol\"}[5m]))",
+          "expr": "sum by (reason) (increase(dia_bridge_intents_filtered_total{network=~\"$network\", symbol=~\"$symbol\"}[5m]))",
           "legendFormat": "{{reason}}",
           "refId": "A"
         }
@@ -888,7 +948,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket{symbol=~\"$symbol\"}[1h])))",
+          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket{network=~\"$network\", symbol=~\"$symbol\"}[1h])))",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -929,7 +989,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket{symbol=~\"$symbol\"}[5m]))",
+          "expr": "sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket{network=~\"$network\", symbol=~\"$symbol\"}[5m]))",
           "legendFormat": "{{symbol}} le={{le}}",
           "refId": "A",
           "format": "heatmap"
@@ -980,12 +1040,50 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, customer) (rate(dia_bridge_transaction_fee_lovelace_bucket{symbol=~\"$symbol\", client_id=~\"$client\", customer=~\"$customer\"}[5m])))",
-          "legendFormat": "{{customer}}",
+          "expr": "histogram_quantile(0.50, sum by (le, customer_id) (rate(dia_bridge_transaction_fee_lovelace_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "{{customer_id}}",
           "refId": "A"
         }
       ],
       "title": "Tx fee p50 — lovelace (per customer)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Transactions that involved each router per 5-minute window, by outcome. A coalesced batch can mix routers on one shared lane, so this is tx↔router membership (one tx can credit several routers), not a pure tx count. Filter with $network / $customer / $client / $router.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 79
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (router_id, outcome) (increase(dia_bridge_transaction_router_membership_total{network=~\"$network\", customer_id=~\"$customer\", client_id=~\"$client\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{router_id}} · {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx involving router (5m, by router & outcome)",
       "type": "timeseries"
     }
   ],
@@ -1019,11 +1117,31 @@
         "includeAll": true,
         "allValue": ".*",
         "multi": true,
+        "label": "Network",
+        "name": "network",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total, network)",
+          "refId": "network"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
         "label": "Customer",
         "name": "customer",
         "options": [],
         "query": {
-          "query": "label_values(dia_bridge_transactions_total, customer)",
+          "query": "label_values(dia_bridge_transactions_total{network=~\"$network\"}, customer_id)",
           "refId": "customer"
         },
         "refresh": 2,
@@ -1043,8 +1161,28 @@
         "name": "client",
         "options": [],
         "query": {
-          "query": "label_values(dia_bridge_transactions_total{customer=~\"$customer\"}, client_id)",
+          "query": "label_values(dia_bridge_transactions_total{network=~\"$network\", customer_id=~\"$customer\"}, client_id)",
           "refId": "client"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Router",
+        "name": "router",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transaction_router_membership_total{network=~\"$network\", customer_id=~\"$customer\", client_id=~\"$client\"}, router_id)",
+          "refId": "router"
         },
         "refresh": 2,
         "type": "query"
@@ -1063,7 +1201,7 @@
         "name": "symbol",
         "options": [],
         "query": {
-          "query": "label_values(dia_bridge_tx_pair_membership_total{customer=~\"$customer\", client_id=~\"$client\"}, symbol)",
+          "query": "label_values(dia_bridge_tx_pair_membership_total{network=~\"$network\", customer_id=~\"$customer\", client_id=~\"$client\", router_id=~\"$router\"}, symbol)",
           "refId": "symbol"
         },
         "refresh": 2,

@@ -37,11 +37,29 @@ const ALERT_TO_YAML: Record<string, { yamlKey: string; divisor: number }> = {
   SettleOverdue: { yamlKey: "settle_overdue_lovelace", divisor: 1_000_000 },
   PaymentHookWithdrawReady: { yamlKey: "payment_hook_withdraw_ready_lovelace", divisor: 1_000_000 },
   AdminWalletLow: { yamlKey: "admin_wallet_low_lovelace", divisor: 1_000_000 },
+  AdminWalletFragmented: { yamlKey: "admin_wallet_min_collateral_lovelace", divisor: 1_000_000 },
   PriceDeviationHigh: { yamlKey: "price_deviation_high_percent", divisor: 1 },
   PriceAgeHigh: { yamlKey: "price_age_high_seconds", divisor: 1 },
   ReorgRateHigh: { yamlKey: "reorg_rate_high_per_hour", divisor: 1 },
   ReceiverDepositsPending: { yamlKey: "deposit_pending_merge_lovelace", divisor: 1_000_000 },
 };
+
+// Automatic-remediation thresholds. These drive FEEDER BEHAVIOUR (auto settle /
+// withdraw / consolidate), not a Prometheus rule, so they have no alert mapping.
+// Each must sit BEYOND its paired alert so the alert fires FIRST and the
+// automatic step only follows — asserted by the "ordering invariant" test below.
+//   direction "above": auto value must be > the alert value (accruals grow)
+//   direction "below": auto value must be < the alert value (collateral shrinks)
+const AUTO_REMEDIATION_ORDERING: Array<{
+  autoKey: string;
+  alertKey: string;
+  direction: "above" | "below";
+}> = [
+  { autoKey: "auto_settle_lovelace", alertKey: "settle_overdue_lovelace", direction: "above" },
+  { autoKey: "auto_withdraw_lovelace", alertKey: "payment_hook_withdraw_ready_lovelace", direction: "above" },
+  { autoKey: "auto_consolidate_below_lovelace", alertKey: "admin_wallet_min_collateral_lovelace", direction: "below" },
+];
+const AUTO_REMEDIATION_KEYS = new Set(AUTO_REMEDIATION_ORDERING.map((o) => o.autoKey));
 
 /** Pull the threshold (the operand of the final `<`/`>` comparison) from a PromQL expr. */
 function thresholdFromExpr(expr: string): number {
@@ -103,11 +121,35 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     assert.deepEqual(loadAlerting("infrastructure.preview.yaml"), loadAlerting("infrastructure.mainnet.yaml"));
   });
 
-  it("every alerting key is consumed by exactly one alert mapping (no orphan keys)", () => {
+  it("every alerting key is consumed by an alert mapping or an auto-remediation threshold (no orphan keys)", () => {
     const yaml = loadAlerting("infrastructure.preview.yaml");
     const mapped = new Set(Object.values(ALERT_TO_YAML).map((m) => m.yamlKey));
     for (const key of Object.keys(yaml)) {
-      assert.ok(mapped.has(key), `alerting.${key} has no alert/dashboard binding — wire it or remove it`);
+      assert.ok(
+        mapped.has(key) || AUTO_REMEDIATION_KEYS.has(key),
+        `alerting.${key} has no alert/dashboard binding and is not an auto-remediation threshold — wire it or remove it`,
+      );
+    }
+  });
+
+  it("auto-remediation thresholds sit BEYOND their paired alert (alert fires first, automatic follows)", () => {
+    const yaml = loadAlerting("infrastructure.preview.yaml");
+    for (const { autoKey, alertKey, direction } of AUTO_REMEDIATION_ORDERING) {
+      const auto = yaml[autoKey];
+      const alert = yaml[alertKey];
+      assert.ok(auto !== undefined, `alerting.${autoKey} is missing`);
+      assert.ok(alert !== undefined, `alerting.${alertKey} is missing`);
+      if (direction === "above") {
+        assert.ok(
+          auto > alert,
+          `alerting.${autoKey} (${auto}) must be > alerting.${alertKey} (${alert}) so the alert fires before the auto step`,
+        );
+      } else {
+        assert.ok(
+          auto < alert,
+          `alerting.${autoKey} (${auto}) must be < alerting.${alertKey} (${alert}) so the alert fires before the auto step`,
+        );
+      }
     }
   });
 
@@ -134,7 +176,7 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
       return `${r.annotations?.summary ?? ""} ${r.annotations?.description ?? ""}`;
     };
     // ADA-denominated alerts must mention "<N> ADA" in their text.
-    for (const alert of ["ReceiverBalanceLow", "SettleOverdue", "PaymentHookWithdrawReady", "AdminWalletLow", "ReceiverDepositsPending"]) {
+    for (const alert of ["ReceiverBalanceLow", "SettleOverdue", "PaymentHookWithdrawReady", "AdminWalletLow", "AdminWalletFragmented", "ReceiverDepositsPending"]) {
       const { yamlKey } = ALERT_TO_YAML[alert]!;
       const ada = yaml[yamlKey]! / 1_000_000;
       assert.match(prose(alert), new RegExp(`\\b${ada}\\s*ADA\\b`), `${alert} prose missing "${ada} ADA"`);
@@ -156,6 +198,14 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     assert.equal(step(wallets, "green"), yaml.admin_wallet_low_lovelace / 1_000_000);
     assert.equal(overrideStep(wallets, "PaymentHook accrued", "yellow"), yaml.payment_hook_withdraw_ready_lovelace / 1_000_000);
     assert.equal(overrideStep(wallets, "Receiver accrued (sum)", "yellow"), yaml.settle_overdue_lovelace / 1_000_000);
+
+    // Fragmentation panel — largest pure-ADA UTxO vs the collateral floor.
+    // Floor convention (same as the admin-wallet panel above): green AT the
+    // floor value, red below it.
+    assert.equal(
+      step(panelByTitle(panels, "Admin wallet — largest UTxO — ADA (collateral floor)"), "green"),
+      yaml.admin_wallet_min_collateral_lovelace / 1_000_000,
+    );
   });
 
   it("dashboard has no dead template variables (every filter var is wired to a panel)", () => {
@@ -165,12 +215,12 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     };
     assert.deepEqual(
       dashboard.templating.list.map((v) => v.name),
-      ["datasource", "customer", "client", "symbol", "error_code"],
+      ["datasource", "network", "customer", "client", "router", "symbol", "error_code"],
       "remove unused template vars or wire them to a panel",
     );
     // Every non-datasource var must be referenced by at least one panel target expr.
     const exprs = dashboard.panels.flatMap((p) => (p.targets ?? []).map((t) => t.expr ?? ""));
-    for (const name of ["client", "symbol", "customer", "error_code"]) {
+    for (const name of ["network", "customer", "client", "router", "symbol", "error_code"]) {
       assert.ok(
         exprs.some((e) => e.includes(`$${name}`)),
         `template var $${name} is not referenced by any panel target expr`,
@@ -185,11 +235,11 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     };
     assert.deepEqual(
       dashboard.templating.list.map((v) => v.name),
-      ["datasource", "customer", "client", "symbol"],
+      ["datasource", "network", "customer", "client", "router", "symbol"],
       "feeder-tx.json: remove unused template vars or wire them to a panel",
     );
     const exprs = dashboard.panels.flatMap((p) => (p.targets ?? []).map((t) => t.expr ?? ""));
-    for (const name of ["client", "symbol", "customer"]) {
+    for (const name of ["network", "customer", "client", "router", "symbol"]) {
       assert.ok(
         exprs.some((e) => e.includes(`$${name}`)),
         `feeder-tx.json: template var $${name} is not referenced by any panel target expr`,

@@ -39,6 +39,10 @@ export type FeederMetrics = {
   /** Distribution of pairs-per-transaction (batch size), one observation per
    *  tx, partitioned by `outcome`. Answers "how big are our batches". */
   transactionPairs: FeedHistogram;
+  /** One increment per (transaction, router): which routers contributed at
+   *  least one member to the tx. Pure tx counters intentionally do not carry a
+   *  scalar router_id because one tx can batch multiple routers on one lane. */
+  transactionRouterMembership: FeedCounter;
   /** One increment per (transaction, symbol): which pairs each tx touched,
    *  partitioned by `outcome`. Lets a dashboard filtered by symbol surface the
    *  transactions that included that pair without inflating the pure tx counts
@@ -94,6 +98,7 @@ export type FeederMetrics = {
   /** Total lovelace held by the admin (signer) wallet that pays Cardano
    *  tx fees. Singleton — no labels. */
   cardanoAdminWalletLovelace: FeedGauge;
+  cardanoAdminWalletMaxUtxoLovelace: FeedGauge;
   cardanoReceiverTopupWarnings: FeedCounter;
   /** Sum of clean, un-merged ADA deposits waiting at the client's side-deposit
    *  address (`receiver.depositValidatorAddress`). A `deposit:merge` folds
@@ -175,6 +180,7 @@ export const noopMetrics: FeederMetrics = {
   transactionsReorg: noopCounter,
   transactionsTotal: noopCounter,
   transactionPairs: noopHistogram,
+  transactionRouterMembership: noopCounter,
   txPairMembership: noopCounter,
   txProcessingToSubmissionSeconds: noopHistogram,
   txSubmissionToConfirmationSeconds: noopHistogram,
@@ -197,6 +203,7 @@ export const noopMetrics: FeederMetrics = {
   cardanoReceiverAccruedLovelace: noopGauge,
   cardanoPaymentHookAccruedLovelace: noopGauge,
   cardanoAdminWalletLovelace: noopGauge,
+  cardanoAdminWalletMaxUtxoLovelace: noopGauge,
   cardanoReceiverTopupWarnings: noopCounter,
   cardanoDepositPendingLovelace: noopGauge,
   cardanoPairIsCreate: noopGauge,
@@ -336,55 +343,60 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     transactionsSubmitted: counter(
       "transactions_submitted_total",
       "Cardano submission attempts broadcast to the chain",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer_id"],
     ),
     transactionsConfirmed: counter(
       "transactions_confirmed_total",
       "Cardano submission attempts confirmed on-chain",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer_id"],
     ),
     transactionsFailed: counter(
       "transactions_failed_total",
       "Cardano submission attempts that failed",
-      ["symbol", "client_id", "error_code"],
+      ["symbol", "client_id", "customer_id", "error_code"],
     ),
     transactionsReorg: counter(
       "transactions_reorg_total",
       "Cardano transactions dropped by a rollback after submission",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer_id"],
     ),
     transactionsTotal: counter(
       "transactions_total",
       "Cardano transactions, counted once per tx (not per symbol), by outcome",
-      ["client_id", "customer", "outcome"],
+      ["client_id", "customer_id", "outcome"],
     ),
     transactionPairs: histogram(
       "transaction_pairs",
       "Pairs per Cardano transaction (batch size), one observation per tx",
-      ["client_id", "customer", "outcome"],
+      ["client_id", "customer_id", "outcome"],
       BATCH_SIZE_BUCKETS,
     ),
     txPairMembership: counter(
       "tx_pair_membership_total",
-      "One increment per (transaction, symbol) — which pairs each tx touched, by outcome",
-      ["client_id", "customer", "symbol", "outcome"],
+      "One increment per (transaction, router destination, symbol) — which pairs each tx touched, by outcome",
+      ["client_id", "customer_id", "router_id", "destination_index", "symbol", "outcome"],
+    ),
+    transactionRouterMembership: counter(
+      "transaction_router_membership_total",
+      "One increment per (transaction, router) — which routers contributed at least one member to the tx, by outcome",
+      ["client_id", "customer_id", "router_id", "outcome"],
     ),
     txProcessingToSubmissionSeconds: histogram(
       "tx_processing_to_submission_seconds",
       "Tx-level seconds from processing start to submission, one observation per confirmed tx",
-      ["client_id", "customer"],
+      ["client_id", "customer_id"],
       LATENCY_BUCKETS,
     ),
     txSubmissionToConfirmationSeconds: histogram(
       "tx_submission_to_confirmation_seconds",
       "Tx-level seconds from submission to confirmation, one observation per confirmed tx",
-      ["client_id", "customer"],
+      ["client_id", "customer_id"],
       LATENCY_BUCKETS,
     ),
     txEndToEndSeconds: histogram(
       "tx_end_to_end_seconds",
       "Tx-level end-to-end seconds (processing start to confirmation), one observation per confirmed tx",
-      ["client_id", "customer"],
+      ["client_id", "customer_id"],
       LATENCY_BUCKETS,
     ),
     intentToRegistrationSeconds: histogram(
@@ -408,19 +420,19 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     processingToSubmissionSeconds: histogram(
       "processing_to_submission_seconds",
       "Seconds from per-intent processing start to Cardano submission",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer_id"],
       LATENCY_BUCKETS,
     ),
     submissionToConfirmationSeconds: histogram(
       "submission_to_confirmation_seconds",
       "Seconds from Cardano submission to confirmation",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer_id"],
       LATENCY_BUCKETS,
     ),
     endToEndLatencySeconds: histogram(
       "end_to_end_latency_seconds",
       "Seconds from feeder processing start to Cardano confirmation",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer_id"],
       LATENCY_BUCKETS,
     ),
     priceDeviationPercent: histogram(
@@ -463,7 +475,7 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     cardanoOracleLastConfirmedTimestampSeconds: gauge(
       "cardano_oracle_last_confirmed_timestamp_seconds",
       "Latest confirmed oracle timestamp per symbol and client",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer_id"],
     ),
     cardanoReceiverBalanceLovelace: gauge(
       "cardano_receiver_balance_lovelace",
@@ -487,6 +499,12 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       [],
       true,
     ),
+    cardanoAdminWalletMaxUtxoLovelace: gauge(
+      "cardano_admin_wallet_max_utxo_lovelace",
+      "Largest single pure-ADA UTxO in the admin/signer wallet. A script tx needs a collateral UTxO distinct from its fee inputs, so THIS — not the total — determines whether the wallet can still build: when it falls below `alerting.admin_wallet_min_collateral_lovelace` the wallet is fragmented (every build traps) even if the total looks healthy → AdminWalletFragmented. The daemon auto-consolidates below `alerting.auto_consolidate_below_lovelace`.",
+      [],
+      true,
+    ),
     cardanoReceiverTopupWarnings: counter(
       "cardano_receiver_topup_warnings_total",
       "Number of times the feeder observed a Receiver `balanceLovelace` below `alerting.receiver_balance_low_lovelace` after a confirmed tx.",
@@ -500,12 +518,12 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     cardanoPairIsCreate: gauge(
       "cardano_pair_is_create",
       "Whether the last confirmed submission for a symbol minted the pair (1) or updated it (0)",
-      ["symbol", "client_id"],
+      ["symbol", "client_id", "customer_id"],
     ),
     cronResubmissions: counter(
       "cron_resubmissions_total",
       "Cron-service resubmission decisions, partitioned by outcome (Spectra-parity counterpart of `internal/cron`).",
-      ["router_id", "symbol", "client_id", "customer", "outcome"],
+      ["router_id", "symbol", "client_id", "customer_id", "outcome"],
     ),
     httpRequests: counter(
       "http_requests_total",
@@ -558,27 +576,27 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     bridgeIntentsProcessed: counter(
       "intents_processed_lifecycle_total",
       "Intents processed — Spectra bridge_intents_processed_total lifecycle alias",
-      ["symbol", "customer"],
+      ["symbol", "customer_id"],
     ),
     bridgeIntentsSubmitted: counter(
       "intents_submitted_lifecycle_total",
       "Intents submitted to Cardano — Spectra bridge_intents_submitted_total lifecycle alias",
-      ["symbol", "client_id", "customer"],
+      ["symbol", "client_id", "customer_id"],
     ),
     bridgeIntentsConfirmed: counter(
       "intents_confirmed_lifecycle_total",
       "Intents confirmed on Cardano — Spectra bridge_intents_confirmed_total lifecycle alias",
-      ["symbol", "client_id", "customer"],
+      ["symbol", "client_id", "customer_id"],
     ),
     bridgeIntentsFailed: counter(
       "intents_failed_lifecycle_total",
       "Intents failed — Spectra bridge_intents_failed_total lifecycle alias",
-      ["symbol", "client_id", "customer", "reason"],
+      ["symbol", "client_id", "customer_id", "reason"],
     ),
     bridgeTransactionFeeLovelace: histogram(
       "transaction_fee_lovelace",
       "Lovelace paid per Cardano oracle update transaction (Cardano equivalent of EVM gas cost)",
-      ["symbol", "client_id", "customer"],
+      ["symbol", "client_id", "customer_id"],
       [10_000, 50_000, 100_000, 200_000, 500_000, 1_000_000, 2_000_000],
     ),
     bridgeDbOperations: counter(

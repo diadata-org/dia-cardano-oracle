@@ -99,6 +99,7 @@ const ALERT_TO_YAML: Record<string, { yamlKey: string; divisor: number }> = {
   SettleOverdue: { yamlKey: "settle_overdue_lovelace", divisor: 1_000_000 },
   PaymentHookWithdrawReady: { yamlKey: "payment_hook_withdraw_ready_lovelace", divisor: 1_000_000 },
   AdminWalletLow: { yamlKey: "admin_wallet_low_lovelace", divisor: 1_000_000 },
+  AdminWalletFragmented: { yamlKey: "admin_wallet_min_collateral_lovelace", divisor: 1_000_000 },
   PriceDeviationHigh: { yamlKey: "price_deviation_high_percent", divisor: 1 },
   PriceAgeHigh: { yamlKey: "price_age_high_seconds", divisor: 1 },
   ReorgRateHigh: { yamlKey: "reorg_rate_high_per_hour", divisor: 1 },
@@ -213,6 +214,7 @@ const PANEL_STEPS: PanelStepTarget[] = [
   { panelTitle: "Admin wallet • PaymentHook • Receiver accrued — ADA", color: "green", yamlKey: "admin_wallet_low_lovelace", divisor: 1_000_000 },
   { panelTitle: "Admin wallet • PaymentHook • Receiver accrued — ADA", color: "yellow", yamlKey: "payment_hook_withdraw_ready_lovelace", divisor: 1_000_000, override: "PaymentHook accrued" },
   { panelTitle: "Admin wallet • PaymentHook • Receiver accrued — ADA", color: "yellow", yamlKey: "settle_overdue_lovelace", divisor: 1_000_000, override: "Receiver accrued (sum)" },
+  { panelTitle: "Admin wallet — largest UTxO — ADA (collateral floor)", color: "green", yamlKey: "admin_wallet_min_collateral_lovelace", divisor: 1_000_000 },
 ];
 
 /**

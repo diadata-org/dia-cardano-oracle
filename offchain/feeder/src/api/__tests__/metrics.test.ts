@@ -43,22 +43,35 @@ describe("createMetrics", () => {
     metrics.intentsScanned.inc({ symbol: "BTC/USD", scanner_type: "http" });
     metrics.intentsRouted.inc({ symbol: "BTC/USD", router_id: "r1" });
     metrics.intentsFiltered.inc({ symbol: "BTC/USD", router_id: "r1", reason: "policy" });
-    metrics.transactionsSubmitted.inc({ symbol: "BTC/USD", client_id: "c1" });
-    metrics.transactionsConfirmed.inc({ symbol: "BTC/USD", client_id: "c1" });
-    metrics.transactionsFailed.inc({ symbol: "BTC/USD", client_id: "c1", error_code: "Err" });
-    metrics.transactionsReorg.inc({ symbol: "BTC/USD", client_id: "c1" });
-    metrics.transactionsTotal.inc({ client_id: "c1", customer: "acme", outcome: "confirmed" });
-    metrics.transactionPairs.observe({ client_id: "c1", customer: "acme", outcome: "confirmed" }, 3);
-    metrics.txPairMembership.inc({ client_id: "c1", customer: "acme", symbol: "BTC/USD", outcome: "confirmed" });
-    metrics.txProcessingToSubmissionSeconds.observe({ client_id: "c1", customer: "acme" }, 1.0);
-    metrics.txSubmissionToConfirmationSeconds.observe({ client_id: "c1", customer: "acme" }, 10.0);
-    metrics.txEndToEndSeconds.observe({ client_id: "c1", customer: "acme" }, 12.0);
+    metrics.transactionsSubmitted.inc({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" });
+    metrics.transactionsConfirmed.inc({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" });
+    metrics.transactionsFailed.inc({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme", error_code: "Err" });
+    metrics.transactionsReorg.inc({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" });
+    metrics.transactionsTotal.inc({ client_id: "c1", customer_id: "acme", outcome: "confirmed" });
+    metrics.transactionPairs.observe({ client_id: "c1", customer_id: "acme", outcome: "confirmed" }, 3);
+    metrics.transactionRouterMembership.inc({
+      client_id: "c1",
+      customer_id: "acme",
+      router_id: "r1",
+      outcome: "confirmed",
+    });
+    metrics.txPairMembership.inc({
+      client_id: "c1",
+      customer_id: "acme",
+      router_id: "r1",
+      destination_index: "0",
+      symbol: "BTC/USD",
+      outcome: "confirmed",
+    });
+    metrics.txProcessingToSubmissionSeconds.observe({ client_id: "c1", customer_id: "acme" }, 1.0);
+    metrics.txSubmissionToConfirmationSeconds.observe({ client_id: "c1", customer_id: "acme" }, 10.0);
+    metrics.txEndToEndSeconds.observe({ client_id: "c1", customer_id: "acme" }, 12.0);
     metrics.intentToRegistrationSeconds.observe({ symbol: "BTC/USD" }, 0.5);
     metrics.registrationToScanSeconds.observe({ symbol: "BTC/USD" }, 0.5);
     metrics.scanToProcessingSeconds.observe({ symbol: "BTC/USD" }, 0.1);
-    metrics.processingToSubmissionSeconds.observe({ symbol: "BTC/USD", client_id: "c1" }, 1.0);
-    metrics.submissionToConfirmationSeconds.observe({ symbol: "BTC/USD", client_id: "c1" }, 10.0);
-    metrics.endToEndLatencySeconds.observe({ symbol: "BTC/USD", client_id: "c1" }, 12.0);
+    metrics.processingToSubmissionSeconds.observe({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" }, 1.0);
+    metrics.submissionToConfirmationSeconds.observe({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" }, 10.0);
+    metrics.endToEndLatencySeconds.observe({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" }, 12.0);
     metrics.priceDeviationPercent.observe({ symbol: "BTC/USD" }, 0.5);
     metrics.priceAgeSeconds.observe({ symbol: "BTC/USD" }, 30);
     metrics.scannerLastBlock.set({ chain_id: "10050", scanner_type: "http" }, 1000);
@@ -66,7 +79,7 @@ describe("createMetrics", () => {
     metrics.scannerRpcErrors.inc({ chain_id: "10050", error_type: "timeout" });
     metrics.scannerBackfillBlocks.inc({ chain_id: "10050" }, 100);
     metrics.scannerBackfillChunks.inc({ chain_id: "10050" });
-    metrics.cardanoOracleLastConfirmedTimestampSeconds.set({ symbol: "BTC/USD", client_id: "c1" }, 1234567890);
+    metrics.cardanoOracleLastConfirmedTimestampSeconds.set({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" }, 1234567890);
     metrics.cardanoReceiverBalanceLovelace.set(
       {
         client_id: "c1",
@@ -79,7 +92,7 @@ describe("createMetrics", () => {
     metrics.cardanoPaymentHookAccruedLovelace.set({}, 50000000);
     metrics.cardanoAdminWalletLovelace.set({}, 10000000000);
     metrics.cardanoReceiverTopupWarnings.inc({ client_id: "c1" });
-    metrics.cardanoPairIsCreate.set({ symbol: "BTC/USD", client_id: "c1" }, 0);
+    metrics.cardanoPairIsCreate.set({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" }, 0);
     metrics.cronResubmissions.inc({ router_id: "r1", symbol: "BTC/USD", client_id: "c1", outcome: "submitted" });
     metrics.httpRequests.inc({ method: "GET", endpoint: "/health/live", status: "200" });
     metrics.httpRequestDurationSeconds.observe({ method: "GET", endpoint: "/health/live" }, 0.001);
@@ -92,11 +105,11 @@ describe("createMetrics", () => {
     metrics.workerTaskRetries.inc();
     // Spectra lifecycle aliases
     metrics.bridgeIntentsScanned.inc({ symbol: "BTC/USD", scanner_type: "http" });
-    metrics.bridgeIntentsProcessed.inc({ symbol: "BTC/USD", customer: "acme" });
-    metrics.bridgeIntentsSubmitted.inc({ symbol: "BTC/USD", client_id: "c1", customer: "acme" });
-    metrics.bridgeIntentsConfirmed.inc({ symbol: "BTC/USD", client_id: "c1", customer: "acme" });
-    metrics.bridgeIntentsFailed.inc({ symbol: "BTC/USD", client_id: "c1", customer: "acme", reason: "timeout" });
-    metrics.bridgeTransactionFeeLovelace.observe({ symbol: "BTC/USD", client_id: "c1", customer: "acme" }, 200000);
+    metrics.bridgeIntentsProcessed.inc({ symbol: "BTC/USD", customer_id: "acme" });
+    metrics.bridgeIntentsSubmitted.inc({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" });
+    metrics.bridgeIntentsConfirmed.inc({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" });
+    metrics.bridgeIntentsFailed.inc({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme", reason: "timeout" });
+    metrics.bridgeTransactionFeeLovelace.observe({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" }, 200000);
     metrics.bridgeDbOperations.inc({ table: "transaction_log", operation: "insert" });
     metrics.bridgeDbOperationDuration.observe({ table: "transaction_log", operation: "insert" }, 0.005);
     metrics.bridgeComponentHealth.set({ component: "scanner" }, 1);
@@ -144,6 +157,7 @@ describe("createMetrics", () => {
       // Tx-level metrics (counted once per transaction, not per symbol)
       "dia_bridge_transactions_total",
       "dia_bridge_transaction_pairs",
+      "dia_bridge_transaction_router_membership_total",
       "dia_bridge_tx_pair_membership_total",
       "dia_bridge_tx_processing_to_submission_seconds",
       "dia_bridge_tx_submission_to_confirmation_seconds",
