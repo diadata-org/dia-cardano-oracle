@@ -1,5 +1,5 @@
 {
-  "clientId": "client-a",
+  "clientId": "client-test-01",
   "scripts": {
     "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
     "pairValidatorHash": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
@@ -14,7 +14,7 @@
   },
   "drafts": {
     "receiverParameterize": {
-      "clientId": "client-a",
+      "clientId": "client-test-01",
       "receiverAssetLabel": "DIA_RECEIVER_CLIENT_A",
       "receiverAssetName": "4449415f52454345495645525f434c49454e545f41",
       "minUtxoLovelace": "5000000"
@@ -45,14 +45,14 @@
     }
   },
   "datum": {
-    "receiverCbor": "d8799f1a028942f0001a004c4b40ff"
+    "receiverCbor": "d8799f1a12e75330001a004c4b40ff"
   },
   "wallet": {
     "source": "seed",
     "address": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j"
   },
   "receiver": {
-    "clientId": "client-a",
+    "clientId": "client-test-01",
     "bootstrapRef": {
       "txHash": "5a9eb329bfadeceb04267511265d3025db8027414f88c8406971ac85d73f8510",
       "outputIndex": 1
@@ -65,7 +65,7 @@
     "depositValidatorHash": "f8a600c189f5e0fd2e88e15deefbfb0c064c5fb67e51cadcc44620bc",
     "depositValidatorAddress": "addr_test1wru2vqxp3867plfw3rs4mmhmlvxqvnzlkel9rjkuc3rzp0qrstq95",
     "receiverState": {
-      "balanceLovelace": "42550000",
+      "balanceLovelace": "317150000",
       "accruedToHookLovelace": "0",
       "minUtxoLovelace": "5000000"
     }
@@ -104,6 +104,16 @@
     {
       "step": "preview:receiver:withdraw",
       "submittedTxHash": "e090d92b1a97a6ecf7a5470c1500d0fa2e9e8aa11c93c4267c72884a5f03cdf2",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "f325fef9875fcff407fe27c686aa290921c1f20f8b034453777cc035b030e1c5",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "7af0234bd6a9e12c90d5e3cff06c4613aefe06d8813aafff21aeb9f58725a0da",
       "confirmed": true
     }
   ]
