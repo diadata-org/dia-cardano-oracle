@@ -34,6 +34,7 @@ Every chart links to its larger image and is also shown inline.
   - [Row 3 — Chain & Scanner Health](#row-3--chain--scanner-health)
   - [Row 4 — Price Quality & Anomaly Detection](#row-4--price-quality--anomaly-detection)
   - [Row 5 — Billing (per client / customer)](#row-5--billing-per-client--customer)
+  - [Row 6 — Provider Health](#row-6--provider-health)
 - [5. Dashboard 2 — Transactions (`dia-cardano-feeder-tx`)](#5-dashboard-2--transactions-dia-cardano-feeder-tx)
   - [Row T1 — Transaction latency by stage](#row-t1--transaction-latency-by-stage)
   - [Row T2 — Transaction throughput & outcome](#row-t2--transaction-throughput--outcome)
@@ -259,6 +260,24 @@ pairs. Each panel below follows the same shape — **What it shows · How to rea
   Receiver accrued above **10 ADA** (`SettleOverdue`) → run `settle`. PaymentHook
   accrued above **50 ADA** (`PaymentHookWithdrawReady`) → DIA withdraws.
 
+**Admin wallet — largest UTxO — ADA (collateral floor)** · `stat`
+`dia_bridge_cardano_admin_wallet_max_utxo_lovelace / 1000000`
+
+[panel-201.png](img/panel-201.png)
+
+![Admin wallet — largest UTxO — ADA (collateral floor)](img/panel-201.png)
+
+- **What it shows** — the **largest single pure-ADA UTxO** in the admin/signer
+  wallet — not the total. A Cardano script tx needs a collateral UTxO distinct
+  from its fee inputs, so this is what decides whether the wallet can still build.
+- **How to read it** — green at/above the collateral floor (**10 ADA**), red
+  below it. Global panel — filters do not change it.
+- **When to worry** — below **10 ADA** (`AdminWalletFragmented`, critical): the
+  wallet has shattered into sub-collateral dust and every build traps with
+  "RuntimeError: unreachable" even if the TOTAL (the panel above) still looks
+  healthy. The daemon auto-consolidates below `auto_consolidate_below_lovelace`;
+  to force it: `make cli CMD="wallet:consolidate"`.
+
 **Deposit pending — ADA (per client)** · `gauge`
 `dia_bridge_cardano_deposit_pending_lovelace / 1000000`
 
@@ -316,14 +335,15 @@ pairs. Each panel below follows the same shape — **What it shows · How to rea
 
 ![Symbol-update failures by error code](img/panel-6.png)
 
-- **What it shows** — 5-minute count of **failed** updates, grouped by error code.
-- **How to read it** — `NonMonotonicNonce` is **not a real failure**: it marks a
-  superseded/condemned intent the feeder declined to submit (no tx, no fee). Codes
-  are documented in `offchain/feeder/src/errors/codes.ts`. Use the **Error code**
+- **What it shows** — 5-minute count of **real** failed updates, grouped by error code.
+- **How to read it** — this panel now counts **real submission failures only**.
+  Superseded intents (`NonMonotonicNonce`, no tx, no fee) are **no longer counted
+  here** — they moved to `dia_bridge_intents_superseded_total{reason}`, so the
+  failure counters and success ratio reflect only genuine failures. Codes are
+  documented in `offchain/feeder/src/errors/codes.ts`. Use the **Error code**
   filter to isolate one.
-- **When to worry** — any *real* error code (anything other than
-  `NonMonotonicNonce`) appearing repeatedly — that is a genuine submission
-  problem.
+- **When to worry** — any error code appearing repeatedly — every code shown here
+  is now a genuine submission problem.
 
 ### Row 2b — Transactions (per tx)
 
@@ -454,6 +474,31 @@ pairs. Each panel below follows the same shape — **What it shows · How to rea
   lovelace ≈ 0.75 ADA per tx in the Preview sample.
 - **When to worry** — a sustained climb in the median fee (Cardano fee-market
   pressure, or batches getting smaller so each pair carries more fixed cost).
+
+### Row 6 — Provider Health
+
+**Cardano provider health — primary vs secondary (1 = up)** · `stat`
+`dia_bridge_component_health{component,role}`
+
+[panel-203.png](img/panel-203.png)
+
+![Cardano provider health — primary vs secondary](img/panel-203.png)
+
+- **What it shows** — the health of the **two Cardano API providers** the feeder
+  depends on, by **role**. **PRIMARY** is the provider lucid uses to build, sign
+  and submit (selected by `CARDANO_PROVIDER`); **SECONDARY** backs tx confirmation
+  and reorg checks. `1` = up, `0` = down.
+- **How to read it** — the role is derived from `CARDANO_PROVIDER`, so the panel
+  always labels whichever provider actually builds as `primary`. The primary is
+  measured passively from the calls the feeder already makes; the secondary is
+  probed actively once per tick. Global panel — filters do not change it.
+- **When to worry** — **primary down** (`PrimaryProviderDown`, critical): nothing
+  can be built and **every pair freezes together** — the classic case is a
+  Blockfrost `402 Payment Required` (the API key hit its quota). Rotate
+  `BLOCKFROST_PROJECT_ID_<NET>` / `KOIOS_API_URL_<NET>` in `feeder/.env` or switch
+  `CARDANO_PROVIDER`, then `make restart`. **Secondary down**
+  (`SecondaryProviderDown`, warning): redundancy lost, but core operation
+  continues.
 
 ## 5. Dashboard 2 — Transactions (`dia-cardano-feeder-tx`)
 
@@ -610,10 +655,13 @@ Grafana panel colours; kept in sync by the threshold-drift test).
 | Price age p95 | `PriceAgeHigh` | source price age p95 over | **600 s** | DIA source publishing stale prices (upstream) |
 | Receiver balance | `ReceiverBalanceLow` | balance below | **2 ADA** | Send ADA to deposit address / `receiver:top-up` |
 | Admin wallet | `AdminWalletLow` | balance below | **5 ADA** | `settle` then `payment-hook:withdraw` to refill |
+| Admin wallet largest UTxO | `AdminWalletFragmented` | largest pure-ADA UTxO below | **10 ADA** | `wallet:consolidate` (daemon auto-consolidates below 7 ADA) |
 | Receiver accrued | `SettleOverdue` | accrued above | **10 ADA** | Run `settle` |
 | PaymentHook accrued | `PaymentHookWithdrawReady` | accrued above | **50 ADA** | DIA `payment-hook:withdraw` |
 | Price deviation p95 | `PriceDeviationHigh` | p95 deviation over | **5 %** | Investigate DIA source (possible misreport) |
 | Reorg counter | `ReorgRateHigh` | reorgs per hour over | **> 3 / h** | Check provider lag + scanner block lag |
+| Provider health (primary) | `PrimaryProviderDown` | primary provider no success for | **600 s** | Build/submit provider down (e.g. Blockfrost 402) → rotate key / switch `CARDANO_PROVIDER`, `make restart` |
+| Provider health (secondary) | `SecondaryProviderDown` | secondary provider no probe for | **900 s** | Redundancy lost only; fix/rotate its endpoint in `feeder/.env`, `make restart` |
 | Tx success ratio | `TransactionFailureRateHigh` | failed/total ratio high | — | Failures panel + `make logs` |
 | Scanner block lag | `ScannerLag` | no new block within lag window | `max_processing_lag` | Provider/connectivity check |
 
