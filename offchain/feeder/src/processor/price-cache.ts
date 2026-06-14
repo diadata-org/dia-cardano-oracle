@@ -40,6 +40,14 @@ export type PriceCacheEntry = {
   confirmedAtDepth?: number;
   /** Wall-clock time the entry was last written (ms since epoch). */
   updatedAtMs: number;
+  /** On-chain client deployment that owns this price (from the destination's
+   *  client state path). Optional: absent on entries that predate identity
+   *  tracking; the production write paths always set it. */
+  clientId?: string;
+  /** Customer that owns the router (router config's `customer_id`). */
+  customerId?: string;
+  /** Network the destination lives on (`Preview` / `Mainnet`). */
+  network?: string;
 };
 
 export type PriceCacheKey = {

@@ -14,6 +14,12 @@ import { DEFAULT_CONFIRMATION_DEPTH } from "../config/constants.js";
 
 export type PriceEntry = {
   routerId: string;
+  /** On-chain client deployment serving this price, its customer, and the
+   *  network — the same `customer -> client -> router` identity used across
+   *  metrics and `/transactions`. Present on all live entries. */
+  clientId?: string;
+  customerId?: string;
+  network?: string;
   destinationIndex: number;
   symbol: string;
   price: string;
@@ -78,10 +84,16 @@ function toPriceEntry(
     cardanoTxHash?: string;
     confirmedAtDepth?: number;
     updatedAtMs: number;
+    clientId?: string;
+    customerId?: string;
+    network?: string;
   },
 ): PriceEntry {
   return {
     routerId: key.routerId,
+    clientId: entry.clientId,
+    customerId: entry.customerId,
+    network: entry.network,
     destinationIndex: key.destinationIndex,
     symbol: key.symbol,
     price: entry.price.toString(),

@@ -47,6 +47,7 @@ function makeRouter(overrides: Partial<RouterConfig> = {}): RouterConfig {
   return {
     id: "r1",
     name: "Test Router",
+    customer_id: "customer-test",
     type: "oracle",
     enabled: true,
     triggers: {

@@ -184,10 +184,8 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
           router_id: router.id,
           symbol,
           client_id: clientId,
+          customer_id: router.customer_id,
         };
-        if (router.customer) {
-          labels.customer = router.customer;
-        }
 
         const confirmed = options.priceCache.get({ routerId: router.id, destinationIndex: destIdx, symbol });
         // If we have never confirmed anything on this pair, the cron path

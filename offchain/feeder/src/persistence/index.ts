@@ -16,6 +16,4 @@ export {
   type TransactionLogPatch,
   type TransactionLogRow,
   type TransactionQuery,
-  // Backward-compat alias kept for existing callers.
-  type TransactionViewRow,
 } from "./db.js";

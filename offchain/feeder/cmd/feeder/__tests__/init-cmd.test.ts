@@ -8,8 +8,10 @@ import { describe, it, before, after } from "node:test";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { parse as parseYaml } from "yaml";
 
 import {
+  buildRouterFileStem,
   buildRouterYaml,
   loadExistingPairsFromYaml,
   findConfigClientCandidates,
@@ -21,9 +23,9 @@ import {
 
 describe("buildRouterYaml", () => {
   const BASE_OPTS = {
-    routerId: "client_a_preview",
+    routerId: "client_a_router_default",
     clientId: "client-a",
-    customer: "client-a",
+    customerId: "client-a",
     network: "Preview" as const,
     keyEnv: "CARDANO_WALLET_SEED_TESTNET",
     pairs: ["BTC/USD", "ETH/USD"],
@@ -41,7 +43,7 @@ describe("buildRouterYaml", () => {
 
   it("includes the routerId", () => {
     const yaml = buildRouterYaml(BASE_OPTS);
-    assert.ok(yaml.includes("client_a_preview"));
+    assert.ok(yaml.includes("client_a_router_default"));
   });
 
   it("includes the network", () => {
@@ -65,9 +67,37 @@ describe("buildRouterYaml", () => {
     assert.ok(yaml.includes("cron: true"), "destination must set cron: true so a flat pair still updates within time_threshold");
   });
 
-  it("includes the customer label", () => {
-    const yaml = buildRouterYaml({ ...BASE_OPTS, customer: "acme-corp" });
-    assert.ok(yaml.includes("customer: acme-corp"));
+  it("includes the customer_id label", () => {
+    const yaml = buildRouterYaml({ ...BASE_OPTS, customerId: "acme-corp" });
+    assert.ok(yaml.includes("customer_id: acme-corp"));
+  });
+
+  it("round-trips into a router object with the shape the config validator requires", () => {
+    // Generate → parse → assert the router carries every field validateModularConfig
+    // requires, so the wizard output can never drift from the validator's schema.
+    const parsed = parseYaml(buildRouterYaml(BASE_OPTS)) as {
+      routers: Record<string, {
+        customer_id?: string;
+        type?: string;
+        enabled?: boolean;
+        triggers?: { events?: string[] };
+        processing?: unknown;
+        destinations?: Array<{
+          cardano?: { network?: string; client_state_path?: string; protocol_state_path?: string };
+        }>;
+      }>;
+    };
+    const [routerId, router] = Object.entries(parsed.routers)[0]!;
+    assert.equal(routerId, "client_a_router_default");
+    assert.equal(router.customer_id, "client-a"); // required by the validator
+    assert.equal(typeof router.type, "string");
+    assert.equal(router.enabled, true);
+    assert.ok(router.triggers?.events?.includes("IntentRegistered"));
+    assert.ok(router.processing);
+    const cardano = router.destinations?.[0]?.cardano;
+    assert.equal(cardano?.network, "Preview");
+    assert.ok(cardano?.client_state_path);
+    assert.ok(cardano?.protocol_state_path);
   });
 
   it("includes time_threshold and price_deviation", () => {
@@ -90,6 +120,12 @@ describe("buildRouterYaml", () => {
     const yaml = buildRouterYaml({ ...BASE_OPTS, pairs: ["ADA/USD"] });
     assert.ok(yaml.includes("- ADA/USD"));
     assert.ok(!yaml.includes("BTC/USD"));
+  });
+});
+
+describe("buildRouterFileStem", () => {
+  it("uses the client-router-name filename convention", () => {
+    assert.equal(buildRouterFileStem("client-a", "Majors"), "client-a-router-majors");
   });
 });
 

@@ -11,7 +11,7 @@
 //     submitted. Independent of `--scan`: can be used together or alone.
 //   - `--from-block <N>` / `--from-latest` seed the block-scanner checkpoint
 //     before startup. Use after `--clean` to avoid replaying expired intents.
-//   - `init client`    generates a router YAML pointing the daemon at the
+//   - `init router`    generates a router YAML pointing the daemon at the
 //     client's state under ../state/<network>_run_<id>/ (interactive).
 //   - default: long-running daemon.
 //
@@ -40,7 +40,7 @@ Usage:
   feeder --config <dir> [--log-level <level>]
   feeder --config <dir> --validate-only
   feeder --config <dir> --scan [--transport http|ws] [--dry-run]
-  feeder init client    [--from <client.json>]           [--force]
+  feeder init router    [--from <client.json>]           [--force]
   feeder checkpoint get
   feeder checkpoint set --from-latest | --from-block <N> | --clear
   feeder reset
@@ -78,13 +78,13 @@ Flags:
   --help, -h            Show this help message and exit.
 
 Init sub-command (one-time setup):
-  init client           Interactive wizard that generates
-                        config/routers/<network>/<id>.yaml pointing the daemon at
+  init router           Interactive wizard that generates
+                        config/routers/<network>/<client-id>-router-<name>.yaml pointing the daemon at
                         the client's state under ../state/<network>_run_<id>/.
                         Auto-scans ../state/ for the run; use --from <client.json>
                         to pick one.
 
-  --from <path>         Source path for 'init client': the client JSON file.
+  --from <path>         Source path for 'init router': the client JSON file.
   --force               Skip the overwrite confirmation prompt (init only).
 
 Checkpoint sub-commands (mutate chain_state.last_scan_block in the DB):

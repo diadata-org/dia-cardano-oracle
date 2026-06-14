@@ -31,12 +31,12 @@ describe("loadRouterDirectory — network-scoped", () => {
       const previewDir = path.join(base, "preview");
       await mkdir(previewDir, { recursive: true });
       // Correctly-filed Preview router + a misfiled Mainnet router in the same folder.
-      await writeFile(path.join(previewDir, "client-a.yaml"), routerYaml("client_a_preview", "Preview"));
+      await writeFile(path.join(previewDir, "client-a-router-default.yaml"), routerYaml("client_a_router_default", "Preview"));
       await writeFile(path.join(previewDir, "oops-mainnet.yaml"), routerYaml("client_a_mainnet", "Mainnet"));
 
       const routers = await loadRouterDirectory(previewDir, "Preview");
 
-      assert.ok(routers["client_a_preview"], "the Preview router must load");
+      assert.ok(routers["client_a_router_default"], "the Preview router must load");
       assert.equal(
         routers["client_a_mainnet"],
         undefined,

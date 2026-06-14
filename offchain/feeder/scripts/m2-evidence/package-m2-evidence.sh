@@ -157,7 +157,7 @@ PANELS=(
   '9|Intents filtered (5m, by reason)|Metric `sum by (reason) (increase(dia_bridge_intents_filtered_total[5m]))` — a 5-minute count grouped by `reason`. Intents the feeder deliberately suppressed before submitting. High counts are normal: the deviation/time-threshold policy suppresses most intents by design.'
   '13|Price deviation p95 — 1 h window (per pair)|Metric `histogram_quantile(0.95, rate(dia_bridge_price_deviation_percent_bucket[1h]))` per `symbol`, in percent. 95th percentile of the percentage gap between the price the feeder published and the reference price, per pair. A high value suggests a possible misreport and feeds the `PriceDeviationHigh` alert.'
   '10|Price deviation distribution (heatmap)|Metric `sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket[5m]))`, percent buckets. Heatmap of the price-deviation distribution over time (histogram `le` buckets, colour = frequency), measured at policy-gating time for every evaluated intent — submitted and gate-suppressed alike. Healthy feeds cluster near 0%; a vertical spread means deviations are growing.'
-  '14|Tx fee p50 — lovelace (per customer)|Metric `histogram_quantile(0.50, sum by (le, customer) (rate(dia_bridge_transaction_fee_lovelace_bucket[5m])))`, in lovelace (1 ADA = 1,000,000 lovelace). Median Cardano network fee paid per oracle-update transaction, grouped by `customer` — the basis for per-customer cost attribution / billing. A batch of N pairs is one tx and one fee observation.'
+  '14|Tx fee p50 — lovelace (per consumer)|Metric `histogram_quantile(0.50, sum by (le, consumer_id) (rate(dia_bridge_transaction_fee_lovelace_bucket[5m])))`, in lovelace (1 ADA = 1,000,000 lovelace). Median Cardano network fee paid per oracle-update transaction, grouped by `consumer_id` — the basis for per-consumer cost attribution / billing. A batch of N pairs is one tx and one fee observation.'
 )
 
 # Transactions dashboard (feeder-tx.json, uid dia-cardano-feeder-tx) — the
@@ -173,7 +173,7 @@ PANELS_TX=(
   '313|Tx by client (5m)|Metric `sum by (client_id) (increase(dia_bridge_transactions_total[5m]))` — transactions per 5-minute window grouped by client (receiver identity), counted once per tx.'
   '321|Pairs per tx (p50/p95/p99)|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_transaction_pairs_bucket[5m]))` — batch size distribution: pairs per transaction at the median, 95th and 99th percentiles.'
   '322|Batch size distribution (heatmap)|Metric `sum by (le) (rate(dia_bridge_transaction_pairs_bucket[5m]))`, batch-size buckets. Heatmap of pairs-per-transaction over time; bright bands show the typical batch size.'
-  '323|Tx touching pair (5m, by symbol & outcome)|Metric `sum by (symbol, outcome) (increase(dia_bridge_tx_pair_membership_total[5m]))` — one increment per (tx, pair). Filter by `$symbol` to find the transactions that included a given pair (their size is in "Pairs per tx"); carries confirmed vs failed and the customer dimension.'
+  '323|Tx touching pair (5m, by symbol & outcome)|Metric `sum by (symbol, outcome) (increase(dia_bridge_tx_pair_membership_total[5m]))` — one increment per (tx, pair). Filter by `$symbol` to find the transactions that included a given pair (their size is in "Pairs per tx"); carries confirmed vs failed and the consumer dimension.'
 )
 
 render_dashboard() {

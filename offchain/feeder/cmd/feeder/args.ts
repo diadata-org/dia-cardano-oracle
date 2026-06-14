@@ -23,11 +23,11 @@
 //
 // Positional sub-commands:
 //
-//   init client          generate the router YAML for a deployment interactively
+//   init router          generate the router YAML for a deployment interactively
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type Transport = "http" | "ws";
-export type InitSubCommand = "client";
+export type InitSubCommand = "router";
 export type CheckpointSubCommand = "set" | "get";
 
 /** Mutually exclusive top-level "mode" the binary runs in. */
@@ -273,10 +273,10 @@ function parsePruneArgs(argv: string[]): ParsedArgs {
 
 function parseInitArgs(argv: string[]): ParsedArgs {
   const sub = argv[1] as InitSubCommand | undefined;
-  if (sub !== "client") {
+  if (sub !== "router") {
     throw new Error(
-      `'init' requires the 'client' sub-command:\n` +
-      `  feeder init client [--from <client.json>] [--force]`,
+      `'init' requires the 'router' sub-command:\n` +
+      `  feeder init router [--from <client.json>] [--force]`,
     );
   }
 

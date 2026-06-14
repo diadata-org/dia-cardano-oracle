@@ -54,6 +54,8 @@ function makeTxInsert(overrides: Partial<TransactionLogInsert> = {}): Transactio
     intentHash: "0x" + "22".repeat(32),
     cardanoTxHash: "cardanotx" + "0".repeat(56),
     routerId: "client-a",
+    clientId: "client-a",
+    customerId: "customer-a",
     destinationIndex: 0,
     destinationChainName: "Preview",
     destinationContractAddress: "addr_receiver",

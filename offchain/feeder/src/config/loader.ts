@@ -17,8 +17,8 @@
 // caller picks one at load time.
 //
 // Routers are network-scoped the same way: they live under
-// `routers/<network>/` (e.g. `routers/preview/client-a.yaml`,
-// `routers/mainnet/client-a.yaml`) and ONLY the active network's folder is
+// `routers/<network>/` (e.g. `routers/preview/client-a-router-default.yaml`,
+// `routers/mainnet/client-a-router-majors.yaml`) and ONLY the active network's folder is
 // loaded. The per-destination `cardano.network` field is a second guard — a
 // router whose destination network does not match the active network is a
 // misfiled file and is skipped with a warning (see `loadRouterDirectory`).

@@ -36,6 +36,9 @@ const ErrorResponse = Type.Object(
 const PriceEntry = Type.Object(
   {
     routerId: Type.String(),
+    clientId: Type.Optional(Type.String()),
+    customerId: Type.Optional(Type.String()),
+    network: Type.Optional(Type.String()),
     destinationIndex: Type.Integer(),
     symbol: Type.String(),
     price: Type.String({ description: "Integer price as a decimal string." }),

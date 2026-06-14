@@ -37,6 +37,7 @@ function makeRouter(
   return {
     id: "router-a",
     name: "Router A",
+    customer_id: "customer-a",
     type: "event",
     enabled: true,
     triggers: {
@@ -268,6 +269,7 @@ describe("runOneTick", () => {
     const router: RouterConfig = {
       id: "router-multi",
       name: "Multi",
+      customer_id: "customer-multi",
       type: "event",
       enabled: true,
       triggers: {
@@ -320,6 +322,7 @@ describe("runOneTick", () => {
     const router: RouterConfig = {
       id: "router-enriched",
       name: "Enriched",
+      customer_id: "customer-enriched",
       type: "event",
       enabled: true,
       triggers: {
@@ -376,6 +379,7 @@ describe("runOneTick", () => {
     const router: RouterConfig = {
       id: "router-no-symbol",
       name: "NoSym",
+      customer_id: "customer-nosym",
       type: "event",
       enabled: true,
       triggers: {
@@ -442,14 +446,14 @@ describe("runOneTick", () => {
     assert.ok(errorLog!.includes("submission-network-error"), "error message forwarded");
   });
 
-  it("includes customer label in cron metric when router.customer is set", async () => {
+  it("includes customer_id label in cron metric", async () => {
     const now = 1_700_000_000_000;
     const router: RouterConfig = {
       id: "router-a",
       name: "Router A",
+      customer_id: "acme-corp",
       type: "event",
       enabled: true,
-      customer: "acme-corp",
       triggers: {
         events: ["IntentRegistered"],
         conditions: [{ field: "event.symbol", operator: "in", value: ["BTC/USD"] }],
@@ -467,9 +471,9 @@ describe("runOneTick", () => {
 
     await runOneTick(options);
 
-    // skipped_uninitialised but the labels should include customer
+    // skipped_uninitialised but the labels should include customer_id
     assert.equal(cronCalls.length, 1);
-    assert.equal(cronCalls[0]!.customer, "acme-corp");
+    assert.equal(cronCalls[0]!.customer_id, "acme-corp");
   });
 
   // --- Deviation-only push mode (B6): time_threshold=0 + max_staleness ---

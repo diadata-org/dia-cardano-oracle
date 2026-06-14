@@ -87,6 +87,7 @@ function makeConfig(includeTxMode = false): ModularConfig {
       "router-a": {
         id: "router-a",
         name: "Router A",
+        customer_id: "customer-a",
         type: "event",
         enabled: true,
         private_key_env: "CARDANO_WALLET_SEED_TESTNET",
@@ -153,6 +154,97 @@ describe("validateModularConfig", () => {
     assert.deepEqual(validateModularConfig(config), []);
   });
 
+  it("rejects a router without customer_id", () => {
+    const config = makeConfig(false);
+    delete (config.routers["router-a"] as Partial<ModularConfig["routers"][string]>).customer_id;
+
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some(
+        (issue) =>
+          issue.severity === "error" &&
+          issue.path === "routers.router-a.customer_id" &&
+          /Required/.test(issue.message),
+      ),
+      `expected missing customer_id to be rejected; got ${JSON.stringify(issues)}`,
+    );
+  });
+
+  it("rejects unknown router fields", () => {
+    const config = makeConfig(false);
+    (config.routers["router-a"] as unknown as Record<string, unknown>).unexpected_label = "nope";
+
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some(
+        (issue) =>
+          issue.severity === "error" &&
+          issue.path === "routers.router-a.unexpected_label" &&
+          issue.message === "Unknown field.",
+      ),
+      `expected unknown field to be rejected; got ${JSON.stringify(issues)}`,
+    );
+  });
+
+  it("rejects one router whose Cardano destinations point at different clients", () => {
+    const config = makeConfig(false);
+    config.routers["router-a"]!.destinations.push({
+      cardano: {
+        network: "Preview",
+        client_state_path: "state/preview/clients/client-b.json",
+        protocol_state_path: "state/preview/config-bootstrap.json",
+      },
+      time_threshold: "30m",
+      price_deviation: "1%",
+    });
+
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some(
+        (issue) =>
+          issue.severity === "error" &&
+          issue.path === "routers.router-a.destinations" &&
+          /same on-chain client deployment/.test(issue.message),
+      ),
+      `expected mixed-client router destinations to be rejected; got ${JSON.stringify(issues)}`,
+    );
+  });
+
+  it("rejects one client deployment referenced by multiple customer_id values", () => {
+    const config = makeConfig(false);
+    config.routers["router-b"] = {
+      ...config.routers["router-a"]!,
+      id: "router-b",
+      name: "Router B",
+      customer_id: "customer-b",
+      private_key_env: "CARDANO_WALLET_SEED_TESTNET_ALT",
+      triggers: {
+        events: ["IntentRegistered"],
+        conditions: [{ field: "event.symbol", operator: "in", value: ["ETH/USD"] }],
+      },
+    };
+
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some(
+        (issue) =>
+          issue.severity === "error" &&
+          issue.path === "routers.router-a.customer_id" &&
+          /exactly one customer_id/.test(issue.message),
+      ),
+      `expected mixed customer ownership to be rejected on router-a; got ${JSON.stringify(issues)}`,
+    );
+    assert.ok(
+      issues.some(
+        (issue) =>
+          issue.severity === "error" &&
+          issue.path === "routers.router-b.customer_id" &&
+          /exactly one customer_id/.test(issue.message),
+      ),
+      `expected mixed customer ownership to be rejected on router-b; got ${JSON.stringify(issues)}`,
+    );
+  });
+
   it("rejects overlapping symbols across routers that share one Cardano lane", () => {
     const config = makeConfig(false);
     config.routers["router-a"]!.triggers.conditions = [
@@ -197,6 +289,66 @@ describe("validateModularConfig", () => {
       ),
       `expected a shared-lane overlap error on router-b; got ${JSON.stringify(issues)}`,
     );
+  });
+
+  it("accepts one customer that owns two clients on distinct lanes", () => {
+    // A customer may run multiple on-chain client deployments (each its own
+    // Receiver/deposit/lane). Same customer_id, different client_state_path.
+    const config = makeConfig(false);
+    config.routers["router-a"]!.triggers.conditions = [
+      { field: "event.symbol", operator: "in", value: ["BTC/USD"] },
+    ];
+    config.routers["router-b"] = {
+      ...config.routers["router-a"]!,
+      id: "router-b",
+      name: "Router B",
+      private_key_env: "CARDANO_WALLET_SEED_TESTNET_ALT",
+      triggers: {
+        events: ["IntentRegistered"],
+        conditions: [{ field: "event.symbol", operator: "in", value: ["ETH/USD"] }],
+      },
+      destinations: [
+        {
+          cardano: {
+            network: "Preview",
+            client_state_path: "state/preview/clients/client-b.json",
+            protocol_state_path: "state/preview/config-bootstrap.json",
+          },
+        },
+      ],
+    };
+
+    assert.deepEqual(validateModularConfig(config), []);
+  });
+
+  it("accepts overlapping symbols when the routers target different clients/lanes", () => {
+    // The disjoint-symbol rule only applies WITHIN one shared lane. Two routers
+    // on different clients (different lanes) may both serve BTC/USD.
+    const config = makeConfig(false);
+    config.routers["router-a"]!.triggers.conditions = [
+      { field: "event.symbol", operator: "in", value: ["BTC/USD"] },
+    ];
+    config.routers["router-b"] = {
+      ...config.routers["router-a"]!,
+      id: "router-b",
+      name: "Router B",
+      private_key_env: "CARDANO_WALLET_SEED_TESTNET_ALT",
+      triggers: {
+        events: ["IntentRegistered"],
+        conditions: [{ field: "event.symbol", operator: "in", value: ["BTC/USD"] }],
+      },
+      destinations: [
+        {
+          cardano: {
+            network: "Preview",
+            client_state_path: "state/preview/clients/client-b.json",
+            protocol_state_path: "state/preview/config-bootstrap.json",
+          },
+        },
+      ],
+    };
+
+    assert.deepEqual(validateModularConfig(config), []);
   });
 
   // tx_mode is no longer rejected — the guard was removed as a rename leftover.

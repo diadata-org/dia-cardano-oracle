@@ -260,7 +260,7 @@ feeder alive**. It deliberately excludes:
 | Price deviation | 0.1% |
 | Forecast window | ${FORECAST_MINUTES} min |
 
-Same router configuration as Preview (\`config/routers/preview/client-a.yaml\`):
+Same router configuration as Preview (\`config/routers/preview/client-a-router-default.yaml\`):
 OR-gate of \`price_deviation\` + a \`cron\` heartbeat at \`time_threshold\`.
 
 ## Observed baseline (source data)

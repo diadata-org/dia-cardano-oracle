@@ -132,7 +132,7 @@ describe("buildTransactionResponse (against in-memory DB)", () => {
     const shared = "cardanotx" + "0".repeat(56);
     const now = Date.now();
     const base = {
-      cardanoTxHash: shared, routerId: "client-a", destinationIndex: 0,
+      cardanoTxHash: shared, routerId: "client-a", clientId: "client-a", customerId: "customer-a", destinationIndex: 0,
       destinationChainName: "Preview", destinationContractAddress: "addr",
       price: "1", timestamp: 1, status: "confirmed" as const,
       submittedAtMs: now, confirmedAtMs: now + 1, createdAtMs: now,
@@ -147,5 +147,26 @@ describe("buildTransactionResponse (against in-memory DB)", () => {
     // Sorted by symbol → BTC/USD first.
     assert.equal(res.updates[0]?.symbol, "BTC/USD");
     assert.equal(res.updates[1]?.symbol, "ETH/USD");
+    // Single router → routerIds is that one router.
+    assert.deepEqual(res.routerIds, ["client-a"]);
+  });
+
+  it("surfaces every distinct router in a mixed-router batch as routerIds", async () => {
+    const shared = "cardanotx" + "1".repeat(56);
+    const now = Date.now();
+    const base = {
+      cardanoTxHash: shared, clientId: "client-a", customerId: "customer-a", destinationIndex: 0,
+      destinationChainName: "Preview", destinationContractAddress: "addr",
+      price: "1", timestamp: 1, status: "confirmed" as const,
+      submittedAtMs: now, confirmedAtMs: now + 1, createdAtMs: now,
+    };
+    // One coalesced batch on one lane, two routers contributing different pairs.
+    await db.insertTransactionLog({ ...base, routerId: "router-stables", intentHash: "0x" + "c2".repeat(32), symbol: "USDC/USD" });
+    await db.insertTransactionLog({ ...base, routerId: "router-majors", intentHash: "0x" + "c1".repeat(32), symbol: "BTC/USD" });
+    const res = await buildTransactionResponse(db, shared);
+    assert.ok(res);
+    assert.equal(res.updateCount, 2);
+    // Deduped + sorted, both routers credited — the tx is a list of routers.
+    assert.deepEqual(res.routerIds, ["router-majors", "router-stables"]);
   });
 });

@@ -144,7 +144,7 @@ describe("checkBootstrapStateFiles", () => {
     );
     assert.equal(result, false);
     assert.ok(messages.some(m => m.includes("missing bootstrap state file")));
-    assert.ok(messages.some(m => m.includes("init client")));
+    assert.ok(messages.some(m => m.includes("init router")));
   });
 
   it("returns false and reports hint when client state is missing", async () => {
@@ -162,7 +162,7 @@ describe("checkBootstrapStateFiles", () => {
     );
     assert.equal(result, false);
     assert.ok(messages.some(m => m.includes("missing client state")));
-    assert.ok(messages.some(m => m.includes("init client")));
+    assert.ok(messages.some(m => m.includes("init router")));
   });
 
   it("returns true when all state files are present", async () => {

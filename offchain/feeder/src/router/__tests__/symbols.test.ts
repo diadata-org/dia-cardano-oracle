@@ -10,6 +10,7 @@ function routerWith(conditions: TriggerCondition[]): RouterConfig {
   return {
     id: "r",
     name: "r",
+    customer_id: "customer-r",
     type: "generic",
     enabled: true,
     private_key_env: "X",

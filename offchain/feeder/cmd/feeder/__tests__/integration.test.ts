@@ -36,7 +36,7 @@ function txInsert(o: Partial<TransactionLogInsert> = {}): TransactionLogInsert {
   return {
     intentHash: "0x" + "11".repeat(32),
     cardanoTxHash: "tx" + "0".repeat(62),
-    routerId: "client-a", destinationIndex: 0,
+    routerId: "client-a", clientId: "client-a", customerId: "customer-a", destinationIndex: 0,
     destinationChainName: "Preview", destinationContractAddress: "addr",
     symbol: "BTC/USD", price: "1", timestamp: 1, status: "pending",
     createdAtMs: now, ...o,

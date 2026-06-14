@@ -1,5 +1,5 @@
 import type { ModularConfig } from "../config/types.js";
-import type { Db, TransactionViewRow } from "../persistence/index.js";
+import type { Db, TransactionLogRow } from "../persistence/index.js";
 import { extractRouterSymbols } from "../router/symbols.js";
 
 export type SymbolsResponse = {
@@ -58,7 +58,7 @@ export function extractConfiguredSymbols(config: ModularConfig): Set<string> {
   return out;
 }
 
-function toSymbolUpdateEntry(row: TransactionViewRow): SymbolUpdateEntry {
+function toSymbolUpdateEntry(row: TransactionLogRow): SymbolUpdateEntry {
   return {
     intentHash: row.intentHash,
     cardanoTxHash: row.cardanoTxHash,

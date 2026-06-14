@@ -13,7 +13,7 @@ import type {
   Db,
   PerformanceMetricRow,
   ProcessedEventRow,
-  TransactionViewRow,
+  TransactionLogRow,
 } from "../../persistence/index.js";
 
 let portCounter = 19_100;
@@ -74,6 +74,7 @@ function makeConfig(overrides: { corsEnabled?: boolean; debugEnabled?: boolean }
       "router-a": {
         id: "router-a",
         name: "Router A",
+        customer_id: "customer-a",
         type: "event",
         enabled: true,
         private_key_env: "CARDANO_WALLET_SEED_TESTNET",
@@ -99,8 +100,8 @@ function makeConfig(overrides: { corsEnabled?: boolean; debugEnabled?: boolean }
 }
 
 function makeDb(overrides: {
-  symbolUpdates?: TransactionViewRow[];
-  transactions?: TransactionViewRow[];
+  symbolUpdates?: TransactionLogRow[];
+  transactions?: TransactionLogRow[];
   chainStates?: ChainStateRow[];
   processedEvents?: ProcessedEventRow[];
   alerts?: AlertLogRow[];
@@ -145,12 +146,14 @@ function makeDb(overrides: {
   } as Db & { _ackId: () => number | null };
 }
 
-function makeTransactionViewRow(overrides: Partial<TransactionViewRow> = {}): TransactionViewRow {
+function makeTransactionLogRow(overrides: Partial<TransactionLogRow> = {}): TransactionLogRow {
   return {
     id: 1,
     intentHash: "0xintent",
     cardanoTxHash: "tx123",
     routerId: "router-a",
+    clientId: "client-a",
+    customerId: "customer-a",
     destinationIndex: 0,
     destinationChainName: "DIA Testnet",
     destinationContractAddress: "0xcontract",
@@ -293,7 +296,7 @@ describe("createApiServer", () => {
     const server = createApiServer({
       port,
       config: makeConfig(),
-      db: makeDb({ symbolUpdates: [makeTransactionViewRow()] }),
+      db: makeDb({ symbolUpdates: [makeTransactionLogRow()] }),
       metrics: noopMetrics,
       priceCache: createPriceCache(),
       chainRuntime: createChainRuntimeState(),
@@ -314,8 +317,8 @@ describe("createApiServer", () => {
       config: makeConfig(),
       db: makeDb({
         transactions: [
-          makeTransactionViewRow({ symbol: "BTC/USD", intentHash: "0x1" }),
-          makeTransactionViewRow({ symbol: "ETH/USD", intentHash: "0x2" }),
+          makeTransactionLogRow({ symbol: "BTC/USD", intentHash: "0x1" }),
+          makeTransactionLogRow({ symbol: "ETH/USD", intentHash: "0x2" }),
         ],
       }),
       metrics: noopMetrics,
@@ -516,7 +519,7 @@ describe("createApiServer", () => {
     const server = createApiServer({
       port,
       config: makeConfig(),
-      db: makeDb({ transactions: [makeTransactionViewRow()] }),
+      db: makeDb({ transactions: [makeTransactionLogRow()] }),
       metrics: noopMetrics,
       priceCache: createPriceCache(),
       chainRuntime: createChainRuntimeState(),

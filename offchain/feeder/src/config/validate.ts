@@ -40,6 +40,18 @@ const VALID_OPERATORS: readonly TriggerConditionOperator[] = [
 
 const VALID_DATABASE_DRIVERS = ["sqlite", "postgres"] as const;
 const VALID_CARDANO_NETWORKS = ["Preview", "Mainnet"] as const;
+const ROUTER_ALLOWED_FIELDS = new Set([
+  "id",
+  "name",
+  "customer_id",
+  "type",
+  "enabled",
+  "private_key",
+  "private_key_env",
+  "triggers",
+  "processing",
+  "destinations",
+]);
 
 /**
  * Validate the whole `ModularConfig`. Returns every issue found across
@@ -562,6 +574,7 @@ function validateRoutersMap(
   for (const [key, router] of Object.entries(routers)) {
     validateRouter(key, router, c.scope(key), config);
   }
+  validateClientCustomerOwnership(routers, c);
   validateSharedLaneSymbolCollisions(routers, c);
 }
 
@@ -571,9 +584,11 @@ function validateRouter(
   c: IssueCollector,
   config: ModularConfig,
 ): void {
+  validateKnownFields(router, ROUTER_ALLOWED_FIELDS, c);
   if (router.id !== key) {
     c.error("id", `Router id "${router.id}" must match its key "${key}".`);
   }
+  c.required("customer_id", router.customer_id);
   if (!router.enabled) {
     c.warn("enabled", "Router is disabled; it will be loaded but not dispatched against.");
   }
@@ -582,6 +597,76 @@ function validateRouter(
   validatePrivateKey(router, c);
   validateProcessing(router.processing, c.scope("processing"));
   validateDestinations(router.destinations, c.scope("destinations"), config);
+  validateRouterDestinationsUseOneClient(router, c);
+}
+
+function validateKnownFields(
+  value: object | undefined,
+  allowed: ReadonlySet<string>,
+  c: IssueCollector,
+): void {
+  if (!value || typeof value !== "object") return;
+  for (const field of Object.keys(value as Record<string, unknown>)) {
+    if (!allowed.has(field)) {
+      c.error(field, "Unknown field.");
+    }
+  }
+}
+
+function validateRouterDestinationsUseOneClient(router: RouterConfig, c: IssueCollector): void {
+  const clientPaths = new Map<string, number[]>();
+  for (const [destinationIndex, destination] of router.destinations.entries()) {
+    const clientStatePath = destination.cardano?.client_state_path;
+    if (!clientStatePath) continue;
+    const indexes = clientPaths.get(clientStatePath) ?? [];
+    indexes.push(destinationIndex);
+    clientPaths.set(clientStatePath, indexes);
+  }
+
+  if (clientPaths.size <= 1) return;
+
+  const details = [...clientPaths.entries()]
+    .map(([path, indexes]) => `${path} at destination(s) ${indexes.join(", ")}`)
+    .join("; ");
+  c.error(
+    "destinations",
+    `All Cardano destinations in one router must reference the same on-chain client deployment. Found: ${details}. Split these into separate routers.`,
+  );
+}
+
+function validateClientCustomerOwnership(
+  routers: Record<string, RouterConfig>,
+  c: IssueCollector,
+): void {
+  const owners = new Map<string, Map<string, string[]>>();
+
+  for (const [routerId, router] of Object.entries(routers)) {
+    for (const destination of router.destinations) {
+      const clientStatePath = destination.cardano?.client_state_path;
+      if (!clientStatePath || !router.customer_id) continue;
+      const byCustomer = owners.get(clientStatePath) ?? new Map<string, string[]>();
+      const routerIds = byCustomer.get(router.customer_id) ?? [];
+      routerIds.push(routerId);
+      byCustomer.set(router.customer_id, routerIds);
+      owners.set(clientStatePath, byCustomer);
+    }
+  }
+
+  for (const [clientStatePath, byCustomer] of owners.entries()) {
+    if (byCustomer.size <= 1) continue;
+    const details = [...byCustomer.entries()]
+      .map(([customerId, routerIds]) => `${customerId}: ${routerIds.join(", ")}`)
+      .join("; ");
+    for (const routerIds of byCustomer.values()) {
+      for (const routerId of routerIds) {
+        c.scope(routerId).error(
+          "customer_id",
+          `One on-chain client deployment must belong to exactly one customer_id. ` +
+            `${clientStatePath} is referenced by: ${details}.`,
+        );
+      }
+    }
+  }
 }
 
 type LaneDestinationSymbols = {

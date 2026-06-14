@@ -1357,6 +1357,18 @@ at compile time.
 
 ## 9. Off-chain feeder architecture
 
+**Terminology.** This section uses the feeder's identity concepts plus the runtime
+lane key. A **customer** is the business DIA serves. A **client** is one on-chain
+deployment — a Receiver UTxO, its deposit address, and its pair namespace, persisted as
+`clients/<id>.json`. A **router** is an off-chain feeder config group (symbol selection
+plus push policy) that points at a client; there is no on-chain `router` object (§6.5),
+so a customer may run many routers against one client. A **destination** is a router's
+Cardano output target (`client_state_path` + `protocol_state_path` + policy). The
+**lane** is the runtime serialization key `client_state_path :: protocol_state_path`:
+one lane is one serial writer for one Receiver UTxO, and every router that targets the
+same client shares it. The full glossary lives in
+[`feeder.md`](./feeder.md#concept-glossary-customer-client-router-lane).
+
 ### 9.1 Persistence model — DB + pair-state files
 
 The feeder uses a 6-table relational schema (SQLite by default, optional Postgres)
@@ -1406,23 +1418,25 @@ DIA Lasernet EVM chain
   └─────┬───────┘
         │ SubmitRequest per dispatched destination
         ▼
-  ┌─────────────┐   UpdateWorkerPoolManager — one pool per router_id.
-  │  Update     │   Buffers batches of SubmitRequests; workers drain them
-  │  Worker     │   into the lane coalescer. Controlled by worker_pool.*
-  │  Pool Mgr   │   config keys.
+  ┌─────────────┐   UpdateWorkerPoolManager — one pool per router_id, so each
+  │  Update     │   router buffers independently. Workers drain their
+  │  Worker     │   SubmitRequests into the shared per-lane coalescer below.
+  │  Pool Mgr   │   Controlled by the worker_pool.* config keys.
   └─────┬───────┘
         │ SubmitRequest
         ▼
-  ┌─────────────┐   CoalescerManager — one LaneCoalescer per router.
-  │  Lane       │   Per-symbol supersession: only the newest intent for each
-  │  Coalescer  │   symbol reaches the queue. Three-state machine (idle /
-  │             │   accumulating / in-flight) enforces coalesce_window.
+  ┌─────────────┐   CoalescerManager — one LaneCoalescer per lane
+  │  Lane       │   (client_state_path :: protocol_state_path), shared by every
+  │  Coalescer  │   router on that client. Per-symbol supersession keeps only the
+  │             │   newest intent per symbol; idle/accumulating/in-flight enforces
+  │             │   coalesce_window.
   └─────┬───────┘
         │ flush batch → QueueManager
         ▼
-  ┌─────────────┐   QueueManager — one serial queue per Cardano destination
-  │  Queue      │   (per lane key = routerId + destinationIndex). Serializes
-  │  Manager    │   submissions so UTxO contention is avoided.
+  ┌─────────────┐   QueueManager — one serial queue per lane
+  │  Queue      │   (client_state_path :: protocol_state_path). All routers on one
+  │  Manager    │   client share this queue, so no two txs contend for the
+  │             │   Receiver UTxO.
   └─────┬───────┘
         │ OracleIntentBridge.submitUpdate(...)
         ▼

@@ -201,41 +201,48 @@ describe("parseArgs — combined flags", () => {
 // init sub-commands
 // ---------------------------------------------------------------------------
 
-describe("parseArgs — init client", () => {
-  it("sets mode=init and subCommand=client", () => {
-    const r = parseArgs(["init", "client"]);
+describe("parseArgs — init router", () => {
+  it("sets mode=init and subCommand=router", () => {
+    const r = parseArgs(["init", "router"]);
     assert.equal(r.mode, "init");
-    assert.equal(r.initSubCommand, "client");
+    assert.equal(r.initSubCommand, "router");
     assert.equal(r.force, false);
     assert.equal(r.initFrom, undefined);
   });
 
   it("--help inside init sets showHelp", () => {
-    const r = parseArgs(["init", "client", "--help"]);
+    const r = parseArgs(["init", "router", "--help"]);
     assert.equal(r.showHelp, true);
   });
 
-  it("throws on unknown flag inside init client", () => {
+  it("throws on unknown flag inside init router", () => {
     assert.throws(
-      () => parseArgs(["init", "client", "--config", "x"]),
-      /Unknown argument for 'init client'/,
+      () => parseArgs(["init", "router", "--config", "x"]),
+      /Unknown argument for 'init router'/,
     );
   });
 
   it("--from and --force together", () => {
-    const r = parseArgs(["init", "client", "--from", "/client.json", "--force"]);
+    const r = parseArgs(["init", "router", "--from", "/client.json", "--force"]);
     assert.equal(r.initFrom, "/client.json");
     assert.equal(r.force, true);
+  });
+
+  it("does not accept init client", () => {
+    assert.throws(
+      () => parseArgs(["init", "client"]),
+      /requires the 'router' sub-command/,
+    );
   });
 });
 
 describe("parseArgs — init errors", () => {
   it("throws when no sub-command given", () => {
-    assert.throws(() => parseArgs(["init"]), /requires the 'client' sub-command/);
+    assert.throws(() => parseArgs(["init"]), /requires the 'router' sub-command/);
   });
 
   it("throws on unknown init sub-command", () => {
-    assert.throws(() => parseArgs(["init", "badcmd"]), /requires the 'client' sub-command/);
+    assert.throws(() => parseArgs(["init", "badcmd"]), /requires the 'router' sub-command/);
   });
 });
 
@@ -380,10 +387,10 @@ describe("parseArgs — sub-commands preceded by global flags (Docker invocation
     assert.equal(r.maxAge, "30m");
   });
 
-  it("detects init client after --config <dir>", () => {
-    const r = parseArgs(["--config", "/config", "init", "client"]);
+  it("detects init router after --config <dir>", () => {
+    const r = parseArgs(["--config", "/config", "init", "router"]);
     assert.equal(r.mode, "init");
-    assert.equal(r.initSubCommand, "client");
+    assert.equal(r.initSubCommand, "router");
     assert.equal(r.configPath, "/config");
   });
 

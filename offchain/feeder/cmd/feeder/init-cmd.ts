@@ -1,7 +1,7 @@
-// `feeder init client` — one-time setup wizard. State lives at
+// `feeder init router` — one-time setup wizard. State lives at
 // ../state/<network>_run_<id>/ (offchain/state); the CLI and the feeder both
-// use that tree. This generates config/routers/<network>/<id>.yaml pointing the
-// daemon at the client's state (../state/<run>/clients/<id>.json).
+// use that tree. This generates config/routers/<network>/<client-id>-router-<name>.yaml
+// pointing the daemon at the client's state (../state/<run>/clients/<id>.json).
 //
 // Run from offchain/feeder/. The auto-scan looks under ../state/ for
 // <network>_run_* dirs, newest first; it uses the only match, prompts when
@@ -10,7 +10,7 @@
 
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createInterface, type Interface } from "node:readline/promises";
-import { join, basename, extname, dirname } from "node:path";
+import { join, dirname } from "node:path";
 
 import { DEFAULT_INIT_PAIRS } from "../../src/config/constants.js";
 
@@ -26,7 +26,7 @@ export type InitCmdOptions = {
 };
 
 export async function runInit(options: InitCmdOptions): Promise<number> {
-  return runInitClient(options);
+  return runInitRouter(options);
 }
 
 /**
@@ -47,14 +47,14 @@ function runIdFromSourcePath(sourcePath: string, networkLower: string): string |
 }
 
 // ---------------------------------------------------------------------------
-// init client
+// init router
 // ---------------------------------------------------------------------------
 
-async function runInitClient(options: InitCmdOptions): Promise<number> {
+async function runInitRouter(options: InitCmdOptions): Promise<number> {
   const { network, from, force, report } = options;
   const networkLower = network.toLowerCase();
 
-  report(`init client: network=${network}`);
+  report(`init router: network=${network}`);
 
   const rl = openRl();
   try {
@@ -65,8 +65,8 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     } else {
       const candidates = await findConfigClientCandidates(networkLower);
       if (candidates.length === 0) {
-        report(`init client: no client JSONs found under ../state/`);
-        report(`init client: hint: run from offchain/feeder/, or use --from <client.json>`);
+        report(`init router: no client JSONs found under ../state/`);
+        report(`init router: hint: run from offchain/feeder/, or use --from <client.json>`);
         return 1;
       }
       if (candidates.length === 1) {
@@ -78,7 +78,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     }
 
     if (!await fileExists(sourcePath)) {
-      report(`init client: source not found: ${sourcePath}`);
+      report(`init router: source not found: ${sourcePath}`);
       return 1;
     }
 
@@ -86,7 +86,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     const clientJson = JSON.parse(await readFile(sourcePath, "utf8")) as { clientId?: string };
     const clientId = clientJson.clientId;
     if (!clientId || typeof clientId !== "string") {
-      report(`init client: source file has no clientId field: ${sourcePath}`);
+      report(`init router: source file has no clientId field: ${sourcePath}`);
       return 1;
     }
 
@@ -94,7 +94,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     // generated below points the daemon at this path. ---
     const runId = runIdFromSourcePath(sourcePath, networkLower);
     if (!runId) {
-      report(`init client: could not determine the run id from ${sourcePath}.`);
+      report(`init router: could not determine the run id from ${sourcePath}.`);
       return 1;
     }
     const runDir = `../state/${networkLower}_run_${runId}`;
@@ -103,8 +103,10 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     // --- Step 4: interactive router YAML generation ---
     out(`\n  Now let's configure the router for ${clientId} on Cardano ${network}.\n`);
 
-    const routerId = `${clientId.replace(/-/g, "_")}_${networkLower}`;
-    const routerTarget = `config/routers/${networkLower}/${clientId}.yaml`;
+    const routerName = await askText(rl, "  Router name — policy group under this client", "default");
+    const routerFileStem = buildRouterFileStem(clientId, routerName);
+    const routerId = normalizeId(routerFileStem);
+    const routerTarget = `config/routers/${networkLower}/${routerFileStem}.yaml`;
 
     const existingPairs = await loadExistingPairsFromYaml(routerTarget);
     const pairPool: string[] =
@@ -119,7 +121,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
       initialSelected,
     );
     if (activePairs.length === 0) {
-      report("init client: no pairs selected. Aborted.");
+      report("init router: no pairs selected. Aborted.");
       return 1;
     }
 
@@ -127,7 +129,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
       ? "CARDANO_WALLET_SEED_MAINNET"
       : "CARDANO_WALLET_SEED_TESTNET";
     const keyEnv       = await askText(rl, "  Wallet seed env var", defaultKeyEnv);
-    const customer     = await askText(rl, "  Customer — business client that groups this router (defaults to the client id)", clientId);
+    const customerId   = await askText(rl, "  Customer id — business/operator grouping above this client", clientId);
     const timeThresh   = await askText(rl, "  Heartbeat — max time between updates; the cron pushes at least this often (e.g. 5m, 10m)", "10m");
     const priceDevRaw  = await askText(rl, "  Price deviation to push early (e.g. 0.1%, 0.5%)", "0.1%");
     const priceDev     = priceDevRaw.replace(/"/g, "");
@@ -135,7 +137,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     const yaml = buildRouterYaml({
       routerId,
       clientId,
-      customer,
+      customerId,
       network: network as "Preview" | "Mainnet",
       keyEnv,
       pairs: activePairs,
@@ -154,14 +156,14 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
     if (await fileExists(routerTarget) && !force) {
       const ok = await askConfirm(rl, `  ${routerTarget} already exists. Overwrite?`, false);
       if (!ok) {
-        report("init client: router YAML not written (aborted). Copy the output above manually.");
+        report("init router: router YAML not written (aborted). Copy the output above manually.");
         return 0;
       }
     }
 
     await mkdir(dirname(routerTarget), { recursive: true });
     await writeFile(routerTarget, yaml, "utf8");
-    report(`init client: wrote ${routerTarget}`);
+    report(`init router: wrote ${routerTarget}`);
 
     out(`\n  All done (run id ${runId}). Start the feeder for THIS run:`);
     out(`    Docker:  make up RUN_ID=${runId} MONITORING=1     (from offchain/)`);
@@ -181,7 +183,7 @@ async function runInitClient(options: InitCmdOptions): Promise<number> {
 export function buildRouterYaml(opts: {
   routerId: string;
   clientId: string;
-  customer: string;
+  customerId: string;
   network: "Preview" | "Mainnet";
   keyEnv: string;
   pairs: string[];
@@ -191,15 +193,15 @@ export function buildRouterYaml(opts: {
   priceDeviation: string;
 }): string {
   const pairsBlock = opts.pairs.map(p => `            - ${p}`).join("\n");
-  return `# Router config — ${opts.clientId} on Cardano ${opts.network}.
-# Generated by: feeder init client
+  return `# Router config - ${opts.clientId} on Cardano ${opts.network}.
+# Generated by: feeder init router
 # Edit any value and restart the feeder to pick up the change.
 
 routers:
   ${opts.routerId}:
     id: ${opts.routerId}
-    name: ${opts.clientId} → Cardano ${opts.network}
-    customer: ${opts.customer}
+    name: ${opts.clientId} -> Cardano ${opts.network}
+    customer_id: ${opts.customerId}
     type: event
     enabled: true
     # Env var holding the Cardano wallet mnemonic seed (from .env).
@@ -234,6 +236,28 @@ ${pairsBlock}
         # stay stale past time_threshold.
         cron: true
 `;
+}
+
+export function buildRouterFileStem(clientId: string, routerName: string): string {
+  return `${slugifyFilePart(clientId)}-router-${slugifyFilePart(routerName)}`;
+}
+
+function slugifyFilePart(value: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "default";
+}
+
+function normalizeId(value: string): string {
+  const id = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return id || "router_default";
 }
 
 // ---------------------------------------------------------------------------

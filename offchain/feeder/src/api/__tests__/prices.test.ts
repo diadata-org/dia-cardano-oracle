@@ -27,6 +27,22 @@ describe("buildPricesResponse", () => {
     assert.equal(r.prices.length, 2);
   });
 
+  it("surfaces the customer/client/network identity on each entry", () => {
+    const cache = createPriceCache({ now: () => 1_000 });
+    cache.set(
+      { routerId: "client_a_router_majors", destinationIndex: 0, symbol: "BTC/USD" },
+      {
+        symbol: "BTC/USD", price: 100_000n, timestamp: 1_700_000_000n, intentHash: "0xabc", updatedAtMs: 1_000,
+        clientId: "client-a", customerId: "acme", network: "Preview",
+      },
+    );
+    const [entry] = buildPricesResponse(cache).prices;
+    assert.equal(entry?.routerId, "client_a_router_majors");
+    assert.equal(entry?.clientId, "client-a");
+    assert.equal(entry?.customerId, "acme");
+    assert.equal(entry?.network, "Preview");
+  });
+
   it("overwrite: set() twice for same key gives one entry", () => {
     const cache = createPriceCache({ now: () => 1_000 });
     cache.set(

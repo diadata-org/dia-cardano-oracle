@@ -136,6 +136,31 @@ export function isTransactionRepresentative(result: SubmitResult): boolean {
   return result.intentHash === representativeIntentHash;
 }
 
+/** Every distinct router id that contributed a member to this transaction.
+ *  A batch coalesces symbols from all routers sharing one lane, so the
+ *  router-membership metric must credit each contributing router exactly once
+ *  — not just the representative's. `resolveRouterId` maps a member's intent
+ *  hash back to the router that produced it; members that no longer resolve are
+ *  skipped, and a batch that resolves to nothing falls back to the caller's
+ *  own router id. The result is sorted for deterministic emission order. */
+export function routerIdsForTransaction(
+  result: SubmitResult,
+  fallbackRouterId: string,
+  resolveRouterId: (intentHash: string) => string | undefined,
+): string[] {
+  const routerIds = new Set<string>();
+  for (const member of result.batch?.members ?? []) {
+    const routerId = resolveRouterId(member.intentHash);
+    if (routerId !== undefined) {
+      routerIds.add(routerId);
+    }
+  }
+  if (routerIds.size === 0) {
+    routerIds.add(fallbackRouterId);
+  }
+  return [...routerIds].sort();
+}
+
 // ---------------------------------------------------------------------------
 // Thin Lucid facade — only the methods the submitter calls.
 // ---------------------------------------------------------------------------

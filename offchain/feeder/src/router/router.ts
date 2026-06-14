@@ -32,8 +32,8 @@ import type { RouterRegistry } from "./registry.js";
 
 export type DispatchResult = {
   routerId: string;
-  /** Customer label from `router.customer`. Undefined when not set in YAML. */
-  customer?: string;
+  /** Business/operator grouping from `router.customer_id`. */
+  customerId: string;
   destinationIndex: number;
   destination: RouterDestination;
   verdict: PolicyVerdict;
@@ -107,7 +107,7 @@ export function routeIntent(
       const verdict = gate(cacheKey, enriched.fullIntent.price, enriched.fullIntent.timestamp);
 
       if (verdict.allowed) {
-        dispatched.push({ routerId: router.id, customer: router.customer, destinationIndex: i, destination, verdict, deviationPct });
+        dispatched.push({ routerId: router.id, customerId: router.customer_id, destinationIndex: i, destination, verdict, deviationPct });
       } else {
         policyFiltered.push({ routerId: router.id, destinationIndex: i, verdict, deviationPct });
       }

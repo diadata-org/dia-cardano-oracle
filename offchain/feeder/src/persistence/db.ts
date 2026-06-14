@@ -71,6 +71,11 @@ export type TransactionLogInsert = {
   intentHash: string;
   cardanoTxHash?: string;
   routerId: string;
+  /** On-chain client deployment that owns the destination (derived from the
+   *  client state path). One transaction is one client/lane. */
+  clientId: string;
+  /** Customer that owns the router (router config's `customer_id`). */
+  customerId: string;
   destinationIndex: number;
   destinationChainName: string;
   destinationContractAddress: string;
@@ -108,6 +113,8 @@ export type TransactionLogRow = {
   intentHash: string;
   cardanoTxHash: string;
   routerId: string;
+  clientId: string;
+  customerId: string;
   destinationIndex: number;
   destinationChainName: string;
   destinationContractAddress: string;
@@ -126,9 +133,6 @@ export type TransactionLogRow = {
   failedAtMs?: number;
   createdAtMs: number;
 };
-
-// Backward-compat alias — some callers still reference TransactionViewRow.
-export type TransactionViewRow = TransactionLogRow;
 
 export type ContractSymbolUpdateRow = {
   id?: number;
@@ -295,6 +299,8 @@ CREATE TABLE IF NOT EXISTS transaction_log (
   intent_hash                   TEXT    NOT NULL,
   cardano_tx_hash               TEXT    NOT NULL DEFAULT '',
   router_id                     TEXT    NOT NULL,
+  client_id                     TEXT    NOT NULL,
+  customer_id                   TEXT    NOT NULL,
   destination_index             INTEGER NOT NULL,
   destination_chain_name        TEXT    NOT NULL,
   destination_contract_address  TEXT    NOT NULL,
@@ -398,6 +404,8 @@ CREATE TABLE IF NOT EXISTS transaction_log (
   intent_hash                   TEXT    NOT NULL,
   cardano_tx_hash               TEXT    NOT NULL DEFAULT '',
   router_id                     TEXT    NOT NULL,
+  client_id                     TEXT    NOT NULL,
+  customer_id                   TEXT    NOT NULL,
   destination_index             INTEGER NOT NULL,
   destination_chain_name        TEXT    NOT NULL,
   destination_contract_address  TEXT    NOT NULL,
@@ -627,16 +635,18 @@ async function createSqliteDb(filePath: string): Promise<Db> {
     async insertTransactionLog(row) {
       db.prepare(`
         INSERT INTO transaction_log
-          (intent_hash, cardano_tx_hash, router_id, destination_index,
+          (intent_hash, cardano_tx_hash, router_id, client_id, customer_id, destination_index,
            destination_chain_name, destination_contract_address,
            symbol, price, timestamp, status, error_code, error_message,
            retry_count, max_retries, fee_paid_lovelace, confirmed_at_depth,
            submitted_at_ms, confirmed_at_ms, failed_at_ms, created_at_ms)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).run(
         row.intentHash,
         row.cardanoTxHash ?? "",
         row.routerId,
+        row.clientId,
+        row.customerId,
         row.destinationIndex,
         row.destinationChainName,
         row.destinationContractAddress,
@@ -1044,16 +1054,18 @@ async function createPostgresDb(dsn: string): Promise<Db> {
     async insertTransactionLog(row) {
       await pool.query(
         `INSERT INTO transaction_log
-           (intent_hash, cardano_tx_hash, router_id, destination_index,
+           (intent_hash, cardano_tx_hash, router_id, client_id, customer_id, destination_index,
             destination_chain_name, destination_contract_address,
             symbol, price, timestamp, status, error_code, error_message,
             retry_count, max_retries, fee_paid_lovelace, confirmed_at_depth,
             submitted_at_ms, confirmed_at_ms, failed_at_ms, created_at_ms)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
         [
           row.intentHash,
           row.cardanoTxHash ?? "",
           row.routerId,
+          row.clientId,
+          row.customerId,
           row.destinationIndex,
           row.destinationChainName,
           row.destinationContractAddress,
@@ -1436,6 +1448,8 @@ type SqliteTransactionLogRow = {
   intent_hash: string;
   cardano_tx_hash: string;
   router_id: string;
+  client_id: string;
+  customer_id: string;
   destination_index: number;
   destination_chain_name: string;
   destination_contract_address: string;
@@ -1461,6 +1475,8 @@ function fromSqliteTransactionLogRow(r: SqliteTransactionLogRow): TransactionLog
     intentHash: r.intent_hash,
     cardanoTxHash: r.cardano_tx_hash,
     routerId: r.router_id,
+    clientId: r.client_id,
+    customerId: r.customer_id,
     destinationIndex: r.destination_index,
     destinationChainName: r.destination_chain_name,
     destinationContractAddress: r.destination_contract_address,
@@ -1626,6 +1642,8 @@ type PgTransactionLogRow = {
   intent_hash: string;
   cardano_tx_hash: string;
   router_id: string;
+  client_id: string;
+  customer_id: string;
   destination_index: number;
   destination_chain_name: string;
   destination_contract_address: string;
@@ -1651,6 +1669,8 @@ function fromPgTransactionLogRow(r: PgTransactionLogRow): TransactionLogRow {
     intentHash: r.intent_hash,
     cardanoTxHash: r.cardano_tx_hash,
     routerId: r.router_id,
+    clientId: r.client_id,
+    customerId: r.customer_id,
     destinationIndex: r.destination_index,
     destinationChainName: r.destination_chain_name,
     destinationContractAddress: r.destination_contract_address,
