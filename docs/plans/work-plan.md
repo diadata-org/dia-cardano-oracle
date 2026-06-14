@@ -134,8 +134,8 @@ High-level deliverables tracked here:
   duplicate enqueues across refresh ticks), not the safety mechanism. The deposit floor is read
   from `config-bootstrap.json::configState.depositMinLovelace` via `readDepositMinLovelace`.
 - [x] OpenAPI/Swagger surface: a metadata route table (`src/api/routes.ts`, TypeBox schemas)
-  drives an OpenAPI 3.0.3 doc at `/api/v1/openapi.json` and an offline Redoc UI at `/docs`
-  (vendored, no CDN; shipped in the Docker image).
+  drives an OpenAPI 3.0.3 doc at `/api/v1/openapi.json` and an interactive
+  Swagger UI at `/docs` (vendored; shipped in the Docker image).
 - [~] M2 Preview evidence: the earlier packs (`m2-preview-20260609-*`, `m2-preview-20260611-114820`)
   predate the terminology migration + cron-path fix and are **superseded**. A **fresh** Preview pack
   from the current run (customer/client/router naming, 606 feeder tests pass) is captured as Fase 1

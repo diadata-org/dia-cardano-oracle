@@ -850,7 +850,7 @@ describe("createApiServer", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // B4 — OpenAPI / Redoc docs (offline)
+  // B4 — OpenAPI / Swagger UI docs
   // ---------------------------------------------------------------------------
 
   it("/api/v1/openapi.json returns a valid OpenAPI doc covering known routes", async () => {
@@ -890,7 +890,7 @@ describe("createApiServer", () => {
     assert.ok("post" in doc.paths["/api/v1/alerts/{id}/ack"], "ack route should be POST");
   });
 
-  it("/docs returns 200 HTML referencing the spec and the bundled Redoc asset", async () => {
+  it("/docs returns 200 HTML referencing the spec and the bundled Swagger UI assets", async () => {
     const port = nextPort();
     const server = createApiServer({
       port,
@@ -909,12 +909,13 @@ describe("createApiServer", () => {
     assert.equal(res.status, 200);
     assert.match(res.headers.get("content-type") ?? "", /text\/html/);
     assert.match(body, /\/api\/v1\/openapi\.json/);
-    // Offline: references the locally-served bundle, never a CDN.
-    assert.match(body, /\/public\/redoc\.standalone\.js/);
-    assert.doesNotMatch(body, /https?:\/\/[^"']*redoc/i);
+    // References the locally-served Swagger UI assets, never a remote URL.
+    assert.match(body, /\/public\/swagger-ui-bundle\.js/);
+    assert.match(body, /\/public\/swagger-ui\.css/);
+    assert.doesNotMatch(body, /https?:\/\/[^"']*swagger/i);
   });
 
-  it("/public/redoc.standalone.js serves the vendored bundle (no network)", async () => {
+  it("the vendored Swagger UI assets serve with the right content types", async () => {
     const port = nextPort();
     const server = createApiServer({
       port,
@@ -928,15 +929,19 @@ describe("createApiServer", () => {
     await server.start();
     after(() => server.stop());
 
-    const res = await fetch(`http://127.0.0.1:${port}/public/redoc.standalone.js`);
-    assert.equal(res.status, 200);
-    assert.match(res.headers.get("content-type") ?? "", /javascript/);
-    const body = await res.text();
-    assert.ok(body.length > 10_000, "bundle should be a substantial JS file");
-    assert.match(body, /Redoc/, "bundle should expose the Redoc global");
+    const js = await fetch(`http://127.0.0.1:${port}/public/swagger-ui-bundle.js`);
+    assert.equal(js.status, 200);
+    assert.match(js.headers.get("content-type") ?? "", /javascript/);
+    const jsBody = await js.text();
+    assert.ok(jsBody.length > 10_000, "bundle should be a substantial JS file");
+    assert.match(jsBody, /SwaggerUIBundle/, "bundle should expose the SwaggerUIBundle global");
+
+    const css = await fetch(`http://127.0.0.1:${port}/public/swagger-ui.css`);
+    assert.equal(css.status, 200);
+    assert.match(css.headers.get("content-type") ?? "", /text\/css/);
   });
 
-  it("an arbitrary /public/* path is not served (only the vendored asset)", async () => {
+  it("an unknown or traversing /public/* path is not served (only the vendored assets)", async () => {
     const port = nextPort();
     const server = createApiServer({
       port,
@@ -950,8 +955,10 @@ describe("createApiServer", () => {
     await server.start();
     after(() => server.stop());
 
-    const res = await get(port, "/public/../package.json");
-    assert.equal(res.status, 404);
+    const traversal = await get(port, "/public/../package.json");
+    assert.equal(traversal.status, 404);
+    const unknown = await fetch(`http://127.0.0.1:${port}/public/not-an-asset.js`);
+    assert.equal(unknown.status, 404);
   });
 
   // ---------------------------------------------------------------------------

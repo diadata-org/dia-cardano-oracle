@@ -132,7 +132,7 @@ on `localhost`.
 | --- | --- | --- |
 | **Grafana** dashboards | <http://localhost:3000> — login `admin` / `${GRAFANA_ADMIN_PASSWORD:-admin}` | `make up MONITORING=1` |
 | **Prometheus** (raw metrics, alert state) | <http://localhost:9090> | `make up MONITORING=1` |
-| Feeder **API reference** (Redoc, interactive) | <http://localhost:8080/docs> | `make up` |
+| Feeder **API reference** (Swagger UI, interactive — Try it out) | <http://localhost:8080/docs> | `make up` |
 | Feeder **OpenAPI schema** (3.0 JSON) | <http://localhost:8080/api/v1/openapi.json> | `make up` |
 | Feeder **liveness** | <http://localhost:8080/health/live> | `make up` |
 | Feeder **readiness** | <http://localhost:8080/health/ready> | `make up` |
@@ -142,7 +142,7 @@ Feeder HTTP API (all under `http://localhost:8080`):
 
 | Endpoint | Shows |
 | --- | --- |
-| `/docs` | Interactive API reference (Redoc), rendered offline from the OpenAPI schema |
+| `/docs` | Interactive API reference (Swagger UI), rendered from the OpenAPI schema — fire requests with **Try it out** |
 | `/api/v1/openapi.json` | The OpenAPI 3.0 schema itself, generated from the route table |
 | `/api/v1/prices` | Latest confirmed price per symbol (each entry carries `routerId` + `customerId`/`clientId`/`network`) |
 | `/api/v1/prices/:symbol` | One symbol across destinations |

@@ -36,9 +36,9 @@ import { sanitizeLogLine } from "../utils/sanitize.js";
 import { apiRoutes } from "./routes.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import {
-  loadRedocAsset,
+  loadSwaggerAssets,
   renderDocsHtml,
-  REDOC_ASSET_PATH,
+  PUBLIC_ASSET_PREFIX,
 } from "./docs.js";
 
 export type ApiServerOptions = {
@@ -153,12 +153,12 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
 
   // Build the OpenAPI document once from the metadata route table — it never
   // changes during the server's lifetime. The /docs page renders it via the
-  // vendored Redoc bundle, loaded once and held in memory (1 MB asset; reading
-  // it per-request would be wasteful). When the asset is missing /docs serves
-  // a minimal offline fallback that links to the raw spec (see docs.ts).
+  // vendored Swagger UI assets, loaded once and held in memory (reading them
+  // per-request would be wasteful). When an asset is missing /docs serves a
+  // minimal fallback that links to the raw spec (see docs.ts).
   const openApiDocument = JSON.stringify(buildOpenApiDocument(apiRoutes));
-  const redocAsset = loadRedocAsset();
-  const docsHtml = renderDocsHtml("/api/v1/openapi.json", redocAsset !== null);
+  const swaggerAssets = loadSwaggerAssets();
+  const docsHtml = renderDocsHtml("/api/v1/openapi.json", swaggerAssets !== null);
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const startedAtNs = process.hrtime.bigint();
@@ -269,13 +269,15 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
           return;
 
         case "public-asset": {
-          // Only the one vendored Redoc bundle is served — no arbitrary file
-          // access. matchRoute already restricts the path to REDOC_ASSET_PATH.
-          if (redocAsset === null) {
+          // Only the vendored Swagger UI assets are served — the lookup against
+          // the preloaded map means no arbitrary file access (an unknown
+          // /public/* path is not in the map and 404s).
+          const asset = swaggerAssets?.get(pathname);
+          if (!asset) {
             sendJson(404, { error: "Not Found" });
             return;
           }
-          finish(200, redocAsset, "application/javascript; charset=utf-8");
+          finish(200, asset.body, asset.contentType);
           return;
         }
 
@@ -520,7 +522,7 @@ function matchRoute(pathname: string): RouteMatch | null {
   if (pathname === "/debug") return { endpoint: "/debug", kind: "debug" };
   if (pathname === "/api/v1/openapi.json") return { endpoint: "/api/v1/openapi.json", kind: "openapi" };
   if (pathname === "/docs") return { endpoint: "/docs", kind: "docs" };
-  if (pathname === REDOC_ASSET_PATH) return { endpoint: "/public/*", kind: "public-asset" };
+  if (pathname.startsWith(PUBLIC_ASSET_PREFIX)) return { endpoint: "/public/*", kind: "public-asset" };
   if (pathname === "/api/v1/prices") return { endpoint: "/api/v1/prices", kind: "prices" };
   if (pathname === "/api/v1/symbols") return { endpoint: "/api/v1/symbols", kind: "symbols" };
   if (pathname === "/api/v1/chains") return { endpoint: "/api/v1/chains", kind: "chains" };

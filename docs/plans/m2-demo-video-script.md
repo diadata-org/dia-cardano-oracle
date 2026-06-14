@@ -96,10 +96,11 @@ the shoot, point it out — but don't bank on it.
 *(00:45–02:30)*
 
 **On screen:** the `/docs` API reference, then the terminal.
-- Open **`http://localhost:8080/docs`** → the interactive API reference (Redoc),
+- Open **`http://localhost:8080/docs`** → the interactive API reference (Swagger UI),
   generated from the OpenAPI 3.0 schema at `http://localhost:8080/api/v1/openapi.json`.
   Narrate: "the API is self-documented — every endpoint, schema, and example is here,
-  generated from the code so it can't drift."
+  generated from the code so it can't drift." Optionally expand an endpoint and hit
+  **Try it out → Execute** to fire a live request from the page (e.g. `GET /api/v1/prices`).
 - `curl -s localhost:8080/api/v1/symbols | jq` → narrate the 10 symbols.
 - `curl -s localhost:8080/api/v1/prices | jq '.prices[] | {symbol, price, timestamp, cardanoTxHash}'`
   → show each feed has a fresh price, timestamp, and an on-chain tx hash.
@@ -175,7 +176,7 @@ by anyone on a public explorer."
 
 | What | URL |
 |---|---|
-| API docs (Redoc) | `http://localhost:8080/docs` |
+| API docs (Swagger UI — Try it out) | `http://localhost:8080/docs` |
 | OpenAPI 3.0 schema | `http://localhost:8080/api/v1/openapi.json` |
 | Symbols | `http://localhost:8080/api/v1/symbols` |
 | Prices | `http://localhost:8080/api/v1/prices` |

@@ -229,7 +229,7 @@ export const apiRoutes: readonly RouteDescriptor[] = [
     method: "GET",
     path: "/docs",
     kind: "docs",
-    summary: "Offline API reference (Redoc) rendering this spec.",
+    summary: "Interactive API reference (Swagger UI) rendering this spec — with Try it out.",
   },
   {
     method: "GET",

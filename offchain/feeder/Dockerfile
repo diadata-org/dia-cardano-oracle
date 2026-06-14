@@ -49,7 +49,7 @@ RUN cd offchain/feeder && npm ci
 COPY offchain/feeder/tsconfig.json ./offchain/feeder/
 COPY offchain/feeder/cmd ./offchain/feeder/cmd
 COPY offchain/feeder/src ./offchain/feeder/src
-# Static assets served by the API at runtime (the offline Redoc bundle behind
+# Static assets served by the API at runtime (the Swagger UI bundle + CSS behind
 # /docs). Vendored under feeder/public/ and not part of the TS build.
 COPY offchain/feeder/public ./offchain/feeder/public
 RUN cd offchain/feeder && npm run build
