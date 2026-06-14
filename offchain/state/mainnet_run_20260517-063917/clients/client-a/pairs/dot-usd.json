@@ -50,5 +50,11 @@
       "submittedTxHash": "bc0b5dab76964ee9c4a053b3337f585dfcc9162e576741247d7d3bd48e47e8ee",
       "confirmed": true
     }
-  ]
+  ],
+  "teardown": {
+    "status": "orphaned",
+    "orphaned": true,
+    "reason": "pair NFT not present at client pair address at teardown time",
+    "recordedAt": "2026-06-14T05:42:49.532Z"
+  }
 }
