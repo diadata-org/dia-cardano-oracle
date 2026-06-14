@@ -2,15 +2,15 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  isTransientWasmBuildError,
+  isProcessRecoverableWasmError,
   nextWasmFailureCount,
   shouldExitOnWasmFailures,
 } from "../wasm-failure-guard.js";
 
-describe("isTransientWasmBuildError", () => {
+describe("isProcessRecoverableWasmError", () => {
   it("matches the detached-ArrayBuffer signature", () => {
     assert.equal(
-      isTransientWasmBuildError(
+      isProcessRecoverableWasmError(
         new Error(
           "Cannot perform %TypedArray%.prototype.set on a detached ArrayBuffer",
         ),
@@ -20,26 +20,45 @@ describe("isTransientWasmBuildError", () => {
   });
 
   it("matches a bare 'detached' message and the %TypedArray% form", () => {
-    assert.equal(isTransientWasmBuildError(new Error("buffer is detached")), true);
+    assert.equal(isProcessRecoverableWasmError(new Error("buffer is detached")), true);
     assert.equal(
-      isTransientWasmBuildError("%TypedArray%.prototype.set failed"),
+      isProcessRecoverableWasmError("%TypedArray%.prototype.set failed"),
       true,
     );
   });
 
+  it("matches the hard WASM trap 'RuntimeError: unreachable' (the real outage signature)", () => {
+    assert.equal(
+      isProcessRecoverableWasmError(new Error("{ Complete: RuntimeError: unreachable }")),
+      true,
+    );
+    assert.equal(isProcessRecoverableWasmError("unreachable"), true);
+  });
+
   it("does NOT match unrelated errors", () => {
-    assert.equal(isTransientWasmBuildError(new Error("insufficient funds")), false);
-    assert.equal(isTransientWasmBuildError(new Error("fee too small")), false);
-    assert.equal(isTransientWasmBuildError(undefined), false);
-    assert.equal(isTransientWasmBuildError(null), false);
+    assert.equal(isProcessRecoverableWasmError(new Error("insufficient funds")), false);
+    assert.equal(isProcessRecoverableWasmError(new Error("fee too small")), false);
+    // A collateral-exhaustion build error is NOT process-recoverable (a restart
+    // won't add a fat UTxO — auto-consolidate resolves it), so it must NOT count.
+    assert.equal(
+      isProcessRecoverableWasmError(
+        new Error("Selected 4 inputs as collateral, but max collateral inputs is 3"),
+      ),
+      false,
+    );
+    assert.equal(isProcessRecoverableWasmError(undefined), false);
+    assert.equal(isProcessRecoverableWasmError(null), false);
   });
 });
 
 describe("nextWasmFailureCount", () => {
-  it("increments on a WASM-signature failure", () => {
+  it("increments on a WASM-signature failure (detached AND unreachable)", () => {
     const wasmErr = new Error("detached ArrayBuffer");
     assert.equal(nextWasmFailureCount(0, { ok: false, error: wasmErr }), 1);
     assert.equal(nextWasmFailureCount(4, { ok: false, error: wasmErr }), 5);
+    const trapErr = new Error("{ Complete: RuntimeError: unreachable }");
+    assert.equal(nextWasmFailureCount(0, { ok: false, error: trapErr }), 1);
+    assert.equal(nextWasmFailureCount(4, { ok: false, error: trapErr }), 5);
   });
 
   it("RESETS to 0 on any successful submission", () => {

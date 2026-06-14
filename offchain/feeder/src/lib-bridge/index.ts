@@ -56,7 +56,10 @@ import {
   assertPaymentKeyHashIsConfigSigner,
 } from "@diadata-org/dia-cardano-oracle-cli/preflight";
 import { depositMerge, selectDepositsForUpdateFold } from "@diadata-org/dia-cardano-oracle-cli/transactions/deposit";
+import { settleAccruedFees } from "@diadata-org/dia-cardano-oracle-cli/transactions/settle";
+import { paymentHookWithdraw } from "@diadata-org/dia-cardano-oracle-cli/transactions/payment-hook-withdraw";
 import { deriveConfiguredWalletDefaults } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet";
+import { consolidateWallet } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet-consolidate";
 import type { CliConfig } from "@diadata-org/dia-cardano-oracle-cli/core/config";
 import type { DiaOracleIntent } from "@diadata-org/dia-cardano-oracle-cli/core/dia-intent";
 import type {
@@ -148,6 +151,11 @@ export type PostConfirmChainState = {
   receiverAccruedLovelace?: bigint;
   paymentHookAccruedLovelace?: bigint;
   adminWalletLovelace?: bigint;
+  /** Largest single pure-ADA UTxO in the admin/signer wallet. A script tx needs
+   *  a collateral UTxO distinct from its fee inputs, so this — not the total —
+   *  is what determines whether the wallet can still build. Drives the
+   *  AdminWalletFragmented alert and the daemon's auto-consolidate. */
+  adminWalletMaxUtxoLovelace?: bigint;
   /** The client's on-chain Receiver script address — surfaced as a metric
    *  label together with `depositAddress` so ReceiverBalanceLow can show
    *  both the locked UTxO and the address operators should fund. */
@@ -244,6 +252,39 @@ export type OracleIntentBridge = {
   mergeDeposits(params: {
     clientStatePath: string;
     protocolStatePath: string;
+  }): Promise<{ txHash: string | null; confirmed: boolean }>;
+  /**
+   * Drain the client's Receiver accrued fees into the shared PaymentHook by
+   * delegating to the CLI's `settleAccruedFees` (one Receiver per call here).
+   * Script tx — spends the Receiver, so the CALLER MUST serialize it on the
+   * update lane. Builds, signs, submits, awaits confirmation. Throws on failure.
+   */
+  settle(params: {
+    clientStatePath: string;
+    protocolStatePath: string;
+  }): Promise<{ txHash: string | null; confirmed: boolean }>;
+  /**
+   * Withdraw accrued fees from the PaymentHook to its configured
+   * `withdrawAddress` (= the admin/signer wallet that pays Cardano fees) by
+   * delegating to the CLI's `paymentHookWithdraw`. Script tx. Refills the wallet
+   * the loop drains. Builds, signs, submits, awaits confirmation. Throws on
+   * failure.
+   */
+  withdrawFromPaymentHook(params: {
+    protocolStatePath: string;
+    amountLovelace: bigint;
+  }): Promise<{ txHash: string | null; confirmed: boolean }>;
+  /**
+   * Defragment the admin/signer wallet: fold its pure-ADA UTxOs into a dedicated
+   * collateral UTxO + working balance by delegating to the CLI's
+   * `consolidateWallet`. A plain pubkey self-payment (NO script inputs → NO
+   * collateral needed to build), so it recovers even an all-dust wallet. It
+   * spends ONLY wallet UTxOs (not the Receiver), but the daemon still runs it on
+   * the lane to keep its own UTxO view consistent. Throws on failure.
+   */
+  consolidateWallet(params: {
+    collateralLovelace: bigint;
+    maxInputs?: number;
   }): Promise<{ txHash: string | null; confirmed: boolean }>;
 };
 
@@ -1370,6 +1411,62 @@ export function createRealOracleIntentBridge(
       log(`mergeDeposits: confirmed=${confirmed} txHash=${txHash ?? "(none)"}`);
       return { txHash, confirmed };
     },
+
+    async settle(params: {
+      clientStatePath: string;
+      protocolStatePath: string;
+    }): Promise<{ txHash: string | null; confirmed: boolean }> {
+      // Delegate to the CLI's `settleAccruedFees` (single Receiver here) so the
+      // feeder keeps one source of truth for the settle tx shape. Serialization
+      // against the update lane is the CALLER's responsibility.
+      log(`settle: client=${params.clientStatePath}`);
+      const result = await settleAccruedFees({
+        protocolStatePath: path.resolve(params.protocolStatePath),
+        clientStatePaths: [path.resolve(params.clientStatePath)],
+        buildOnly: false,
+      });
+      const record = result.transactions?.[result.transactions.length - 1];
+      const txHash = record?.submittedTxHash ?? null;
+      const confirmed = record?.confirmed === true;
+      log(`settle: confirmed=${confirmed} txHash=${txHash ?? "(none)"} drained=${result.totalSettledLovelace}`);
+      return { txHash, confirmed };
+    },
+
+    async withdrawFromPaymentHook(params: {
+      protocolStatePath: string;
+      amountLovelace: bigint;
+    }): Promise<{ txHash: string | null; confirmed: boolean }> {
+      log(`withdrawFromPaymentHook: amount=${params.amountLovelace}`);
+      const result = (await paymentHookWithdraw({
+        amountLovelace: params.amountLovelace.toString(),
+        statePath: path.resolve(params.protocolStatePath),
+        buildOnly: false,
+      })) as {
+        transactions?: Array<{ submittedTxHash?: string | null; confirmed?: boolean }>;
+      };
+      const record = result.transactions?.[result.transactions.length - 1];
+      const txHash = record?.submittedTxHash ?? null;
+      const confirmed = record?.confirmed === true;
+      log(`withdrawFromPaymentHook: confirmed=${confirmed} txHash=${txHash ?? "(none)"}`);
+      return { txHash, confirmed };
+    },
+
+    async consolidateWallet(params: {
+      collateralLovelace: bigint;
+      maxInputs?: number;
+    }): Promise<{ txHash: string | null; confirmed: boolean }> {
+      log(`consolidateWallet: collateral=${params.collateralLovelace} maxInputs=${params.maxInputs ?? 60}`);
+      const result = await consolidateWallet({
+        maxInputs: params.maxInputs ?? 60,
+        buildOnly: false,
+        collateralLovelace: params.collateralLovelace,
+      });
+      log(
+        `consolidateWallet: confirmed=${result.confirmed} txHash=${result.submittedTxHash ?? "(none)"} ` +
+          `merged=${result.consolidatedUtxoCount}`,
+      );
+      return { txHash: result.submittedTxHash, confirmed: result.confirmed };
+    },
   };
 
   return bridge;
@@ -1405,6 +1502,7 @@ async function capturePostConfirmState(args: {
   receiverAccruedLovelace?: bigint;
   paymentHookAccruedLovelace?: bigint;
   adminWalletLovelace?: bigint;
+  adminWalletMaxUtxoLovelace?: bigint;
   receiverAddress?: string;
   depositAddress?: string;
 }> {
@@ -1413,6 +1511,7 @@ async function capturePostConfirmState(args: {
     receiverAccruedLovelace?: bigint;
     paymentHookAccruedLovelace?: bigint;
     adminWalletLovelace?: bigint;
+    adminWalletMaxUtxoLovelace?: bigint;
     receiverAddress?: string;
     depositAddress?: string;
   } = {
@@ -1458,15 +1557,27 @@ async function capturePostConfirmState(args: {
     args.log(`post-confirm: payment hook query failed: ${(error as Error).message}`);
   }
 
-  // 3. Admin (signer) wallet — sum lovelace across fresh UTxOs.
+  // 3. Admin (signer) wallet — total lovelace AND the largest pure-ADA UTxO.
+  //    Total alone is blind to fragmentation: a wallet shattered into
+  //    sub-collateral dust still totals fine but cannot back collateral, so we
+  //    also surface the largest pure-ADA UTxO (a script tx needs a collateral
+  //    UTxO distinct from its fee inputs). Drives AdminWalletFragmented +
+  //    auto-consolidate.
   try {
     const utxos = await args.wallet.getUtxos();
     let total = 0n;
+    let maxPureAda = 0n;
     for (const utxo of utxos) {
-      const lovelace = utxo.assets?.lovelace ?? 0n;
-      total += typeof lovelace === "bigint" ? lovelace : BigInt(lovelace as unknown as string);
+      const raw = utxo.assets?.lovelace ?? 0n;
+      const lovelace = typeof raw === "bigint" ? raw : BigInt(raw as unknown as string);
+      total += lovelace;
+      // Pure-ADA UTxO = single `lovelace` asset; only these can be collateral.
+      if (Object.keys(utxo.assets ?? {}).length === 1 && lovelace > maxPureAda) {
+        maxPureAda = lovelace;
+      }
     }
     result.adminWalletLovelace = total;
+    result.adminWalletMaxUtxoLovelace = maxPureAda;
   } catch (error) {
     args.log(`post-confirm: admin wallet query failed: ${(error as Error).message}`);
   }

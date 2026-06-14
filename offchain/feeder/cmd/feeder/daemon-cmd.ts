@@ -84,12 +84,25 @@ import {
   laneKey,
   nextWasmFailureCount,
   shouldExitOnWasmFailures,
+  shouldAutoSettle,
+  shouldAutoWithdraw,
+  shouldAutoConsolidate,
   type CoalescerManager,
   type InflightTable,
 } from "../../src/submitter/index.js";
 import type { CardanoDestinationConfig } from "../../src/config/types.js";
 import type { SubmitRequest, SubmitResult, RouterSigner } from "../../src/submitter/types.js";
-import { isNoTransactionFailure, isTransactionRepresentative } from "../../src/submitter/types.js";
+import {
+  isNoTransactionFailure,
+  isTransactionRepresentative,
+  routerIdsForTransaction,
+} from "../../src/submitter/types.js";
+import {
+  buildRouterIdentity,
+  clientIdFromStatePath,
+  type RouterRuntimeIdentity,
+} from "../../src/runtime/identity.js";
+import { clientLabels, routerMembershipLabels } from "../../src/api/metric-labels.js";
 import {
   createUpdateWorkerPoolManager,
   type UpdateWorkerPoolManager,
@@ -179,21 +192,11 @@ function parseDurationMs(raw: string | undefined, fallback: number): number {
   return Math.round(num * 1_000); // bare number → seconds
 }
 
-type IntentRuntimeEntry = {
+type IntentRuntimeEntry = RouterRuntimeIdentity & {
   observedAtMs: number;
-  routerId: string;
-  destinationIndex: number;
-  clientStatePath: string;
-  clientId: string;
   symbol: string;
   submittedAtMs?: number;
 };
-
-function clientIdFromStatePath(path: string): string {
-  const normalized = path.replace(/\\/g, "/");
-  const fileName = normalized.split("/").pop() ?? normalized;
-  return fileName.endsWith(".json") ? fileName.slice(0, -5) : fileName;
-}
 
 /**
  * Resolve a per-router Cardano signer for every enabled router, keyed by
@@ -459,7 +462,7 @@ export async function checkBootstrapStateFiles(
   );
   if (!await fileExists(bootstrapPath)) {
     report(`daemon: missing bootstrap state file: ${bootstrapPath}`);
-    report(`daemon: hint → deploy with the CLI (run-all / protocol-init) so ${bootstrapPath} exists, then 'init client'.`);
+    report(`daemon: hint → deploy with the CLI (run-all / protocol-init) so ${bootstrapPath} exists, then 'init router'.`);
     return false;
   }
   for (const [routerId, router] of Object.entries(config.routers)) {
@@ -468,7 +471,7 @@ export async function checkBootstrapStateFiles(
         const clientPath = dest.cardano.client_state_path;
         if (!await fileExists(clientPath)) {
           report(`daemon: router "${routerId}": missing client state: ${clientPath}`);
-          report(`daemon: hint → npm run feeder:dev -- init client`);
+          report(`daemon: hint → npm run feeder:dev -- init router`);
           return false;
         }
       }
@@ -616,10 +619,13 @@ async function hydratePriceCacheFromPairStateFiles(args: {
               cardanoTxHash: lastConfirmedTx?.submittedTxHash,
               confirmedAtDepth: confirmationDepth,
               updatedAtMs,
+              clientId,
+              customerId: router.customer_id,
+              network: dest.cardano.network,
             },
           );
           metrics.cardanoOracleLastConfirmedTimestampSeconds.set(
-            { symbol, client_id: clientId },
+            { symbol, ...clientLabels({ clientId, customerId: router.customer_id }) },
             Number(timestampRaw),
           );
           hydrated++;
@@ -914,6 +920,33 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       ? BigInt(alerting.deposit_pending_merge_lovelace)
       : undefined;
 
+  // Automatic fee-loop maintenance thresholds. Each is optional: when absent the
+  // matching automatic step is DISABLED (never defaulted). Each sits BEYOND its
+  // paired alert (enforced by the threshold-drift test) so the alert fires first.
+  //   - auto_settle_lovelace            > settle_overdue_lovelace
+  //   - auto_withdraw_lovelace          > payment_hook_withdraw_ready_lovelace
+  //   - auto_consolidate_below_lovelace < admin_wallet_min_collateral_lovelace
+  const autoSettleLovelace =
+    alerting.auto_settle_lovelace !== undefined
+      ? BigInt(alerting.auto_settle_lovelace)
+      : undefined;
+  const autoWithdrawLovelace =
+    alerting.auto_withdraw_lovelace !== undefined
+      ? BigInt(alerting.auto_withdraw_lovelace)
+      : undefined;
+  const autoConsolidateBelowLovelace =
+    alerting.auto_consolidate_below_lovelace !== undefined
+      ? BigInt(alerting.auto_consolidate_below_lovelace)
+      : undefined;
+  // Dedicated collateral UTxO size the auto-consolidate leaves behind. Reuse the
+  // collateral floor (`admin_wallet_min_collateral_lovelace`) when set so the
+  // consolidated collateral UTxO clears the AdminWalletFragmented threshold;
+  // fall back to lucid's 5 ADA default otherwise.
+  const collateralUtxoLovelace =
+    alerting.admin_wallet_min_collateral_lovelace !== undefined
+      ? BigInt(alerting.admin_wallet_min_collateral_lovelace)
+      : 5_000_000n;
+
   const maxQueueSize = infra.health_check?.max_queue_size;
 
   healthState.maxStalenessMs = maxStalenessMs;
@@ -936,11 +969,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // startup error (fail loud) rather than a silent fallback to the wrong key.
   const routerSigners = resolveRouterSigners(routerRegistry.all, report);
 
-  // routerId → customer label (free-form business label from router.customer).
-  // Used to tag the Spectra bridge_intents_* lifecycle aliases so Grafana can
-  // split per-customer. Falls back to "unknown" when a router omits it.
+  // routerId -> customer id. Validation makes customer_id required, so the
+  // runtime does not carry compatibility fallbacks here.
   const routerCustomers = new Map<string, string>(
-    routerRegistry.all.map((r) => [r.id, r.customer ?? "unknown"]),
+    routerRegistry.all.map((r) => [r.id, r.customer_id]),
   );
 
   // ------------------------------------------------------------------
@@ -980,13 +1012,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           const runtime = intentRuntime.get(intentHash);
           if (step === "submitted" && txHash && runtime && runtime.submittedAtMs === undefined) {
             runtime.submittedAtMs = Date.now();
-            metrics.transactionsSubmitted.inc({ symbol, client_id: runtime.clientId });
-            metrics.bridgeIntentsSubmitted.inc({
-              symbol, client_id: runtime.clientId,
-              customer: routerCustomers.get(runtime.routerId) ?? "unknown",
-            });
+            metrics.transactionsSubmitted.inc({ symbol, ...clientLabels(runtime) });
+            metrics.bridgeIntentsSubmitted.inc({ symbol, ...clientLabels(runtime) });
             metrics.processingToSubmissionSeconds.observe(
-              { symbol, client_id: runtime.clientId },
+              { symbol, ...clientLabels(runtime) },
               (runtime.submittedAtMs - runtime.observedAtMs) / 1_000,
             );
             // onStep is a synchronous void callback (the write-client does
@@ -1000,6 +1029,8 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
               intentHash,
               cardanoTxHash: txHash,
               routerId: runtime.routerId,
+              clientId: runtime.clientId,
+              customerId: runtime.customerId,
               destinationIndex: runtime.destinationIndex,
               destinationChainName: "",
               destinationContractAddress: "",
@@ -1097,51 +1128,71 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         const { symbol, price, timestamp } = enriched.fullIntent;
         const batchSize = result.batch?.size ?? 1;
         const batchMember = result.batch?.members.find((member) => member.intentHash === result.intentHash);
-        metrics.transactionsConfirmed.inc({ symbol, client_id: clientId });
-        const customer = routerCustomers.get(routerId) ?? "unknown";
-        metrics.bridgeIntentsConfirmed.inc({ symbol, client_id: clientId, customer });
+        const customerId = routerCustomers.get(routerId)!;
+        const labels = clientLabels({ clientId, customerId });
+        metrics.transactionsConfirmed.inc({ symbol, ...labels });
+        metrics.bridgeIntentsConfirmed.inc({ symbol, ...labels });
 
         // Tx-level metrics — counted once per TRANSACTION, not per symbol.
         // onResult fires once per intent, so a batch of N pairs fires N times
         // with the same cardanoTxHash; the first batch member is the stateless
         // representative that emits the tx-scoped metrics exactly once. A
         // single (non-batch) confirmation is its own representative.
-        metrics.txPairMembership.inc({ client_id: clientId, customer, symbol, outcome: "confirmed" });
+        metrics.txPairMembership.inc({
+          ...routerMembershipLabels({ clientId, customerId, routerId }),
+          destination_index: String(destinationIndex),
+          symbol,
+          outcome: "confirmed",
+        });
         if (isTransactionRepresentative(result)) {
-          metrics.transactionsTotal.inc({ client_id: clientId, customer, outcome: "confirmed" });
-          metrics.transactionPairs.observe({ client_id: clientId, customer, outcome: "confirmed" }, batchSize);
+          for (const memberRouterId of routerIdsForTransaction(
+            result,
+            routerId,
+            (intentHash) => intentRuntime.get(intentHash)?.routerId,
+          )) {
+            metrics.transactionRouterMembership.inc({
+              ...routerMembershipLabels({
+                clientId,
+                customerId: routerCustomers.get(memberRouterId)!,
+                routerId: memberRouterId,
+              }),
+              outcome: "confirmed",
+            });
+          }
+          metrics.transactionsTotal.inc({ ...labels, outcome: "confirmed" });
+          metrics.transactionPairs.observe({ ...labels, outcome: "confirmed" }, batchSize);
           if (runtime?.submittedAtMs !== undefined) {
             metrics.txProcessingToSubmissionSeconds.observe(
-              { client_id: clientId, customer },
+              labels,
               (runtime.submittedAtMs - runtime.observedAtMs) / 1_000,
             );
             metrics.txSubmissionToConfirmationSeconds.observe(
-              { client_id: clientId, customer },
+              labels,
               (nowMs - runtime.submittedAtMs) / 1_000,
             );
           }
           if (runtime) {
             metrics.txEndToEndSeconds.observe(
-              { client_id: clientId, customer },
+              labels,
               (nowMs - runtime.observedAtMs) / 1_000,
             );
           }
         }
         if (result.feePaidLovelace !== undefined) {
           metrics.bridgeTransactionFeeLovelace.observe(
-            { symbol, client_id: clientId, customer },
+            { symbol, ...labels },
             Number(result.feePaidLovelace),
           );
         }
         if (runtime?.submittedAtMs !== undefined) {
           metrics.submissionToConfirmationSeconds.observe(
-            { symbol, client_id: clientId },
+            { symbol, ...labels },
             (nowMs - runtime.submittedAtMs) / 1_000,
           );
         }
         if (runtime) {
           metrics.endToEndLatencySeconds.observe(
-            { symbol, client_id: clientId },
+            { symbol, ...labels },
             (nowMs - runtime.observedAtMs) / 1_000,
           );
         }
@@ -1156,14 +1207,17 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
             cardanoTxHash: result.cardanoTxHash,
             confirmedAtDepth: cardanoConfirmationDepth,
             updatedAtMs: nowMs,
+            clientId,
+            customerId,
+            network: req.destination.network,
           },
         );
         metrics.cardanoOracleLastConfirmedTimestampSeconds.set(
-          { symbol, client_id: clientId },
+          { symbol, ...labels },
           Number(timestamp),
         );
         metrics.cardanoPairIsCreate.set(
-          { symbol, client_id: clientId },
+          { symbol, ...labels },
           (batchMember?.action ?? result.pairAction) === "mint" ? 1 : 0,
         );
 
@@ -1287,16 +1341,16 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       } else {
         const symbol = req.enriched.fullIntent.symbol;
         const batchSize = result.batch?.size ?? 1;
+        const customerId = routerCustomers.get(req.routerId)!;
+        const labels = clientLabels({ clientId, customerId });
         metrics.transactionsFailed.inc({
           symbol,
-          client_id: clientId,
+          ...labels,
           error_code: result.code,
         });
-        const customer = routerCustomers.get(req.routerId) ?? "unknown";
         metrics.bridgeIntentsFailed.inc({
           symbol,
-          client_id: clientId,
-          customer,
+          ...labels,
           reason: result.code,
         });
 
@@ -1305,14 +1359,33 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         // correct no-ops and excluded; a real batch failure shares one
         // representative (the first batch member) so it counts once.
         if (!isNoTransactionFailure(result)) {
-          metrics.txPairMembership.inc({ client_id: clientId, customer, symbol, outcome: "failed" });
+          metrics.txPairMembership.inc({
+            ...routerMembershipLabels({ clientId, customerId, routerId: req.routerId }),
+            destination_index: String(req.destinationIndex),
+            symbol,
+            outcome: "failed",
+          });
           if (isTransactionRepresentative(result)) {
-            metrics.transactionsTotal.inc({ client_id: clientId, customer, outcome: "failed" });
-            metrics.transactionPairs.observe({ client_id: clientId, customer, outcome: "failed" }, batchSize);
+            for (const memberRouterId of routerIdsForTransaction(
+              result,
+              req.routerId,
+              (intentHash) => intentRuntime.get(intentHash)?.routerId,
+            )) {
+              metrics.transactionRouterMembership.inc({
+                ...routerMembershipLabels({
+                  clientId,
+                  customerId: routerCustomers.get(memberRouterId)!,
+                  routerId: memberRouterId,
+                }),
+                outcome: "failed",
+              });
+            }
+            metrics.transactionsTotal.inc({ ...labels, outcome: "failed" });
+            metrics.transactionPairs.observe({ ...labels, outcome: "failed" }, batchSize);
           }
         }
         if (result.code === "TxDroppedFromChain") {
-          metrics.transactionsReorg.inc({ symbol, client_id: clientId });
+          metrics.transactionsReorg.inc({ symbol, ...labels });
         }
         report(
           `[error] daemon: TRANSACTION FAILED — code=${result.code} intentHash=${sanitizeLogLine(result.intentHash)} ` +
@@ -1327,6 +1400,8 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
             intentHash: result.intentHash,
             cardanoTxHash: "",
             routerId: req.routerId,
+            clientId,
+            customerId,
             destinationIndex: req.destinationIndex,
             destinationChainName: "",
             destinationContractAddress: "",
@@ -1472,7 +1547,29 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     routers: config.routers,
     latestIntents,
     priceCache,
-    submit: (req) => coalescerManager.accept(req),
+    submit: (req) => {
+      // Cron re-submissions don't pass through `processOneEvent`, so they have
+      // no `intentRuntime` entry. Without one, the submitted-insert and the
+      // latency observations (both runtime-gated) are skipped, and the
+      // post-confirm `updateTransactionLog` fails with "no row" — the tx
+      // confirms on-chain but never lands in `transaction_log` or the latency
+      // histograms. Stamp the identity here so a cron update is recorded exactly
+      // like a live one. `observedAtMs = now` makes processing→submission
+      // measure the coalesce wait (the only "processing" a re-submission has).
+      if (!intentRuntime.has(req.intentHash)) {
+        intentRuntime.set(req.intentHash, {
+          ...buildRouterIdentity({
+            customerId: routerCustomers.get(req.routerId)!,
+            routerId: req.routerId,
+            destinationIndex: req.destinationIndex,
+            cardano: req.destination,
+          }),
+          observedAtMs: Date.now(),
+          symbol: req.enriched.fullIntent.symbol,
+        });
+      }
+      return coalescerManager.accept(req);
+    },
     metrics,
     log: report,
     signal,
@@ -1577,6 +1674,15 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // lane queue provides mutual exclusion; this only collapses duplicates.
   const mergeInProgress = new Set<string>();
 
+  // Dedup guards for the automatic fee-loop maintenance tasks, mirroring
+  // `mergeInProgress`. Each spans many ticks (build → submit → confirm); the
+  // guard collapses duplicate enqueues. Mutual exclusion is the lane queue's
+  // job. Settle is per-lane (per Receiver); withdraw (one PaymentHook) and
+  // consolidate (one shared admin wallet) are process-wide, so a boolean each.
+  const settleInProgress = new Set<string>();
+  let withdrawInProgress = false;
+  let consolidateInProgress = false;
+
   // Log each client's deposit address exactly once (the first refresh that
   // resolves it) so operators can see / hand it out — a client funds its
   // Receiver by paying ADA there with a plain wallet payment, no CLI needed.
@@ -1645,6 +1751,113 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       });
   }
 
+  // Automatic fee-loop maintenance — settle / withdraw / consolidate. Each
+  // mirrors maybeAutoMergeDeposits: a pure decision, a dedup guard, and a
+  // fire-and-forget lane task that builds → submits → confirms. They run on the
+  // SAME serial lane as updates, so they never race an update on that Receiver.
+  // The alert for each fires FIRST (lower/earlier threshold); these only act
+  // once the condition develops past the `auto_*` threshold.
+
+  async function maybeAutoSettle(
+    dest: { clientStatePath: string; protocolStatePath: string; cardano: CardanoDestinationConfig },
+    snapshot: { receiverAccruedLovelace?: bigint; clientId?: string },
+  ): Promise<void> {
+    const lane = laneKey(dest.cardano);
+    const clientId = snapshot.clientId ?? dest.clientStatePath;
+    const decision = shouldAutoSettle({
+      receiverAccruedLovelace: snapshot.receiverAccruedLovelace,
+      autoSettleLovelace,
+      inProgress: settleInProgress.has(lane),
+    });
+    if (!decision.act) return;
+    settleInProgress.add(lane);
+    report(
+      `auto-settle: enqueueing settle client=${clientId} accrued=${snapshot.receiverAccruedLovelace ?? "?"} ` +
+      `threshold=${autoSettleLovelace}`,
+    );
+    void queueManager
+      .enqueueLaneTask(dest.cardano, async () => {
+        const res = await bridge.settle({
+          clientStatePath: dest.clientStatePath,
+          protocolStatePath: dest.protocolStatePath,
+        });
+        report(`auto-settle: done client=${clientId} confirmed=${res.confirmed} txHash=${res.txHash ?? "(none)"}`);
+      })
+      .catch((err) => {
+        report(`[warn] auto-settle: failed client=${clientId} — ${sanitizeLogLine((err as Error).message)}`);
+      })
+      .finally(() => {
+        settleInProgress.delete(lane);
+      });
+  }
+
+  async function maybeAutoWithdraw(
+    dest: { clientStatePath: string; protocolStatePath: string; cardano: CardanoDestinationConfig },
+    snapshot: { paymentHookAccruedLovelace?: bigint },
+  ): Promise<void> {
+    const decision = shouldAutoWithdraw({
+      paymentHookAccruedLovelace: snapshot.paymentHookAccruedLovelace,
+      autoWithdrawLovelace,
+      inProgress: withdrawInProgress,
+    });
+    if (!decision.act) return;
+    withdrawInProgress = true;
+    report(
+      `auto-withdraw: enqueueing payment-hook withdraw amount=${decision.amountLovelace} ` +
+      `threshold=${autoWithdrawLovelace}`,
+    );
+    // The withdraw spends the single shared PaymentHook + admin-wallet UTxOs. We
+    // run it on this dest's lane so it serializes against that client's updates;
+    // the process-wide `withdrawInProgress` guard keeps it single-flight across
+    // all lanes.
+    void queueManager
+      .enqueueLaneTask(dest.cardano, async () => {
+        const res = await bridge.withdrawFromPaymentHook({
+          protocolStatePath: dest.protocolStatePath,
+          amountLovelace: decision.amountLovelace,
+        });
+        report(`auto-withdraw: done confirmed=${res.confirmed} txHash=${res.txHash ?? "(none)"}`);
+      })
+      .catch((err) => {
+        report(`[warn] auto-withdraw: failed — ${sanitizeLogLine((err as Error).message)}`);
+      })
+      .finally(() => {
+        withdrawInProgress = false;
+      });
+  }
+
+  async function maybeAutoConsolidate(
+    dest: { cardano: CardanoDestinationConfig },
+    snapshot: { adminWalletMaxUtxoLovelace?: bigint },
+  ): Promise<void> {
+    const decision = shouldAutoConsolidate({
+      adminWalletMaxUtxoLovelace: snapshot.adminWalletMaxUtxoLovelace,
+      autoConsolidateBelowLovelace,
+      inProgress: consolidateInProgress,
+    });
+    if (!decision.act) return;
+    consolidateInProgress = true;
+    report(
+      `auto-consolidate: enqueueing wallet consolidate largestUtxo=${snapshot.adminWalletMaxUtxoLovelace ?? "?"} ` +
+      `threshold=${autoConsolidateBelowLovelace} collateral=${collateralUtxoLovelace}`,
+    );
+    // Consolidate spends ONLY admin-wallet UTxOs (a plain self-payment, no
+    // script, no collateral needed to build), but every update also spends
+    // wallet UTxOs for fees, so we run it on a lane and keep it single-flight
+    // process-wide to avoid colliding with an in-flight build.
+    void queueManager
+      .enqueueLaneTask(dest.cardano, async () => {
+        const res = await bridge.consolidateWallet({ collateralLovelace: collateralUtxoLovelace });
+        report(`auto-consolidate: done confirmed=${res.confirmed} txHash=${res.txHash ?? "(none)"}`);
+      })
+      .catch((err) => {
+        report(`[warn] auto-consolidate: failed — ${sanitizeLogLine((err as Error).message)}`);
+      })
+      .finally(() => {
+        consolidateInProgress = false;
+      });
+  }
+
   async function refreshBalanceGauges(): Promise<void> {
     for (const dest of balanceRefreshDests) {
       try {
@@ -1675,6 +1888,9 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         if (b.adminWalletLovelace !== undefined) {
           metrics.cardanoAdminWalletLovelace.set({}, Number(b.adminWalletLovelace));
         }
+        if (b.adminWalletMaxUtxoLovelace !== undefined) {
+          metrics.cardanoAdminWalletMaxUtxoLovelace.set({}, Number(b.adminWalletMaxUtxoLovelace));
+        }
         // Deposit-pending gauge — emit only when the deposit query succeeded
         // (depositPendingLovelace defined). The address may be present even
         // when the query failed, so guard on the lovelace field.
@@ -1684,8 +1900,13 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
             Number(b.depositPendingLovelace),
           );
         }
-        // Auto-merge runs off the same snapshot so we never double-probe chain.
+        // Automatic fee-loop maintenance — all run off this same snapshot so we
+        // never double-probe chain. Each is gated by its own threshold + dedup
+        // guard and dispatched as a serial lane task.
         await maybeAutoMergeDeposits(dest, b);
+        await maybeAutoSettle(dest, b);
+        await maybeAutoWithdraw(dest, b);
+        await maybeAutoConsolidate(dest, b);
       } catch (err) {
         report(`balance-refresh: ${dest.clientStatePath} failed: ${(err as Error).message}`);
       }
@@ -1769,6 +1990,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           enricher,
           routerRegistry,
           routerSigners,
+          routerCustomers,
           priceCache,
           latestIntents,
           coalescerManager,
@@ -1833,6 +2055,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           enricher,
           routerRegistry,
           routerSigners,
+          routerCustomers,
           priceCache,
           latestIntents,
           coalescerManager,
@@ -1946,6 +2169,10 @@ type ProcessOneEventInputs = {
    *  startup; attached to each SubmitRequest so the bridge signs with the
    *  router's own key. */
   routerSigners: Map<string, RouterSigner>;
+  /** Router id -> customer_id (the router's owner). Used to stamp the runtime
+   *  identity once, so downstream metrics/logs read `customerId` off the entry
+   *  instead of looking it up again. */
+  routerCustomers: Map<string, string>;
   priceCache: ReturnType<typeof createPriceCache>;
   latestIntents: LatestIntentCache;
   coalescerManager: CoalescerManager;
@@ -1961,7 +2188,7 @@ type ProcessOneEventInputs = {
 
 async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
   const {
-    event, observedAtMs, scannerType, dedupCache, enricher, routerRegistry, routerSigners,
+    event, observedAtMs, scannerType, dedupCache, enricher, routerRegistry, routerSigners, routerCustomers,
     priceCache, latestIntents, coalescerManager, updatePoolManager, fileLogger, db, intentRuntime, dryRun, report, metrics,
   } = inputs;
 
@@ -2044,7 +2271,7 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     });
     metrics.bridgeIntentsProcessed.inc({
       symbol: enriched.fullIntent.symbol,
-      customer: dispatch.customer ?? "unknown",
+      customer_id: dispatch.customerId,
     });
     if (dispatch.deviationPct !== undefined) {
       metrics.priceDeviationPercent.observe(
@@ -2174,11 +2401,13 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     });
 
     intentRuntime.set(event.intentHash, {
+      ...buildRouterIdentity({
+        customerId: routerCustomers.get(dispatch.routerId)!,
+        routerId: dispatch.routerId,
+        destinationIndex: dispatch.destinationIndex,
+        cardano,
+      }),
       observedAtMs,
-      routerId: dispatch.routerId,
-      destinationIndex: dispatch.destinationIndex,
-      clientStatePath: cardano.client_state_path,
-      clientId: clientIdFromStatePath(cardano.client_state_path),
       symbol: enriched.fullIntent.symbol,
     });
 
@@ -2323,6 +2552,22 @@ function makeDryRunBridge(report: (line: string) => void): OracleIntentBridge {
       // anyway, so this is only here to satisfy the interface.
       report(
         `daemon: [dry-run bridge] mergeDeposits client=${params.clientStatePath} (no-op)`,
+      );
+      return { txHash: null, confirmed: false };
+    },
+    async settle(params) {
+      report(`daemon: [dry-run bridge] settle client=${params.clientStatePath} (no-op)`);
+      return { txHash: null, confirmed: false };
+    },
+    async withdrawFromPaymentHook(params) {
+      report(
+        `daemon: [dry-run bridge] withdrawFromPaymentHook amount=${params.amountLovelace} (no-op)`,
+      );
+      return { txHash: null, confirmed: false };
+    },
+    async consolidateWallet(params) {
+      report(
+        `daemon: [dry-run bridge] consolidateWallet collateral=${params.collateralLovelace} (no-op)`,
       );
       return { txHash: null, confirmed: false };
     },

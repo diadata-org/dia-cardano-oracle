@@ -46,10 +46,21 @@ export {
   type RetryDecision,
 } from "./retry-policy.js";
 
-export { laneKey } from "./lane-key.js";
+export { laneId, laneKey } from "./lane-key.js";
 
 export {
-  isTransientWasmBuildError,
+  isProcessRecoverableWasmError,
   nextWasmFailureCount,
   shouldExitOnWasmFailures,
 } from "./wasm-failure-guard.js";
+
+export {
+  shouldAutoSettle,
+  shouldAutoWithdraw,
+  shouldAutoConsolidate,
+} from "./auto-remediation.js";
+export type {
+  AutoSettleDecision,
+  AutoWithdrawDecision,
+  AutoConsolidateDecision,
+} from "./auto-remediation.js";

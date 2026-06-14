@@ -74,6 +74,9 @@ describe("createCardanoWriteClient", () => {
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
+      async settle() { return { txHash: null, confirmed: false }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false }; },
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-single");
         return {
@@ -137,6 +140,9 @@ describe("createCardanoWriteClient", () => {
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
+      async settle() { return { txHash: null, confirmed: false }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false }; },
       async submitOracleUpdate() {
         throw new Error("unexpected single call");
       },
@@ -200,6 +206,9 @@ describe("createCardanoWriteClient", () => {
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
+      async settle() { return { txHash: null, confirmed: false }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false }; },
       async submitOracleUpdate() {
         throw new Error("unexpected single call");
       },
@@ -256,6 +265,9 @@ describe("createCardanoWriteClient", () => {
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
+      async settle() { return { txHash: null, confirmed: false }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false }; },
       async submitOracleUpdate() {
         throw new Error("unexpected single call");
       },
@@ -297,6 +309,9 @@ describe("createCardanoWriteClient", () => {
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
+      async settle() { return { txHash: null, confirmed: false }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false }; },
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-fee");
         return {
@@ -328,6 +343,9 @@ describe("createCardanoWriteClient", () => {
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
+      async settle() { return { txHash: null, confirmed: false }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false }; },
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-nofee");
         return {
@@ -362,6 +380,9 @@ describe("createCardanoWriteClient", () => {
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
+      async settle() { return { txHash: null, confirmed: false }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false }; },
       async submitOracleUpdate(params) {
         singleCalls++;
         emitStandardSteps(params.onStep, "tx-singleton");

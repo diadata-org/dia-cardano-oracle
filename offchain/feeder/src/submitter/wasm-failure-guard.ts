@@ -13,24 +13,33 @@
 //   genuinely corrupted WASM module that an in-process rebuild can NOT clear —
 //   the daemon is long-running, so only a FRESH PROCESS recovers.
 //
-//   This module provides (a) the WASM-signature matcher (mirroring the CLI's
-//   `isTransientWasmBuildError`, intentionally NOT imported from the CLI
-//   package) and (b) the pure decision/counter logic the daemon uses to decide
-//   when to self-exit so a supervisor restarts it with a fresh WASM module.
-//   Kept pure (no process.exit, no I/O) so the threshold logic is unit-tested
-//   in isolation.
+//   This module provides (a) the WASM-signature matcher and (b) the pure
+//   decision/counter logic the daemon uses to decide when to self-exit so a
+//   supervisor restarts it with a fresh WASM module. Kept pure (no
+//   process.exit, no I/O) so the threshold logic is unit-tested in isolation.
+//
+//   The matcher recognises TWO lucid WASM build-error families that a fresh
+//   PROCESS clears but an in-process rebuild does not:
+//     1. the detached-ArrayBuffer family (WASM linear memory grew mid-build and
+//        detached a held TypedArray view), and
+//     2. the hard WASM trap family — `RuntimeError: unreachable` — which poisons
+//        the WASM module for every subsequent build in the same process. A live
+//        Preview run proved this: after the trap the CLI (a fresh process) built
+//        the byte-identical tx fine while the long-running daemon kept failing
+//        until it was restarted. Counting it here is what makes the self-exit
+//        fire; before, the streak only counted the detached family, so a trap
+//        storm left the daemon mute for hours with no restart.
 // ---------------------------------------------------------------------------
 
 /**
- * Return true only for the transient lucid WASM detached-ArrayBuffer error
- * signature. Mirrors the CLI tx-build's `isTransientWasmBuildError` matcher
- * (kept as an independent copy — the feeder does not import from the CLI
- * package). Matches the known forms:
- *   - "...detached ArrayBuffer"
- *   - "%TypedArray%.prototype.set..."
- *   - any message mentioning "detached"
+ * Return true for a lucid WASM build-error signature that only a FRESH PROCESS
+ * recovers from (an in-process rebuild cannot clear it). Matches:
+ *   - the detached-ArrayBuffer family: "...detached ArrayBuffer",
+ *     "%TypedArray%.prototype.set...", any message mentioning "detached"
+ *   - the hard WASM trap family: "RuntimeError: unreachable" / "unreachable"
+ * Kept as an independent copy — the feeder does not import from the CLI package.
  */
-export function isTransientWasmBuildError(error: unknown): boolean {
+export function isProcessRecoverableWasmError(error: unknown): boolean {
   const message =
     error instanceof Error
       ? error.message
@@ -40,7 +49,8 @@ export function isTransientWasmBuildError(error: unknown): boolean {
   return (
     message.includes("detached ArrayBuffer") ||
     message.includes("%TypedArray%") ||
-    message.includes("detached")
+    message.includes("detached") ||
+    message.includes("unreachable")
   );
 }
 
@@ -49,9 +59,13 @@ export function isTransientWasmBuildError(error: unknown): boolean {
  * the outcome of a submission that has ALREADY exhausted the worker-pool
  * retries (so a single transient blip the retries clear never reaches here).
  *
- *   - success            → reset to 0
- *   - WASM-signature fail → increment
- *   - any other failure   → unchanged (handled by the normal retry/alert path)
+ *   - success                       → reset to 0
+ *   - process-recoverable WASM fail → increment
+ *   - any other failure             → unchanged (handled by the normal
+ *                                     retry/alert path; e.g. NonMonotonicNonce,
+ *                                     or a collateral-exhaustion build error
+ *                                     that auto-consolidate — not a restart —
+ *                                     resolves)
  *
  * Pure: no side effects, so the counter transitions are unit-tested directly.
  */
@@ -60,7 +74,7 @@ export function nextWasmFailureCount(
   outcome: { ok: boolean; error?: unknown },
 ): number {
   if (outcome.ok) return 0;
-  return isTransientWasmBuildError(outcome.error) ? current + 1 : current;
+  return isProcessRecoverableWasmError(outcome.error) ? current + 1 : current;
 }
 
 /**

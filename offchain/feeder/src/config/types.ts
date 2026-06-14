@@ -261,6 +261,36 @@ export type AlertingConfig = {
    *  consume it); kept here so every alert threshold has one canonical home and
    *  the threshold-drift test can enforce it against `monitoring/`. */
   deposit_pending_merge_lovelace?: number;
+  /** Admin (signer) wallet LARGEST pure-ADA UTxO below this lovelace value
+   *  triggers the AdminWalletFragmented alert (critical). A script tx needs a
+   *  collateral UTxO distinct from its fee inputs; once the wallet shatters into
+   *  sub-collateral dust the total can still look healthy while every build
+   *  traps. The daemon auto-consolidates below `auto_consolidate_below_lovelace`
+   *  (which must be < this, so the alert fires first). */
+  admin_wallet_min_collateral_lovelace?: number;
+
+  // --- Automatic remediation thresholds -------------------------------------
+  // The feeder ACTS on these itself, on the balance-refresh tick, as a lane task
+  // (serialized with updates). Each MUST sit BEYOND its paired alert so the ALERT
+  // fires FIRST and the automatic step only follows — the threshold-drift test
+  // enforces the ordering. There is no Prometheus alert for these keys
+  // themselves; they drive feeder behaviour, not a rule.
+
+  /** Receiver `accruedToHookLovelace` above this value → the daemon auto-runs
+   *  `settle` (Receiver accrued → PaymentHook). MUST be > `settle_overdue_lovelace`
+   *  so the SettleOverdue alert fires first. Set high enough that settle moves a
+   *  worthwhile chunk (a tiny auto-settle would waste fees and delay updates). */
+  auto_settle_lovelace?: number;
+  /** PaymentHook `accruedFeesLovelace` above this value → the daemon auto-runs
+   *  `payment-hook:withdraw` (PaymentHook → admin wallet, refilling the wallet
+   *  that pays Cardano fees). MUST be > `payment_hook_withdraw_ready_lovelace`
+   *  so the PaymentHookWithdrawReady alert fires first. */
+  auto_withdraw_lovelace?: number;
+  /** Admin (signer) wallet LARGEST pure-ADA UTxO below this value → the daemon
+   *  auto-runs `wallet:consolidate` (fold dust into a dedicated collateral UTxO
+   *  + working balance). MUST be < `admin_wallet_min_collateral_lovelace` so the
+   *  AdminWalletFragmented alert fires first. */
+  auto_consolidate_below_lovelace?: number;
 };
 
 export type ReplicaConfig = {
@@ -375,16 +405,15 @@ export type EnrichmentConfig = {
 
 /**
  * A router binds a source-event subscription (with optional filters) to
- * one or more destinations. Each customer/destination combination is a
- * separate router file in `config/routers/`, exactly the way the
- * Spectra Bridge operates.
+ * one or more Cardano destinations for exactly one on-chain client
+ * deployment. A customer can own multiple clients, and each client can
+ * have multiple routers/policies.
  */
 export type RouterConfig = {
   id: string;
   name: string;
-  /** Free-form label preserved for metrics/log correlation. Spectra uses
-   * this the same way; it does not gate routing. */
-  customer?: string;
+  /** Business/operator grouping above the on-chain client deployment. */
+  customer_id: string;
   type: string;
   enabled: boolean;
   private_key?: string;

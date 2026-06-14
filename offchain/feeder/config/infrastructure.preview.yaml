@@ -303,6 +303,28 @@ infrastructure:
     # (not consumed by feeder code); kept here so every alert threshold has one
     # canonical home (enforced by the threshold-drift test).
     deposit_pending_merge_lovelace: 5000000            # 5 ADA of un-merged deposits → run a merge
+    # Admin (signer) wallet LARGEST pure-ADA UTxO below this → AdminWalletFragmented
+    # alert (critical). A script tx needs a collateral UTxO DISTINCT from its fee
+    # inputs; if the wallet shatters into sub-collateral dust the total can still
+    # look healthy while every build traps. Action: `wallet:consolidate` (the
+    # daemon auto-consolidates below `auto_consolidate_below_lovelace`).
+    admin_wallet_min_collateral_lovelace: 10000000     # 10 ADA largest-UTxO floor
+
+    # --- Automatic remediation thresholds -------------------------------------
+    # The feeder ACTS on these itself, on the balance-refresh tick, as a lane
+    # task (serialized with updates on the same Receiver). Each MUST sit BEYOND
+    # its paired alert so the ALERT fires FIRST and the automatic step only
+    # follows if the condition keeps growing (accruals) / shrinking (collateral).
+    # The threshold-drift test enforces the ordering — an automatic step that
+    # fired at the alert value would make the alert useless.
+    # Receiver accrued above this → daemon auto-runs `settle` (> settle_overdue).
+    auto_settle_lovelace: 30000000                     # 30 ADA accrued (alert at 10)
+    # PaymentHook accrued above this → daemon auto-runs `payment-hook:withdraw`
+    # to refill the admin wallet (> payment_hook_withdraw_ready).
+    auto_withdraw_lovelace: 100000000                  # 100 ADA accrued (alert at 50)
+    # Largest admin-wallet pure-ADA UTxO below this → daemon auto-runs
+    # `wallet:consolidate` (< admin_wallet_min_collateral, so the alert fires first).
+    auto_consolidate_below_lovelace: 7000000           # 7 ADA largest UTxO (alert at 10)
 
   # --------------------------------------------------------------------------
   # replica — Spectra parity, HA failover monitor.
