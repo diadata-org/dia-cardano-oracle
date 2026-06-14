@@ -1,0 +1,62 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts pair:burn --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json --client-state ../state/mainnet_run_20260517-063917/clients/client-a.json --pair-state ../state/mainnet_run_20260517-063917/clients/client-a/pairs/xrp-usd.json --build-only
+
+[1G[0K[pair:burn] Loading protocol, client and pair state
+[pair:burn] Connecting to Mainnet and selecting the configured wallet
+[pair:burn] Finding Config UTxO
+[pair:burn] Finding Pair UTxO
+[pair:burn] Burning Pair NFT 71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561bac7b9f5648596883156b7004ce94ebb55cc5049bd65b93188cd724e9feed0bc and recovering 5000000 lovelace.
+[pair:burn] Tx resources: fee=0.441137 ADA (441137 lovelace), cpu=158670212, mem=513069
+[pair:burn] Output[0] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=4.558863 ADA (4558863)
+[pair:burn] Build-only: unsigned hash = f5e1766b1f0f3785a9534cf6c93d904b83cd8edcbb0d04c5e201d09acccc97e5
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72"
+  },
+  "pair": {
+    "tokenName": "bac7b9f5648596883156b7004ce94ebb55cc5049bd65b93188cd724e9feed0bc",
+    "pairId": "5852502f555344",
+    "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561bac7b9f5648596883156b7004ce94ebb55cc5049bd65b93188cd724e9feed0bc",
+    "pairValidatorAddress": "addr1w9cawvn4m7auhramjvfytmatsy9dfakg6xsnmfh70nmv2cg0rwvyu"
+  },
+  "pairState": {
+    "pairId": "5852502f555344",
+    "price": "521000000",
+    "timestamp": "1779003414",
+    "nonce": "1779003414000",
+    "intentHash": "825496082f12ad56e217cf08945b631eb6c755ffbde57d232fbfd7fad62136fc",
+    "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+    "minUtxoLovelace": "5000000",
+    "intent": {
+      "intentType": "OracleUpdate",
+      "version": "1.0",
+      "chainId": "100640",
+      "nonce": "1779003414000",
+      "expiry": "1779007014",
+      "symbol": "XRP/USD",
+      "price": "521000000",
+      "timestamp": "1779003414",
+      "source": "DIA Oracle",
+      "signature": "88097f209e444057200ddbffb4e162a82ac9723cf2fbdd83b4cf76c9239312597de721de5310d01348847a258a9d02be83e7d7ac07b8c7ced1215b56eeb12a101c",
+      "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+    }
+  },
+  "datum": {
+    "pairCbor": ""
+  },
+  "transactions": [
+    {
+      "step": "mainnet:update",
+      "submittedTxHash": "4c8d67e7962f83976c1f702a7ea99666e01b411c230064c56efbc98a4a4f23ee",
+      "confirmed": true
+    },
+    {
+      "step": "mainnet:update:batch",
+      "submittedTxHash": "9877cce1b34b77929a32c26c72fe9b4a850f35ac4d947be68ae9750dab3569b4",
+      "confirmed": true
+    }
+  ]
+}
+[1G[0K⠙[1G[0K

@@ -1,0 +1,127 @@
+{
+  "config": {
+    "unit": "211186b23b3c371426cdfe10559a6266cfbd025ca415f4d0c53af4754449415f434f4e464947",
+    "address": "addr1wys3rp4j8v7rw9pxehlpq4v6vfnvl0gztjjptaxsc5a0gag9chlle",
+    "present": true
+  },
+  "hook": {
+    "unit": "c0c8f244c75bcde4c032b7b96bc843ba19e3351beaae3005dc0833854449415f5041594d454e545f484f4f4b",
+    "address": "addr1w8qv3ujycadumexqx2mmj67ggwapnce4r042uvq9msyr8pgvyvkwk",
+    "present": true
+  },
+  "referenceHolderAddress": "addr1wymd9rcnu3xq4gvxypnyeu6js43avr5veglww8zr2ehjvwcyufgpq",
+  "referenceScripts": [
+    {
+      "kind": "global:config",
+      "txHash": "6bb730faa7af29ffd3b7ee7f7877d79adf14690174d5a1c816191da886a34f46",
+      "outputIndex": 0,
+      "present": true
+    },
+    {
+      "kind": "global:coordinator",
+      "txHash": "6bb730faa7af29ffd3b7ee7f7877d79adf14690174d5a1c816191da886a34f46",
+      "outputIndex": 1,
+      "present": true
+    },
+    {
+      "kind": "global:paymentHook",
+      "txHash": "f32157880e43b1ddfc73bf78c98e14690305136348582b659d2ed0657a0c90ab",
+      "outputIndex": 0,
+      "present": true
+    },
+    {
+      "kind": "client:client-a:receiver",
+      "txHash": "52b58e52c60df799656e9bf3d9a241434fd4f9630cca408dfe96154e0d60d250",
+      "outputIndex": 0,
+      "present": true
+    },
+    {
+      "kind": "client:client-a:pair",
+      "txHash": "52b58e52c60df799656e9bf3d9a241434fd4f9630cca408dfe96154e0d60d250",
+      "outputIndex": 1,
+      "present": true
+    },
+    {
+      "kind": "client:client-a:pairMint",
+      "txHash": "52b58e52c60df799656e9bf3d9a241434fd4f9630cca408dfe96154e0d60d250",
+      "outputIndex": 2,
+      "present": true
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "client-a",
+      "receiverPresent": true,
+      "receiverUnit": "d276c806b1beb5e04c71356bec048e0bbd39c07e267961cb7325726f4449415f52454345495645525f434c49454e545f41",
+      "pairValidatorAddress": "addr1w9cawvn4m7auhramjvfytmatsy9dfakg6xsnmfh70nmv2cg0rwvyu",
+      "pairs": [
+        {
+          "pairFile": "ada-usd",
+          "pairId": "4144412f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c56104e5366fb69cdc906d0e8841d641628f09a50f7618e944de5cdb7a26b95e32b4",
+          "present": true
+        },
+        {
+          "pairFile": "bnb-usd",
+          "pairId": "424e422f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c56109da81653014451f3a86d96589f6a9e5d97b4e8236a461c7b2edbe1bab30b101",
+          "present": true
+        },
+        {
+          "pairFile": "btc-usd",
+          "pairId": "4254432f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5618a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497",
+          "present": true
+        },
+        {
+          "pairFile": "dai-usd",
+          "pairId": "4441492f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5610ae6401fc15363e085cf3d2f90ae10566e797d8686ab048ba30f5914c7ff2852",
+          "present": true
+        },
+        {
+          "pairFile": "dot-usd",
+          "pairId": "444f542f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561ff3f796230b336b4e5c8d3af0440cbe0346a64cdab5e9cba4a8e2f476152daee",
+          "present": false
+        },
+        {
+          "pairFile": "eth-usd",
+          "pairId": "4554482f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5613d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4",
+          "present": true
+        },
+        {
+          "pairFile": "matic-usd",
+          "pairId": "4d415449432f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561d2a1402553abe60aecdea3464be08e7ced64530fea0989b8fdfd49351157e571",
+          "present": true
+        },
+        {
+          "pairFile": "sol-usd",
+          "pairId": "534f4c2f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561396545cb87b0103c8ddb5ff4329eeff88e2aef114f76b0807b21ce3d68bbbe64",
+          "present": true
+        },
+        {
+          "pairFile": "usdc-usd",
+          "pairId": "555344432f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5610156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac",
+          "present": true
+        },
+        {
+          "pairFile": "usdt-usd",
+          "pairId": "555344542f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5615ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315",
+          "present": true
+        },
+        {
+          "pairFile": "xrp-usd",
+          "pairId": "5852502f555344",
+          "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561bac7b9f5648596883156b7004ce94ebb55cc5049bd65b93188cd724e9feed0bc",
+          "present": true
+        }
+      ]
+    }
+  ]
+}

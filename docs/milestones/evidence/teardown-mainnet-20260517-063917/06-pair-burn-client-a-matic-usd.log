@@ -1,0 +1,62 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts pair:burn --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json --client-state ../state/mainnet_run_20260517-063917/clients/client-a.json --pair-state ../state/mainnet_run_20260517-063917/clients/client-a/pairs/matic-usd.json --build-only
+
+[1G[0K[pair:burn] Loading protocol, client and pair state
+[pair:burn] Connecting to Mainnet and selecting the configured wallet
+[pair:burn] Finding Config UTxO
+[pair:burn] Finding Pair UTxO
+[pair:burn] Burning Pair NFT 71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561d2a1402553abe60aecdea3464be08e7ced64530fea0989b8fdfd49351157e571 and recovering 5000000 lovelace.
+[pair:burn] Tx resources: fee=0.441137 ADA (441137 lovelace), cpu=158670212, mem=513069
+[pair:burn] Output[0] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=4.558863 ADA (4558863)
+[pair:burn] Build-only: unsigned hash = 8115879a340805e82d1e951615e557cc8254ecdf71c9f9783eabcece5a7adb57
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72"
+  },
+  "pair": {
+    "tokenName": "d2a1402553abe60aecdea3464be08e7ced64530fea0989b8fdfd49351157e571",
+    "pairId": "4d415449432f555344",
+    "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561d2a1402553abe60aecdea3464be08e7ced64530fea0989b8fdfd49351157e571",
+    "pairValidatorAddress": "addr1w9cawvn4m7auhramjvfytmatsy9dfakg6xsnmfh70nmv2cg0rwvyu"
+  },
+  "pairState": {
+    "pairId": "4d415449432f555344",
+    "price": "981000000",
+    "timestamp": "1779003414",
+    "nonce": "1779003414000",
+    "intentHash": "5fbb214d1ebd6f21201b101ca35811a7ba69885ee1e628b5140c7165070f38b2",
+    "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+    "minUtxoLovelace": "5000000",
+    "intent": {
+      "intentType": "OracleUpdate",
+      "version": "1.0",
+      "chainId": "100640",
+      "nonce": "1779003414000",
+      "expiry": "1779007014",
+      "symbol": "MATIC/USD",
+      "price": "981000000",
+      "timestamp": "1779003414",
+      "source": "DIA Oracle",
+      "signature": "3abf8ba342c59d7120fde8db75b9b1713df7e88698758c034c7dc1f6223f605d6a994702b826bdbee72af0a78efbedb2781cee473b6041299bb29186747a7b801c",
+      "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+    }
+  },
+  "datum": {
+    "pairCbor": ""
+  },
+  "transactions": [
+    {
+      "step": "mainnet:update",
+      "submittedTxHash": "fbd96e64ad49abc7fd04e1cb4235101aaa49108a90a5bb93479b44f28de10962",
+      "confirmed": true
+    },
+    {
+      "step": "mainnet:update:batch",
+      "submittedTxHash": "9877cce1b34b77929a32c26c72fe9b4a850f35ac4d947be68ae9750dab3569b4",
+      "confirmed": true
+    }
+  ]
+}
+[1G[0K⠙[1G[0K
