@@ -158,7 +158,7 @@ PANELS=(
   '9|Intents filtered (5m, by reason)|Metric `sum by (reason) (increase(dia_bridge_intents_filtered_total[5m]))` — a 5-minute count grouped by `reason`. Intents the feeder deliberately suppressed before submitting. High counts are normal: the deviation/time-threshold policy suppresses most intents by design.'
   '13|Price deviation p95 — 1 h window (per pair)|Metric `histogram_quantile(0.95, rate(dia_bridge_price_deviation_percent_bucket[1h]))` per `symbol`, in percent. 95th percentile of the percentage gap between the price the feeder published and the reference price, per pair. A high value suggests a possible misreport and feeds the `PriceDeviationHigh` alert.'
   '10|Price deviation distribution (heatmap)|Metric `sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket[5m]))`, percent buckets. Heatmap of the price-deviation distribution over time (histogram `le` buckets, colour = frequency), measured at policy-gating time for every evaluated intent — submitted and gate-suppressed alike. Healthy feeds cluster near 0%; a vertical spread means deviations are growing.'
-  '14|Tx fee p50 — lovelace (per consumer)|Metric `histogram_quantile(0.50, sum by (le, consumer_id) (rate(dia_bridge_transaction_fee_lovelace_bucket[5m])))`, in lovelace (1 ADA = 1,000,000 lovelace). Median Cardano network fee paid per oracle-update transaction, grouped by `consumer_id` — the basis for per-consumer cost attribution / billing. A batch of N pairs is one tx and one fee observation.'
+  '14|Tx fee p50 — lovelace (per customer)|Metric `histogram_quantile(0.50, sum by (le, customer_id) (rate(dia_bridge_transaction_fee_lovelace_bucket[5m])))`, in lovelace (1 ADA = 1,000,000 lovelace). Median Cardano network fee paid per oracle-update transaction, grouped by `customer_id` — the basis for per-customer cost attribution / billing. A batch of N pairs is one tx and one fee observation.'
   '203|Cardano provider health — primary vs secondary (1 = up)|Metric `dia_bridge_component_health{component,role}` (1 = up, 0 = down). Health of the two Cardano API providers by role: PRIMARY is the build/submit provider lucid uses (selected by `CARDANO_PROVIDER`) — if it is down nothing can be built and every pair freezes together (e.g. a Blockfrost 402 quota wall) → `PrimaryProviderDown` (critical); SECONDARY backs confirmation/reorg redundancy → `SecondaryProviderDown` (warning). The down-alerts watch `dia_bridge_provider_last_ok_timestamp_seconds{provider,role}`.'
 )
 
@@ -175,7 +175,7 @@ PANELS_TX=(
   '313|Tx by client (5m)|Metric `sum by (client_id) (increase(dia_bridge_transactions_total[5m]))` — transactions per 5-minute window grouped by client (receiver identity), counted once per tx.'
   '321|Pairs per tx (p50/p95/p99)|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_transaction_pairs_bucket[5m]))` — batch size distribution: pairs per transaction at the median, 95th and 99th percentiles.'
   '322|Batch size distribution (heatmap)|Metric `sum by (le) (rate(dia_bridge_transaction_pairs_bucket[5m]))`, batch-size buckets. Heatmap of pairs-per-transaction over time; bright bands show the typical batch size.'
-  '323|Tx touching pair (5m, by symbol & outcome)|Metric `sum by (symbol, outcome) (increase(dia_bridge_tx_pair_membership_total[5m]))` — one increment per (tx, pair). Filter by `$symbol` to find the transactions that included a given pair (their size is in "Pairs per tx"); carries confirmed vs failed and the consumer dimension.'
+  '323|Tx touching pair (5m, by symbol & outcome)|Metric `sum by (symbol, outcome) (increase(dia_bridge_tx_pair_membership_total[5m]))` — one increment per (tx, pair). Filter by `$symbol` to find the transactions that included a given pair (their size is in "Pairs per tx"); carries confirmed vs failed and the customer dimension.'
 )
 
 render_dashboard() {
@@ -316,13 +316,16 @@ if [[ -f "$TX_LOG" ]]; then
   # Real tx failures + condemned intents — sourced from the DB CSV (it carries
   # error_code; the JSONL tx_failed events do not). NonMonotonicNonce = intent
   # superseded on-chain before submission: no Cardano tx broadcast, no fee paid.
-  # All other codes = a tx was submitted to the chain but failed.
+  # CrashRecovery = an intent that was in-flight (pending/submitted) when the
+  # daemon last restarted, force-failed on startup — also NOT a broadcast tx that
+  # failed on-chain. Both are excluded from the "real failures" total/table; all
+  # other codes = a tx was submitted to the chain but failed.
   if [[ -f "$DB_LOG" ]]; then
     stat_total_failed=$(python3 - "$DB_LOG" <<'PYEOF'
 import csv, sys
 with open(sys.argv[1]) as f:
     rows = list(csv.DictReader(f))
-real = [r for r in rows if r['status'] == 'failed' and r.get('error_code','') not in ('NonMonotonicNonce', '')]
+real = [r for r in rows if r['status'] == 'failed' and r.get('error_code','') not in ('NonMonotonicNonce', 'CrashRecovery', '')]
 print(len(real))
 PYEOF
     )
@@ -334,7 +337,7 @@ condemned = [r for r in rows if r['status'] == 'failed' and r.get('error_code','
 print(len(condemned))
 PYEOF
     )
-    # Real failures grouped by error_code (excludes NonMonotonicNonce).
+    # Real failures grouped by error_code (excludes NonMonotonicNonce + CrashRecovery).
     python3 - "$DB_LOG" "$ERROR_COUNTS" <<'PYEOF'
 import csv, sys
 from collections import Counter
@@ -342,7 +345,7 @@ with open(sys.argv[1]) as f:
     rows = list(csv.DictReader(f))
 codes = Counter(
     r['error_code'] for r in rows
-    if r['status'] == 'failed' and r.get('error_code','') not in ('NonMonotonicNonce', '')
+    if r['status'] == 'failed' and r.get('error_code','') not in ('NonMonotonicNonce', 'CrashRecovery', '')
 )
 with open(sys.argv[2], 'w') as out:
     for code, count in codes.most_common():
@@ -401,7 +404,7 @@ ALERTS_MD="$(cd "$REPO_ROOT/offchain/feeder" \
   && node --import tsx/esm scripts/m2-evidence/build-alerts.ts "$ALERTS_ACTIVE_JSON" 2>/dev/null)" || true
 if [ -z "$ALERTS_MD" ]; then
   echo "[package-m2]   build-alerts.ts unavailable — falling back to static catalog" >&2
-  ALERTS_MD=$'Source of truth: [`offchain/feeder/monitoring/alerts.yml`](../../../offchain/feeder/monitoring/alerts.yml).\nCanonical thresholds: `infrastructure.<network>.yaml::alerting.*`.\n\nThe 9 alert rules (OraclePairStale, ReceiverBalanceLow, SettleOverdue, PaymentHookWithdrawReady, AdminWalletLow, PriceDeviationHigh, PriceAgeHigh, ReorgRateHigh, ReceiverDepositsPending) and their exact remediation commands are defined in `alerts.yml`; the live snapshot is in `alerts-active.json`.'
+  ALERTS_MD=$'Source of truth: [`offchain/feeder/monitoring/alerts.yml`](../../../../offchain/feeder/monitoring/alerts.yml).\nCanonical thresholds: `infrastructure.<network>.yaml::alerting.*`.\n\nThe 12 alert rules (OraclePairStale, ReceiverBalanceLow, SettleOverdue, PaymentHookWithdrawReady, AdminWalletLow, AdminWalletFragmented, PriceDeviationHigh, PriceAgeHigh, ReorgRateHigh, ReceiverDepositsPending, PrimaryProviderDown, SecondaryProviderDown) and their exact remediation commands are defined in `alerts.yml`; the live snapshot is in `alerts-active.json`.'
 fi
 
 # ---------------------------------------------------------------------------
@@ -426,7 +429,7 @@ PUSH_MD="$(printf '%s\n' \
   "With \`time_threshold > 0\` + \`cron: true\` + \`price_deviation\`, this is the **classic OR-gate + cron heartbeat**: a pair pushes when the price moves at least \`price_deviation\` **OR** every \`time_threshold\` (the cron heartbeat fires even if no new DIA intent arrives), so **max staleness ≈ \`time_threshold\`**. No \`max_staleness\` key is set — and it would be ignored here anyway, because it only applies when \`time_threshold\` is absent or \`0\`." \
   "" \
   "The other modes (and their effect on push frequency / max staleness / tx volume) are documented in full:" \
-  "**[docs/audit/20260609-feeder-push-policy-config.md](../../audit/20260609-feeder-push-policy-config.md)**. In short:" \
+  "**[docs/audit/20260609-feeder-push-policy-config.md](../../../audit/20260609-feeder-push-policy-config.md)**. In short:" \
   "" \
   "- **OR-gate + heartbeat** (this run): move-based fast path + a \`time_threshold\` ceiling guaranteed by cron. Bounded staleness, medium tx." \
   "- **Deviation-only mode** (\`time_threshold: 0s\` + \`max_staleness\`): push only on a real price move, with \`max_staleness\` as the backstop. Fewest tx, ceiling = \`max_staleness\`." \
@@ -518,9 +521,9 @@ Evidence pack location: this directory.
 | Test coverage | Complete: \`npm test\` in \`offchain/feeder/\` (passing, full surface). |
 | Uptime / accuracy reports | This pack: per-pair confirmed counts + latency + reorg stats. |
 | QA review logs | This pack: \`logs/feeder.log\`, \`logs/transactions.jsonl\`, \`logs/lane.jsonl\`, \`logs/intents/\`. |
-| Automated alerts | Complete: \`offchain/feeder/monitoring/alerts.yml\` (8 alert rules; canonical thresholds in \`infrastructure.<network>.yaml::alerting.*\`). |
-| Real-time dashboards | Complete: \`dashboards/\` (PNG snapshots taken at pack time). Source JSON: [\`offchain/feeder/monitoring/grafana/dashboards/feeder.json\`](../../../offchain/feeder/monitoring/grafana/dashboards/feeder.json). |
-| Developer documentation | Complete: [feeder README](../../../offchain/feeder/README.md), [CLI README](../../../offchain/cli/README.md), [architecture](../../architecture/cardano-oracle-architecture.md). |
+| Automated alerts | Complete: \`offchain/feeder/monitoring/alerts.yml\` (12 alert rules; canonical thresholds in \`infrastructure.<network>.yaml::alerting.*\`). |
+| Real-time dashboards | Complete: \`dashboards/\` (PNG snapshots taken at pack time). Source JSON: [\`offchain/feeder/monitoring/grafana/dashboards/feeder.json\`](../../../../offchain/feeder/monitoring/grafana/dashboards/feeder.json). |
+| Developer documentation | Complete: [feeder README](../../../../offchain/feeder/README.md), [CLI README](../../../../offchain/cli/README.md), [architecture](../../../architecture/cardano-oracle-architecture.md). |
 
 ## Totals (this window)
 
@@ -550,14 +553,18 @@ $(tsv_to_md_table "$LATENCY_FILE" "Pair" "Samples" "p50 (ms)" "p95 (ms)")
 
 ## Failures (grouped by error_code)
 
-Real Cardano tx failures only (tx was broadcast but failed on-chain).
-Condemned intents (NonMonotonicNonce — superseded before submission, no tx, no fee)
-are counted separately in the Totals table above and excluded here.
+Real Cardano tx failures only (tx was broadcast but failed on-chain). Two
+no-tx categories are excluded (counted in the Totals table above instead):
+**NonMonotonicNonce** — intent superseded before submission (no tx, no fee); and
+**CrashRecovery** — an intent that was in-flight when the daemon last restarted,
+force-failed on startup (not a broadcast tx that failed on-chain).
 
 $(tsv_to_md_table "$ERROR_COUNTS" "FeederErrorCode" "Count")
 
-Failure semantics for each code are documented in
-[\`offchain/feeder/src/errors/codes.ts\`](../../../offchain/feeder/src/errors/codes.ts).
+Semantics for each \`FeederErrorCode\` are documented in
+[\`offchain/feeder/src/errors/codes.ts\`](../../../../offchain/feeder/src/errors/codes.ts)
+(\`CrashRecovery\` is not a FeederErrorCode — it is a restart artifact set in
+\`cmd/feeder/daemon-cmd.ts\`).
 
 ## Raw artefacts in this pack
 
@@ -588,7 +595,7 @@ $PUSH_MD
 
 Grafana dashboard \`DIA Cardano Oracle Feeder\` (UID \`dia-cardano-feeder\`) —
 PNG snapshots taken at pack time over a \`now-3h\` window. Source JSON:
-[\`offchain/feeder/monitoring/grafana/dashboards/feeder.json\`](../../../offchain/feeder/monitoring/grafana/dashboards/feeder.json).
+[\`offchain/feeder/monitoring/grafana/dashboards/feeder.json\`](../../../../offchain/feeder/monitoring/grafana/dashboards/feeder.json).
 
 $DASHBOARDS_MD
 
@@ -599,7 +606,7 @@ cd offchain && make up-monitoring
 # then open http://localhost:3000 (default admin/admin) — dashboard is auto-provisioned.
 \`\`\`
 
-See the [feeder README — Daemon + monitoring section](../../../offchain/feeder/README.md#daemon--monitoring)
+See the [feeder README — Daemon + monitoring section](../../../../offchain/feeder/README.md#daemon--monitoring)
 for the canonical operator instructions.
 
 ## Alerts active during the window

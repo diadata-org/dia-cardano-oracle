@@ -76,7 +76,7 @@ const active = loadActive(process.argv[2]);
 
 const out: string[] = [];
 out.push(
-  "Source of truth: [`offchain/feeder/monitoring/alerts.yml`](../../../offchain/feeder/monitoring/alerts.yml).",
+  "Source of truth: [`offchain/feeder/monitoring/alerts.yml`](../../../../offchain/feeder/monitoring/alerts.yml).",
   "Canonical thresholds: `infrastructure.<network>.yaml::alerting.*`. Every alert below carries an",
   "exact, copy-pasteable remediation (Docker + npm) in its description.",
   "",

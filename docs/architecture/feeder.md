@@ -517,10 +517,12 @@ fires N times with the same tx hash. The first batch member is the stateless
 exactly once; the membership counter fires for every member.
 
 **No-tx failures excluded.** A condemned/superseded intent the feeder declined to submit
-(the build-time monotonicity assertion refuses, or the coalescer pre-filter drops it)
-surfaces as a `NonMonotonicNonce` failure with **no tx broadcast and no fee**. These are
-correct no-ops, not failed transactions, so `isNoTransactionFailure` excludes them from
-the tx-level counts.
+(the build-time monotonicity assertion refuses, or the coalescer pre-filter drops it) is a
+`NonMonotonicNonce` no-op with **no tx broadcast and no fee**. It is counted in
+`dia_bridge_intents_superseded_total{reason}` (logged at info as `intent superseded (no tx)`)
+and kept out of BOTH the per-symbol `transactions_failed_total` / `bridge_intents_failed_total`
+AND the per-tx `transactions_total` counts (`isNoTransactionFailure`), so the failure counters
+reflect only real failures.
 
 The dedicated **`monitoring/grafana/dashboards/feeder-tx.json`** dashboard ("DIA Cardano
 Oracle Feeder — Transactions") renders this axis: tx-stage latency (p50/p95/p99),
@@ -828,7 +830,7 @@ off by default. The route table is described by an auto-generated OpenAPI 3.0 do
 | Endpoint | Returns |
 | --- | --- |
 | `GET /health`, `/health/ready` | liveness / readiness |
-| `GET /metrics` | **Prometheus, ~50 metrics** (feeds Grafana) |
+| `GET /metrics` | **Prometheus, ~60 metrics** (feeds Grafana) |
 | `GET /api/v1/prices` | last confirmed prices per symbol; each entry carries `routerId` + the resolved `customerId` / `clientId` / `network` |
 | `GET /api/v1/status` | health snapshot (uptime, network, scanner, db) |
 | `GET /api/v1/transactions` | Cardano tx history with status |
@@ -912,7 +914,7 @@ prerequisites, env vars, and the full output description.
 
 ## 19. Metrics that exist but are NOT in Grafana
 
-The feeder exposes ~55 `dia_bridge_*` metrics at `/metrics`, across **two** dashboards:
+The feeder exposes ~60 `dia_bridge_*` metrics at `/metrics`, across **two** dashboards:
 `monitoring/grafana/dashboards/feeder.json` (operational overview) and
 `feeder-tx.json` (the per-transaction axis — see §6). Below is what neither shows yet —
 split into **metrics with real data** (worth adding) and **metrics defined but with no
@@ -942,6 +944,7 @@ Per-transaction axis (`feeder-tx.json`): `transactions_total`, `transaction_pair
 | `dia_bridge_intents_scanned_total{symbol,scanner_type}` | Enriched intents **entering** the routing pipeline. |
 | `dia_bridge_intents_routed_total{symbol,router_id}` | Intents **accepted** by a destination (passed trigger conditions). |
 | `dia_bridge_transactions_submitted_total{symbol,client_id,customer_id}` | Submission attempts **broadcast** to Cardano (the denominator for success rate, with confirmed/failed). |
+| `dia_bridge_intents_superseded_total{symbol,client_id,customer_id,reason}` | Intents the feeder **declined to submit** because a newer one already won on chain (`NonMonotonicNonce`) — no tx, no fee. Correct no-ops, kept out of the failure counters. |
 
 **Latency breakdown (phases 1–5)** — today only phase 6 (end-to-end) is shown. These
 show **WHERE** latency lives:
@@ -975,7 +978,7 @@ show **WHERE** latency lives:
 
 | Metric | What it measures |
 | --- | --- |
-| `dia_bridge_cron_resubmissions_total{router_id,symbol,client_id,outcome}` | Cron decisions by outcome: `submitted`, `skipped_already_fresh`, `skipped_superseded`, `skipped_no_intent`, `skipped_uninitialised`. Shows whether the cron is working and why it skips. |
+| `dia_bridge_cron_resubmissions_total{router_id,symbol,client_id,customer_id,outcome}` | Cron decisions by outcome: `submitted`, `skipped_already_fresh`, `skipped_superseded`, `skipped_no_intent`, `skipped_uninitialised`. Shows whether the cron is working and why it skips. |
 
 **HTTP API** (today none shown):
 

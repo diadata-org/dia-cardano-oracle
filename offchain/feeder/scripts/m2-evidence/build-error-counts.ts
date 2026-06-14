@@ -1,4 +1,7 @@
-// Bucket failed transactions by error_code from the SQLite DB.
+// Bucket REAL failed transactions by error_code from the SQLite DB — a tx was
+// broadcast but failed on-chain. Two no-tx categories are excluded: NonMonotonicNonce
+// (intent superseded before submission — no tx, no fee) and CrashRecovery (an
+// in-flight intent force-failed when the daemon restarted, not an on-chain failure).
 //
 // Usage (from offchain/feeder/):
 //   node --import tsx/esm scripts/m2-evidence/build-error-counts.ts [<db-path>]
@@ -66,6 +69,7 @@ function main(): void {
       `SELECT error_code, COUNT(*) AS count
        FROM transaction_log
        WHERE status = 'failed'
+         AND error_code NOT IN ('NonMonotonicNonce', 'CrashRecovery')
        GROUP BY error_code
        ORDER BY count DESC`,
     ).all() as ErrorCountRow[];

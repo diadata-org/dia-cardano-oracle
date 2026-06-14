@@ -1477,16 +1477,22 @@ cron drops it instead of wasting a pipeline pass and a fee.
 ### 9.4 Alert evaluator and `alert_log`
 
 The alert evaluator is an in-process periodic loop started alongside the feeder daemon.
-It reads the in-memory `priceCache` (refreshed on every confirm, hydrated from the
-reconciled pair-state files at startup) to find pairs whose last confirmed entry is
-older than `alerting.oracle_pair_stale_seconds` and writes an `OraclePairStale` event to
-`alert_log`. It also monitors for `PriceDeviationHigh` and `ReceiverBalanceLow`
-conditions using the thresholds from `alerting.*` in the YAML.
+It implements exactly one rule: it reads the in-memory `priceCache` (refreshed on every
+confirm, hydrated from the reconciled pair-state files at startup) to find pairs whose
+last confirmed entry is older than the staleness window and writes an `OraclePairStale`
+event to `alert_log`. **Every other operational condition** — price deviation, price age,
+balances, fee-loop, reorgs, and Cardano API provider health — is evaluated **externally**
+by the Prometheus rules in `monitoring/alerts.yml` (PromQL), not by this loop.
 
-Fired alerts are visible at `/api/v1/alerts` (active = unresolved) and
-`/api/v1/alerts?active=false` (all). Prometheus alert rules in
-`monitoring/alerts.yml` mirror the same thresholds and fire independently based
-on Prometheus metric data.
+Fired in-process alerts are visible at `/api/v1/alerts` (active = unresolved) and
+`/api/v1/alerts?active=false` (all). The Prometheus rules cover the full set against the
+same canonical `alerting.*` thresholds — including provider health: `PrimaryProviderDown`
+/ `SecondaryProviderDown` fire on
+`time() - dia_bridge_provider_last_ok_timestamp_seconds{role} > alerting.provider_{primary,secondary}_unhealthy_seconds`,
+with `dia_bridge_component_health{component,role}` as the 1/0 health gauge. The `role`
+(`primary`/`secondary`) follows `CARDANO_PROVIDER`, so the critical alert always tracks
+whichever provider actually builds; the primary also gates `/health/ready` via the
+`cardano_provider` check.
 
 ### 9.5 API endpoint → table map
 

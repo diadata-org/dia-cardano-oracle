@@ -24,7 +24,7 @@ heartbeat), [`src/submitter/coalescer.ts`](../../offchain/feeder/src/submitter/c
 
 ## TL;DR — what is configured right now
 
-Active Preview client (`config/routers/preview/client-a.yaml`) + cron block
+Active Preview client (`config/routers/preview/client-test-01-router-default.yaml`) + cron block
 (`infrastructure.preview.yaml::cron_service`):
 
 ```yaml

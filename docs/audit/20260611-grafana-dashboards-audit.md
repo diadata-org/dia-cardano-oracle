@@ -89,7 +89,7 @@ client, one symbol, without editing any query.
 | **Customer** | The billing entity a router serves (`router.customer`). | `acme`, `All` |
 | **Client** | The on-chain receiver identity (one deployed client = one receiver). | `client-a`, `All` |
 | **Symbol** | The price pair. | `BTC/USD`, `ETH/USD`, … or `All` |
-| **Error code** | *(Overview only)* a transaction failure code, used to slice the failures chart. | `NonMonotonicNonce`, `All` |
+| **Error code** | *(Overview only)* a REAL transaction failure code, used to slice the failures chart. (`NonMonotonicNonce` is **not** here — superseded intents are no-ops counted in `dia_bridge_intents_superseded_total`.) | `BuilderError`, `ProviderLag`, `All` |
 
 Each filter has an **`All`** option (the default). `All` means "do not narrow on
 this dimension" — every series is shown.
@@ -662,8 +662,8 @@ Grafana panel colours; kept in sync by the threshold-drift test).
 | Reorg counter | `ReorgRateHigh` | reorgs per hour over | **> 3 / h** | Check provider lag + scanner block lag |
 | Provider health (primary) | `PrimaryProviderDown` | primary provider no success for | **600 s** | Build/submit provider down (e.g. Blockfrost 402) → rotate key / switch `CARDANO_PROVIDER`, `make restart` |
 | Provider health (secondary) | `SecondaryProviderDown` | secondary provider no probe for | **900 s** | Redundancy lost only; fix/rotate its endpoint in `feeder/.env`, `make restart` |
-| Tx success ratio | `TransactionFailureRateHigh` | failed/total ratio high | — | Failures panel + `make logs` |
-| Scanner block lag | `ScannerLag` | no new block within lag window | `max_processing_lag` | Provider/connectivity check |
+| Tx success ratio | _(no alert — watch manually)_ | confirmed/total drops noticeably | — | Failures panel + `make logs` |
+| Scanner block lag | _(no alert — watch manually)_ | lag keeps climbing off the tip | — | "Scanner block lag" panel + provider/connectivity check |
 
 ## 7. Two concepts the charts assume
 

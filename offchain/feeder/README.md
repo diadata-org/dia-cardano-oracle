@@ -901,19 +901,18 @@ how the feeder detects a rollback, the `ReorgCounter` panel), see
 The feeder runs an in-process alert evaluator loop that writes firing and
 resolved events to the `alert_log` DB table, readable at `GET /api/v1/alerts`.
 
-Current rules:
+Current rules — the in-process evaluator implements exactly one:
 
-| Rule | Fires when | Config key |
+| Rule | Fires when | Threshold |
 |---|---|---|
-| `OraclePairStale` | A price-cache entry has not been refreshed within `pairStalenessThresholdMs` | `alerting.oracle_pair_stale_seconds` |
-| `PriceDeviationHigh` | p95 of observed price deviation exceeds the threshold | `alerting.price_deviation_high_percent` |
-| `ScannerLag` | The scanner has not processed a new block within the lag window | `alerting.max_processing_lag` |
-| `WorkerQueueSaturated` | The submission queue depth exceeds the saturation threshold | (evaluator internal) |
-| `TransactionFailureRateHigh` | The ratio of failed to total submissions exceeds the threshold | (evaluator internal) |
+| `OraclePairStale` | A price-cache entry has not been refreshed within the staleness window | code default `DEFAULT_PAIR_STALENESS_THRESHOLD_MS` (5 min) |
 
-The evaluator runs on the same cadence as `cron_service.tick_interval`
-(default 30 s). Prometheus alert rules in `monitoring/alerts.yml` cover
-additional conditions evaluated externally via PromQL.
+`ScannerLag` and `WorkerQueueDepth` are planned (`TODO` in
+`src/alerting/evaluator.ts`) and not yet wired. **Every other operational
+condition** — price deviation, price age, balances, fee-loop, reorgs, provider
+health — is evaluated **externally** by the Prometheus rules in
+`monitoring/alerts.yml` (PromQL), not by this loop. The evaluator runs on the
+same cadence as `cron_service.tick_interval` (default 30 s).
 
 ### Prometheus alert thresholds
 
@@ -950,7 +949,7 @@ You control **when** the daemon merges with two thresholds in
 | Key | What it does | Default |
 | --- | --- | --- |
 | `receiver_balance_low_lovelace` | Merge pending deposits once the Receiver balance falls below this | `2 000 000` (2 ADA) |
-| `deposit_pending_merge_lovelace` | Merge once the pending deposit pile reaches this, regardless of the Receiver balance | (set per deployment) |
+| `deposit_pending_merge_lovelace` | Merge once the pending deposit pile reaches this, regardless of the Receiver balance | `5 000 000` (5 ADA); optional — omit to disable this arm |
 
 For the merge mechanism, how a merge and an oracle update on the same Receiver
 stay mutually exclusive (lane concurrency), and the deposit floor / per-merge
@@ -975,6 +974,7 @@ Price deviation is **percent** (0–100).
 | `PriceDeviationHigh` | `dia_bridge_price_deviation_percent_bucket` (p95) | `price_deviation_high_percent` | `5` % | Investigate DIA source — possible misreport. |
 | `PriceAgeHigh` | `dia_bridge_price_age_seconds_bucket` (p95) | `price_age_high_seconds` | `600` s | DIA source publishing stale prices. |
 | `ReorgRateHigh` | `dia_bridge_transactions_reorg_total` | `reorg_rate_high_per_hour` | `> 3 / 1 h` | Check provider lag + scanner block-lag panel. |
+| `ReceiverDepositsPending` | `dia_bridge_cardano_deposit_pending_lovelace` | `deposit_pending_merge_lovelace` | `5 000 000` (5 ADA) | Un-merged client deposits waiting; the daemon auto-merges. Operator fallback: `make cli CMD="deposit:merge --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json --client-state /app/offchain/state/preview_run_<id>/clients/<client>.json"`. |
 | `PrimaryProviderDown` | `dia_bridge_provider_last_ok_timestamp_seconds{role="primary"}` | `provider_primary_unhealthy_seconds` | `600` s | **Critical** — the build/submit provider (selected by `CARDANO_PROVIDER`) is down → nothing builds, every pair freezes. Often a Blockfrost `402` (quota). Rotate `BLOCKFROST_PROJECT_ID_<NET>` / `KOIOS_API_URL_<NET>` in `feeder/.env` or switch `CARDANO_PROVIDER`, then `make restart`. |
 | `SecondaryProviderDown` | `dia_bridge_provider_last_ok_timestamp_seconds{role="secondary"}` | `provider_secondary_unhealthy_seconds` | `900` s | **Warning** — the confirmation/reorg redundancy provider is down; core operation continues. Fix/rotate its endpoint in `feeder/.env`, then `make restart`. |
 

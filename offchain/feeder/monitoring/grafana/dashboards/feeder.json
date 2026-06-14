@@ -614,7 +614,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Failed symbol updates in each 5-minute window grouped by error code (a count, not a rate). Condemned/superseded intents the feeder declined to submit appear here as NonMonotonicNonce (no tx, no fee).",
+      "description": "Failed symbol updates in each 5-minute window grouped by error code (a count, not a rate). REAL failures only — superseded intents (NonMonotonicNonce, no tx, no fee) are counted separately in dia_bridge_intents_superseded_total{reason}, not here.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
