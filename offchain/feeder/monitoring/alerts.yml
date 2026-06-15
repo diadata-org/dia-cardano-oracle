@@ -330,7 +330,9 @@ groups:
             {{ $labels.symbol }} is {{ $value | humanizeDuration }} (alert fires
             above 10 minutes). The feeder itself is healthy; the UPSTREAM DIA
             source is delivering old prices for this symbol (or the source
-            WebSocket connection is degraded).
+            WebSocket connection is degraded). This is scoped to ROUTED pairs only
+            (`dia_bridge_price_age_seconds` is recorded just for symbols this
+            feeder publishes, not every symbol the source feed carries).
 
             WHAT TO DO:
             1. Confirm the feeder is still connected to the DIA source and watch

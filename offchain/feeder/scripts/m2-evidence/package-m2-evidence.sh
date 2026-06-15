@@ -142,7 +142,7 @@ echo "[package-m2] step 4/6 — rendering Grafana dashboard"
 # backticks survive into the markdown unevaluated.
 PANELS=(
   '11|Confirmed oracle updates — all-time total (per pair)|Metric `sum by (symbol) (dia_bridge_transactions_confirmed_total)`. Running all-time count of oracle-update transactions that reached on-chain confirmation, split per price pair (the `symbol` label). This is the liveness proof — every active pair should show a non-zero, growing count.'
-  '12|Price data age p95 — 1 h window (per pair)|Metric `histogram_quantile(0.95, rate(dia_bridge_price_age_seconds_bucket[1h]))` per `symbol`, in seconds. 95th percentile of how old the DIA source price was at the moment the feeder consumed it — i.e. data freshness, not transaction speed. Lower is better; high values feed the `PriceAgeHigh` alert.'
+  '12|Price data age p95 — 1 h window (per routed pair)|Metric `histogram_quantile(0.95, rate(dia_bridge_price_age_seconds_bucket[1h]))` per `symbol`, in seconds. 95th percentile of how old the DIA source price was at the moment the feeder consumed it — i.e. data freshness, not transaction speed. Recorded ONLY for the pairs this feeder routes (not the hundreds of other symbols the source feed carries). Lower is better; high values feed the `PriceAgeHigh` alert.'
   '1|Pair staleness (per symbol)|Metric `time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds`, in seconds. Wall-clock age of the most recent confirmed on-chain update for each pair — how stale the value currently living on Cardano is. Drives the `OraclePairStale` alert.'
   '2|Receiver balance — ADA (per client)|Metric `dia_bridge_cardano_receiver_balance_lovelace / 1000000`, in ADA. Current spendable balance of each Receiver address, converted from lovelace. The metric labels include both `receiver_address` and the client `deposit_address` operators should fund when `ReceiverBalanceLow` fires.'
   '3|Admin wallet • PaymentHook • Receiver accrued — ADA|Three ADA series (lovelace ÷ 1e6): `dia_bridge_cardano_admin_wallet_lovelace` (operator admin wallet), `dia_bridge_cardano_payment_hook_accrued_lovelace` (fees accrued inside the PaymentHook awaiting withdraw), and `sum(dia_bridge_cardano_receiver_accrued_lovelace)` (amounts accrued at receivers awaiting settle). Together they track the fee / settlement money flow.'
@@ -171,11 +171,12 @@ PANELS_TX=(
   '302|Stage 2 — submission → confirmation|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket[5m]))`, in seconds. Pure Cardano settlement time from broadcast to on-chain confirmation, per tx.'
   '303|End-to-end — processing → confirmation|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_tx_end_to_end_seconds_bucket[5m]))`, in seconds. Total per-transaction latency from feeder processing start to confirmation.'
   '311|Tx confirmed vs failed (5m)|Metric `sum by (outcome) (increase(dia_bridge_transactions_total[5m]))` — transactions per 5-minute window counted once per tx, by outcome. Condemned no-ops excluded.'
-  '312|Tx success ratio (5m)|Confirmed transactions as a percentage of all real attempts (confirmed + failed) over 5 minutes: `100 * confirmed / (confirmed + failed)` from `dia_bridge_transactions_total`. Condemned no-ops are excluded from both terms.'
+  '312|Tx success ratio (5m)|Confirmed transactions as a percentage of all transactions in the last 5 minutes. Shows "No data" when no transactions were sent in that window (rather than 0%).'
   '313|Tx by client (5m)|Metric `sum by (client_id) (increase(dia_bridge_transactions_total[5m]))` — transactions per 5-minute window grouped by client (receiver identity), counted once per tx.'
   '321|Pairs per tx (p50/p95/p99)|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_transaction_pairs_bucket[5m]))` — batch size distribution: pairs per transaction at the median, 95th and 99th percentiles.'
   '322|Batch size distribution (heatmap)|Metric `sum by (le) (rate(dia_bridge_transaction_pairs_bucket[5m]))`, batch-size buckets. Heatmap of pairs-per-transaction over time; bright bands show the typical batch size.'
   '323|Tx touching pair (5m, by symbol & outcome)|Metric `sum by (symbol, outcome) (increase(dia_bridge_tx_pair_membership_total[5m]))` — one increment per (tx, pair). Filter by `$symbol` to find the transactions that included a given pair (their size is in "Pairs per tx"); carries confirmed vs failed and the customer dimension.'
+  '331|Tx counts — confirmed vs failed (selected range)|The number of real Cardano oracle transactions over the window — how many confirmed on-chain and how many failed, counted once per transaction (one transaction can carry several price pairs).'
 )
 
 render_dashboard() {
@@ -551,20 +552,14 @@ DIA \`IntentRegistered\` → Cardano \`tx_confirmed\`, milliseconds.
 
 $(tsv_to_md_table "$LATENCY_FILE" "Pair" "Samples" "p50 (ms)" "p95 (ms)")
 
-## Failures (grouped by error_code)
+## Failures (grouped by error code)
 
-Real Cardano tx failures only (tx was broadcast but failed on-chain). Two
-no-tx categories are excluded (counted in the Totals table above instead):
-**NonMonotonicNonce** — intent superseded before submission (no tx, no fee); and
-**CrashRecovery** — an intent that was in-flight when the daemon last restarted,
-force-failed on startup (not a broadcast tx that failed on-chain).
+Real Cardano transaction failures only — a transaction was broadcast and then
+failed on-chain. Routine non-failures (an update made obsolete by a newer one
+before it was sent, or an update interrupted by a restart) are not counted here.
+An empty table means there were no real failures in this run.
 
-$(tsv_to_md_table "$ERROR_COUNTS" "FeederErrorCode" "Count")
-
-Semantics for each \`FeederErrorCode\` are documented in
-[\`offchain/feeder/src/errors/codes.ts\`](../../../../offchain/feeder/src/errors/codes.ts)
-(\`CrashRecovery\` is not a FeederErrorCode — it is a restart artifact set in
-\`cmd/feeder/daemon-cmd.ts\`).
+$(tsv_to_md_table "$ERROR_COUNTS" "Error code" "Count")
 
 ## Raw artefacts in this pack
 

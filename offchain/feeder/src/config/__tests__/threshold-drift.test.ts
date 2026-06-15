@@ -190,7 +190,7 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     const yaml = loadAlerting("infrastructure.preview.yaml");
     const { panels } = loadDashboard();
     assert.equal(step(panelByTitle(panels, "Pair staleness (per symbol)"), "red"), yaml.oracle_pair_stale_seconds);
-    assert.equal(step(panelByTitle(panels, "Price data age p95 — 1 h window (per pair)"), "red"), yaml.price_age_high_seconds);
+    assert.equal(step(panelByTitle(panels, "Price data age p95 — 1 h window (per routed pair)"), "red"), yaml.price_age_high_seconds);
     assert.equal(step(panelByTitle(panels, "Price deviation p95 — 1 h window (per pair)"), "red"), yaml.price_deviation_high_percent);
     assert.equal(step(panelByTitle(panels, "Reorg counter"), "red"), yaml.reorg_rate_high_per_hour);
     assert.equal(step(panelByTitle(panels, "Receiver balance — ADA (per client)"), "yellow"), yaml.receiver_balance_low_lovelace / 1_000_000);

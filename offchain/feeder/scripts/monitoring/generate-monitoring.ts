@@ -208,7 +208,7 @@ type PanelStepTarget = {
 
 const PANEL_STEPS: PanelStepTarget[] = [
   { panelTitle: "Pair staleness (per symbol)", color: "red", yamlKey: "oracle_pair_stale_seconds", divisor: 1 },
-  { panelTitle: "Price data age p95 — 1 h window (per pair)", color: "red", yamlKey: "price_age_high_seconds", divisor: 1 },
+  { panelTitle: "Price data age p95 — 1 h window (per routed pair)", color: "red", yamlKey: "price_age_high_seconds", divisor: 1 },
   { panelTitle: "Price deviation p95 — 1 h window (per pair)", color: "red", yamlKey: "price_deviation_high_percent", divisor: 1 },
   { panelTitle: "Reorg counter", color: "red", yamlKey: "reorg_rate_high_per_hour", divisor: 1 },
   { panelTitle: "Receiver balance — ADA (per client)", color: "yellow", yamlKey: "receiver_balance_low_lovelace", divisor: 1_000_000 },

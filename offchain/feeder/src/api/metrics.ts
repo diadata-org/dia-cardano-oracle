@@ -466,7 +466,7 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     ),
     priceAgeSeconds: histogram(
       "price_age_seconds",
-      "Age of the incoming intent price at processing time",
+      "Age of the incoming intent price at processing time, recorded ONLY for symbols this feeder routes (matched a router) — not every symbol the source feed carries. Drives the PriceAgeHigh alert.",
       ["symbol"],
       PRICE_AGE_BUCKETS,
     ),

@@ -99,7 +99,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "95th-percentile age of incoming DIA price data at the moment it was processed (1-hour window per pair). Values above 600 s indicate the DIA source is publishing stale prices and may trigger the PriceAgeHigh alert.",
+      "description": "95th-percentile age of incoming DIA price data at the moment it was processed (1-hour window), recorded ONLY for the pairs this feeder routes (not the hundreds of other symbols the source feed carries). Values above 600 s indicate the DIA source is publishing stale prices for a routed pair and may trigger the PriceAgeHigh alert.",
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -149,7 +149,7 @@
           "refId": "A"
         }
       ],
-      "title": "Price data age p95 — 1 h window (per pair)",
+      "title": "Price data age p95 — 1 h window (per routed pair)",
       "type": "stat"
     },
     {

@@ -39,6 +39,7 @@ Every chart links to its larger image and is also shown inline.
   - [Row T1 — Transaction latency by stage](#row-t1--transaction-latency-by-stage)
   - [Row T2 — Transaction throughput & outcome](#row-t2--transaction-throughput--outcome)
   - [Row T3 — Batch size & pair membership](#row-t3--batch-size--pair-membership)
+  - [Row T4 — Real transaction counts](#row-t4--real-transaction-counts)
 - [6. When to panic — one-page cheat sheet](#6-when-to-panic--one-page-cheat-sheet)
 - [7. Two concepts the charts assume](#7-two-concepts-the-charts-assume)
 - [8. Note on the deviation heatmap (instrumentation fix)](#8-note-on-the-deviation-heatmap-instrumentation-fix)
@@ -190,7 +191,7 @@ pairs. Each panel below follows the same shape — **What it shows · How to rea
 - **When to worry** — a pair at 0 while others climb, or a number that has stopped
   growing for a pair you expect to be active. Cross-check with *Pair staleness*.
 
-**Price data age p95 — 1 h window (per pair)** · `stat`
+**Price data age p95 — 1 h window (per routed pair)** · `stat`
 `histogram_quantile(0.95, rate(dia_bridge_price_age_seconds_bucket[1h]))`
 
 [panel-12.png](img/panel-12.png)
@@ -200,11 +201,18 @@ pairs. Each panel below follows the same shape — **What it shows · How to rea
 - **What it shows** — in seconds, the 95th-percentile **age of the DIA source
   price** at the moment the feeder consumed it. This is data *freshness at the
   source*, not transaction speed.
+- **Scope (routed pairs only).** `dia_bridge_price_age_seconds` is recorded
+  **only for the symbols this feeder routes** (the intent matched a router) — not
+  the hundreds of other symbols the DIA source feed carries. Earlier this metric
+  covered every scanned symbol, which flooded this panel (and `PriceAgeHigh`)
+  with exotic pairs we never publish; it is now scoped to our pairs.
 - **How to read it** — lower is better. p95 means "95% of intents were fresher
-  than this." A few seconds is healthy.
+  than this." A few seconds is healthy. The histogram tops out at the 1800 s
+  bucket, so a value pegged at `1800` (30 min) means "≥ 30 min" — it cannot show
+  how much older.
 - **When to worry** — sustained climbing toward **600 s** fires the `PriceAgeHigh`
-  alert → the DIA source is publishing stale prices. This is upstream of the
-  feeder, not a Cardano problem.
+  alert → the DIA source is publishing stale prices for a routed pair. This is
+  upstream of the feeder, not a Cardano problem.
 
 ### Row 1 — Balances & Staleness
 
@@ -575,17 +583,20 @@ idea but per-symbol and not split by stage — they do not repeat.)
   stat below.
 
 **Tx success ratio (5m)** · `stat` · percent
-`100 * confirmed / clamp_min(total, 1)`
+`100 * confirmed / total` (over `dia_bridge_transactions_total[5m]`)
 
 [tx-panel-312.png](img/tx-panel-312.png)
 
 ![Tx success ratio (5m)](img/tx-panel-312.png)
 
 - **What it shows** — confirmed transactions as a percentage of all real attempts
-  (confirmed + failed) over 5 minutes. Condemned no-ops excluded from both terms.
-- **How to read it** — should sit at or near **100%**.
-- **When to worry** — dropping below ~**95%** and staying there means a real
-  submission problem — investigate via the failures panel and `make logs`.
+  (confirmed + failed) over 5 minutes. Superseded no-ops excluded from both terms.
+- **How to read it** — should sit at or near **100%**. **Idle = "No data".** When
+  no transactions were sent in the window the panel shows **No data** (not `0%`):
+  the denominator is 0, so there is nothing to divide. (It used to `clamp_min` the
+  denominator to 1, which made an idle window read a misleading `0%` in red.)
+- **When to worry** — a real value dropping below ~**95%** and staying there means
+  a genuine submission problem — investigate via the failures panel and `make logs`.
 
 **Tx by client (5m)** · `timeseries`
 `sum by (client_id) (increase(dia_bridge_transactions_total[5m]))`
@@ -642,6 +653,25 @@ idea but per-symbol and not split by stage — they do not repeat.)
 - **How to read it** — filter by `$symbol` to answer "which transactions carried
   BTC/USD, and did they confirm?" Their size is in *Pairs per tx*.
 - **When to worry** — a pair showing failed memberships repeatedly.
+
+### Row T4 — Real transaction counts
+
+**Tx counts — confirmed vs failed (selected range)** · `stat`
+`sum(increase(dia_bridge_transactions_total{outcome="confirmed"|"failed"}[$__range]))`
+
+[tx-panel-331.png](img/tx-panel-331.png)
+
+![Tx counts — confirmed vs failed](img/tx-panel-331.png)
+
+- **What it shows** — the **raw count** of real Cardano transactions over the
+  dashboard's selected time range: how many **confirmed** on-chain (green) and how
+  many **failed** (red), counted once per tx (a batch of N pairs is ONE tx). No
+  averages, no ratios — just two numbers.
+- **How to read it** — `$__range` is the time picker, so the counts are the totals
+  for whatever window you have selected. Superseded no-ops (`NonMonotonicNonce`)
+  and crash-recovery rows are not transactions and are not counted.
+- **When to worry** — a non-trivial `failed` count (real failures) — cross-check
+  the failures-by-error-code panel and `make logs`.
 
 ## 6. When to panic — one-page cheat sheet
 

@@ -235,7 +235,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Confirmed transactions as a percentage of all real tx attempts (confirmed + failed) over a 5-minute window. Condemned no-ops are excluded from both.",
+      "description": "Confirmed transactions as a percentage of all real tx attempts (confirmed + failed) over a 5-minute window. Superseded no-ops are excluded from both. Shows \"No data\" during an idle window (no tx in the last 5 min) instead of a misleading 0%.",
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
@@ -280,7 +280,7 @@
       },
       "targets": [
         {
-          "expr": "100 * sum(increase(dia_bridge_transactions_total{network=~\"$network\", outcome=\"confirmed\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])) / clamp_min(sum(increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])), 1)",
+          "expr": "100 * sum(increase(dia_bridge_transactions_total{network=~\"$network\", outcome=\"confirmed\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])) / sum(increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
           "legendFormat": "success %",
           "refId": "A"
         }
@@ -503,6 +503,107 @@
       ],
       "title": "Tx involving router (5m, by router & outcome)",
       "type": "timeseries"
+    },
+    {
+      "type": "row",
+      "title": "Real transaction counts",
+      "collapsed": false,
+      "id": 330,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "panels": []
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Raw COUNT of real Cardano transactions over the selected time range — confirmed and failed, counted once per tx (a batch of N pairs is ONE tx). No averages, no ratios. Superseded no-ops (NonMonotonicNonce) and crash-recovery rows are not transactions and are not counted here.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {}
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "confirmed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "id": 331,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(increase(dia_bridge_transactions_total{network=~\"$network\", outcome=\"confirmed\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range]))",
+          "legendFormat": "confirmed",
+          "refId": "A",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(increase(dia_bridge_transactions_total{network=~\"$network\", outcome=\"failed\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range]))",
+          "legendFormat": "failed",
+          "refId": "B",
+          "instant": true
+        }
+      ],
+      "title": "Tx counts — confirmed vs failed (selected range)",
+      "type": "stat"
     }
   ],
   "refresh": "30s",

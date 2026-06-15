@@ -1225,7 +1225,7 @@ network-agnostic). Current values:
 | `deposit_pending_merge_lovelace` | 5 ADA | **ReceiverDepositsPending** alert + auto-merge | info — deposits awaiting merge |
 | `oracle_pair_stale_seconds` | 3600 s | **OraclePairStale** alert | warning — no confirm in 1 h |
 | `price_deviation_high_percent` | 5 % | **PriceDeviationHigh** alert | critical — possible misreport |
-| `price_age_high_seconds` | 600 s | **PriceAgeHigh** alert | warning — DIA source stale |
+| `price_age_high_seconds` | 600 s | **PriceAgeHigh** alert | warning — DIA source stale (routed pairs only) |
 | `reorg_rate_high_per_hour` | 3 | **ReorgRateHigh** alert | warning — chain provider lagging |
 | `provider_primary_unhealthy_seconds` | 600 s | **PrimaryProviderDown** alert | critical — build/submit provider down → everything freezes |
 | `provider_secondary_unhealthy_seconds` | 900 s | **SecondaryProviderDown** alert | warning — confirmation/reorg redundancy lost |
