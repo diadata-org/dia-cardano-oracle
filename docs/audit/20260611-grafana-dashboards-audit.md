@@ -682,7 +682,7 @@ Grafana panel colours; kept in sync by the threshold-drift test).
 | Panel | Alert | Fires when | Default | First action |
 | --- | --- | --- | --- | --- |
 | Pair staleness | `OraclePairStale` | on-chain value older than | **3600 s** | Check Receiver/Admin balance + `make logs` |
-| Price age p95 | `PriceAgeHigh` | source price age p95 over | **600 s** | DIA source publishing stale prices (upstream) |
+| Price age p95 (routed pairs) | `PriceAgeHigh` | source price age p95 over | **600 s** | DIA source publishing stale prices for a routed pair (upstream) |
 | Receiver balance | `ReceiverBalanceLow` | balance below | **2 ADA** | Send ADA to deposit address / `receiver:top-up` |
 | Admin wallet | `AdminWalletLow` | balance below | **5 ADA** | `settle` then `payment-hook:withdraw` to refill |
 | Admin wallet largest UTxO | `AdminWalletFragmented` | largest pure-ADA UTxO below | **10 ADA** | `wallet:consolidate` (daemon auto-consolidates below 7 ADA) |
