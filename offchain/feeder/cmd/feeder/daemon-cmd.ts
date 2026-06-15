@@ -2289,13 +2289,22 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     { symbol: enriched.fullIntent.symbol },
     Math.max(0, Date.now() - observedAtMs) / 1_000,
   );
-  metrics.priceAgeSeconds.observe(
-    { symbol: enriched.fullIntent.symbol },
-    Math.max(0, Date.now() / 1_000 - Number(enriched.fullIntent.timestamp)),
-  );
 
   const transformed = identityTransformer(enriched);
   const output = routeIntent(routerRegistry, priceCache, "IntentRegistered", transformed);
+
+  // Source-data age — recorded ONLY for symbols this feeder actually routes (the
+  // intent matched at least one router), not every symbol the scanner sees. The
+  // DIA source feed carries hundreds of symbols we do not use; counting their age
+  // would flood the price-age panel and fire PriceAgeHigh for pairs we never
+  // publish. Scoping to routed symbols keeps the metric / panel / alert about the
+  // data the oracle actually consumes.
+  if (output.dispatched.length > 0 || output.policyFiltered.length > 0) {
+    metrics.priceAgeSeconds.observe(
+      { symbol: enriched.fullIntent.symbol },
+      Math.max(0, Date.now() / 1_000 - Number(enriched.fullIntent.timestamp)),
+    );
+  }
 
   for (const { routerId, reason } of output.conditionFiltered) {
     metrics.intentsFiltered.inc({
