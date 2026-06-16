@@ -38,6 +38,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # scripts/m2-evidence/ → feeder/scripts/ → feeder/ → offchain/ → repo root
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 NETWORK="$(echo "${EVIDENCE_NETWORK:-preview}" | tr '[:upper:]' '[:lower:]')"
+# Display name + paired DIA source + explorer, so the evidence markdown matches
+# the network — a Mainnet pack must never claim "Preview".
+NETWORK_DISPLAY="$(tr '[:lower:]' '[:upper:]' <<<"${NETWORK:0:1}")${NETWORK:1}"
+if [[ "$NETWORK" == "mainnet" ]]; then
+  DIA_NETWORK="Mainnet"; EXPLORER_NAME="Cardanoscan"; EXPLORER_URL="https://cardanoscan.io/"
+else
+  DIA_NETWORK="Testnet"; EXPLORER_NAME="Cardanoscan Preview"; EXPLORER_URL="https://preview.cardanoscan.io/"
+fi
+MD_FILE="milestone-2-${NETWORK}-evidence.md"
 
 # Resolve the per-run state dir — mirror cmd/feeder/run-state.ts resolveRunStateDir
 # so the pack reads the SAME deployment the daemon writes:
@@ -70,9 +79,11 @@ if [[ "$run_suffix" == "$STATE_DIR" ]]; then
 fi
 STAMP="${EVIDENCE_STAMP:-$run_suffix}"
 OUT_DIR="$REPO_ROOT/docs/milestones/evidence/m2-$NETWORK-$STAMP"
-# A pack already exists for this run: append a two-digit suffix (-01, -02, …)
-# instead of overwriting, so repeated captures of the same deployment are kept.
-if [[ -e "$OUT_DIR" ]]; then
+# Standalone only: if a pack already exists for this run, append a two-digit
+# suffix (-01, -02, …) instead of overwriting. When EVIDENCE_STAMP is set (e.g.
+# `make evidence`), the caller already resolved the dir and shares it across the
+# sibling scripts, so we must use it verbatim — bumping here would desync them.
+if [[ -z "${EVIDENCE_STAMP:-}" && -e "$OUT_DIR" ]]; then
   suffix_n=1
   while [[ -e "$(printf '%s-%02d' "$OUT_DIR" "$suffix_n")" ]]; do
     suffix_n=$((suffix_n + 1))
@@ -93,7 +104,7 @@ done
 
 [[ -d "$LOGS_DIR" ]] || {
   echo "fatal: feeder logs dir not found: $LOGS_DIR" >&2
-  echo "Did you run the feeder against Cardano Preview? See offchain/feeder/README.md" >&2
+  echo "Did you run the feeder against Cardano ${NETWORK_DISPLAY}? See offchain/feeder/README.md" >&2
   exit 1
 }
 [[ -f "$SQLITE_FILE" ]] || {
@@ -536,13 +547,13 @@ tsv_to_md_table() {
 }
 
 # Evidence markdown — structure mirrors the M1 preview evidence doc.
-cat > "$OUT_DIR/milestone-2-preview-evidence.md" <<EOF
-# Milestone 2 Preview Evidence
+cat > "$OUT_DIR/$MD_FILE" <<EOF
+# Milestone 2 ${NETWORK_DISPLAY} Evidence
 
 Source of truth: [\`final-cardano-milestones.md\`](../../final-cardano-milestones.md).
 
 Scope: Milestone 2 (Data Feeder and Documentation) validation on
-Cardano Preview ↔ DIA Testnet.
+Cardano ${NETWORK_DISPLAY} ↔ DIA ${DIA_NETWORK}.
 
 Pack stamp: **$STAMP**
 
@@ -610,8 +621,8 @@ $(tsv_to_md_table "$SYMBOL_COUNTS" "Pair" "Confirmed txs")
 
 $(tsv_to_md_table "$SYMBOL_HASHES" "Pair" "Tx hash")
 
-Verify on [Cardanoscan Preview](https://preview.cardanoscan.io/) or any
-public Preview explorer.
+Verify on [${EXPLORER_NAME}](${EXPLORER_URL}) or any
+public ${NETWORK_DISPLAY} explorer.
 
 ## End-to-end latency per pair
 
@@ -679,4 +690,4 @@ $ALERTS_MD
 EOF
 
 echo "[package-m2] done."
-echo "[package-m2] open: $OUT_DIR/milestone-2-preview-evidence.md"
+echo "[package-m2] open: $OUT_DIR/$MD_FILE"

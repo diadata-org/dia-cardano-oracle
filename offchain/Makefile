@@ -201,10 +201,12 @@ evidence: ## Build the COMPLETE M2 evidence pack into ONE dir (network from feed
 	  echo "ERROR: CARDANO_NETWORK not set in feeder/.env — cannot pick evidence network." >&2; exit 1; \
 	fi; \
 	net=$$(echo "$(EVIDENCE_NETWORK)" | tr '[:upper:]' '[:lower:]'); \
-	stamp=$$(date -u +%Y%m%d-%H%M%S); \
-	out=docs/milestones/evidence/m2-$$net-$$stamp; \
 	if [ -n "$(RUN_ID)" ]; then sdir=state/$${net}_run_$(RUN_ID); \
 	else sdir=$$(ls -d state/$${net}_run_*/ 2>/dev/null | sort | tail -1); sdir=$${sdir%/}; sdir=$${sdir:-state/$$net}; fi; \
+	runid=$${sdir##*_run_}; [ "$$runid" = "$$sdir" ] && runid=$$(date -u +%Y%m%d-%H%M%S); \
+	stamp=$$runid; base=docs/milestones/evidence/m2-$$net-$$stamp; \
+	if [ -e "$$base" ]; then n=1; while [ -e "$$base-$$(printf '%02d' $$n)" ]; do n=$$((n+1)); done; stamp=$$stamp-$$(printf '%02d' $$n); fi; \
+	out=docs/milestones/evidence/m2-$$net-$$stamp; \
 	db=$$(pwd)/$$sdir/feeder.sqlite; \
 	echo "Building $(EVIDENCE_NETWORK) COMPLETE evidence pack — stamp=$$stamp db=$$db"; \
 	EVIDENCE_STAMP=$$stamp EVIDENCE_NETWORK=$$net \
