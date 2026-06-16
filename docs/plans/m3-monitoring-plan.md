@@ -14,19 +14,21 @@ Every "already built" claim below was verified against the tree on 2026-06-16
 
 ## Contents
 
-- [What M3 asks for](#what-m3-asks-for)
-- [Already built (verified)](#already-built-verified)
-- [What remains — workstreams](#what-remains--workstreams)
-  - [M3-A · Per-feed sanity check (on-chain vs DIA source)](#m3-a--per-feed-sanity-check-on-chain-vs-dia-source)
-  - [M3-B · Alert-trigger harness + captured alert logs](#m3-b--alert-trigger-harness--captured-alert-logs)
-  - [M3-C · Uptime & accuracy report](#m3-c--uptime--accuracy-report)
-  - [M3-D · Broad metrics dashboard](#m3-d--broad-metrics-dashboard)
-  - [M3-E · Live Mainnet monitoring demo + M3 video](#m3-e--live-mainnet-monitoring-demo--m3-video)
-  - [M3-F · QA validation report](#m3-f--qa-validation-report)
-  - [M3-G · milestone-3-poa.md](#m3-g--milestone-3-poamd)
-- [Dependencies & ordering](#dependencies--ordering)
-- [Plan corrections (vs m3-m4-plan.md)](#plan-corrections-vs-m3-m4-planmd)
-- [Open questions / decisions](#open-questions--decisions)
+- [Milestone 3 — Monitoring Library: Detailed Plan](#milestone-3--monitoring-library-detailed-plan)
+  - [Contents](#contents)
+  - [What M3 asks for](#what-m3-asks-for)
+  - [Already built (verified)](#already-built-verified)
+  - [What remains — workstreams](#what-remains--workstreams)
+    - [M3-A · Per-feed sanity check (on-chain vs DIA source)](#m3-a--per-feed-sanity-check-on-chain-vs-dia-source)
+    - [M3-B · Alert-trigger harness + captured alert logs](#m3-b--alert-trigger-harness--captured-alert-logs)
+    - [M3-C · Uptime \& accuracy report](#m3-c--uptime--accuracy-report)
+    - [M3-D · Broad metrics dashboard](#m3-d--broad-metrics-dashboard)
+    - [M3-E · Live Mainnet monitoring demo + M3 video](#m3-e--live-mainnet-monitoring-demo--m3-video)
+    - [M3-F · QA validation report](#m3-f--qa-validation-report)
+    - [M3-G · milestone-3-poa.md](#m3-g--milestone-3-poamd)
+  - [Dependencies \& ordering](#dependencies--ordering)
+  - [Plan alignment status](#plan-alignment-status)
+  - [Open questions / decisions](#open-questions--decisions)
 
 ## What M3 asks for
 
@@ -273,16 +275,16 @@ requires a **demo video** of dashboards + live mainnet logs showing feed health 
 
 A→(B,D) parallel → C → F → E → G.
 
-## Plan corrections (vs m3-m4-plan.md)
+## Plan alignment status
 
-Grounded discrepancies to fix in [`m3-m4-plan.md`](./m3-m4-plan.md) when it is next
-touched (do NOT silently diverge):
+The grounded discrepancies found on 2026-06-16 were applied to
+[`m3-m4-plan.md`](./m3-m4-plan.md) and [`work-plan.md`](./work-plan.md) on 2026-06-17:
 
-- It lists **8** alert rules; the real count is **12** (adds `AdminWalletFragmented`,
-  `PrimaryProviderDown`, `SecondaryProviderDown`).
-- It says the in-process evaluator writes `OraclePairStale` / `PriceDeviationHigh`;
-  the evaluator writes **only `OraclePairStale`** — `PriceDeviationHigh` is
-  Prometheus-only.
+- The alert count is **12**, not 8.
+- The in-process evaluator writes **only `OraclePairStale`**; `PriceDeviationHigh` and
+  the other non-staleness rules are Prometheus-only.
+- The M2 Mainnet feeder pack (`m2-mainnet-20260616-074413`) is now treated as the
+  baseline for the M3 monitoring-centric mainnet capture, not as work still to bring up from zero.
 
 ## Open questions / decisions
 

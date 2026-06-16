@@ -4,15 +4,17 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 
 ## Contents
 
-- [Related documents](#related-documents)
-- [Scope](#scope)
-- [Workstream A — On-chain contracts](#workstream-a--on-chain-contracts)
-- [Workstream B — Off-chain CLI and deployment tooling](#workstream-b--off-chain-cli-and-deployment-tooling)
-- [Workstream C — Data feeder (bridge)](#workstream-c--data-feeder-bridge)
-- [Workstream D — Indexer](#workstream-d--indexer)
-- [Workstream E — Monitoring](#workstream-e--monitoring)
-- [Workstream F — Deployment, operations and developer documentation](#workstream-f--deployment-operations-and-developer-documentation)
-- [Mapping to Catalyst milestones](#mapping-to-catalyst-milestones)
+- [Work Plan](#work-plan)
+  - [Contents](#contents)
+  - [Related documents](#related-documents)
+  - [Scope](#scope)
+  - [Workstream A — On-chain contracts](#workstream-a--on-chain-contracts)
+  - [Workstream B — Off-chain CLI and deployment tooling](#workstream-b--off-chain-cli-and-deployment-tooling)
+  - [Workstream C — Data feeder (bridge)](#workstream-c--data-feeder-bridge)
+  - [Workstream D — Indexer](#workstream-d--indexer)
+  - [Workstream E — Monitoring](#workstream-e--monitoring)
+  - [Workstream F — Deployment, operations and developer documentation](#workstream-f--deployment-operations-and-developer-documentation)
+  - [Mapping to Catalyst milestones](#mapping-to-catalyst-milestones)
 
 ## Related documents
 
@@ -119,10 +121,12 @@ High-level deliverables tracked here:
 - [x] Spectra-parity API (14 endpoints) and metrics (6-phase latency histograms,
   Prometheus aliases, Cardano extensions).
 - [x] Cron service for time-threshold re-submissions.
-- [x] Alert evaluator (`OraclePairStale`, `PriceDeviationHigh`) writing to `alert_log`.
+- [x] Alert evaluator writing `OraclePairStale` to `alert_log`; the remaining alert rules,
+  including `PriceDeviationHigh`, are Prometheus-side.
 - [x] Security hardening: rate limiter, path-length caps, log injection sanitizer,
   `synchronous = FULL`, path traversal check, WS exponential backoff.
-- [x] Mainnet rollout guide and rollback plan (`docs/plans/mainnet-rollout.md`).
+- [~] Mainnet rollout / rollback material exists in archived plan form
+  (`docs/plans/_archived/mainnet-rollout.md`); no active `docs/plans/mainnet-rollout.md` exists.
 - [x] Side-deposit auto-merge in the daemon: when a Receiver drops below
   `alerting.receiver_balance_low_lovelace` OR pending deposits reach
   `alerting.deposit_pending_merge_lovelace`, the daemon enqueues `bridge.mergeDeposits(...)`
@@ -136,12 +140,9 @@ High-level deliverables tracked here:
 - [x] OpenAPI/Swagger surface: a metadata route table (`src/api/routes.ts`, TypeBox schemas)
   drives an OpenAPI 3.0.3 doc at `/api/v1/openapi.json` and an interactive
   Swagger UI at `/docs` (vendored; shipped in the Docker image).
-- [~] M2 Preview evidence: the earlier packs (`m2-preview-20260609-*`, `m2-preview-20260611-114820`)
-  predate the terminology migration + cron-path fix and are **superseded**. A **fresh** Preview pack
-  from the current run (customer/client/router naming, 606 feeder tests pass) is captured as Fase 1
-  of the M2 closeout. Remaining for the M2 submission: fresh Preview pack + demo video (Preview),
-  then Mainnet daemon tx logs (formal evidence, ≤1 h run) and the `milestone-2-poa.md` PoA doc.
-  Sequence tracked in detail in [milestone-feeder-plan.md](./_archived/20260616-milestone-feeder-plan.md) §2.
+- [x] M2 feeder evidence and PoA delivered: Preview QA/video basis
+  (`m2-preview-20260608-040304`) plus Mainnet feeder run (`m2-mainnet-20260616-074413`, 23 confirmed
+  txs, 10 DIA Mainnet feeds, 0 reorgs) and `docs/milestones/milestone-2-poa.md`.
 
 ## Workstream D — Indexer
 
@@ -157,8 +158,9 @@ Tasks:
 
 - [x] Monitoring for feed freshness (6-phase latency histograms), Receiver balance warnings,
   and failed-transaction rate via Prometheus metrics (`dia_bridge_*`).
-- [x] In-process alert evaluator writing `OraclePairStale` and `PriceDeviationHigh`
-  events to `alert_log`; Prometheus alert rules in `monitoring/alerts.yml`.
+- [x] In-process alert evaluator writing `OraclePairStale` events to `alert_log`;
+  Prometheus alert rules in `monitoring/alerts.yml` cover the full 12-rule alert set, including
+  `PriceDeviationHigh`.
 - [x] Grafana dashboards (provisioned at `monitoring/grafana/dashboards/`): `feeder.json`
   (operational overview — balances, staleness, per-symbol throughput, latency, price quality,
   billing) and `feeder.json`'s companion `feeder-tx.json` (the per-transaction axis — tx-stage
@@ -180,8 +182,9 @@ Tasks:
 - [ ] **Broad metrics dashboard** (still open; separate from the two above) covering the remaining
   registered-but-unshown families: the 5 per-symbol latency phases, scanner RPC errors + backfill,
   worker pool counters, HTTP/db/component-health, cron resubmissions, node/process defaults.
-- [x] Dashboard screenshots capturing real data — captured in the M2 Preview evidence pack
-  (`m2-preview-20260609-132545/dashboards/`, both dashboards).
+- [x] Dashboard screenshots capturing real data — captured in the M2 evidence packs
+  (`m2-preview-20260608-040304/`, `m2-mainnet-20260616-074413/`, both dashboards where monitoring
+  was available).
 - [ ] QA validation report and anomaly-detection evidence — this is an **M3** deliverable (QA
   validation report, alert-trigger logs, sanity checks per feed). Tracked in
   [`m3-m4-plan.md`](./m3-m4-plan.md).

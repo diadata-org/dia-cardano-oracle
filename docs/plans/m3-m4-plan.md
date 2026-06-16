@@ -8,16 +8,18 @@ accepted M1 PoA precedent
 
 ## Contents
 
-- [How to read this](#how-to-read-this)
-- [Code still to write](#code-still-to-write)
-- [Cross-cutting: docs publication and PoA format](#cross-cutting-docs-publication-and-poa-format)
-- [Milestone 3 — Monitoring Library](#milestone-3--monitoring-library)
-  - [M3 — already built (Preview)](#m3--already-built-preview)
-  - [M3 — remaining](#m3--remaining)
-- [Milestone 4 — End-to-End Integration and Mainnet Deployment](#milestone-4--end-to-end-integration-and-mainnet-deployment)
-  - [M4 — already built](#m4--already-built)
-  - [M4 — remaining](#m4--remaining)
-- [Dependencies and ordering](#dependencies-and-ordering)
+- [Plan — Milestones 3 \& 4](#plan--milestones-3--4)
+  - [Contents](#contents)
+  - [How to read this](#how-to-read-this)
+  - [Code still to write](#code-still-to-write)
+  - [Cross-cutting: docs publication and PoA format](#cross-cutting-docs-publication-and-poa-format)
+  - [Milestone 3 — Monitoring Library](#milestone-3--monitoring-library)
+    - [M3 — already built (verified)](#m3--already-built-verified)
+    - [M3 — remaining](#m3--remaining)
+  - [Milestone 4 — End-to-End Integration and Mainnet Deployment](#milestone-4--end-to-end-integration-and-mainnet-deployment)
+    - [M4 — already built](#m4--already-built)
+    - [M4 — remaining](#m4--remaining)
+  - [Dependencies and ordering](#dependencies-and-ordering)
 
 ## How to read this
 
@@ -28,11 +30,12 @@ view of what those workstreams still owe M3 and M4. The **detailed M3 execution 
 (code-grounded, per-workstream) lives in [`m3-monitoring-plan.md`](./m3-monitoring-plan.md).
 
 A large share of the M3 monitoring **machinery** already exists (it was built alongside the
-feeder for M2): Grafana dashboards, Prometheus alert rules, the in-process alert evaluator,
-anomaly metrics (price deviation, staleness, data age), and the evidence-packaging script. M3's
-remaining work is therefore mostly **validation artifacts and a live-mainnet demonstration**,
-not new monitoring code. M4 is where the most net-new work lives (sustained mainnet feeder
-operation, the indexer, and the consolidated documentation/closeout).
+feeder for M2): Grafana dashboards, **12** Prometheus alert rules, the in-process
+`OraclePairStale` evaluator, anomaly metrics (price deviation, staleness, data age), and the
+M2 evidence-packaging script. M3's remaining work is therefore mostly **validation artifacts
+and a monitoring-centric live-mainnet demonstration**, not new monitoring infrastructure. M4 is
+where the most net-new work lives (sustained mainnet operation, the indexer, and the consolidated
+documentation/closeout).
 
 ## Code still to write
 
@@ -43,12 +46,14 @@ and lives almost entirely in M4:
 evaluator, anomaly metrics) is already written. Only small, optional tooling:
 
 - [ ] Broad metrics dashboard (JSON) for the still-unshown metric families — the metrics already
-  exist and are emitted; this is another dashboard, not new instrumentation.
+  exist as registered Prometheus families, but **runtime emission must be verified first** before
+  dashboarding them. A panel for a never-incremented metric is worse than no panel.
 - [ ] Per-feed **accuracy / sanity-check** script (on-chain price + timestamp vs the DIA source per
   pair) to back the QA validation report — does not exist today (only the abi-parser config
   sanity check does).
-- [ ] Small script/test to deliberately **trigger each alert** so the QA pack can capture
-  alert-trigger logs.
+- [ ] Small script/test to deliberately **trigger each safe alert** so the QA pack can capture
+  alert-trigger logs; unsafe financial/provider alerts should be demonstrated synthetically or on
+  Preview only, not forced on Mainnet.
 
 **M4 — two real code items + one minor:**
 
@@ -68,7 +73,7 @@ evaluator, anomaly metrics) is already written. Only small, optional tooling:
   exists today (only Spectra reference material).
 
 Everything else in M3/M4 is **not code**: QA validation report, alert-trigger logs, uptime/accuracy
-reports, demo videos, dashboard screenshots, mainnet bring-up (config + funding), contract-address
+reports, demo videos, dashboard screenshots, sustained Mainnet run operations, contract-address
 listings, the DIA-site documentation publication, and the closeout report/video.
 
 ## Cross-cutting: docs publication and PoA format
@@ -91,20 +96,23 @@ listings, the DIA-site documentation publication, and the closeout report/video.
 > examples + dev docs, a **demo video** of dashboards and **live mainnet logs** showing feed
 > health checks, plus QA artifacts (test reports, alert-trigger logs, dashboard screenshots/exports).
 
-### M3 — already built (Preview)
+### M3 — already built (verified)
 
 - [x] Real-time dashboards (Grafana `feeder.json` + `feeder-tx.json`): balances, staleness, data
   age, per-symbol and per-transaction throughput, latency, price-deviation quality, billing.
-- [x] Automated alerts: `monitoring/alerts.yml` (8 rules, thresholds single-sourced from
-  `infrastructure.<network>.yaml::alerting.*`) — `OraclePairStale`, `PriceAgeHigh`,
-  `PriceDeviationHigh`, `ReorgRateHigh`, `ReceiverBalanceLow`, `SettleOverdue`,
-  `PaymentHookWithdrawReady`, `AdminWalletLow`, `ReceiverDepositsPending`.
-- [x] In-process alert evaluator writing `OraclePairStale` / `PriceDeviationHigh` to `alert_log`.
+- [x] Automated alerts: `monitoring/alerts.yml` (**12 rules**, thresholds single-sourced from
+  `infrastructure.<network>.yaml::alerting.*`) — `OraclePairStale`, `ReceiverBalanceLow`,
+  `SettleOverdue`, `PaymentHookWithdrawReady`, `AdminWalletLow`, `AdminWalletFragmented`,
+  `PriceDeviationHigh`, `PriceAgeHigh`, `ReorgRateHigh`, `ReceiverDepositsPending`,
+  `PrimaryProviderDown`, `SecondaryProviderDown`.
+- [~] In-process alert evaluator writing **only `OraclePairStale`** to `alert_log`; the other 11
+  rules, including `PriceDeviationHigh`, are Prometheus-side alerts.
 - [x] Anomaly-detection metrics: `price_deviation_percent` (misreport), `price_age_seconds` +
   pair staleness (stale data), reorg counter (chain instability).
 - [x] Anomaly/QA HTTP surface: `/api/v1/alerts`, `/api/v1/performance`, `/health/*`, `/metrics`.
-- [x] Evidence packaging (`make evidence`) captures dashboards (both), error-counts, alerts
-  section, per-intent logs, db CSVs — demonstrated on Preview (`m2-preview-20260609-132545`).
+- [x] Evidence packaging (`make evidence`) captures dashboards (both), error-counts, live alert
+  snapshot, per-intent logs, db CSVs, and test logs — demonstrated by the M2 Preview and Mainnet
+  packs (`m2-preview-20260608-040304`, `m2-mainnet-20260616-074413`).
 
 ### M3 — remaining
 
@@ -119,9 +127,9 @@ listings, the DIA-site documentation publication, and the closeout report/video.
 - [ ] **Uptime & accuracy report**: a sustained-window report (confirmed-tx liveness as uptime,
   price/timestamp accuracy vs the DIA source per feed). Builds on the evidence-pack stats.
 - [ ] **Live mainnet monitoring demonstration**: the acceptance criterion is explicit that
-  visibility and alerting are over **mainnet** feeds. Requires the feeder running against mainnet
-  (see M4) with the monitoring stack attached; capture dashboards + `alert_log` against live
-  mainnet data.
+  visibility and alerting are over **mainnet** feeds. Reuse the existing M2 Mainnet deployment/run
+  (`mainnet_run_20260616-074413`) as the baseline, but capture a new **M3 monitoring-centric** pack:
+  dashboards live, logs, M3-A sanity-check output, and at least one safe alert firing/resolving.
 - [ ] **Demo video** (M3): dashboards + live mainnet logs showing feed health checks and alert
   behaviour. (Distinct from the M2 demo video, which previews the 10 feeds + QA logs.)
 - [ ] **Broad metrics dashboard** (the families still unshown — 5 per-symbol latency phases,
@@ -141,15 +149,20 @@ listings, the DIA-site documentation publication, and the closeout report/video.
 
 - [x] Aiken contracts deployed and exercised on **Mainnet** (M1: bootstrap, single + 10-pair
   batch update, settle, withdrawals, reference-script reclaim/republish, burn — see the M1 PoA).
-- [x] Feeder service + CLI tooling (M2) — runs against Preview today; mainnet is config + funding.
-- [x] Monitoring stack (M3 machinery): dashboards, alerts, evaluator.
-- [x] Mainnet rollout guide and rollback plan (`docs/plans/mainnet-rollout.md`).
+- [x] Feeder service + CLI tooling (M2) — exercised on **Mainnet** in
+  `m2-mainnet-20260616-074413` (10 DIA Mainnet feeds, 23 confirmed txs, 0 reorgs), plus the longer
+  Preview QA/video run.
+- [x] Monitoring stack (M3 machinery): dashboards, 12 alerts, `OraclePairStale` evaluator.
+- [~] Mainnet rollout / rollback material exists in archived plan form
+  (`docs/plans/_archived/mainnet-rollout.md`); there is **no active**
+  `docs/plans/mainnet-rollout.md` file, so restore/update it only if M4 needs a standalone active
+  runbook.
 
 ### M4 — remaining
 
-- [ ] **Feeder live on Cardano Mainnet, sustained**: run the feeder against mainnet contracts and
-  capture confirmed-tx logs for the 10 feeds (the formal M2 *and* M4 on-chain evidence). Switch
-  `CARDANO_NETWORK=Mainnet`, fund the admin wallet + receivers, point at the mainnet client.
+- [ ] **Feeder live on Cardano Mainnet, sustained**: M2 already proved a short live Mainnet feeder
+  run; M4 still needs a longer production-style window against mainnet contracts, with confirmed-tx
+  logs, monitoring attached, and stable liveness/accuracy evidence for the 10 feeds.
 - [ ] **99.99% uptime & accuracy evidence**: a sustained mainnet window with an uptime/accuracy
   report meeting the bar (this is the headline M4 acceptance number). The frequent daemon
   crash-recovery seen in the Preview pack (488 restarts) must be driven down first — investigate
@@ -174,8 +187,9 @@ listings, the DIA-site documentation publication, and the closeout report/video.
 
 1. **Drive down daemon restarts** (crash-recovery / WASM self-exit) — prerequisite for any
    credible sustained mainnet uptime window.
-2. **Bring the feeder up on Mainnet** — unblocks both the M3 "live mainnet monitoring" demo and
-   the M4 sustained-uptime evidence; capture both from the same run.
+2. **Run a sustained Mainnet monitoring window** — the short M2 Mainnet run exists; M3 needs a
+   monitoring-centric capture, and M4 needs the longer 99.99%-style evidence window. Capture both
+   from the same operational run if budget/timing allows.
 3. **Indexer** can proceed in parallel (independent of the live run); it gates the M4 "request any
    feed" developer instructions.
 4. **Documentation publication on DIA's site** and the **closeout report/video** land last, at M4,
