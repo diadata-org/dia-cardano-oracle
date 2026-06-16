@@ -17,6 +17,7 @@ Evidence pack location: this directory.
 ## Contents
 
 - [Official Milestone 2 Outputs](#official-milestone-2-outputs)
+- [Test results](#test-results)
 - [Totals (this window)](#totals-this-window)
 - [Confirmed Cardano tx count per pair](#confirmed-cardano-tx-count-per-pair)
 - [Sample Cardano tx hashes (one per pair, first observed)](#sample-cardano-tx-hashes-one-per-pair-first-observed)
@@ -36,12 +37,22 @@ Evidence pack location: this directory.
 | Official output | Repository status |
 | --- | --- |
 | Feeder scripts | Complete: `offchain/feeder/` (TypeScript, Node 22, ESM). |
-| Test coverage | Complete: `npm test` in `offchain/feeder/` (passing, full surface). |
+| Test coverage | Feeder `npm test`: **632 / 632 passing**, 0 failed (143 suites) — **PASS**. CLI `npm test`: **PASS**. Full output captured in [`tests/`](tests/). See [Test results](#test-results). |
 | Uptime / accuracy reports | This pack: per-pair confirmed counts + latency + reorg stats. |
 | QA review logs | This pack: `logs/feeder.log`, `logs/transactions.jsonl`, `logs/lane.jsonl`, `logs/intents/`. |
 | Automated alerts | Complete: `offchain/feeder/monitoring/alerts.yml` (12 alert rules; canonical thresholds in `infrastructure.<network>.yaml::alerting.*`). |
 | Real-time dashboards | Complete: `dashboards/` (PNG snapshots taken at pack time). Source JSON: [`offchain/feeder/monitoring/grafana/dashboards/feeder.json`](../../../../offchain/feeder/monitoring/grafana/dashboards/feeder.json). |
 | Developer documentation | Complete: [feeder README](../../../../offchain/feeder/README.md), [CLI README](../../../../offchain/cli/README.md), [architecture](../../../architecture/cardano-oracle-architecture.md). |
+
+## Test results
+
+Both test suites were run when this pack was assembled; the full console output is
+saved alongside this report.
+
+| Suite | Result | Tests | Suites | Output |
+| --- | --- | ---: | ---: | --- |
+| Feeder (`offchain/feeder`, `npm test`) | **PASS** | 632 / 632 passing (0 failed) | 143 | [`tests/feeder-tests.txt`](tests/feeder-tests.txt) |
+| CLI (`offchain/cli`, `npm test`) | **PASS** | 46 test cases, all passing — each listed in tests/cli-tests.txt (1 emulator case skipped, needs `DIA_AUTHORIZED_PRIVATE_KEY`) | — | [`tests/cli-tests.txt`](tests/cli-tests.txt) |
 
 ## Totals (this window)
 
@@ -131,6 +142,8 @@ An empty table means there were no real failures in this run.
 | `dashboards/dashboard-full.png` | Full Grafana dashboard at pack time. |
 | `dashboards/panel-*.png`       | Per-panel snapshots. |
 | `stats/`                       | Intermediate TSV files this markdown was built from. |
+| `tests/feeder-tests.txt`       | Full `npm test` console output for the feeder suite (node:test). |
+| `tests/cli-tests.txt`          | Full `npm test` console output for the CLI suite. |
 | `alerts-active.json`           | Prometheus `/api/v1/alerts` snapshot at pack time. |
 | `SUMMARY.json`                 | Machine-readable totals (top of this document, as JSON). |
 

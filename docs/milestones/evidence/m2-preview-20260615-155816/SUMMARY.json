@@ -9,5 +9,17 @@
     "tx_failed": 1,
     "tx_condemned": 673,
     "reorgs": 0
+  },
+  "tests": {
+    "feeder": {
+      "result": "PASS",
+      "total": 632,
+      "pass": 632,
+      "fail": 0
+    },
+    "cli": {
+      "result": "PASS",
+      "cases": 46
+    }
   }
 }
