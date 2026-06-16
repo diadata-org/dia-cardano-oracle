@@ -177,7 +177,10 @@ export async function runEmulatorProtocolFlow(
     // ── Protocol bootstrap ──────────────────────────────────────────
     await runStep(steps, "protocol:init", reportProgress, async () => {
       const { initializeProtocolState } = await import("../init/protocol-init.js");
-      const state = await initializeProtocolState({ useDefaults: true });
+      const state = await initializeProtocolState({
+        useDefaults: true,
+        mergeSelfSignKey: true,
+      });
       await writeStateJsonFile(protocolStatePath, state);
     });
 
@@ -550,7 +553,12 @@ export async function runEmulatorProtocolFlow(
               "../oracle/intent-create.js"
             );
             const timestamp = batchIntentNow.unixTimeSec + batchIntentOffset;
-            const nonce = BigInt(batchIntentNow.unixTimeMs) + batchIntentOffset * 1000n;
+            // Nonce in nanoseconds (unixTimeMs ×1e6) — the same scale
+            // `resolveIntentTimingFromNetwork` uses for the single-pair updates
+            // above (DIA's real OracleIntent nonce unit). The per-pair offset keeps
+            // each batch intent strictly above that pair's current on-chain nonce.
+            const nonce =
+              BigInt(batchIntentNow.unixTimeMs) * 1_000_000n + batchIntentOffset;
             batchIntentOffset += 1n;
             const signed = await createAndSignPreviewOracleIntent({
               statePath: protocolStatePath,

@@ -67,23 +67,54 @@ type ProtocolInitConfigInput = {
   paymentHookWithdrawAddress: string;
 };
 
+// Deduplicate authorized DIA public keys case-insensitively, stripping a leading
+// `0x` and lowercasing, preserving first-seen order. Mirrors the dedupe
+// run-all-cli.sh applies before `protocol:init` so the on-chain authorized set
+// (which the contract requires to be unique) is identical whether built here or
+// by the bash flow.
+function dedupeAuthorizedDiaPublicKeys(keys: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of keys) {
+    const normalized = raw.trim().replace(/^0[xX]/, "").toLowerCase();
+    if (normalized.length === 0 || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
 function defaultProtocolConfigInput(
   defaultSigner: string,
   walletAddress: string,
+  opts?: { mergeSelfSignKey?: boolean },
 ): ProtocolInitConfigInput {
   const cliConfig = getCliConfig();
   const dia = requireDiaSourceConfig(cliConfig);
   const { authorizedDiaPrivateKey } = cliConfig;
-  // Prefer DIA's configured signer keys (DIA_AUTHORIZED_PUBLIC_KEYS_<network>) —
-  // the keys the feeder's real intents recover to. Fall back to deriving the
-  // self-sign key from DIA_AUTHORIZED_PRIVATE_KEY only when no authorized set is
-  // configured (an env-less self-signed demo). run-all merges the self-sign key
-  // explicitly for its Preview demo updates.
-  const defaultAuthorizedDiaPublicKeys =
-    cliConfig.authorizedDiaPublicKeys.length > 0
+  const selfSignPublicKey = authorizedDiaPrivateKey
+    ? deriveCompressedPublicKeyFromPrivateKey(authorizedDiaPrivateKey)
+    : null;
+  // Default: prefer DIA's configured signer keys (DIA_AUTHORIZED_PUBLIC_KEYS_<network>)
+  // — the keys the feeder's real intents recover to — and fall back to the self-sign
+  // key derived from DIA_AUTHORIZED_PRIVATE_KEY only when no authorized set is
+  // configured (an env-less self-signed demo).
+  //
+  // With `mergeSelfSignKey`, authorize the self-sign key AND DIA's keys together
+  // (self-sign first, deduped) so one deployment accepts both our self-signed demo
+  // updates and the feeder's real DIA intents. The emulator protocol-flow and
+  // run-all-cli.sh both deploy this combined set for their full demo lifecycle.
+  const defaultAuthorizedDiaPublicKeys = opts?.mergeSelfSignKey
+    ? dedupeAuthorizedDiaPublicKeys([
+        ...(selfSignPublicKey ? [selfSignPublicKey] : []),
+        ...cliConfig.authorizedDiaPublicKeys,
+      ])
+    : cliConfig.authorizedDiaPublicKeys.length > 0
       ? cliConfig.authorizedDiaPublicKeys
-      : authorizedDiaPrivateKey
-        ? [deriveCompressedPublicKeyFromPrivateKey(authorizedDiaPrivateKey)]
+      : selfSignPublicKey
+        ? [selfSignPublicKey]
         : [];
 
   return {
@@ -348,6 +379,7 @@ async function promptForProtocolConfigInput(
 export async function initializeProtocolState(args?: {
   useDefaults?: boolean;
   configInput?: ProtocolInitConfigInput;
+  mergeSelfSignKey?: boolean;
 }): Promise<ConfigStateArtifact> {
   const lucid = await makeConfiguredLucid();
   const source = await selectConfiguredWallet(lucid);
@@ -358,7 +390,9 @@ export async function initializeProtocolState(args?: {
   });
   const configInput = args?.configInput ??
     (args?.useDefaults
-    ? defaultProtocolConfigInput(walletDefaults.paymentKeyHash, walletAddress)
+    ? defaultProtocolConfigInput(walletDefaults.paymentKeyHash, walletAddress, {
+        mergeSelfSignKey: args?.mergeSelfSignKey,
+      })
     : await promptForProtocolConfigInput(
         walletDefaults.paymentKeyHash,
         walletAddress,

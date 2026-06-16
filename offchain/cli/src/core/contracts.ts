@@ -7,6 +7,7 @@ import {
   validatorToScriptHash,
   type Data as LucidData,
   type MintingPolicy,
+  type Network,
   type OutRef,
   type SpendingValidator,
   type WithdrawalValidator,
@@ -14,6 +15,7 @@ import {
 import { getBlueprintValidator } from "./blueprint.js";
 import { getCliConfig } from "./config.js";
 import { normalizeHex } from "./dia-intent.js";
+import { isEmulatorModeActive } from "./lucid.js";
 
 const CONFIG_STATE_MINT_TITLE = "config_state.config_state.mint";
 const CONFIG_STATE_SPEND_TITLE = "config_state.config_state.spend";
@@ -217,8 +219,18 @@ export function scriptHashFromValidator(
   return validatorToScriptHash(validator);
 }
 
+// In emulator mode the in-memory ledger is a network-id-0 (testnet) chain (the
+// harness builds `Lucid(emulator, "Preview")`), so every script address / reward
+// address must pin to "Preview" regardless of CARDANO_NETWORK — otherwise a
+// Mainnet-configured run (e.g. run-all's npm-test preflight) derives network-id-1
+// addresses the emulator rejects. Production keeps emulator mode off and uses the
+// configured network. Same override as `getNetworkNow` / `slotBackoffUnixTimeMs`.
+function activeScriptNetwork(): Network {
+  return isEmulatorModeActive() ? "Preview" : getCliConfig().cardanoNetwork;
+}
+
 export function scriptAddressFromValidator(validator: SpendingValidator): string {
-  return validatorToAddress(getCliConfig().cardanoNetwork, validator);
+  return validatorToAddress(activeScriptNetwork(), validator);
 }
 
 export function policyIdFromMintingPolicy(policy: MintingPolicy): string {
@@ -249,7 +261,7 @@ export function withdrawalValidatorFromCompiledScript(
 }
 
 export function scriptRewardAddress(scriptHash: string): string {
-  const networkId = getCliConfig().cardanoNetwork === "Preview" ? 0 : 1;
+  const networkId = activeScriptNetwork() === "Preview" ? 0 : 1;
   const credential = CML.Credential.new_script(CML.ScriptHash.from_hex(scriptHash));
   return CML.RewardAddress.new(networkId, credential)
     .to_address()
