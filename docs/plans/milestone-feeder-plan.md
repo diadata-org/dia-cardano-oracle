@@ -63,7 +63,7 @@ M2 closeout sequence (agreed 2026-06-13 — Preview first, then Mainnet):
 
 **Fase 3 — Closeout:**
 
-- [ ] **Milestone 2 PoA document** (`milestone-2-poa.md`), mirroring the accepted M1 PoA (`docs/milestones/evidence/m1-mainnet-20260517-063917/milestone-1-poa.md`): submission commit, AC→evidence tables, outputs-delivered table, how-to-verify, and the same "developer-docs publication on DIA's site deferred to M4" paragraph (the M1 deferral reasoning was accepted).
+- [ ] **Milestone 2 PoA document** (`milestone-2-poa.md`), mirroring the accepted M1 PoA (`docs/milestones/milestone-1-poa.md`): submission commit, AC→evidence tables, outputs-delivered table, how-to-verify, and the same "developer-docs publication on DIA's site deferred to M4" paragraph (the M1 deferral reasoning was accepted).
 
 > Developer-documentation **publication on DIA's main developer-documentation website** is NOT an M2 blocker: per the accepted M1 PoA it is deferred to M4 (the clause is identical in M2/M3/M4; in-repo docs are complete and meet the substantive content requirement). Do not re-list it as an M2 gap.
 

@@ -6,10 +6,10 @@
 **Submission commit:** `4e54d6b01b9ca09025acf70fc7f83f3db14151b3`
 
 Primary on-chain evidence pack:
-[`docs/milestones/evidence/m1-mainnet-20260517-063917/`](./) including the
+[`docs/milestones/evidence/m1-mainnet-20260517-063917/`](evidence/m1-mainnet-20260517-063917/) including the
 chain-walk report
-[`milestone-1-mainnet-evidence.md`](./milestone-1-mainnet-evidence.md) and the
-machine-readable [`SUMMARY.json`](./SUMMARY.json).
+[`milestone-1-mainnet-evidence.md`](evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) and the
+machine-readable [`SUMMARY.json`](evidence/m1-mainnet-20260517-063917/SUMMARY.json).
 
 ---
 
@@ -49,17 +49,17 @@ to evidence below.
 
 | Evidence | Where |
 | --- | --- |
-| Aiken sources (Plutus V3) | [`contracts/aiken/`](../../../../contracts/aiken/) |
-| Compiled contract artifact | [`contracts/aiken/plutus.json`](../../../../contracts/aiken/plutus.json) |
-| `aiken check` (unit tests, all green) | [`aiken-check.log`](./aiken-check.log) |
-| `aiken build` | [`aiken-build.log`](./aiken-build.log) |
-| Off-chain CLI tests (`npm run test`) | [`npm-test.log`](./npm-test.log) |
-| TypeScript typecheck | [`npm-typecheck.log`](./npm-typecheck.log) |
-| Off-chain CLI build | [`npm-build.log`](./npm-build.log) |
-| End-to-end Mainnet chain walk (31 steps) | [`milestone-1-mainnet-evidence.md`](./milestone-1-mainnet-evidence.md) and per-step `*.log` files in this folder |
-| Final on-chain state snapshot | [`SUMMARY.json`](./SUMMARY.json) |
-| Architecture (datums, redeemers, invariants, fee flow, batch algorithm, trust model) | [`docs/architecture/cardano-oracle-architecture.md`](../../../architecture/cardano-oracle-architecture.md) |
-| Security notes (trust model, in/out of scope) | [`docs/security/security-notes.md`](../../../security/security-notes.md) |
+| Aiken sources (Plutus V3) | [`contracts/aiken/`](../../contracts/aiken/) |
+| Compiled contract artifact | [`contracts/aiken/plutus.json`](../../contracts/aiken/plutus.json) |
+| `aiken check` (unit tests, all green) | [`aiken-check.log`](evidence/m1-mainnet-20260517-063917/aiken-check.log) |
+| `aiken build` | [`aiken-build.log`](evidence/m1-mainnet-20260517-063917/aiken-build.log) |
+| Off-chain CLI tests (`npm run test`) | [`npm-test.log`](evidence/m1-mainnet-20260517-063917/npm-test.log) |
+| TypeScript typecheck | [`npm-typecheck.log`](evidence/m1-mainnet-20260517-063917/npm-typecheck.log) |
+| Off-chain CLI build | [`npm-build.log`](evidence/m1-mainnet-20260517-063917/npm-build.log) |
+| End-to-end Mainnet chain walk (31 steps) | [`milestone-1-mainnet-evidence.md`](evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) and per-step `*.log` files in this folder |
+| Final on-chain state snapshot | [`SUMMARY.json`](evidence/m1-mainnet-20260517-063917/SUMMARY.json) |
+| Architecture (datums, redeemers, invariants, fee flow, batch algorithm, trust model) | [`docs/architecture/cardano-oracle-architecture.md`](../architecture/cardano-oracle-architecture.md) |
+| Security notes (trust model, in/out of scope) | [`docs/security/security-notes.md`](../security/security-notes.md) |
 
 The chain walk demonstrates the oracle processing external DIA-signed price
 intents and committing them on-chain to per-pair Pair UTxOs, then returning
@@ -91,7 +91,7 @@ Headline mainnet transactions for immediate verification:
 
 The complete list of all 31 mainnet transactions, fees, and per-step logs is
 in
-[`milestone-1-mainnet-evidence.md`](./milestone-1-mainnet-evidence.md)
+[`milestone-1-mainnet-evidence.md`](evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md)
 (sections "Mainnet transactions executed end-to-end" and "On-chain fee
 audit"). Total confirmed on-chain fees: **17.957658 ADA**.
 
@@ -109,12 +109,12 @@ in the GitHub repository** at submission time:
 
 | Documentation surface | Location |
 | --- | --- |
-| Top-level repository overview | [`README.md`](../../../../README.md) |
-| Architecture (protocol design, datums, redeemers, cross-script invariants, fee flow, batch validation, trust model) | [`docs/architecture/cardano-oracle-architecture.md`](../../../architecture/cardano-oracle-architecture.md) |
-| On-chain (Aiken) developer docs | [`contracts/aiken/README.md`](../../../../contracts/aiken/README.md) |
-| Off-chain CLI developer docs and end-to-end runbook (configuration, deployment, oracle access) | [`offchain/cli/README.md`](../../../../offchain/cli/README.md) |
-| Security notes (trust model and exclusions) | [`docs/security/security-notes.md`](../../../security/security-notes.md) |
-| Milestone tracking and project plan | [`docs/milestones/`](../../) and [`docs/plans/`](../../../plans/) |
+| Top-level repository overview | [`README.md`](../../README.md) |
+| Architecture (protocol design, datums, redeemers, cross-script invariants, fee flow, batch validation, trust model) | [`docs/architecture/cardano-oracle-architecture.md`](../architecture/cardano-oracle-architecture.md) |
+| On-chain (Aiken) developer docs | [`contracts/aiken/README.md`](../../contracts/aiken/README.md) |
+| Off-chain CLI developer docs and end-to-end runbook (configuration, deployment, oracle access) | [`offchain/cli/README.md`](../../offchain/cli/README.md) |
+| Security notes (trust model and exclusions) | [`docs/security/security-notes.md`](../security/security-notes.md) |
+| Milestone tracking and project plan | [`docs/milestones/`](./) and [`docs/plans/`](../plans/) |
 
 This covers each documentation requirement quoted in AC #3:
 
@@ -167,11 +167,11 @@ channel that will land at M4 alongside the final integration.
 
 | Official output | Status | Evidence |
 | --- | --- | --- |
-| Compiled Aiken contract | Delivered | [`contracts/aiken/plutus.json`](../../../../contracts/aiken/plutus.json) |
-| Test coverage with unit / integration tests | Delivered | [`aiken-check.log`](./aiken-check.log), [`npm-test.log`](./npm-test.log), [`npm-typecheck.log`](./npm-typecheck.log), [`npm-build.log`](./npm-build.log), Mainnet chain walk |
-| Deployment scripts | Delivered | [`offchain/cli/`](../../../../offchain/cli/) and [CLI runbook](../../../../offchain/cli/README.md) |
+| Compiled Aiken contract | Delivered | [`contracts/aiken/plutus.json`](../../contracts/aiken/plutus.json) |
+| Test coverage with unit / integration tests | Delivered | [`aiken-check.log`](evidence/m1-mainnet-20260517-063917/aiken-check.log), [`npm-test.log`](evidence/m1-mainnet-20260517-063917/npm-test.log), [`npm-typecheck.log`](evidence/m1-mainnet-20260517-063917/npm-typecheck.log), [`npm-build.log`](evidence/m1-mainnet-20260517-063917/npm-build.log), Mainnet chain walk |
+| Deployment scripts | Delivered | [`offchain/cli/`](../../offchain/cli/) and [CLI runbook](../../offchain/cli/README.md) |
 | Documentation for Cardano developers | Delivered (in repo; DIA-site publication deferred to M4 — see §AC #3) | See AC #3 evidence table |
-| Verified Cardano mainnet transaction hashes (deployment + execution) | Delivered | See AC #2 table and [`milestone-1-mainnet-evidence.md`](./milestone-1-mainnet-evidence.md) |
+| Verified Cardano mainnet transaction hashes (deployment + execution) | Delivered | See AC #2 table and [`milestone-1-mainnet-evidence.md`](evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) |
 
 ---
 
@@ -204,28 +204,28 @@ artifact the CLI consumes; Aiken is only required for recompilation from source.
 
 ### 4.3. Re-walk the chain on Mainnet (optional)
 
-The CLI runbook in [`offchain/cli/README.md`](../../../../offchain/cli/README.md)
+The CLI runbook in [`offchain/cli/README.md`](../../offchain/cli/README.md)
 documents every command used in the chain walk. Operators with a funded
 wallet and a Blockfrost project id may replay any step. The exact sequence
 performed on Mainnet for this PoA is captured in
-[`milestone-1-mainnet-evidence.md`](./milestone-1-mainnet-evidence.md) and
-[`SUMMARY.json`](./SUMMARY.json).
+[`milestone-1-mainnet-evidence.md`](evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) and
+[`SUMMARY.json`](evidence/m1-mainnet-20260517-063917/SUMMARY.json).
 
 ---
 
 ## 5. Pointers (one-stop links)
 
 - Mainnet chain-walk evidence (this PoA's primary supporting document):
-  [`milestone-1-mainnet-evidence.md`](./milestone-1-mainnet-evidence.md)
-- Mainnet final-state snapshot: [`SUMMARY.json`](./SUMMARY.json)
+  [`milestone-1-mainnet-evidence.md`](evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md)
+- Mainnet final-state snapshot: [`SUMMARY.json`](evidence/m1-mainnet-20260517-063917/SUMMARY.json)
 - Preview-network supporting evidence pack:
-  [`docs/milestones/evidence/m1-preview-20260516-090057/`](../m1-preview-20260516-090057/)
+  [`docs/milestones/evidence/m1-preview-20260516-090057/`](evidence/m1-preview-20260516-090057/)
 - Architecture:
-  [`docs/architecture/cardano-oracle-architecture.md`](../../../architecture/cardano-oracle-architecture.md)
+  [`docs/architecture/cardano-oracle-architecture.md`](../architecture/cardano-oracle-architecture.md)
 - Security notes:
-  [`docs/security/security-notes.md`](../../../security/security-notes.md)
+  [`docs/security/security-notes.md`](../security/security-notes.md)
 - On-chain (Aiken) README:
-  [`contracts/aiken/README.md`](../../../../contracts/aiken/README.md)
+  [`contracts/aiken/README.md`](../../contracts/aiken/README.md)
 - Off-chain CLI runbook:
-  [`offchain/cli/README.md`](../../../../offchain/cli/README.md)
-- License: [`LICENSE`](../../../../LICENSE) (MIT)
+  [`offchain/cli/README.md`](../../offchain/cli/README.md)
+- License: [`LICENSE`](../../LICENSE) (MIT)

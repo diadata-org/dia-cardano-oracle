@@ -1313,13 +1313,11 @@ purpose, so it is clear where to look.
 
 ### Evidence — proof it works
 
-- [`docs/milestones/evidence/m2-preview-20260609-132545/milestone-2-preview-evidence.md`](../milestones/evidence/m2-preview-20260609-132545/milestone-2-preview-evidence.md)
-  — the **auto-generated M2 evidence report**: per-pair confirmed-tx counts, sample tx
-  hashes, end-to-end latency, failures by error code, embedded Grafana dashboard/panel
-  PNGs, and the alerts active at capture time. Regenerate any time with `make evidence`
-  (see §17).
-- Earlier M1 packs live under
-  [`docs/milestones/evidence/`](../milestones/evidence/) — dated, per network.
+- The Milestone 2 evidence is consolidated in the **Proof-of-Achievement** document
+  under [`docs/milestones/`](../milestones/) (`milestone-2-poa.md`): per-pair
+  confirmed-tx counts, sample tx hashes, end-to-end latency, failures by error code,
+  Grafana dashboard/panel snapshots, and the alerts active at capture time.
+- Regenerate the raw evidence pack any time with `make evidence` (see §17).
 
 ### Security & audits
 

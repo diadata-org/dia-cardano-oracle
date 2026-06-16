@@ -4,7 +4,7 @@ What is left for **Milestone 3 (Monitoring Library)** and **Milestone 4 (End-to-
 Integration and Mainnet Deployment)**, grounded in the official Catalyst text
 ([`final-cardano-milestones.md`](../milestones/final-cardano-milestones.md)) and the
 accepted M1 PoA precedent
-([`m1-mainnet-20260517-063917/milestone-1-poa.md`](../milestones/evidence/m1-mainnet-20260517-063917/milestone-1-poa.md)).
+([`milestone-1-poa.md`](../milestones/milestone-1-poa.md)).
 
 ## Contents
 

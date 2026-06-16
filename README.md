@@ -19,9 +19,7 @@ Project and delivery documents:
 
 - [Final Cardano Milestones](docs/milestones/final-cardano-milestones.md)
 - ([Project Catalyst](https://milestones.projectcatalyst.io/projects/1400073))
-- [Milestone 1 Proof of Achievement](docs/milestones/evidence/m1-mainnet-20260517-063917/milestone-1-poa.md) — Catalyst submission document
-- [Milestone 1 Preview Evidence](docs/milestones/evidence/m1-preview-20260516-090057/milestone-1-preview-evidence.md)
-- [Milestone 1 Mainnet Evidence](docs/milestones/evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md)
+- [Milestone 1 Proof of Achievement](docs/milestones/milestone-1-poa.md) — Catalyst submission document (links to all M1 evidence)
 - [Requirements](docs/requirements/cardano-integration-requirement-pf.md)
 
 Component docs:

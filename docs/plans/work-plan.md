@@ -194,7 +194,7 @@ Tasks:
 - [ ] Mainnet deployment scripts and evidence (contract addresses, reference-script UTxOs, verified mainnet tx hashes).
 - [x] Operator runbook (onboarding a new client, subscribing a new pair, rotating signers, withdrawing accrued fees).
 - [ ] Developer documentation published via DIA's developer documentation website — **deferred to
-  M4** per the accepted M1 PoA (`m1-mainnet-20260517-063917/milestone-1-poa.md` §AC #3): the
+  M4** per the accepted M1 PoA (`milestone-1-poa.md` §AC #3): the
   publication clause is identical in M2/M3/M4, in-repo docs are complete and meet the substantive
   content requirement, and publishing the final stable surface once at M4 avoids a moving target.
   M4 scope of the published page:
@@ -202,7 +202,7 @@ Tasks:
   - on-chain contracts available for consumption
   - procedure to request any of DIA's 2,500+ price feeds or 10,000+ real-world asset feeds
 - [x] Per-milestone PoA documents mapping AC → evidence (accepted format): M1 done
-  (`m1-mainnet-20260517-063917/milestone-1-poa.md`). M2 PoA pending (tracked in milestone-feeder-plan).
+  (`milestone-1-poa.md`). M2 PoA pending (tracked in milestone-feeder-plan).
 - [ ] Final closeout report and video (M4).
 
 ---
