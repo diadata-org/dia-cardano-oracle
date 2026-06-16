@@ -5,7 +5,7 @@ Source of truth: [`final-cardano-milestones.md`](../../final-cardano-milestones.
 Scope: Milestone 2 (Data Feeder and Documentation) validation on
 Cardano Preview ↔ DIA Testnet.
 
-Pack stamp: **20260615-155816**
+Pack stamp: **20260608-040304**
 
 Window observed in `transactions.jsonl`:
 

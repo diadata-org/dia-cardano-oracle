@@ -14,14 +14,17 @@
 #
 # Env vars (set by `make evidence`; both optional when run standalone):
 #   EVIDENCE_NETWORK  Cardano network (e.g. preview, mainnet). Default: preview.
-#   EVIDENCE_STAMP    Shared UTC dir stamp so all evidence scripts write into
-#                     one dir. Default: a fresh `date -u +%Y%m%d-%H%M%S`.
+#   EVIDENCE_STAMP    Shared dir stamp so all evidence scripts write into one
+#                     dir. Default: the run dir id of the resolved STATE_DIR
+#                     (matches the m1-* packs); a flat state/<network> with no
+#                     run dir falls back to a UTC `date -u +%Y%m%d-%H%M%S`.
 #
 # Run AFTER the feeder has accumulated material to show. The feeder may
 # continue running while this script executes (append-only logs + SQLite
 # concurrent reads).
 #
-# Output: docs/milestones/evidence/m2-<network>-<YYYYMMDD-HHMMSS>/
+# Output: docs/milestones/evidence/m2-<network>-<run-id>/  (a two-digit suffix
+#         -01, -02, … is appended when a pack for that run already exists)
 #
 # Dependencies (all on standard Linux): bash, jq, sqlite3, curl, awk.
 
@@ -57,8 +60,26 @@ GRAFANA_USER="admin"
 GRAFANA_PASS="${GRAFANA_ADMIN_PASSWORD:-admin}"
 GRAFANA_DASHBOARD_UID="dia-cardano-feeder"
 
-STAMP="${EVIDENCE_STAMP:-$(date -u +%Y%m%d-%H%M%S)}"
+# Pack stamp mirrors the run dir id (so the evidence dir maps to the deployment
+# it was captured from, like the m1-* packs) rather than wall-clock time.
+# EVIDENCE_STAMP still overrides for shared multi-script runs; a flat
+# state/<network> with no run dir falls back to a UTC stamp.
+run_suffix="${STATE_DIR##*_run_}"
+if [[ "$run_suffix" == "$STATE_DIR" ]]; then
+  run_suffix="$(date -u +%Y%m%d-%H%M%S)"
+fi
+STAMP="${EVIDENCE_STAMP:-$run_suffix}"
 OUT_DIR="$REPO_ROOT/docs/milestones/evidence/m2-$NETWORK-$STAMP"
+# A pack already exists for this run: append a two-digit suffix (-01, -02, …)
+# instead of overwriting, so repeated captures of the same deployment are kept.
+if [[ -e "$OUT_DIR" ]]; then
+  suffix_n=1
+  while [[ -e "$(printf '%s-%02d' "$OUT_DIR" "$suffix_n")" ]]; do
+    suffix_n=$((suffix_n + 1))
+  done
+  STAMP="$(printf '%s-%02d' "$STAMP" "$suffix_n")"
+  OUT_DIR="$(printf '%s-%02d' "$OUT_DIR" "$suffix_n")"
+fi
 
 # ---------------------------------------------------------------------------
 # Pre-flight: required tools + state must exist.
