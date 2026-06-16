@@ -1,0 +1,21 @@
+{
+  "intent": {
+    "intentType": "OracleUpdate",
+    "version": "1.0",
+    "chainId": "1050",
+    "nonce": "1781599011000000000",
+    "expiry": "1781602611",
+    "symbol": "BNB/USD",
+    "price": "61500000000",
+    "timestamp": "1781599011",
+    "source": "DIA Oracle",
+    "signature": "0x9bc2ae5d1f7e439a78cd8d56710f86eee92d276ce95ad449131272745fd91595407f97daacb995bddf660d872971a98f025dfde679ccd720cbd9288cb88502eb1b",
+    "signer": "0x2b1c7eff297766569966b630a6862947a8e5285a"
+  },
+  "witness": {
+    "signerPublicKey": "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531",
+    "signerAddress": "0x2b1c7eff297766569966b630a6862947a8e5285a",
+    "intentHash": "813f1222ba4e0245080757a68235a96425ebe854f29e18e48ef9431741ee8903",
+    "compactSignature": "9bc2ae5d1f7e439a78cd8d56710f86eee92d276ce95ad449131272745fd91595407f97daacb995bddf660d872971a98f025dfde679ccd720cbd9288cb88502eb"
+  }
+}

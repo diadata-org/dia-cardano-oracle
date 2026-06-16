@@ -1,0 +1,24 @@
+{
+  "updates": [
+    {
+      "statePath": "../state/mainnet_run_20260616-074413/clients/client-test-01/pairs/btc-usd.json",
+      "intentPath": "../state/mainnet_run_20260616-074413/intents/btc-usd-batch.signed.json"
+    },
+    {
+      "statePath": "../state/mainnet_run_20260616-074413/clients/client-test-01/pairs/eth-usd.json",
+      "intentPath": "../state/mainnet_run_20260616-074413/intents/eth-usd-batch.signed.json"
+    },
+    {
+      "statePath": "../state/mainnet_run_20260616-074413/clients/client-test-01/pairs/ada-usd.json",
+      "intentPath": "../state/mainnet_run_20260616-074413/intents/ada-usd-batch.signed.json"
+    },
+    {
+      "statePath": "../state/mainnet_run_20260616-074413/clients/client-test-01/pairs/usdt-usd.json",
+      "intentPath": "../state/mainnet_run_20260616-074413/intents/usdt-usd-batch.signed.json"
+    },
+    {
+      "statePath": "../state/mainnet_run_20260616-074413/clients/client-test-01/pairs/dai-usd.json",
+      "intentPath": "../state/mainnet_run_20260616-074413/intents/dai-usd-batch.signed.json"
+    }
+  ]
+}

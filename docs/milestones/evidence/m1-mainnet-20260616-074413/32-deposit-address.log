@@ -1,0 +1,10 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts deposit:address --protocol-state ../state/mainnet_run_20260616-074413/config-bootstrap.json --client-state ../state/mainnet_run_20260616-074413/clients/client-a.json
+
+[1G[0K{
+  "clientId": "client-a",
+  "receiverUnit": "6ec4b5aa572382beb11bb8db28a87884d147afe4e2b3d8f5a7331a254449415f52454345495645525f434c49454e545f41",
+  "depositValidatorAddress": "addr1wy7ylvlta43g2u5xesp4gtjs6c5r2n0upn9pg7la5vnk56swykjdm"
+}
+[1G[0K⠙[1G[0K

@@ -1,0 +1,119 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
+> tsx src/index.ts update:batch --protocol-state ../state/mainnet_run_20260616-074413/config-bootstrap.json --client-state ../state/mainnet_run_20260616-074413/clients/client-a.json --manifest ../state/mainnet_run_20260616-074413/update-batches/batch-10.manifest.json --out ../state/mainnet_run_20260616-074413/update-batches/batch-10.result.json
+
+[1G[0K[update:batch] Loading batch update manifest from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/update-batches/batch-10.manifest.json
+[update:batch] Connecting to Mainnet and selecting the configured wallet
+[update:batch] Building Mainnet oracle batch update transaction
+[update:batch] Tx resources: fee=2.629210 ADA (2629210 lovelace), cpu=4323276724, mem=10894593
+[update:batch] Output[0] | addr=addr1wxcmjva8k...gwmdlu | lovelace=5.000000 ADA (5000000) | assets=b1b933a7b08e...5e32b4=1 | datum=inline(91B)
+[update:batch] Output[1] | addr=addr1wxcmjva8k...gwmdlu | lovelace=5.000000 ADA (5000000) | assets=b1b933a7b08e...30b101=1 | datum=inline(95B)
+[update:batch] Output[2] | addr=addr1wxcmjva8k...gwmdlu | lovelace=5.000000 ADA (5000000) | assets=b1b933a7b08e...ff2852=1 | datum=inline(91B)
+[update:batch] Output[3] | addr=addr1wxcmjva8k...gwmdlu | lovelace=5.000000 ADA (5000000) | assets=b1b933a7b08e...bbbe64=1 | datum=inline(95B)
+[update:batch] Output[4] | addr=addr1wxcmjva8k...gwmdlu | lovelace=5.000000 ADA (5000000) | assets=b1b933a7b08e...3849f4=1 | datum=inline(95B)
+[update:batch] Output[5] | addr=addr1wxcmjva8k...gwmdlu | lovelace=5.000000 ADA (5000000) | assets=b1b933a7b08e...29d315=1 | datum=inline(92B)
+[update:batch] Output[6] | addr=addr1wxcmjva8k...gwmdlu | lovelace=5.000000 ADA (5000000) | assets=b1b933a7b08e...c2a497=1 | datum=inline(95B)
+[update:batch] Output[7] | addr=addr1wxcmjva8k...gwmdlu | lovelace=5.000000 ADA (5000000) | assets=b1b933a7b08e...eed0bc=1 | datum=inline(91B)
+[update:batch] Output[8] | addr=addr1wxcmjva8k...gwmdlu | lovelace=5.000000 ADA (5000000) | assets=b1b933a7b08e...57e571=1 | datum=inline(93B)
+[update:batch] Output[9] | addr=addr1wxcmjva8k...gwmdlu | lovelace=5.000000 ADA (5000000) | assets=b1b933a7b08e...52daee=1 | datum=inline(91B)
+[update:batch] Output[10] | addr=addr1w9hvfdd22...7fc477 | lovelace=65.000000 ADA (65000000) | assets=6ec4b5aa5723...545f41=1 | datum=inline(19B)
+[update:batch] Output[11] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=7.370790 ADA (7370790)
+[update:batch] Unsigned transaction ready: 1a9dd51d5dc4b9d0f5cb12f60b7d66b7eba29ef5e834f3c438c0272be94840e1
+[update:batch] Submitted transaction hash: 1a9dd51d5dc4b9d0f5cb12f60b7d66b7eba29ef5e834f3c438c0272be94840e1
+[update:batch] Confirmed by Blockfrost: oracle batch update transaction 1a9dd51d5dc4b9d0f5cb12f60b7d66b7eba29ef5e834f3c438c0272be94840e1.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/update-batches/batch-10.result.json
+{
+  "wallet": {
+    "source": "seed",
+    "address": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72"
+  },
+  "receiver": {
+    "clientId": "client-a",
+    "bootstrapRef": {
+      "txHash": "03155f255ae286a7c0d20b56667c98584617d9e5b1bd3e511571b37e8013b401",
+      "outputIndex": 2
+    },
+    "receiverAssetName": "4449415f52454345495645525f434c49454e545f41",
+    "receiverPolicyId": "6ec4b5aa572382beb11bb8db28a87884d147afe4e2b3d8f5a7331a25",
+    "receiverUnit": "6ec4b5aa572382beb11bb8db28a87884d147afe4e2b3d8f5a7331a254449415f52454345495645525f434c49454e545f41",
+    "receiverValidatorHash": "6ec4b5aa572382beb11bb8db28a87884d147afe4e2b3d8f5a7331a25",
+    "receiverValidatorAddress": "addr1w9hvfdd22u3c9043rwudk29g0zzdz3a0un3t8k845ue35fg7fc477",
+    "depositValidatorHash": "3c4fb3ebed62857286cc03542e50d628354dfc0cca147bfda3276a6a",
+    "depositValidatorAddress": "addr1wy7ylvlta43g2u5xesp4gtjs6c5r2n0upn9pg7la5vnk56swykjdm",
+    "receiverState": {
+      "balanceLovelace": "47550000",
+      "accruedToHookLovelace": "12450000",
+      "minUtxoLovelace": "5000000"
+    }
+  },
+  "pairs": [
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/btc-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/btc-usd.json",
+      "pairId": "4254432f555344",
+      "pairUnit": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052f8a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497"
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/eth-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/eth-usd.json",
+      "pairId": "4554482f555344",
+      "pairUnit": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052f3d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4"
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/ada-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/ada-usd.json",
+      "pairId": "4144412f555344",
+      "pairUnit": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052f04e5366fb69cdc906d0e8841d641628f09a50f7618e944de5cdb7a26b95e32b4"
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/usdt-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/usdt-usd.json",
+      "pairId": "555344542f555344",
+      "pairUnit": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052f5ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315"
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/dai-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/dai-usd.json",
+      "pairId": "4441492f555344",
+      "pairUnit": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052f0ae6401fc15363e085cf3d2f90ae10566e797d8686ab048ba30f5914c7ff2852"
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/sol-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/sol-usd.json",
+      "pairId": "534f4c2f555344",
+      "pairUnit": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052f396545cb87b0103c8ddb5ff4329eeff88e2aef114f76b0807b21ce3d68bbbe64"
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/bnb-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/bnb-usd.json",
+      "pairId": "424e422f555344",
+      "pairUnit": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052f09da81653014451f3a86d96589f6a9e5d97b4e8236a461c7b2edbe1bab30b101"
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/xrp-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/xrp-usd.json",
+      "pairId": "5852502f555344",
+      "pairUnit": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052fbac7b9f5648596883156b7004ce94ebb55cc5049bd65b93188cd724e9feed0bc"
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/matic-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/matic-usd.json",
+      "pairId": "4d415449432f555344",
+      "pairUnit": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052fd2a1402553abe60aecdea3464be08e7ced64530fea0989b8fdfd49351157e571"
+    },
+    {
+      "statePath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/dot-usd.json",
+      "outPath": "/home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260616-074413/clients/client-a/pairs/dot-usd.json",
+      "pairId": "444f542f555344",
+      "pairUnit": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052fff3f796230b336b4e5c8d3af0440cbe0346a64cdab5e9cba4a8e2f476152daee"
+    }
+  ],
+  "transactions": [
+    {
+      "step": "mainnet:update:batch",
+      "submittedTxHash": "1a9dd51d5dc4b9d0f5cb12f60b7d66b7eba29ef5e834f3c438c0272be94840e1",
+      "confirmed": true
+    }
+  ]
+}
+[1G[0K⠙[1G[0K
