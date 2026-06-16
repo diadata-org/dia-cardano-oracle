@@ -199,7 +199,7 @@ a few of the lower-risk improvements opportunistically, but it is not on the del
 
 Grounded in [`../plans/m3-m4-plan.md`](../plans/m3-m4-plan.md),
 [`../plans/work-plan.md`](../plans/work-plan.md), and
-[`../plans/milestone-feeder-plan.md`](../plans/milestone-feeder-plan.md):
+[`../plans/_archived/20260616-milestone-feeder-plan.md`](../plans/_archived/20260616-milestone-feeder-plan.md):
 
 **Milestone 3 (Monitoring Library)** — the monitoring machinery already exists; what remains is
 validation artifacts and a live-Mainnet demonstration:
@@ -229,7 +229,7 @@ validation artifacts and a live-Mainnet demonstration:
   [`../architecture/cardano-oracle-architecture.md`](../architecture/cardano-oracle-architecture.md)
 - **Operator manual:** [`../../offchain/feeder/README.md`](../../offchain/feeder/README.md)
 - **Plans:** [`../plans/work-plan.md`](../plans/work-plan.md) ·
-  [`../plans/milestone-feeder-plan.md`](../plans/milestone-feeder-plan.md) ·
+  [`../plans/_archived/20260616-milestone-feeder-plan.md`](../plans/_archived/20260616-milestone-feeder-plan.md) ·
   [`../plans/m3-m4-plan.md`](../plans/m3-m4-plan.md)
 - **Audits:** [`20260609-feeder-push-policy-config.md`](./20260609-feeder-push-policy-config.md) ·
   [`20260607-contract-teardown-ada-recovery.md`](./20260607-contract-teardown-ada-recovery.md) ·

@@ -1,10 +1,17 @@
 # Milestone — Feeder Plan
 
+> **Archived 2026-06-16 — Milestone 2 delivered.** The M2 closeout (feeder live on
+> Mainnet, Preview + Mainnet evidence packs, PoA) is complete; the formal record is
+> [`milestone-2-poa.md`](../../milestones/milestone-2-poa.md). The `Pending — Milestone 2`
+> and `Pending — Mainnet` sections below are retained as a historical snapshot of the
+> build. Forward feeder work (M3 / M4) is tracked in [`m3-m4-plan.md`](../m3-m4-plan.md);
+> the still-open `Open — DIA decisions` items at the bottom remain live there.
+
 Tasks for the DIA Cardano Oracle feeder: done, left for M2, Mainnet, and deferred.
 
 Terminology (`customer -> client -> router`, with `lane` as the Cardano EUTxO
 serialization concept) is defined in the living architecture doc:
-[`../architecture/feeder.md` §Concept glossary](../architecture/feeder.md#concept-glossary-customer-client-router-lane).
+[`../../architecture/feeder.md` §Concept glossary](../../architecture/feeder.md#concept-glossary-customer-client-router-lane).
 The one-off normalization that introduced it is complete (archived 2026-06-13).
 
 ## Contents
@@ -71,8 +78,8 @@ M2 closeout sequence (agreed 2026-06-13 — Preview first, then Mainnet):
 
 > Detailed, code-grounded implementation plan for every item below (plus the
 > receiver-funding / griefing work from the
-> [2026-06-05 audit](../audit/20260605-receiver-concurrency-and-griefing.md)):
-> **[m2-hardening-implementation-plan.md](_archived/m2-hardening-implementation-plan.md)** (archived — complete).
+> [2026-06-05 audit](../../audit/20260605-receiver-concurrency-and-griefing.md)):
+> **[m2-hardening-implementation-plan.md](m2-hardening-implementation-plan.md)** (archived — complete).
 
 - [x] **Thresholds — single source of truth.** Done (2026-06-06): `src/config/__tests__/threshold-drift.test.ts` fails if any `alerts.yml` expr or `feeder.json` panel threshold diverges from `infrastructure.<network>.yaml::alerting.*`, if the two network YAMLs disagree, or if a dashboard template var is left dead (run via `make check-thresholds`). Added `reorg_rate_high_per_hour` so every alert threshold has a YAML home; removed the three dead template vars (`stale_threshold_seconds`, `receiver_warn_lovelace`, `coordinator_warn_lovelace`) and fixed the two panel descriptions that referenced them. The enforcing test replaces a build-time generator (the YAML stays hand-edited; the test guarantees the mirrors agree).
 - [x] **Fix misleading rate panels** (`feeder.json`). Done (2026-06-06, `89bd0ec`): the three panels now use `increase[5m]` counts (not `rate[5m]`), keep `symbol` (the failed panel had dropped it), truthful titles/units. A drift-test assertion locks them to `increase()`+`symbol`.
@@ -85,8 +92,8 @@ M2 closeout sequence (agreed 2026-06-13 — Preview first, then Mainnet):
 
 ### Recent contract + decommission work (2026-06-07)
 
-- [x] **Update can fold side-deposits into the same tx (Option B / A2, generalized `AccrueFee`).** `accrue_fee_transition` (`contracts/aiken/lib/dia_cardano_oracle/receiver_logic.ak`) now takes the receiver prev/next outputs and lets an oracle update ALSO absorb lovelace added in the same tx into `balance_lovelace` (`added ≥ 0`; `accrued` pinned to `+fee`). Call sites updated: `validators/receiver.ak` (AccrueFee branch now derives the fee from the accrued-delta, not the balance-delta) + `validators/update_coordinator.ak` (`valid_receiver_accrue_fee`); `deposit.ak` UNCHANGED (its anti-skim sees the same physical increase). Off-chain: `depositMaxPerUpdateFold` in `config-bootstrap.json::configState` (`protocol:init --deposit-max-per-update-fold`, default 3); CLI `update` gained `--fold-deposits`; the feeder folds best-effort with fallback to a pure update; the emulator proves update+absorb (`run-all-cli.sh` steps 36/37, guard bumped 1..35 → 1..37). Measured: blueprint +620 bytes, AccrueFee bench cpu/mem delta ≈ 0, batch-10 unaffected. A2 changes the receiver/coordinator hashes → accepted re-bootstrap (see the [teardown audit](../audit/20260607-contract-teardown-ada-recovery.md)).
-- [x] **Teardown burns + ADA recovery (decommission).** Added a `Burn` mint action + `Burn` spend redeemer to `config_state` / `payment_hook` / `receiver` (mirroring `pair_state`): config-signer gated, NFT burned −1, no continuation output, zeroed value fields (receiver `balance == 0 && accrued == 0`, hook `accrued_fees == 0`). New CLI verbs `receiver:burn` / `payment-hook:burn` / `config:burn`. Fixed `reclaim-reference-script --script client` to also reclaim the per-client `deposit` reference script. New decommission runbook `offchain/cli/scripts/run-teardown-cli.sh` (chain-as-truth: queries live on-chain UTxOs, acts only on what is live, records each into the entity JSON, marks orphans; `--run-id` / `--from-step` / `--skip-singleton-burns`) + helpers `scripts/teardown-helpers/{query-live,record-teardown}.ts`. Audit/procedure doc: [`docs/audit/20260607-contract-teardown-ada-recovery.md`](../audit/20260607-contract-teardown-ada-recovery.md). The Preview OLD deployment `preview_run_20260606-082456` was actually torn down (recovered receiver balance + hook accrued + 10 pairs + all reference scripts incl. config + coordinator; ~15 ADA stuck = the 3 non-burnable NFT min-UTxOs on the OLD contracts, expected — recovered only on next-gen redeployments since the burns change the config/hook/receiver/coordinator hashes).
+- [x] **Update can fold side-deposits into the same tx (Option B / A2, generalized `AccrueFee`).** `accrue_fee_transition` (`contracts/aiken/lib/dia_cardano_oracle/receiver_logic.ak`) now takes the receiver prev/next outputs and lets an oracle update ALSO absorb lovelace added in the same tx into `balance_lovelace` (`added ≥ 0`; `accrued` pinned to `+fee`). Call sites updated: `validators/receiver.ak` (AccrueFee branch now derives the fee from the accrued-delta, not the balance-delta) + `validators/update_coordinator.ak` (`valid_receiver_accrue_fee`); `deposit.ak` UNCHANGED (its anti-skim sees the same physical increase). Off-chain: `depositMaxPerUpdateFold` in `config-bootstrap.json::configState` (`protocol:init --deposit-max-per-update-fold`, default 3); CLI `update` gained `--fold-deposits`; the feeder folds best-effort with fallback to a pure update; the emulator proves update+absorb (`run-all-cli.sh` steps 36/37, guard bumped 1..35 → 1..37). Measured: blueprint +620 bytes, AccrueFee bench cpu/mem delta ≈ 0, batch-10 unaffected. A2 changes the receiver/coordinator hashes → accepted re-bootstrap (see the [teardown audit](../../audit/20260607-contract-teardown-ada-recovery.md)).
+- [x] **Teardown burns + ADA recovery (decommission).** Added a `Burn` mint action + `Burn` spend redeemer to `config_state` / `payment_hook` / `receiver` (mirroring `pair_state`): config-signer gated, NFT burned −1, no continuation output, zeroed value fields (receiver `balance == 0 && accrued == 0`, hook `accrued_fees == 0`). New CLI verbs `receiver:burn` / `payment-hook:burn` / `config:burn`. Fixed `reclaim-reference-script --script client` to also reclaim the per-client `deposit` reference script. New decommission runbook `offchain/cli/scripts/run-teardown-cli.sh` (chain-as-truth: queries live on-chain UTxOs, acts only on what is live, records each into the entity JSON, marks orphans; `--run-id` / `--from-step` / `--skip-singleton-burns`) + helpers `scripts/teardown-helpers/{query-live,record-teardown}.ts`. Audit/procedure doc: [`docs/audit/20260607-contract-teardown-ada-recovery.md`](../../audit/20260607-contract-teardown-ada-recovery.md). The Preview OLD deployment `preview_run_20260606-082456` was actually torn down (recovered receiver balance + hook accrued + 10 pairs + all reference scripts incl. config + coordinator; ~15 ADA stuck = the 3 non-burnable NFT min-UTxOs on the OLD contracts, expected — recovered only on next-gen redeployments since the burns change the config/hook/receiver/coordinator hashes).
 
 ### Receiver funding — side-deposit + merge (Option A, from the 2026-06-05 audit)
 

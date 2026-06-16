@@ -23,7 +23,7 @@ accepted M1 PoA precedent
 
 `[x]` done · `[ ]` open · `[~]` partial. Workstream items (A–F) live in
 [`work-plan.md`](./work-plan.md); the feeder detail lives in
-[`milestone-feeder-plan.md`](./milestone-feeder-plan.md). This file is the milestone-facing
+[`milestone-feeder-plan.md`](./_archived/20260616-milestone-feeder-plan.md) (archived). This file is the milestone-facing
 view of what those workstreams still owe M3 and M4.
 
 A large share of the M3 monitoring **machinery** already exists (it was built alongside the

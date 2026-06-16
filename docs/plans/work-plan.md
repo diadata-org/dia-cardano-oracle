@@ -21,7 +21,7 @@ Single work plan for the Cardano port of DIA's push-oracle contracts.
 - [Final Cardano Milestones](../milestones/final-cardano-milestones.md) — Catalyst milestone text.
 - [Milestone 1 Preview Evidence](../milestones/evidence/m1-preview-20260516-090057/milestone-1-preview-evidence.md) — M1 Preview verification log.
 - [Milestone 1 Mainnet Evidence](../milestones/evidence/m1-mainnet-20260517-063917/milestone-1-mainnet-evidence.md) — M1 Mainnet verification log (latest run).
-- [**Milestone Feeder Plan**](./milestone-feeder-plan.md) — **start here for the feeder.**
+- [**Milestone Feeder Plan**](./_archived/20260616-milestone-feeder-plan.md) — **start here for the feeder.**
   Done / M2 pending / Mainnet / deferred / open DIA decisions.
 - [**Feeder concept glossary**](../architecture/feeder.md#concept-glossary-customer-client-router-lane)
   — living definition of `customer -> client -> router` (with `lane` as the Cardano EUTxO
@@ -104,7 +104,7 @@ inflight tracking, evidence packaging) required by the M2 acceptance
 criteria in [`final-cardano-milestones.md`](../milestones/final-cardano-milestones.md).
 
 The full task breakdown, status, evidence layout, Mainnet rollout, and open
-DIA dependencies live in [`milestone-feeder-plan.md`](./milestone-feeder-plan.md).
+DIA dependencies live in [`milestone-feeder-plan.md`](./_archived/20260616-milestone-feeder-plan.md).
 
 High-level deliverables tracked here:
 
@@ -141,7 +141,7 @@ High-level deliverables tracked here:
   from the current run (customer/client/router naming, 606 feeder tests pass) is captured as Fase 1
   of the M2 closeout. Remaining for the M2 submission: fresh Preview pack + demo video (Preview),
   then Mainnet daemon tx logs (formal evidence, ≤1 h run) and the `milestone-2-poa.md` PoA doc.
-  Sequence tracked in detail in [milestone-feeder-plan.md](./milestone-feeder-plan.md) §2.
+  Sequence tracked in detail in [milestone-feeder-plan.md](./_archived/20260616-milestone-feeder-plan.md) §2.
 
 ## Workstream D — Indexer
 
@@ -202,7 +202,7 @@ Tasks:
   - on-chain contracts available for consumption
   - procedure to request any of DIA's 2,500+ price feeds or 10,000+ real-world asset feeds
 - [x] Per-milestone PoA documents mapping AC → evidence (accepted format): M1 done
-  (`milestone-1-poa.md`). M2 PoA pending (tracked in milestone-feeder-plan).
+  (`milestone-1-poa.md`); M2 done (`milestone-2-poa.md`).
 - [ ] Final closeout report and video (M4).
 
 ---

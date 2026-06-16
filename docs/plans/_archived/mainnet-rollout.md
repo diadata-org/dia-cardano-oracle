@@ -1,4 +1,4 @@
-> **ARCHIVED 2026-06-05** — superseded by [`../milestone-feeder-plan.md`](../milestone-feeder-plan.md).
+> **ARCHIVED 2026-06-05** — superseded by [`../milestone-feeder-plan.md`](./20260616-milestone-feeder-plan.md).
 > Its CLI commands were broken (no 'init bootstrap' / 'protocol init' / 'router init'); the corrected Mainnet procedure is in §3 of the new plan. Any still-open items were carried into that consolidated plan; the only live
 > plans are `../work-plan.md` and `../milestone-feeder-plan.md`. Kept for history — do
 > not use as the live plan.

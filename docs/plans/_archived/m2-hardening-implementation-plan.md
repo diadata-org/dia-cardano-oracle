@@ -1,6 +1,6 @@
 # Milestone 2 — Pre-Mainnet Hardening & Operability: Implementation Plan
 
-> **Archived — complete.** Every item in this plan shipped (Part A incl. A1 + A2/Option B, and Part B incl. B1-B7). It is kept for historical/design context; for the as-built behavior see the architecture docs and the teardown audit [`docs/audit/20260607-contract-teardown-ada-recovery.md`](../../audit/20260607-contract-teardown-ada-recovery.md). The only follow-up that outlived this plan (the "new metrics dashboard") is tracked in [milestone-feeder-plan.md](../milestone-feeder-plan.md).
+> **Archived — complete.** Every item in this plan shipped (Part A incl. A1 + A2/Option B, and Part B incl. B1-B7). It is kept for historical/design context; for the as-built behavior see the architecture docs and the teardown audit [`docs/audit/20260607-contract-teardown-ada-recovery.md`](../../audit/20260607-contract-teardown-ada-recovery.md). The only follow-up that outlived this plan (the "new metrics dashboard") is tracked in [milestone-feeder-plan.md](./20260616-milestone-feeder-plan.md).
 
 Detailed, code-grounded implementation plan for two bodies of work to land before
 (or alongside) the M2 Mainnet feeder run:
@@ -11,7 +11,7 @@ Detailed, code-grounded implementation plan for two bodies of work to land befor
   contract + feeder changes that delivers.
 - **Part B — Monitoring, config, API, CLI & push policy** (the open
   `§ Monitoring, config & API` items in
-  [docs/plans/milestone-feeder-plan.md](../milestone-feeder-plan.md)).
+  [docs/plans/_archived/20260616-milestone-feeder-plan.md](./20260616-milestone-feeder-plan.md)).
 
 > **Out of scope:** Issue 2 of the audit (active update-griefing) is **not** part
 > of this plan — it is a separate DIA policy discussion, tracked in the audit
@@ -344,7 +344,7 @@ client-facing funding UX is the `deposit:address` command, with `deposit:fund` /
 #### Tests
 
 *(Shipped — see the matching items in
-[milestone-feeder-plan.md](../milestone-feeder-plan.md). The sketch below is what was
+[milestone-feeder-plan.md](./20260616-milestone-feeder-plan.md). The sketch below is what was
 planned; the actual coverage is noted per line.)*
 
 - **Aiken (inline, in the 126-test style of
@@ -604,7 +604,7 @@ when `receiver` is recompiled.
 ## Part B — Monitoring, config, API, CLI & policy
 
 These are the open `§ Monitoring, config & API` items in
-[milestone-feeder-plan.md](../milestone-feeder-plan.md), now with grounded designs.
+[milestone-feeder-plan.md](./20260616-milestone-feeder-plan.md), now with grounded designs.
 
 ### B1. Thresholds — single source of truth
 
@@ -972,4 +972,4 @@ Cross-cutting, so we build once and reuse:
 *Plan authored 2026-06-06. Implements Issue 1 / Option A of
 [the receiver audit](../../audit/20260605-receiver-concurrency-and-griefing.md)
 (Issue 2 is out of scope here) and the `§ Monitoring, config & API` items in
-[milestone-feeder-plan.md](../milestone-feeder-plan.md).*
+[milestone-feeder-plan.md](./20260616-milestone-feeder-plan.md).*

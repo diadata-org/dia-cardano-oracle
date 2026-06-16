@@ -1325,11 +1325,6 @@ purpose, so it is clear where to look.
   model and in-scope security properties.
 - [`docs/audit/`](../audit/) — the security and fee/efficiency audit reports.
 
-### Planning (internal)
-
-- [`docs/plans/milestone-feeder-plan.md`](../plans/milestone-feeder-plan.md) and
-  [`docs/plans/work-plan.md`](../plans/work-plan.md) — the live delivery plans.
-
 ---
 
 ## Open questions & constraints to verify
