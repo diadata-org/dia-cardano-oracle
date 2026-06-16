@@ -1,11 +1,15 @@
 
 > @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
-> tsx src/index.ts reclaim-reference-script --script config --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json --build-only
+> tsx src/index.ts reclaim-reference-script --script config --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json
 
 [1G[0K[reclaim-reference-script:config] Fetching reference-script UTxOs and Config UTxO from chain
 [reclaim-reference-script:config] Building reclaim transaction (spending 2 UTxO(s))
 [reclaim-reference-script:config] Tx resources: fee=0.407352 ADA (407352 lovelace), cpu=87333092, mem=291140
 [reclaim-reference-script:config] Output[0] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=45.963938 ADA (45963938)
+[reclaim-reference-script:config] Unsigned transaction ready: 949aeb90c17430f066dba23f55d5c0ad6efb025112ea5217d46adc6d95dea301
+[reclaim-reference-script:config] Submitted transaction hash: 949aeb90c17430f066dba23f55d5c0ad6efb025112ea5217d46adc6d95dea301
+[reclaim-reference-script:config] Confirmed by Blockfrost: reclaim-reference-script (config) transaction 949aeb90c17430f066dba23f55d5c0ad6efb025112ea5217d46adc6d95dea301.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260517-063917/config-bootstrap.json
 {
   "wallet": {
     "source": "seed",
@@ -64,9 +68,9 @@
   },
   "paymentHookState": {
     "withdrawAddress": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72",
-    "accruedFeesLovelace": "2450000",
+    "accruedFeesLovelace": "0",
     "lifetimeCollectedLovelace": "12450000",
-    "lifetimeWithdrawnLovelace": "10000000",
+    "lifetimeWithdrawnLovelace": "12450000",
     "minUtxoLovelace": "5000000"
   },
   "compiledScripts": {
@@ -102,15 +106,15 @@
         "scriptHash": ""
       },
       "paymentHook": {
-        "txHash": "f32157880e43b1ddfc73bf78c98e14690305136348582b659d2ed0657a0c90ab",
+        "txHash": "",
         "outputIndex": 0,
-        "scriptHash": "c0c8f244c75bcde4c032b7b96bc843ba19e3351beaae3005dc083385"
+        "scriptHash": ""
       }
     }
   },
   "datum": {
     "configCbor": "d8799f9f581c831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3ddff9f582102d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531ffd8799f4a444941204f7261636c6543312e301a0001892054f8c614a483a0427a13512f52ac72a576678be317ff1a000927c01a0003d090d8799fd8799f581cc0c8f244c75bcde4c032b7b96bc843ba19e3351beaae3005dc083385504449415f5041594d454e545f484f4f4bffffd8799fd87a9f581c98f950517112e513c21817e4f8f618ba3557fc082d8c4b15d6f27c78ffff19012c1a004c4b40ff",
-    "paymentHookCbor": "d8799fd8799fd8799f581c831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3ddffd8799fd8799fd8799f581c879d3b48e8c98ac1eaeebe5cc67ea47a3b0ee25db059f1eee7b3333effffffff1a002562501a00bdf8d01a009896801a004c4b40ff"
+    "paymentHookCbor": "d8799fd8799fd8799f581c831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3ddffd8799fd8799fd8799f581c879d3b48e8c98ac1eaeebe5cc67ea47a3b0ee25db059f1eee7b3333effffffff001a00bdf8d01a00bdf8d01a004c4b40ff"
   },
   "transactions": [
     {
@@ -151,6 +155,21 @@
     {
       "step": "mainnet:payment-hook:reference-script",
       "submittedTxHash": "f32157880e43b1ddfc73bf78c98e14690305136348582b659d2ed0657a0c90ab",
+      "confirmed": true
+    },
+    {
+      "step": "mainnet:payment-hook:withdraw",
+      "submittedTxHash": "b4333762e8b00276e52067fc28c4299aceb4d672507b63ae0ce7324c6be37d90",
+      "confirmed": true
+    },
+    {
+      "step": "reclaim-reference-script:payment-hook",
+      "submittedTxHash": "c21c66c8f12db2a2edbbc9cdb81e03d34894b1dc0ffc629102322c5991b1b822",
+      "confirmed": true
+    },
+    {
+      "step": "reclaim-reference-script:config",
+      "submittedTxHash": "949aeb90c17430f066dba23f55d5c0ad6efb025112ea5217d46adc6d95dea301",
       "confirmed": true
     }
   ]

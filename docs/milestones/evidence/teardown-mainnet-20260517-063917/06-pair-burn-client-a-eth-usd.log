@@ -1,6 +1,6 @@
 
 > @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
-> tsx src/index.ts pair:burn --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json --client-state ../state/mainnet_run_20260517-063917/clients/client-a.json --pair-state ../state/mainnet_run_20260517-063917/clients/client-a/pairs/eth-usd.json --build-only
+> tsx src/index.ts pair:burn --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json --client-state ../state/mainnet_run_20260517-063917/clients/client-a.json --pair-state ../state/mainnet_run_20260517-063917/clients/client-a/pairs/eth-usd.json
 
 [1G[0K[pair:burn] Loading protocol, client and pair state
 [pair:burn] Connecting to Mainnet and selecting the configured wallet
@@ -9,7 +9,9 @@
 [pair:burn] Burning Pair NFT 71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5613d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4 and recovering 5000000 lovelace.
 [pair:burn] Tx resources: fee=0.441137 ADA (441137 lovelace), cpu=158670212, mem=513069
 [pair:burn] Output[0] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=4.558863 ADA (4558863)
-[pair:burn] Build-only: unsigned hash = 5bc1c1da62fd2f94970dbd234a035c10041127bc9bf523b43ba8d6200823cfd8
+[pair:burn] Submitted: 9b10b27b076ecc9d74a21588524fb9a263bfd12521a04e04306fe5ac17070ff7
+[pair:burn] Confirmed by Blockfrost: pair:burn 9b10b27b076ecc9d74a21588524fb9a263bfd12521a04e04306fe5ac17070ff7.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260517-063917/clients/client-a/pairs/eth-usd.json
 {
   "wallet": {
     "source": "seed",
@@ -55,6 +57,11 @@
     {
       "step": "mainnet:update:batch",
       "submittedTxHash": "9877cce1b34b77929a32c26c72fe9b4a850f35ac4d947be68ae9750dab3569b4",
+      "confirmed": true
+    },
+    {
+      "step": "mainnet:pair:burn",
+      "submittedTxHash": "9b10b27b076ecc9d74a21588524fb9a263bfd12521a04e04306fe5ac17070ff7",
       "confirmed": true
     }
   ]

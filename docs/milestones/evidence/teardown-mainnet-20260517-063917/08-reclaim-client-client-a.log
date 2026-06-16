@@ -1,11 +1,15 @@
 
 > @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
-> tsx src/index.ts reclaim-reference-script --script client --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json --client-state ../state/mainnet_run_20260517-063917/clients/client-a.json --build-only
+> tsx src/index.ts reclaim-reference-script --script client --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json --client-state ../state/mainnet_run_20260517-063917/clients/client-a.json
 
 [1G[0K[reclaim-reference-script:client] Fetching reference-script UTxOs and Config UTxO from chain
 [reclaim-reference-script:client] Building reclaim transaction (spending 3 UTxO(s))
 [reclaim-reference-script:client] Tx resources: fee=0.489991 ADA (489991 lovelace), cpu=144533139, mem=483738
 [reclaim-reference-script:client] Output[0] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=65.470249 ADA (65470249)
+[reclaim-reference-script:client] Unsigned transaction ready: 02d5f9582a9a6a7c695512ce1af301ba216223cd63d30450414d123aec4fd835
+[reclaim-reference-script:client] Submitted transaction hash: 02d5f9582a9a6a7c695512ce1af301ba216223cd63d30450414d123aec4fd835
+[reclaim-reference-script:client] Confirmed by Blockfrost: reclaim-reference-script (client) transaction 02d5f9582a9a6a7c695512ce1af301ba216223cd63d30450414d123aec4fd835.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260517-063917/clients/client-a.json
 {
   "clientId": "client-a",
   "scripts": {
@@ -47,7 +51,7 @@
     }
   },
   "datum": {
-    "receiverCbor": "d8799f1a028942f0001a004c4b40ff"
+    "receiverCbor": "d8799f00001a004c4b40ff"
   },
   "wallet": {
     "source": "seed",
@@ -65,7 +69,7 @@
     "receiverValidatorHash": "d276c806b1beb5e04c71356bec048e0bbd39c07e267961cb7325726f",
     "receiverValidatorAddress": "addr1w8f8djqxkxlttczvwy6khmqy3c9m6wwq0cn8jcwtwvjhymce9mxgw",
     "receiverState": {
-      "balanceLovelace": "42550000",
+      "balanceLovelace": "0",
       "accruedToHookLovelace": "0",
       "minUtxoLovelace": "5000000"
     }
@@ -104,6 +108,16 @@
     {
       "step": "mainnet:receiver:withdraw",
       "submittedTxHash": "40b75a78e304a1544b33ae73974cd8c834835034b07b721359d58bec02819131",
+      "confirmed": true
+    },
+    {
+      "step": "mainnet:receiver:withdraw",
+      "submittedTxHash": "29f268be8068cacfc81d9a4b4f05b20d612884c72fb9c1645e14d17420f3f932",
+      "confirmed": true
+    },
+    {
+      "step": "reclaim-reference-script:client",
+      "submittedTxHash": "02d5f9582a9a6a7c695512ce1af301ba216223cd63d30450414d123aec4fd835",
       "confirmed": true
     }
   ]

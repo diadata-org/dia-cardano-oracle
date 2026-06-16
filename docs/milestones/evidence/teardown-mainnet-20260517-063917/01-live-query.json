@@ -59,25 +59,25 @@
           "pairFile": "ada-usd",
           "pairId": "4144412f555344",
           "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c56104e5366fb69cdc906d0e8841d641628f09a50f7618e944de5cdb7a26b95e32b4",
-          "present": true
+          "present": false
         },
         {
           "pairFile": "bnb-usd",
           "pairId": "424e422f555344",
           "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c56109da81653014451f3a86d96589f6a9e5d97b4e8236a461c7b2edbe1bab30b101",
-          "present": true
+          "present": false
         },
         {
           "pairFile": "btc-usd",
           "pairId": "4254432f555344",
           "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5618a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497",
-          "present": true
+          "present": false
         },
         {
           "pairFile": "dai-usd",
           "pairId": "4441492f555344",
           "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5610ae6401fc15363e085cf3d2f90ae10566e797d8686ab048ba30f5914c7ff2852",
-          "present": true
+          "present": false
         },
         {
           "pairFile": "dot-usd",
@@ -89,31 +89,31 @@
           "pairFile": "eth-usd",
           "pairId": "4554482f555344",
           "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5613d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4",
-          "present": true
+          "present": false
         },
         {
           "pairFile": "matic-usd",
           "pairId": "4d415449432f555344",
           "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561d2a1402553abe60aecdea3464be08e7ced64530fea0989b8fdfd49351157e571",
-          "present": true
+          "present": false
         },
         {
           "pairFile": "sol-usd",
           "pairId": "534f4c2f555344",
           "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561396545cb87b0103c8ddb5ff4329eeff88e2aef114f76b0807b21ce3d68bbbe64",
-          "present": true
+          "present": false
         },
         {
           "pairFile": "usdc-usd",
           "pairId": "555344432f555344",
           "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5610156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac",
-          "present": true
+          "present": false
         },
         {
           "pairFile": "usdt-usd",
           "pairId": "555344542f555344",
           "pairUnit": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c5615ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315",
-          "present": true
+          "present": false
         },
         {
           "pairFile": "xrp-usd",

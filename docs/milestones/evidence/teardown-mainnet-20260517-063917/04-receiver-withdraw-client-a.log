@@ -1,6 +1,6 @@
 
 > @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
-> tsx src/index.ts receiver:withdraw --amount-lovelace 42550000 --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json --client-state ../state/mainnet_run_20260517-063917/clients/client-a.json --build-only
+> tsx src/index.ts receiver:withdraw --amount-lovelace 42550000 --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json --client-state ../state/mainnet_run_20260517-063917/clients/client-a.json
 
 [1G[0K[receiver:withdraw] Using amountLovelace=42550000 for receiver withdraw
 [receiver:withdraw] Loading client state from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260517-063917/clients/client-a.json
@@ -10,6 +10,10 @@
 [receiver:withdraw] Output[0] | addr=addr1w8f8djqxk...e9mxgw | lovelace=5.000000 ADA (5000000) | assets=d276c806b1be...545f41=1 | datum=inline(11B)
 [receiver:withdraw] Output[1] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=42.550000 ADA (42550000)
 [receiver:withdraw] Output[2] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=27.321860 ADA (27321860)
+[receiver:withdraw] Unsigned transaction ready: 29f268be8068cacfc81d9a4b4f05b20d612884c72fb9c1645e14d17420f3f932
+[receiver:withdraw] Submitted transaction hash: 29f268be8068cacfc81d9a4b4f05b20d612884c72fb9c1645e14d17420f3f932
+[receiver:withdraw] Confirmed by Blockfrost: receiver withdraw transaction 29f268be8068cacfc81d9a4b4f05b20d612884c72fb9c1645e14d17420f3f932.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260517-063917/clients/client-a.json
 {
   "clientId": "client-a",
   "scripts": {
@@ -108,6 +112,11 @@
     {
       "step": "mainnet:receiver:withdraw",
       "submittedTxHash": "40b75a78e304a1544b33ae73974cd8c834835034b07b721359d58bec02819131",
+      "confirmed": true
+    },
+    {
+      "step": "mainnet:receiver:withdraw",
+      "submittedTxHash": "29f268be8068cacfc81d9a4b4f05b20d612884c72fb9c1645e14d17420f3f932",
       "confirmed": true
     }
   ]

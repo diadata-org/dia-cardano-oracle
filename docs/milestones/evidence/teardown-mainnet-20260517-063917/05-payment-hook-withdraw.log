@@ -1,15 +1,19 @@
 
 > @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
-> tsx src/index.ts payment-hook:withdraw --amount-lovelace 2450000 --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json --build-only
+> tsx src/index.ts payment-hook:withdraw --amount-lovelace 2450000 --protocol-state ../state/mainnet_run_20260517-063917/config-bootstrap.json
 
 [1G[0K[payment-hook:withdraw] Using amountLovelace=2450000 for payment-hook withdraw
 [payment-hook:withdraw] Loading config state from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260517-063917/config-bootstrap.json
 [payment-hook:withdraw] Connecting to Mainnet and selecting the configured wallet
 [payment-hook:withdraw] Building Mainnet payment-hook withdraw transaction
-[payment-hook:withdraw] Tx resources: fee=0.373892 ADA (373892 lovelace), cpu=146805644, mem=449434
+[payment-hook:withdraw] Tx resources: fee=0.374323 ADA (374323 lovelace), cpu=149431121, mem=453628
 [payment-hook:withdraw] Output[0] | addr=addr1w8qv3ujyc...vyvkwk | lovelace=5.000000 ADA (5000000) | assets=c0c8f244c75b...4f4f4b=1 | datum=inline(100B)
 [payment-hook:withdraw] Output[1] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=2.450000 ADA (2450000)
-[payment-hook:withdraw] Output[2] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=27.331955 ADA (27331955)
+[payment-hook:withdraw] Output[2] | addr=addr1qxp3wp7xa...ulrq72 | lovelace=42.175677 ADA (42175677)
+[payment-hook:withdraw] Unsigned transaction ready: b4333762e8b00276e52067fc28c4299aceb4d672507b63ae0ce7324c6be37d90
+[payment-hook:withdraw] Submitted transaction hash: b4333762e8b00276e52067fc28c4299aceb4d672507b63ae0ce7324c6be37d90
+[payment-hook:withdraw] Confirmed by Blockfrost: payment-hook withdraw transaction b4333762e8b00276e52067fc28c4299aceb4d672507b63ae0ce7324c6be37d90.
+[cli] Wrote JSON output to /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/state/mainnet_run_20260517-063917/config-bootstrap.json
 {
   "wallet": {
     "source": "seed",
@@ -155,6 +159,11 @@
     {
       "step": "mainnet:payment-hook:reference-script",
       "submittedTxHash": "f32157880e43b1ddfc73bf78c98e14690305136348582b659d2ed0657a0c90ab",
+      "confirmed": true
+    },
+    {
+      "step": "mainnet:payment-hook:withdraw",
+      "submittedTxHash": "b4333762e8b00276e52067fc28c4299aceb4d672507b63ae0ce7324c6be37d90",
       "confirmed": true
     }
   ]

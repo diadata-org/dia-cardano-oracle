@@ -22,24 +22,24 @@
   "referenceScripts": {
     "client": {
       "receiver": {
-        "txHash": "52b58e52c60df799656e9bf3d9a241434fd4f9630cca408dfe96154e0d60d250",
+        "txHash": "",
         "outputIndex": 0,
-        "scriptHash": "d276c806b1beb5e04c71356bec048e0bbd39c07e267961cb7325726f"
+        "scriptHash": ""
       },
       "pair": {
-        "txHash": "52b58e52c60df799656e9bf3d9a241434fd4f9630cca408dfe96154e0d60d250",
-        "outputIndex": 1,
-        "scriptHash": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561"
+        "txHash": "",
+        "outputIndex": 0,
+        "scriptHash": ""
       },
       "pairMint": {
-        "txHash": "52b58e52c60df799656e9bf3d9a241434fd4f9630cca408dfe96154e0d60d250",
-        "outputIndex": 2,
-        "scriptHash": "71d73275dfbbcb8fbb931245efab810ad4f6c8d1a13da6fe7cf6c561"
+        "txHash": "",
+        "outputIndex": 0,
+        "scriptHash": ""
       }
     }
   },
   "datum": {
-    "receiverCbor": "d8799f1a028942f0001a004c4b40ff"
+    "receiverCbor": "d8799f00001a004c4b40ff"
   },
   "wallet": {
     "source": "seed",
@@ -57,7 +57,7 @@
     "receiverValidatorHash": "d276c806b1beb5e04c71356bec048e0bbd39c07e267961cb7325726f",
     "receiverValidatorAddress": "addr1w8f8djqxkxlttczvwy6khmqy3c9m6wwq0cn8jcwtwvjhymce9mxgw",
     "receiverState": {
-      "balanceLovelace": "42550000",
+      "balanceLovelace": "0",
       "accruedToHookLovelace": "0",
       "minUtxoLovelace": "5000000"
     }
@@ -96,6 +96,16 @@
     {
       "step": "mainnet:receiver:withdraw",
       "submittedTxHash": "40b75a78e304a1544b33ae73974cd8c834835034b07b721359d58bec02819131",
+      "confirmed": true
+    },
+    {
+      "step": "mainnet:receiver:withdraw",
+      "submittedTxHash": "29f268be8068cacfc81d9a4b4f05b20d612884c72fb9c1645e14d17420f3f932",
+      "confirmed": true
+    },
+    {
+      "step": "reclaim-reference-script:client",
+      "submittedTxHash": "02d5f9582a9a6a7c695512ce1af301ba216223cd63d30450414d123aec4fd835",
       "confirmed": true
     }
   ]
