@@ -1,9 +1,0 @@
-
-> @diadata-org/dia-cardano-oracle-cli@0.1.0 cli
-> tsx src/index.ts receiver:withdraw --amount-lovelace 42550000 --protocol-state ./state/preview_run_20260606-082456/config-bootstrap.json --client-state ./state/preview_run_20260606-082456/clients/client-a.json
-
-[1G[0K[receiver:withdraw] Using amountLovelace=42550000 for receiver withdraw
-[receiver:withdraw] Loading client state from /home/manuelpadilla/sources/reposUbuntu/PROTOFIRE/DIA/dia-cardano-oracle/offchain/cli/state/preview_run_20260606-082456/clients/client-a.json
-[receiver:withdraw] Connecting to Preview and selecting the configured wallet
-Receiver balance is not sufficient for the requested withdrawal.
-[1G[0K⠙[1G[0K
