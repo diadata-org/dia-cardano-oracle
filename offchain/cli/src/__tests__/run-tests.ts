@@ -80,23 +80,33 @@ import { resolveClientUtxoRefs } from "../transactions/reclaim-reference-script.
 import { completeWithRetry } from "../core/tx-build.js";
 import { resolveRunStateDir, latestRunDir } from "../core/run-state.js";
 
-testCardanoWalletCreate();
-testEthereumWalletCreate();
-testCliConfigAllowsCardanoOnlyModeWithoutDiaSourceEnv();
-testIntentSigning();
-testBatchSnapshotRefresh();
-testCompatibleBatchRules();
-testBatchUpdatesSortByPairTokenName();
-testBatchUpdatesSortMatchesBytewiseCompare();
-testBatchUpdatesSortRejectsNonNormalizedTokenName();
-testPairApplyUpdateRedeemerHasNoFields();
-testProtocolStateInit();
-testProtocolInitAuthorizedKeysFromEnv();
-testClientStateInit();
-await testDepositFundReadsFloorFromConfigState();
-testDepositMergeSelectionFiltersAndCaps();
-testConsolidationUtxoSelection();
-await testRunStateResolution();
+// Verbose runner: each test logs [pass] <name> as it completes, and the final
+// line reports the count — so the captured output is real evidence, not just
+// "passed". `run` awaits, so sync and async test functions both work.
+let __passed = 0;
+async function run(name: string, fn: () => unknown): Promise<void> {
+  await fn();
+  __passed += 1;
+  console.log(`[pass] ${name}`);
+}
+
+await run("testCardanoWalletCreate", testCardanoWalletCreate);
+await run("testEthereumWalletCreate", testEthereumWalletCreate);
+await run("testCliConfigAllowsCardanoOnlyModeWithoutDiaSourceEnv", testCliConfigAllowsCardanoOnlyModeWithoutDiaSourceEnv);
+await run("testIntentSigning", testIntentSigning);
+await run("testBatchSnapshotRefresh", testBatchSnapshotRefresh);
+await run("testCompatibleBatchRules", testCompatibleBatchRules);
+await run("testBatchUpdatesSortByPairTokenName", testBatchUpdatesSortByPairTokenName);
+await run("testBatchUpdatesSortMatchesBytewiseCompare", testBatchUpdatesSortMatchesBytewiseCompare);
+await run("testBatchUpdatesSortRejectsNonNormalizedTokenName", testBatchUpdatesSortRejectsNonNormalizedTokenName);
+await run("testPairApplyUpdateRedeemerHasNoFields", testPairApplyUpdateRedeemerHasNoFields);
+await run("testProtocolStateInit", testProtocolStateInit);
+await run("testProtocolInitAuthorizedKeysFromEnv", testProtocolInitAuthorizedKeysFromEnv);
+await run("testClientStateInit", testClientStateInit);
+await run("testDepositFundReadsFloorFromConfigState", testDepositFundReadsFloorFromConfigState);
+await run("testDepositMergeSelectionFiltersAndCaps", testDepositMergeSelectionFiltersAndCaps);
+await run("testConsolidationUtxoSelection", testConsolidationUtxoSelection);
+await run("testRunStateResolution", testRunStateResolution);
 
 // --- Datum encoder/decoder regression tests ---------------------------------
 // These exist as a regression net for three real bugs found and fixed in the
@@ -108,49 +118,49 @@ await testRunStateResolution();
 //      ConfigDatum entirely.
 // They are golden-style: any reordering or missing field will trip them.
 
-testPrimitivesPureHelpers();
-testReceiverDatumRoundTrip();
-testReceiverDatumExactlyThreeIntegerFields();
-testPaymentHookDatumRoundTrip();
-testPaymentHookDatumWithdrawAddressRoundTrip();
-testConfigDatumRoundTrip();
-testConfigDatumFieldOrderAndArity();
-testPairDatumRoundTrip();
-testAddressToPlutusDataKeyAndStake();
+await run("testPrimitivesPureHelpers", testPrimitivesPureHelpers);
+await run("testReceiverDatumRoundTrip", testReceiverDatumRoundTrip);
+await run("testReceiverDatumExactlyThreeIntegerFields", testReceiverDatumExactlyThreeIntegerFields);
+await run("testPaymentHookDatumRoundTrip", testPaymentHookDatumRoundTrip);
+await run("testPaymentHookDatumWithdrawAddressRoundTrip", testPaymentHookDatumWithdrawAddressRoundTrip);
+await run("testConfigDatumRoundTrip", testConfigDatumRoundTrip);
+await run("testConfigDatumFieldOrderAndArity", testConfigDatumFieldOrderAndArity);
+await run("testPairDatumRoundTrip", testPairDatumRoundTrip);
+await run("testAddressToPlutusDataKeyAndStake", testAddressToPlutusDataKeyAndStake);
 
 // --- Pure invariant tests (withdraw, settle, batch guards) -----------------
-testReceiverWithdrawDoesNotTouchAccrued();
-testSettleDeltaInvariant();
-testMultiClientSettleSumAccrued();
-testBatchRejectsDuplicatePair();
-testBatchRejectsForeignReceiver();
-testSettleManifestPreChecks();
-testHookCoordinatorConsistencyPure();
-testReferenceScriptMissingHelper();
-testClientReclaimUtxoRefsIncludesDeposit();
-testClientReclaimUtxoRefsSkipsDepositWhenAbsent();
-testWithdrawAmountPreflightHelpers();
-testReceiverTransactionPreflightGuards();
-testConfigUpdateAndInitArtifactPreflight();
-testBootstrapNftPayPreflight();
-testSettleAndPaymentHookPreflight();
-testOracleUpdatePreflightPureGuards();
+await run("testReceiverWithdrawDoesNotTouchAccrued", testReceiverWithdrawDoesNotTouchAccrued);
+await run("testSettleDeltaInvariant", testSettleDeltaInvariant);
+await run("testMultiClientSettleSumAccrued", testMultiClientSettleSumAccrued);
+await run("testBatchRejectsDuplicatePair", testBatchRejectsDuplicatePair);
+await run("testBatchRejectsForeignReceiver", testBatchRejectsForeignReceiver);
+await run("testSettleManifestPreChecks", testSettleManifestPreChecks);
+await run("testHookCoordinatorConsistencyPure", testHookCoordinatorConsistencyPure);
+await run("testReferenceScriptMissingHelper", testReferenceScriptMissingHelper);
+await run("testClientReclaimUtxoRefsIncludesDeposit", testClientReclaimUtxoRefsIncludesDeposit);
+await run("testClientReclaimUtxoRefsSkipsDepositWhenAbsent", testClientReclaimUtxoRefsSkipsDepositWhenAbsent);
+await run("testWithdrawAmountPreflightHelpers", testWithdrawAmountPreflightHelpers);
+await run("testReceiverTransactionPreflightGuards", testReceiverTransactionPreflightGuards);
+await run("testConfigUpdateAndInitArtifactPreflight", testConfigUpdateAndInitArtifactPreflight);
+await run("testBootstrapNftPayPreflight", testBootstrapNftPayPreflight);
+await run("testSettleAndPaymentHookPreflight", testSettleAndPaymentHookPreflight);
+await run("testOracleUpdatePreflightPureGuards", testOracleUpdatePreflightPureGuards);
 
 // --- completeWithRetry rebuilds a fresh tx per attempt ----------------------
 // lucid's TxBuilder is stateful and `.complete()` is NOT idempotent: retrying
 // the SAME builder duplicates outputs. completeWithRetry must REBUILD via the
 // factory on each attempt. These guard both the retry path and the
 // rethrow-real-errors path.
-await testCompleteWithRetryRebuildsFreshBuilderOnRetry();
-await testCompleteWithRetryRethrowsRealErrorImmediately();
+await run("testCompleteWithRetryRebuildsFreshBuilderOnRetry", testCompleteWithRetryRebuildsFreshBuilderOnRetry);
+await run("testCompleteWithRetryRethrowsRealErrorImmediately", testCompleteWithRetryRethrowsRealErrorImmediately);
 
 // --- Wallet settlement wait (provider lag / stale-UTxO regression) ----------
-await testWalletSettlementWaitsForSpentInputs();
+await run("testWalletSettlementWaitsForSpentInputs", testWalletSettlementWaitsForSpentInputs);
 
 // --- Lucid emulator harness (smoke: pay + reference script genesis) ---------
-await runLucidEmulatorHarnessSmokeTests();
+await run("runLucidEmulatorHarnessSmokeTests", runLucidEmulatorHarnessSmokeTests);
 
-console.log("CLI tests passed");
+console.log(`CLI tests passed (${__passed} tests)`);
 
 // Regression for the stale-UTxO / provider-lag bug: waitForWalletSettlement
 // must derive the spent wallet inputs FROM THE TX and block until the
