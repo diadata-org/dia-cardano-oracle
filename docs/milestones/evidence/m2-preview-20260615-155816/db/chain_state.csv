@@ -1,0 +1,2 @@
+id,chain_id,chain_name,contract_id,last_processed_block,last_scan_block,is_healthy,error_count,last_error,last_health_check_ms,updated_at_ms
+1,10050,Preview,intent-registry-testnet,12888615,12888615,1,0,,,1781539096572

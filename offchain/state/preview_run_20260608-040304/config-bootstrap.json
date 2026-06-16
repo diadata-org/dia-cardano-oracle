@@ -61,9 +61,9 @@
   },
   "paymentHookState": {
     "withdrawAddress": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
-    "accruedFeesLovelace": "126350000",
-    "lifetimeCollectedLovelace": "1879200000",
-    "lifetimeWithdrawnLovelace": "1752850000",
+    "accruedFeesLovelace": "63350000",
+    "lifetimeCollectedLovelace": "2305950000",
+    "lifetimeWithdrawnLovelace": "2242600000",
     "minUtxoLovelace": "5000000"
   },
   "compiledScripts": {
@@ -107,7 +107,7 @@
   },
   "datum": {
     "configCbor": "d8799f9f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dff9f582102d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531582103aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807582103c7d448ea95104a628945f43745f177f1e9895c6d4c8e43614d7b1c0395469b2dffd8799f4a444941204f7261636c6543312e3019274254f8c614a483a0427a13512f52ac72a576678be317ff1a000927c01a0003d090d8799fd8799f581c70bf934df3daefb7c19d20d06641528765bd02b761bb1e818f633bf6504449415f5041594d454e545f484f4f4bffffd8799fd87a9f581c583b9e5278b1bf6af1ab6da98f2ab123e3a402526f5087fee46970eeffff19012c1a004c4b40ff",
-    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a0787f2b01a700251001a687a5e501a004c4b40ff"
+    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a03c6a4f01a897201301a85ab5c401a004c4b40ff"
   },
   "transactions": [
     {
@@ -188,6 +188,76 @@
     {
       "step": "preview:settle",
       "submittedTxHash": "b2eba5e8e49e8ac181dc3112057e2ddeecebb36012366d212766220b965a718d",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "4b7ff040b5cea8db7aa773e9a484404e2990030042488f9c663dec947407e9da",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "44defdece46fd235be5ecf45bb5c0ca7c636585243464ddb4f06a1643cc13bdb",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "76a1540ef26619fe9afb25fa16d13021000f9f2319a0a109bc6065cb8c358150",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "e93bc3139bea7753b5c381c301e4d3b5f58518e750577c85a06ef241d2830db4",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "d20b42ecd73139b218cf62fb4292bbdc7e3fd4c7d7f2d368236578af15cbdaa2",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "c04567bd5ca1f8ce20315c518e3a2092fc47ec841ca3939d05bcaf39d113b4bd",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "c26c962f03147a22487ab7a56cbf6a9be74af707e7547fe47657bba9c5af4591",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "cedf295f9690ad61a17db2b085ddcd0f3510852e508ca1e320a18268dd271c5c",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "1e689ba2f87d3d5a6b1d341136b9ae415708ddc4244b06f52463de79d97835e5",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "152ffd593ce06d873c8935fac403375b168ea349d727a1de9ba53d2dbaa5c294",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "9d8e5c9e249ca1f0116bd69ab4881c9ccf68ed90e541e7de748117ded02b42d6",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "6a20f13637b936a054eb1adcbed7cac277d76c7914d44dc25bc7de7900f3b107",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "3c0e1bfad77394de218c6537df98bc8f6d295bc2a1fc7dc39b95a25810ddee65",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "f69f40853e521c083282a5bfc6bccc2e002dba233124822131db2ae99c693283",
       "confirmed": true
     }
   ]
