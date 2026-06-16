@@ -1,15 +1,9 @@
-<!--
-  PLACEHOLDERS TO FILL BEFORE SUBMISSION (search for ⟨):
-    ⟨SUBMISSION-COMMIT⟩ — the tag/commit hash this PoA is pinned to
-  Everything else is filled from the committed evidence packs + the QA video.
--->
-
 # Milestone 2 — Proof of Achievement (Catalyst)
 
 **Project:** DIA Oracles on Cardano
 **Milestone:** 2 — Implement Data Feeder and Documentation
 **Public repository:** <https://github.com/diadata-org/dia-cardano-oracle>
-**Submission commit:** `⟨SUBMISSION-COMMIT⟩`
+**Submission commit:** `ab38495af46abd18712f0aa73b0bedf5306d2919`
 
 Primary evidence:
 
@@ -206,7 +200,7 @@ deployment ([`evidence/m2-preview-20260608-040304/`](evidence/m2-preview-2026060
 
 ```bash
 git clone https://github.com/diadata-org/dia-cardano-oracle.git
-cd dia-cardano-oracle && git checkout ⟨SUBMISSION-COMMIT⟩
+cd dia-cardano-oracle && git checkout ab38495af46abd18712f0aa73b0bedf5306d2919
 
 # Tests
 ( cd offchain/feeder && npm ci && npm test )
