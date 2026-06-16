@@ -1,0 +1,20 @@
+{
+  "generatedAtMs": 1781614801069,
+  "generatedAt": "2026-06-16T13:00:01.069Z",
+  "processedEventsByStatus": {
+    "processed": 37
+  },
+  "transactionsByStatus": {
+    "confirmed": 46,
+    "failed": 38
+  },
+  "totalSymbols": 10,
+  "totalPairsUpdated": 10,
+  "totalFeePaidLovelace": "0",
+  "timeWindow": {
+    "firstTxMs": 1781610082276,
+    "lastTxMs": 1781614695315,
+    "firstTxIso": "2026-06-16T11:41:22.276Z",
+    "lastTxIso": "2026-06-16T12:58:15.315Z"
+  }
+}
