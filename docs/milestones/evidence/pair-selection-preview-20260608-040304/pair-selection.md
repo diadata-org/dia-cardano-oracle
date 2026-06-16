@@ -3,7 +3,7 @@
 > **Rationale snapshot — not a config source.** This records which DIA price pairs the
 > feeder publishes to Cardano, and why, as of 2026-06-05. The **authoritative source of
 > truth is the router config**
-> [`offchain/feeder/config/routers/client-a.preview.yaml`](../../../../offchain/feeder/config/routers/client-a.preview.yaml)
+> [`offchain/feeder/config/routers/preview/client-test-01-router-default.yaml`](../../../../offchain/feeder/config/routers/preview/client-test-01-router-default.yaml)
 > (its `triggers.conditions` symbol list). If that file and this snapshot ever disagree,
 > the YAML wins — update this note to match.
 

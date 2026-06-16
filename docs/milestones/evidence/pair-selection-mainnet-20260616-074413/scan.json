@@ -1,0 +1,160 @@
+{
+  "network": "mainnet",
+  "chainId": 1050,
+  "registry": "0x5612599CF48032d7428399d5Fcb99eDcc75c06A7",
+  "rpc": "https://rpc.diadata.org",
+  "windowBlocks": 60000,
+  "fromBlock": "29065791",
+  "headBlock": "29125791",
+  "blockTimeSec": 0.5862666666666667,
+  "totalIntents": 10310,
+  "symbols": [
+    {
+      "symbol": "usdValue:spSEI",
+      "intents": 1174,
+      "avgIntervalSec": 29.97157135549872,
+      "firstBlock": "29065814",
+      "lastBlock": "29125781"
+    },
+    {
+      "symbol": "numerator:spSEI",
+      "intents": 1174,
+      "avgIntervalSec": 29.97157135549872,
+      "firstBlock": "29065814",
+      "lastBlock": "29125781"
+    },
+    {
+      "symbol": "denominator:spSEI",
+      "intents": 1174,
+      "avgIntervalSec": 29.97157135549872,
+      "firstBlock": "29065814",
+      "lastBlock": "29125781"
+    },
+    {
+      "symbol": "denominator:hemiBTC",
+      "intents": 1174,
+      "avgIntervalSec": 29.97157135549872,
+      "firstBlock": "29065814",
+      "lastBlock": "29125781"
+    },
+    {
+      "symbol": "numerator:hemiBTC",
+      "intents": 1174,
+      "avgIntervalSec": 29.97157135549872,
+      "firstBlock": "29065814",
+      "lastBlock": "29125781"
+    },
+    {
+      "symbol": "usdValue:hemiBTC",
+      "intents": 1174,
+      "avgIntervalSec": 29.97157135549872,
+      "firstBlock": "29065814",
+      "lastBlock": "29125781"
+    },
+    {
+      "symbol": "fairValue:hemiBTC",
+      "intents": 1174,
+      "avgIntervalSec": 29.97157135549872,
+      "firstBlock": "29065814",
+      "lastBlock": "29125781"
+    },
+    {
+      "symbol": "fairValue:spSEI",
+      "intents": 1173,
+      "avgIntervalSec": 29.997144368600683,
+      "firstBlock": "29065814",
+      "lastBlock": "29125781"
+    },
+    {
+      "symbol": "ARS/USDT",
+      "intents": 587,
+      "avgIntervalSec": 59.88623959044369,
+      "firstBlock": "29065841",
+      "lastBlock": "29125700"
+    },
+    {
+      "symbol": "SPYM",
+      "intents": 50,
+      "avgIntervalSec": 712.948125170068,
+      "firstBlock": "29065801",
+      "lastBlock": "29125389"
+    },
+    {
+      "symbol": "CRCL",
+      "intents": 29,
+      "avgIntervalSec": 1233.7144476190476,
+      "firstBlock": "29066829",
+      "lastBlock": "29125751"
+    },
+    {
+      "symbol": "TSLA",
+      "intents": 28,
+      "avgIntervalSec": 1293.5865432098767,
+      "firstBlock": "29065794",
+      "lastBlock": "29125369"
+    },
+    {
+      "symbol": "NVDA",
+      "intents": 26,
+      "avgIntervalSec": 1328.0347040000001,
+      "firstBlock": "29068270",
+      "lastBlock": "29124901"
+    },
+    {
+      "symbol": "IAU",
+      "intents": 25,
+      "avgIntervalSec": 1439.1625277777778,
+      "firstBlock": "29065799",
+      "lastBlock": "29124714"
+    },
+    {
+      "symbol": "PPLT",
+      "intents": 25,
+      "avgIntervalSec": 1439.2846666666667,
+      "firstBlock": "29065803",
+      "lastBlock": "29124723"
+    },
+    {
+      "symbol": "IBHG",
+      "intents": 25,
+      "avgIntervalSec": 1439.4068055555556,
+      "firstBlock": "29065807",
+      "lastBlock": "29124732"
+    },
+    {
+      "symbol": "MSTR",
+      "intents": 25,
+      "avgIntervalSec": 1429.831116666667,
+      "firstBlock": "29066177",
+      "lastBlock": "29124710"
+    },
+    {
+      "symbol": "AMZN",
+      "intents": 25,
+      "avgIntervalSec": 1428.8295777777778,
+      "firstBlock": "29066210",
+      "lastBlock": "29124702"
+    },
+    {
+      "symbol": "BMNR",
+      "intents": 25,
+      "avgIntervalSec": 1421.1104000000003,
+      "firstBlock": "29066553",
+      "lastBlock": "29124729"
+    },
+    {
+      "symbol": "SIVR",
+      "intents": 25,
+      "avgIntervalSec": 1397.0246111111112,
+      "firstBlock": "29067531",
+      "lastBlock": "29124721"
+    },
+    {
+      "symbol": "COIN",
+      "intents": 24,
+      "avgIntervalSec": 1435.2062898550728,
+      "firstBlock": "29068403",
+      "lastBlock": "29124708"
+    }
+  ]
+}
