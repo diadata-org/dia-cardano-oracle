@@ -1,0 +1,20 @@
+{
+  "validConfigSigners": [
+    "831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3dd"
+  ],
+  "authorizedDiaPublicKeys": [
+    "02d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531",
+    "02fa12f4143fca6652fa5a365fd1ada14495aab0dd3c1e568755e2230b38a4706d",
+    "02571284d2657052e68dc506c879f710d997a9801a5502339ff22f26bf85b958bd",
+    "03819af891aef2535d268e9eb6b7316665c323e247ad14576fd8fbbcabff104b05",
+    "02ec5fc3316818a55087c315f37ac83e86649d9a9222e28b76e75bd98cfbfd439c"
+  ],
+  "domain": {
+    "name": "DIA Oracle",
+    "version": "1.0",
+    "sourceChainId": "1050",
+    "verifyingContract": "5612599cf48032d7428399d5fcb99edcc75c06a7"
+  },
+  "baseFeeLovelace": "600000",
+  "perPairFeeLovelace": "250000"
+}
