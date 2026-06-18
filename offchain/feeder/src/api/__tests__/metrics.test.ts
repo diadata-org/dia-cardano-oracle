@@ -101,9 +101,9 @@ describe("createMetrics", () => {
     metrics.workerPoolSize.set({ pool_type: "event" }, 4);
     metrics.workerQueueSize.set({ pool_type: "event" }, 0);
     metrics.workerTasksCompleted.inc({ pool_type: "update" });
-    metrics.workerTasksFailed.inc();
+    metrics.workerTasksFailed.inc({ pool_type: "update" });
     metrics.workerTasksDropped.inc({ pool_type: "event" });
-    metrics.workerTaskRetries.inc();
+    metrics.workerTaskRetries.inc({ pool_type: "update" });
     // Spectra lifecycle aliases
     metrics.bridgeIntentsScanned.inc({ symbol: "BTC/USD", scanner_type: "http" });
     metrics.bridgeIntentsProcessed.inc({ symbol: "BTC/USD", customer_id: "acme" });

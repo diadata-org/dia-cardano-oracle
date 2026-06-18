@@ -630,7 +630,8 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     ),
     workerTasksFailed: counter(
       "worker_tasks_failed_total",
-      "Total tasks that failed or timed out across all worker pools",
+      "Tasks that threw or timed out, by worker pool (`update` = submission pool).",
+      ["pool_type"],
     ),
     workerTasksDropped: counter(
       "worker_tasks_dropped_total",
@@ -639,7 +640,8 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     ),
     workerTaskRetries: counter(
       "worker_task_retries_total",
-      "Total task-level retries attempted across all worker pools",
+      "Submit retries from the queue's retry loop, by worker pool (`update` = submission pool).",
+      ["pool_type"],
     ),
     bridgeIntentsScanned: counter(
       "intents_scanned_lifecycle_total",
