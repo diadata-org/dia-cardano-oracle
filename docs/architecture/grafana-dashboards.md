@@ -315,6 +315,8 @@ higher = more amortized fees per pair.
 **Intents superseded (5m, by reason)** · `timeseries` · legend `{{reason}}`
 `sum by (reason) (increase(dia_bridge_intents_superseded_total{…}[5m]))`
 
+![Intents superseded (5m, by reason)](img/overview-panel-21.png)
+
 - **What it shows** — intents the feeder **declined to submit** because a newer one already won
   on-chain (`NonMonotonicNonce`) — no tx, no fee. Correct no-ops, kept out of the failure counters.
 - **How to read it** — **high is normal under fast price movement** (newer intents supersede older
@@ -554,12 +556,17 @@ the next batch in the coalescer while it is *submitting* the current one:
 **Tx counts per client (confirmed/failed, selected range)** · `stat`
 `sum by (client_id, outcome) (increase(dia_bridge_transactions_total{…}[$__range]))`
 
+![Tx counts per client](img/tx-panel-341.png)
+
 - **What it shows** — the **real integer count** of transactions per client and outcome over the
   time-picker range. Not an average — the actual total in the window.
 - **How to read it** — one tile per `client · outcome`; confirmed should dominate.
 - **When to worry** — a non-trivial `failed` count for a client.
 
 **Submission state — now** · `stat` (text) · **Coalescer state — now** · `stat` (text)
+
+![Submission state — now](img/tx-panel-345.png)
+![Coalescer state — now](img/tx-panel-347.png)
 
 - **What they show** — at a glance, what each client is doing **right now**: the submit pipeline
   phase (idle/building/submitting/awaiting) and the coalescer phase (idle/accumulating/in-flight).
@@ -568,12 +575,18 @@ the next batch in the coalescer while it is *submitting* the current one:
 
 **Submission state per client (history)** / **Coalescer state per client (history)** · `state-timeline`
 
+![Submission state per client (history)](img/tx-panel-342.png)
+![Coalescer state per client (history)](img/tx-panel-346.png)
+
 - **What they show** — the same two states **over time**, so you can see how long each phase lasted.
 - **How to read them** — the submit timeline is a clean idle→building→submitting→awaiting→idle
   cycle per batch; the coalescer timeline shows accumulate→in-flight→idle, on its own rhythm.
 
 **Coalescer buffered per client** (`timeseries`) + **Intents in coalescer queue — now** (`stat`)
 `sum by (client_id) (dia_bridge_coalescer_buffered{…})`
+
+![Intents in coalescer queue — now](img/tx-panel-348.png)
+![Coalescer buffered per client](img/tx-panel-343.png)
 
 - **What they show** — how many **intents are queued** in the coalescer for each client (the current
   number + the trend), waiting for the flush that batches them into one transaction.
@@ -582,6 +595,9 @@ the next batch in the coalescer while it is *submitting* the current one:
 
 **Submit queue pending per client** (`timeseries`) + **Tx in submit queue — now** (`stat`)
 `sum by (client_id) (dia_bridge_submit_queue_pending{…})`
+
+![Tx in submit queue — now](img/tx-panel-349.png)
+![Submit queue pending per client](img/tx-panel-344.png)
 
 - **What they show** — how many **transactions are queued** in each client's serial submit queue.
 - **How to read it** — **usually 0**: the serial queue exists to stop two txs spending the same
