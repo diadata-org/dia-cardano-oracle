@@ -123,12 +123,16 @@ what changes:
 
 ## 4. Dashboard 1 — Overview (`dia-cardano-feeder`)
 
+![DIA Cardano Oracle Feeder — Overview — full dashboard](img/overview-full.png)
+
 The operational home base: liveness, money, latency, health, accuracy and billing. Each panel:
 **what · how to read · when to worry.**
 
 ### Row — Oracle Feed Liveness
 
 **Confirmed oracle updates — all-time total (per pair)** · `stat`
+
+![Confirmed oracle updates — all-time total (per pair)](img/overview-panel-11.png)
 `sum by (symbol, client_id) (dia_bridge_transactions_confirmed_total{…})`
 
 - **What it shows** — one number per feed: how many oracle updates have ever reached on-chain
@@ -140,6 +144,8 @@ The operational home base: liveness, money, latency, health, accuracy and billin
   a feed you expect active. Cross-check *Pair staleness*.
 
 **Price data age p95 — 1 h window (per routed pair)** · `stat`
+
+![Price data age p95 — 1 h window (per routed pair)](img/overview-panel-12.png)
 `histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_age_seconds_bucket{…}[1h])))`
 
 - **What it shows** — in seconds, the 95th-percentile **age of the DIA source price** when the
@@ -154,6 +160,8 @@ The operational home base: liveness, money, latency, health, accuracy and billin
 ### Row 1 — Balances & Staleness
 
 **Pair staleness (per symbol)** · `stat` · legend `{{symbol}} · {{client_id}}`
+
+![Pair staleness (per symbol)](img/overview-panel-1.png)
 `time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds{…}`
 
 - **What it shows** — for each feed, the wall-clock age of the value **currently on Cardano**
@@ -165,6 +173,8 @@ The operational home base: liveness, money, latency, health, accuracy and billin
   Receiver or Admin balance (next panels), not the pipeline.
 
 **Receiver balance — ADA (per client)** · `gauge` · legend `{{client_id}}`
+
+![Receiver balance — ADA (per client)](img/overview-panel-2.png)
 `dia_bridge_cardano_receiver_balance_lovelace{…} / 1000000`
 
 - **What it shows** — spendable ADA in each client's Receiver UTxO. The Receiver pays the
@@ -175,6 +185,8 @@ The operational home base: liveness, money, latency, health, accuracy and billin
   to that client's deposit address (folded in automatically) or `receiver:top-up`.
 
 **Admin wallet · PaymentHook · Receiver accrued — ADA** · `stat` (four series)
+
+![Admin wallet • PaymentHook • Receiver accrued — ADA](img/overview-panel-3.png)
 `…admin_wallet_lovelace/1e6`, `…payment_hook_accrued_lovelace/1e6`,
 `sum(…receiver_accrued_lovelace)/1e6`, `sum by (client_id) (…receiver_accrued_lovelace)/1e6`
 
@@ -189,6 +201,8 @@ The operational home base: liveness, money, latency, health, accuracy and billin
   → run `settle`. PaymentHook above **50 ADA** (`PaymentHookWithdrawReady`) → DIA withdraws.
 
 **Admin wallet — largest UTxO — ADA (collateral floor)** · `stat`
+
+![Admin wallet — largest UTxO — ADA (collateral floor)](img/overview-panel-201.png)
 `dia_bridge_cardano_admin_wallet_max_utxo_lovelace / 1000000`
 
 - **What it shows** — the **largest single pure-ADA UTxO** in the admin/signer wallet — not the
@@ -201,6 +215,8 @@ The operational home base: liveness, money, latency, health, accuracy and billin
   `make cli CMD="wallet:consolidate"`.
 
 **Deposit pending — ADA (per client)** · `gauge` · legend `{{client_id}}`
+
+![Deposit pending — ADA (per client)](img/overview-panel-15.png)
 `dia_bridge_cardano_deposit_pending_lovelace{…} / 1000000`
 
 - **What it shows** — side-deposits a client has sent to its deposit address that the feeder has
@@ -214,6 +230,8 @@ The operational home base: liveness, money, latency, health, accuracy and billin
 ### Row 2 — Symbol Throughput & Latency
 
 **Symbol-update latency (p50/p95/p99)** · `timeseries` · seconds
+
+![Symbol-update latency (p50/p95/p99)](img/overview-panel-4.png)
 `histogram_quantile(0.50/0.95/0.99, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{…}[5m])))`
 
 - **What it shows** — end-to-end pipeline latency **per symbol update** at the median, 95th and
@@ -224,6 +242,8 @@ The operational home base: liveness, money, latency, health, accuracy and billin
   getting slow — often Cardano settlement or a congested lane).
 
 **Symbol updates confirmed (5m)** · `timeseries` · legend `{{symbol}} · {{client_id}}`
+
+![Symbol updates confirmed (5m)](img/overview-panel-5.png)
 `sum by (symbol, client_id) (increase(dia_bridge_transactions_confirmed_total{…}[5m]))`
 
 - **What it shows** — a rolling 5-minute **count** (not a rate) of confirmed updates per feed.
@@ -233,6 +253,8 @@ The operational home base: liveness, money, latency, health, accuracy and billin
   filtered* keeps rising for it.
 
 **Symbol-update failures (5m, by error code)** · `timeseries` · legend `{{error_code}}`
+
+![Symbol-update failures (5m, by error code)](img/overview-panel-6.png)
 `sum by (error_code) (increase(dia_bridge_transactions_failed_total{…}[5m]))`
 
 - **What it shows** — 5-minute count of **real** failed updates, grouped by error code. Superseded
@@ -257,6 +279,8 @@ higher = more amortized fees per pair.
 
 **Reorg counter** · `stat` — `sum(increase(dia_bridge_transactions_reorg_total{…}[1h]))`
 
+![Reorg counter](img/overview-panel-7.png)
+
 - **What it shows** — confirmed txs dropped by a Cardano reorg in the last hour.
 - **How to read it** — should sit at **0**; depth-1 reorgs are rare but possible — the feeder
   detects and re-submits.
@@ -264,12 +288,16 @@ higher = more amortized fees per pair.
 
 **Scanner block lag** · `timeseries` · global — `dia_bridge_scanner_block_lag`
 
+![Scanner block lag](img/overview-panel-8.png)
+
 - **What it shows** — blocks behind the source-chain tip the DIA-side scanner currently is. One
   scanner; filters don't change it.
 - **How to read it** — a small stable lag is normal (it stays a few confirmations behind by design).
 - **When to worry** — a **steadily rising** lag → the scanner is falling behind and updates will lag.
 
 **Intents filtered (5m, by reason)** · `timeseries` · legend `{{reason}}`
+
+![Intents filtered (5m, by reason)](img/overview-panel-9.png)
 `sum by (reason) (increase(dia_bridge_intents_filtered_total{…}[5m]))`
 
 - **What it shows** — 5-minute count of intents the feeder **deliberately suppressed** before
@@ -283,6 +311,8 @@ higher = more amortized fees per pair.
 ### Row 4 — Price Quality & Anomaly Detection
 
 **Price deviation p95 — 1 h window (per pair)** · `stat` · legend `{{symbol}} · {{router_id}}`
+
+![Price deviation p95 — 1 h window (per pair)](img/overview-panel-13.png)
 `histogram_quantile(0.95, sum by (le, symbol, router_id) (rate(dia_bridge_price_deviation_percent_bucket{…}[1h])))`
 
 - **What it shows** — per feed, the 95th-percentile **% move** between consecutive prices measured
@@ -294,6 +324,8 @@ higher = more amortized fees per pair.
   possible misreport.
 
 **Price deviation distribution (heatmap)** · `heatmap`
+
+![Price deviation distribution (heatmap)](img/overview-panel-10.png)
 `sum by (le, symbol, router_id) (rate(dia_bridge_price_deviation_percent_bucket{…}[5m]))`
 
 - **What it shows** — the full **distribution** of price-deviation percentages over time: y-axis =
@@ -303,6 +335,8 @@ higher = more amortized fees per pair.
   → prices moving more than usual (market event or source anomaly); cross-check the p95 stat.
 
 **Feed sanity verdict (per pair)** · `stat` · legend `{{symbol}} · {{client_id}}`
+
+![Feed sanity verdict (per pair)](img/overview-panel-20.png)
 `max by (symbol, client_id) (dia_bridge_feed_sanity_status{…})`
 
 - **What it shows** — the periodic feed-sanity check's verdict: the **live on-chain value vs the
@@ -317,6 +351,8 @@ higher = more amortized fees per pair.
 ### Row 5 — Billing (per client / customer)
 
 **Tx fee p50 — lovelace (per customer)** · `timeseries` · legend `{{customer_id}}`
+
+![Tx fee p50 — lovelace (per customer)](img/overview-panel-14.png)
 `histogram_quantile(0.50, sum by (le, customer_id) (rate(dia_bridge_transaction_fee_lovelace_bucket{…}[5m])))`
 
 - **What it shows** — the **median Cardano network fee** (lovelace; 1 ADA = 1,000,000) paid per
@@ -327,6 +363,8 @@ higher = more amortized fees per pair.
   shrinking so each pair carries more fixed cost).
 
 **Tx involving router (5m, by router & outcome)** · `timeseries` · legend `{{router_id}} · {{outcome}}`
+
+![Tx involving router (5m, by router & outcome)](img/overview-panel-16.png)
 `sum by (router_id, outcome) (increase(dia_bridge_transaction_router_membership_total{…}[5m]))`
 
 - **What it shows** — which **routers** contributed at least one member to a transaction, split
@@ -338,6 +376,8 @@ higher = more amortized fees per pair.
 ### Row 6 — Provider Health
 
 **Cardano provider health — primary vs secondary (1 = up)** · `stat` · legend `{{component}} ({{role}})`
+
+![Cardano provider health — primary vs secondary (1 = up)](img/overview-panel-203.png)
 `dia_bridge_component_health{component=~"blockfrost|koios", …}`
 
 - **What it shows** — the health of the **two Cardano API providers**, by role. **PRIMARY** is the
@@ -353,6 +393,8 @@ higher = more amortized fees per pair.
 
 ## 5. Dashboard 2 — Transactions (`dia-cardano-feeder-tx`)
 
+![Transactions dashboard — full dashboard](img/tx-full.png)
+
 Everything here is counted **per transaction** (a batch of N pairs is ONE tx). Filtered by
 Customer / Client (and Symbol on the membership panel).
 
@@ -361,6 +403,8 @@ Customer / Client (and Symbol on the membership panel).
 Decomposes the end-to-end transaction time so you can tell **where** time is spent.
 
 **Stage 1 — processing → submission (p50/p95/p99)** · `timeseries` · seconds
+
+![Stage 1 — processing → submission](img/tx-panel-301.png)
 `histogram_quantile(…, rate(dia_bridge_tx_processing_to_submission_seconds_bucket{…}[5m]))`
 
 - **What it shows** — time to **build, queue and sign** a tx before broadcast — the feeder's own
@@ -369,6 +413,8 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 - **When to worry** — a rising p95/p99 → a busy lane or slow build/UTxO-fetch inside the feeder.
 
 **Stage 2 — submission → confirmation (p50/p95/p99)** · `timeseries` · seconds
+
+![Stage 2 — submission → confirmation](img/tx-panel-302.png)
 `…tx_submission_to_confirmation_seconds_bucket…`
 
 - **What it shows** — **pure Cardano settlement**: broadcast → on-chain confirmation (at
@@ -377,6 +423,8 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 - **When to worry** — sustained increase = the network is slow to confirm or the provider lags.
 
 **End-to-end — processing → confirmation (p50/p95/p99)** · `timeseries` · seconds
+
+![End-to-end — processing → confirmation](img/tx-panel-303.png)
 `…tx_end_to_end_seconds_bucket…`
 
 - **What it shows** — Stage 1 + Stage 2 combined: total per-transaction latency.
@@ -388,6 +436,8 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 ### Row T2 — Transaction throughput & outcome
 
 **Tx confirmed vs failed (5m)** · `timeseries` · legend `{{outcome}}`
+
+![Tx confirmed vs failed (5m)](img/tx-panel-311.png)
 `sum by (outcome) (increase(dia_bridge_transactions_total{…}[5m]))`
 
 - **What it shows** — transactions per 5 min by outcome, counted once per tx. Condemned no-ops
@@ -396,6 +446,8 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 - **When to worry** — any sustained failed line; pair with the success-ratio stat.
 
 **Tx success ratio (5m)** · `stat` · percent
+
+![Tx success ratio (5m)](img/tx-panel-312.png)
 `100 * confirmed / total over dia_bridge_transactions_total[5m]`
 
 - **What it shows** — confirmed as a % of all real attempts (confirmed + failed); superseded
@@ -406,6 +458,8 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
   (failures panel + `make logs`).
 
 **Tx by client (5m)** · `timeseries` · legend `{{client_id}}`
+
+![Tx by client (5m)](img/tx-panel-313.png)
 `sum by (client_id) (increase(dia_bridge_transactions_total{…}[5m]))`
 
 - **What it shows** — transactions per 5 min grouped by client (receiver identity).
@@ -415,6 +469,8 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 ### Row T3 — Batch size & pair membership
 
 **Pairs per tx (p50/p95/p99)** · `timeseries`
+
+![Pairs per tx (p50/p95/p99)](img/tx-panel-321.png)
 `histogram_quantile(…, rate(dia_bridge_transaction_pairs_bucket{…}[5m]))`
 
 - **What it shows** — the batch-size distribution: pairs per tx at median, 95th, 99th.
@@ -423,6 +479,8 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 - **When to worry** — batch size collapsing toward 1 when you expect coalescing → per-pair fees rise.
 
 **Batch size distribution (heatmap)** · `heatmap`
+
+![Batch size distribution (heatmap)](img/tx-panel-322.png)
 `sum by (le) (rate(dia_bridge_transaction_pairs_bucket{…}[5m]))`
 
 - **What it shows** — the same batch-size data as a heatmap over time; bright bands = the typical
@@ -431,6 +489,8 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 - **When to worry** — the band sliding toward 1 (less batching) or becoming erratic.
 
 **Tx touching pair (5m, by symbol & outcome)** · `timeseries` · legend `{{symbol}} · {{client_id}} · {{outcome}}`
+
+![Tx touching pair (5m, by symbol & outcome)](img/tx-panel-323.png)
 `sum by (symbol, client_id, outcome) (increase(dia_bridge_tx_pair_membership_total{…}[5m]))`
 
 - **What it shows** — one increment per (tx, pair): which transactions included a given pair, split
@@ -440,6 +500,8 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 - **When to worry** — a pair showing failed memberships repeatedly.
 
 **Tx involving router (5m, by router & outcome)** · `timeseries` · legend `{{router_id}} · {{outcome}}`
+
+![Tx involving router (5m, by router & outcome)](img/tx-panel-324.png)
 `sum by (router_id, outcome) (increase(dia_bridge_transaction_router_membership_total{…}[5m]))`
 
 - **What it shows** — which routers contributed to transactions, confirmed vs failed (same metric
@@ -450,6 +512,8 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 ### Row T4 — Real transaction counts
 
 **Tx counts — confirmed vs failed (selected range)** · `stat`
+
+![Tx counts — confirmed vs failed (selected range)](img/tx-panel-331.png)
 `sum(increase(dia_bridge_transactions_total{outcome="confirmed"|"failed", …}[$__range]))`
 
 - **What it shows** — the **raw count** of real Cardano transactions over the dashboard's selected
@@ -461,10 +525,14 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 
 ## 6. Dashboard 3 — Internals (`dia-cardano-feeder-internals`)
 
+![Internals dashboard — full dashboard](img/internals-full.png)
+
 Feeder-internal observability (filtered by `network` only) — for troubleshooting the feeder
 itself rather than the feeds.
 
 **Per-phase latency (p95)** · `timeseries` · seconds
+
+![Per-phase latency (p95)](img/internals-panel-1.png)
 `histogram_quantile(0.95, … intent_to_registration / registration_to_scan / scan_to_processing / processing_to_submission / submission_to_confirmation …)`
 
 - **What it shows** — the pipeline latency split into phases 1–5 (DIA/EVM → registration → scan →
@@ -476,15 +544,21 @@ itself rather than the feeds.
 
 **Scanner RPC errors (5m, by type)** · `timeseries` — `sum by (error_type) (increase(dia_bridge_scanner_rpc_errors_total{…}[5m]))`
 
+![Scanner RPC errors (5m, by type)](img/internals-panel-2.png)
+
 - **What it shows** — scanner RPC/WS errors against the source chain, by type. **When to worry:**
   a sustained non-zero rate → an unhealthy RPC endpoint; expect scanner lag to follow.
 
 **Scanner backfill (5m)** · `timeseries` — `increase(dia_bridge_scanner_backfill_blocks_total / _chunks_total[5m])`
 
+![Scanner backfill (5m)](img/internals-panel-3.png)
+
 - **What it shows** — blocks/chunks backfilled after a detected gap (> `max_block_gap`). **When to
   worry:** repeated backfilling = the scanner keeps falling behind and recovering (connectivity).
 
 **Workers — active / capacity / queue** · `timeseries`
+
+![Workers — active / capacity / queue](img/internals-panel-4.png)
 `dia_bridge_active_workers / worker_pool_size / worker_queue_size {pool_type="update"}`
 
 - **What it shows** — the submission worker pool's occupancy: workers busy, configured capacity, and
@@ -494,28 +568,42 @@ itself rather than the feeds.
   are arriving faster than they drain.
 
 **Worker tasks (5m)** · `timeseries` — `increase(dia_bridge_worker_tasks_completed_total{pool_type}[5m])`.
+
+![Worker tasks (5m)](img/internals-panel-5.png)
 Tasks completed by the pool; should track throughput. A drop to 0 while intents arrive = the pool
 stalled.
 
 **HTTP request latency p95 (by endpoint)** · `timeseries` — `histogram_quantile(0.95, … dia_bridge_http_request_duration_seconds_bucket …)`.
+
+![HTTP request latency p95 (by endpoint)](img/internals-panel-6.png)
 API responsiveness per endpoint. **When to worry:** a slow `/metrics` or health endpoint can trip
 Docker health checks.
 
 **DB operations (5m, by table)** · `timeseries` — `sum by (table) (increase(dia_bridge_db_operations_total{…}[5m]))`.
+
+![DB operations (5m, by table)](img/internals-panel-7.png)
 Database load by table, from the `instrumentDb` wrapper. A sudden spike/stall is worth a look.
 
 **DB operation latency p95 (by operation)** · `timeseries` — `histogram_quantile(0.95, … dia_bridge_db_operation_duration_seconds_bucket …)`.
+
+![DB operation latency p95 (by operation)](img/internals-panel-8.png)
 Per-operation DB latency. **When to worry:** rising latency → disk pressure or a hot table.
 
 **Cron resubmissions (5m, by outcome)** · `timeseries` — `sum by (outcome) (increase(dia_bridge_cron_resubmissions_total{…}[5m]))`.
+
+![Cron resubmissions (5m, by outcome)](img/internals-panel-9.png)
 Cron decisions (`submitted`, `skipped_already_fresh`, `skipped_superseded`, …): shows whether the
 heartbeat is working and **why** it skips. Mostly-`skipped_already_fresh` is healthy.
 
 **Recovery attempts (5m, by reason)** · `timeseries` — `sum by (reason) (increase(dia_bridge_recovery_attempts_total{…}[5m]))`.
+
+![Recovery attempts (5m, by reason)](img/internals-panel-10.png)
 Recovery events (e.g. crash recovery on startup). **When to worry:** a steady stream = the daemon is
 restarting/looping (see the WASM self-exit guard); it erodes uptime.
 
 **Provider — time since last OK** · `timeseries` — `time() - dia_bridge_provider_last_ok_timestamp_seconds{role}`.
+
+![Provider — time since last OK](img/internals-panel-11.png)
 Seconds since each provider last succeeded — the signal the provider-down alerts watch. **When to
 worry:** primary crossing **600 s** / secondary **900 s**.
 
@@ -523,12 +611,16 @@ worry:** primary crossing **600 s** / secondary **900 s**.
 
 **Event funnel (5m)** · `timeseries` — `increase(dia_bridge_events_{detected,duplicate,invalid}_total[5m])`
 
+![Event funnel (5m)](img/internals-panel-12.png)
+
 - **What it shows** — inbound event flow: raw events **detected**, dropped as **duplicate** (seen on
   both HTTP and WS, or a re-scan), rejected as **invalid** (decode/enrich failed).
 - **When to worry** — invalid climbing → malformed source data; duplicate dominating → transport
   churn (reconnects).
 
 **Intent funnel (5m)** · `timeseries`
+
+![Intent funnel (5m)](img/internals-panel-13.png)
 `increase(dia_bridge_intents_scanned_total → intents_routed_total → transactions_submitted_total → transactions_confirmed_total → transactions_failed_total [5m])`
 
 - **What it shows** — where intents drop off: **scanned** (entered routing) → **routed** (accepted by
@@ -539,6 +631,8 @@ worry:** primary crossing **600 s** / secondary **900 s**.
 - **When to worry** — a big gap between adjacent stages.
 
 **HTTP requests (5m, by status)** · `timeseries` — `sum by (status) (increase(dia_bridge_http_requests_total{…}[5m]))`.
+
+![HTTP requests (5m, by status)](img/internals-panel-14.png)
 API request counts by HTTP status (pairs with the latency panel: how many, not just how long). A
 rising 5xx rate is the worry.
 
@@ -598,8 +692,13 @@ buy practical finality at the cost of latency. Detail: README → *What "confirm
 
 ## 10. Screenshots
 
-PNG snapshots of each dashboard are produced by the Grafana renderer the same way the evidence
-pack captures them — run `make evidence3` with the monitoring stack up (`make up MONITORING=1`)
-and the dashboard images land under the M3 evidence pack's `dashboards/` directory. This guide is
-the narrative reference; the rendered images live with each evidence pack so they always match the
-deployment they were captured from, rather than going stale inline here.
+The images embedded above (`img/`) were rendered by the Grafana image renderer from a live
+multi-customer Preview deployment (two customers, two clients, three routers — including the same
+symbol served by two clients), so the per-pair panels show the `symbol · client_id` split this
+guide describes.
+
+To refresh them after a dashboard change, with the monitoring stack up (`make up MONITORING=1`),
+re-render each panel via the renderer endpoint
+(`/render/d-solo/<uid>/x?panelId=<id>&width=1200&height=400&tz=UTC`) into `img/`, or capture a
+point-in-time set with `make evidence3` (which also writes dashboard PNGs into the M3 evidence
+pack's `dashboards/` directory).
