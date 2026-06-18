@@ -640,7 +640,7 @@ async function hydratePriceCacheFromPairStateFiles(args: {
             },
           );
           metrics.cardanoOracleLastConfirmedTimestampSeconds.set(
-            { symbol, ...clientLabels({ clientId, customerId: router.customer_id }) },
+            { symbol, ...clientLabels({ clientId, customerId: router.customer_id }), router_id: router.id },
             Number(timestampRaw),
           );
           hydrated++;
