@@ -30,9 +30,9 @@ view of what those workstreams still owe M3 and M4. The **detailed M3 execution 
 (code-grounded, per-workstream) lives in [`m3-monitoring-plan.md`](./m3-monitoring-plan.md).
 
 A large share of the M3 monitoring **machinery** already exists (it was built alongside the
-feeder for M2): Grafana dashboards, **12** Prometheus alert rules, the in-process
-`OraclePairStale` evaluator, anomaly metrics (price deviation, staleness, data age), and the
-M2 evidence-packaging script. M3's remaining work is therefore mostly **validation artifacts
+feeder for M2): Grafana dashboards, **13** Prometheus alert rules, the Prometheus → Alertmanager
+→ feeder-webhook → `alert_log` pipeline, anomaly metrics (price deviation, staleness, data age,
+feed-sanity accuracy), and the evidence-packaging scripts. M3's remaining work is therefore mostly **validation artifacts
 and a monitoring-centric live-mainnet demonstration**, not new monitoring infrastructure. M4 is
 where the most net-new work lives (sustained mainnet operation, the indexer, and the consolidated
 documentation/closeout).
@@ -154,7 +154,8 @@ listings, the DIA-site documentation publication, and the closeout report/video.
 - [x] Feeder service + CLI tooling (M2) — exercised on **Mainnet** in
   `m2-mainnet-20260616-074413` (10 DIA Mainnet feeds, 23 confirmed txs, 0 reorgs), plus the longer
   Preview QA/video run.
-- [x] Monitoring stack (M3 machinery): dashboards, 12 alerts, `OraclePairStale` evaluator.
+- [x] Monitoring stack (M3 machinery): 3 dashboards, 13 alerts, the Prometheus → Alertmanager →
+  webhook → `alert_log` pipeline.
 - [~] Mainnet rollout / rollback material exists in archived plan form
   (`docs/plans/_archived/mainnet-rollout.md`); there is **no active**
   `docs/plans/mainnet-rollout.md` file, so restore/update it only if M4 needs a standalone active
