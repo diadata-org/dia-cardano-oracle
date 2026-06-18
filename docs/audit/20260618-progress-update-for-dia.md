@@ -85,9 +85,15 @@ Milestone 4 is the end-to-end, production-grade close-out. The main items:
   consume **any** of DIA's feeds, which is exactly what Milestone 4 requires. It does not
   exist yet.
 - **A long, stable mainnet run meeting 99.99% uptime.** Milestone 2 proved a short live
-  run; Milestone 4 needs a longer one that meets the headline reliability target. As a
-  prerequisite we will harden the feeder against the periodic internal restarts seen in
-  the test runs so a long window stays clean.
+  run; Milestone 4 needs a longer one that meets the headline reliability target. We will
+  run it on the **same contracts already deployed for Milestone 2** — no redeployment —
+  with the feeder configured to track a **single price feed** and publish on a slow
+  cadence (every 30–60 minutes). That keeps a multi-day window cheap (few transactions)
+  while still demonstrating sustained liveness and accuracy. As a prerequisite we will
+  harden the feeder against the periodic internal restarts seen in the test runs so the
+  window stays clean. We will also retire (burn) the roughly 19 on-chain price pairs no
+  longer in use — there are about 20 on mainnet today, from earlier test and live runs —
+  keeping a single actively-updated feed for the run.
 - **The published materials:** the list of live feeds and contract addresses, the
   developer documentation on DIA's website (including how to request any of DIA's 2,500+
   price feeds and 10,000+ real-world-asset feeds, and the timeline to do so), the final

@@ -106,10 +106,20 @@ exist today.
 
 ### 3 · Sustained mainnet run + 99.99% uptime/accuracy evidence
 
-- [ ] A longer production-style window against the mainnet contracts, with confirmed-tx
-  logs, monitoring attached, and an uptime/accuracy report meeting the **99.99%** bar (the
-  headline M4 acceptance number). M2 already proved a short live mainnet feeder run; this
-  is the long clean window, only credible after the stability work above.
+- [ ] A long production-style window meeting the **99.99%** uptime/accuracy bar (the
+  headline M4 acceptance number), with confirmed-tx logs and monitoring attached. M2
+  already proved a short live mainnet feeder run; this is the long clean window, only
+  credible after the stability work above. Run details:
+  - **Same contracts as M2 — no redeploy.** Reuse the mainnet deployment from
+    `m2-mainnet-20260616-074413`.
+  - **One feed, long heartbeat.** Configure the router to track a **single price feed**
+    and publish on a long cadence (every 30–60 minutes), so a multi-day window produces
+    **few, cheap transactions** while still demonstrating sustained liveness and accuracy.
+- [ ] **Retire the unused on-chain pairs.** Mainnet currently holds ~20 Pair NFTs — 10
+  synthetic ones from the `run-all` bootstrap plus 10 real ones the feeder published. Burn
+  19 of them (`pair:burn`, recovering each NFT's min-ADA) and keep **one** active feed —
+  one DIA updates frequently — for the sustained run. *(Which feed: to be defined — a pair
+  DIA updates frequently.)*
 
 ### 4 · Sample live feeds + contract addresses
 
