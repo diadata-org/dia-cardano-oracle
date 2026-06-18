@@ -130,18 +130,20 @@ The operational home base: liveness, money, latency, health, accuracy and billin
 
 ### Row — Oracle Feed Liveness
 
-**Confirmed oracle updates — all-time total (per pair)** · `stat`
+**Confirmed oracle updates (selected range, per pair)** · `stat`
 
-![Confirmed oracle updates — all-time total (per pair)](img/overview-panel-11.png)
-`sum by (symbol, client_id) (dia_bridge_transactions_confirmed_total{…})`
+![Confirmed oracle updates (selected range, per pair)](img/overview-panel-11.png)
+`round(sum by (symbol, client_id) (increase(dia_bridge_transactions_confirmed_total{…}[$__range])))`
 
-- **What it shows** — one number per feed: how many oracle updates have ever reached on-chain
-  confirmation since the counter started. Keyed by `(symbol, client_id)`, so the same pair on
-  two clients is two tiles.
-- **How to read it** — the liveness proof. Every active feed shows a non-zero, slowly growing
-  number; the legend reads `BTC/USD · client-test-01`.
-- **When to worry** — a feed stuck at 0 while others climb, or a number that stopped growing for
-  a feed you expect active. Cross-check *Pair staleness*.
+- **What it shows** — confirmed on-chain oracle updates per feed over the selected time range, as
+  an integer count. Keyed by `(symbol, client_id)`, so the same pair on two clients is two tiles.
+- **How to read it** — the liveness proof. Uses `increase()`, which is reset-aware, so the count
+  is correct **across feeder restarts** (it stitches over the counter reset) — exactly like the
+  per-window timeseries below. Set the time picker wide for a since-deployment view. (The raw
+  counter value would reset to 0 on each restart, which is why the panel sums `increase()` instead.
+  The true since-the-start total is also persisted in the DB and exposed at `/api/v1/performance`.)
+- **When to worry** — a feed at 0 while others climb, for a feed you expect active. Cross-check
+  *Pair staleness*.
 
 **Price data age p95 — 1 h window (per routed pair)** · `stat`
 

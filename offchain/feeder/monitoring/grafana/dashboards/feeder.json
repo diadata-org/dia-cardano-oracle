@@ -41,7 +41,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Cumulative count of confirmed Cardano oracle update transactions per price pair. A non-zero, growing value for each active pair confirms oracle liveness.",
+      "description": "Confirmed Cardano oracle updates per pair over the selected time range, via increase() so it is correct across feeder restarts (a non-zero count means the feed is live in the window). Integer count, not the raw counter (which resets each restart).",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -62,7 +62,8 @@
               }
             ]
           },
-          "custom": {}
+          "custom": {},
+          "decimals": 0
         },
         "overrides": []
       },
@@ -86,12 +87,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (symbol, client_id) (dia_bridge_transactions_confirmed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"})",
+          "expr": "round(sum by (symbol, client_id) (increase(dia_bridge_transactions_confirmed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[$__range])))",
           "legendFormat": "{{symbol}} · {{client_id}}",
           "refId": "A"
         }
       ],
-      "title": "Confirmed oracle updates — all-time total (per pair)",
+      "title": "Confirmed oracle updates (selected range, per pair)",
       "type": "stat"
     },
     {
@@ -336,6 +337,30 @@
             "matcher": {
               "id": "byName",
               "options": "Receiver accrued (sum)"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 10
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Receiver accrued — "
             },
             "properties": [
               {
