@@ -1,5 +1,11 @@
 # DIA Cardano Oracle — Grafana Dashboards Audit
 
+> **Superseded (2026-06-18).** This is the dated 2026-06-11 snapshot, covering the
+> two dashboards as they were then. The maintained reference is
+> [`docs/architecture/grafana-dashboards.md`](../architecture/grafana-dashboards.md)
+> (three dashboards, multi-client panels, feed-sanity + funnel + HTTP). Kept as a
+> historical record; do not update this file.
+
 A complete, panel-by-panel reference for the two Grafana dashboards the feeder
 ships. It is written to be read aloud to a non-specialist: for every chart it
 answers **what it shows**, **how to read the numbers**, and **when to worry**.

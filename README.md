@@ -28,6 +28,7 @@ Component docs:
 - [On-chain contracts (Aiken)](contracts/aiken/README.md)
 - [Off-chain CLI runbook](offchain/cli/README.md) — protocol bootstrap, client onboarding, maintenance txs (settle, withdraw, pair lifecycle).
 - [Feeder daemon](offchain/feeder/README.md) — long-running service that consumes DIA Lasernet `OracleIntent` events and submits Cardano oracle updates (M2 deliverable).
+- [Grafana dashboards guide](docs/architecture/grafana-dashboards.md) — the three monitoring dashboards panel-by-panel (what each chart shows, how to read it, when to worry) + the alert cheat sheet.
 
 ## Repository Scope
 
