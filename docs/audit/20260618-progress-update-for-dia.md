@@ -38,14 +38,25 @@ This is a status note, not a remediation document.
 - **Two additional DIA signing keys authorized.** The on-chain configuration was updated
   on mainnet to accept two more DIA signer keys, so the authorized signer set can grow
   without redeploying.
-- **Confirmed multi-feed and multi-client operation.** The system supports more than one
-  routing lane per client and more than one client running side by side, with guard-rails
-  that reject misconfigurations — two lanes claiming the same client, one client owned by
-  two customers, or two lanes publishing the same symbol into the same client. This is
-  covered by the feeder's automated test suite (531 test cases) and exercised on Preview
-  with one client split into two lanes (majors / alts) plus a second client; fee
-  settlement can drain several clients' balances in a single transaction, and a per-lane
-  serial queue guarantees one client's updates never collide with each other.
+- **Confirmed multi-client / multi-feed operation, in the on-chain contract terms.** The
+  structure mirrors the smart contracts:
+  - A **consumer** can own **several clients**, and each client is its own on-chain
+    deployment with its own **Receiver** and **Deposit** contracts. The **Receiver** holds
+    that client's balance and accrues the per-update fees; the **Deposit** is the address
+    the client tops up with an ordinary wallet payment, which the feeder later folds into
+    the Receiver. So "several clients" means several independent Receiver/Deposit pairs
+    running side by side.
+  - Within a client, one or more **routers** each drive a set of feeds with their own push
+    policy — specific **symbols**, a **time threshold** (the heartbeat — how often to push)
+    and a **price-deviation** tolerance (how big a move forces a push).
+  - Guard-rails reject misconfigurations: two routers pointing at the same client, one
+    client owned by two consumers, or two routers publishing the same symbol into the same
+    client.
+
+  This is covered by the feeder's automated test suite (531 test cases) and exercised on
+  Preview with one client split into two routers (majors / alts) plus a second client; fee
+  settlement can drain several clients' Receiver balances in a single transaction, and a
+  per-client serial queue guarantees one client's updates never collide with each other.
 - **Real alert delivery.** Previously the alerts were evaluated but did not actually reach
   anyone — they fired into an empty room. We added a proper delivery pipeline so every
   alert is recorded and can notify a human (e-mail / Telegram are one configuration switch
