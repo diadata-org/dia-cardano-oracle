@@ -533,42 +533,53 @@ One **client deployment = one serial submission lane = one Receiver UTxO**. Rout
 the building, submitting and queueing all happen at the lane (client) level — so these panels are
 keyed by **client**, not router (a single tx can batch several routers on one lane).
 
-**Tx counts per client (5m, confirmed/failed)** · `timeseries` · legend `{{client_id}} · {{outcome}}`
-`sum by (client_id, outcome) (increase(dia_bridge_transactions_total{…}[5m]))`
+Two **independent** state metrics, because both can be true at once — a lane can be *accumulating*
+the next batch in the coalescer while it is *submitting* the current one:
 
-- **What it shows** — real Cardano transactions per 5 min, per client and outcome — the clean
-  per-unit count (one tx batches one client's pairs).
-- **How to read it** — confirmed should dominate per client; reacts to Customer/Client (not Router).
-- **When to worry** — a client's confirmed line going flat, or a rising failed line.
+- `dia_bridge_submission_state` — the **submit pipeline** (serial, monotonic per batch):
+  **0 idle / 1 building / 2 submitting / 3 awaiting-confirmation**.
+- `dia_bridge_coalescer_state` — the **coalescer lane lifecycle**:
+  **0 idle / 1 accumulating / 2 in-flight**.
 
-**Submission state per client** · `state-timeline`
-`dia_bridge_submission_state{…}` — 0 idle · 1 accumulating · 2 building · 3 submitting · 4 awaiting-confirmation
+**Tx counts per client (confirmed/failed, selected range)** · `stat`
+`sum by (client_id, outcome) (increase(dia_bridge_transactions_total{…}[$__range]))`
 
-- **What it shows** — what each client's lane is **doing over time**: idle, accumulating (coalescer
-  buffering), building, submitting, awaiting confirmation.
-- **How to read it** — a timeline, not a point-in-time light: lanes flip phases quickly, so the
-  history is what's legible. A healthy lane spends most time `idle`/`accumulating` with brief
-  build→submit→await bursts.
-- **When to worry** — a lane **stuck** in `building`/`submitting`/`awaiting-confirmation` (not
-  returning to idle) → a slow build, a provider stall, or a confirmation that never lands.
+- **What it shows** — the **real integer count** of transactions per client and outcome over the
+  time-picker range. Not an average — the actual total in the window.
+- **How to read it** — one tile per `client · outcome`; confirmed should dominate.
+- **When to worry** — a non-trivial `failed` count for a client.
 
-**Coalescer buffered per client** · `timeseries` · legend `{{client_id}}`
+**Submission state — now** · `stat` (text) · **Coalescer state — now** · `stat` (text)
+
+- **What they show** — at a glance, what each client is doing **right now**: the submit pipeline
+  phase (idle/building/submitting/awaiting) and the coalescer phase (idle/accumulating/in-flight).
+- **When to worry** — a client stuck in `building`/`submitting`/`awaiting-confirmation`, or a
+  coalescer stuck `accumulating` while submission stays `idle` (flushes not firing).
+
+**Submission state per client (history)** / **Coalescer state per client (history)** · `state-timeline`
+
+- **What they show** — the same two states **over time**, so you can see how long each phase lasted.
+- **How to read them** — the submit timeline is a clean idle→building→submitting→awaiting→idle
+  cycle per batch; the coalescer timeline shows accumulate→in-flight→idle, on its own rhythm.
+
+**Coalescer buffered per client** (`timeseries`) + **Intents in coalescer queue — now** (`stat`)
 `sum by (client_id) (dia_bridge_coalescer_buffered{…})`
 
-- **What it shows** — intents buffered in the coalescer for each client, waiting for the flush that
-  batches them into one transaction.
+- **What they show** — how many **intents are queued** in the coalescer for each client (the current
+  number + the trend), waiting for the flush that batches them into one transaction.
 - **How to read it** — sawtooths: climbs as intents accumulate, drops to 0 on each flush.
-- **When to worry** — a value that **keeps climbing without dropping** → flushes are not firing
-  (check the submission-state timeline and the lane logs).
+- **When to worry** — a value that **keeps climbing without dropping** → flushes are not firing.
 
-**Submit queue pending per client** · `timeseries` · legend `{{client_id}}`
+**Submit queue pending per client** (`timeseries`) + **Tx in submit queue — now** (`stat`)
 `sum by (client_id) (dia_bridge_submit_queue_pending{…})`
 
-- **What it shows** — tasks waiting in each client's **serial submit queue** (already flushed from
-  the coalescer, waiting their turn to build/submit on that single Receiver lane).
-- **How to read it** — usually 0–1: the lane processes serially and fast.
-- **When to worry** — a sustained backlog (> a few) → submissions arrive faster than the lane
-  drains; pair it with the per-stage latency panels (Row T1).
+- **What they show** — how many **transactions are queued** in each client's serial submit queue.
+- **How to read it** — **usually 0**: the serial queue exists to stop two txs spending the same
+  Receiver UTxO at once (serialization), not to hold a backlog — the real backlog lives in the
+  coalescer buffer above. It only rises **under contention** (a flush arrives while the previous tx
+  is still building/submitting/awaiting).
+- **When to worry** — a sustained value > a few → submissions arrive faster than the lane confirms;
+  pair it with the per-stage latency panels (Row T1).
 
 ## 6. Dashboard 3 — Internals (`dia-cardano-feeder-internals`)
 

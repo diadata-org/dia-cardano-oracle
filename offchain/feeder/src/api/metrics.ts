@@ -135,10 +135,14 @@ export type FeederMetrics = {
   workerPoolSize: FeedGauge;             // dia_bridge_worker_pool_size{pool_type}
   /** Tasks/events currently waiting in the pool queue, partitioned by pool type. */
   workerQueueSize: FeedGauge;            // dia_bridge_worker_queue_size{pool_type}
-  /** Current submission phase of each client's serial lane (one lane per client
-   *  deployment / Receiver): 0 idle, 1 accumulating, 2 building, 3 submitting,
-   *  4 awaiting-confirmation. */
+  /** Current submit-pipeline phase of each client's serial lane (one lane per
+   *  client deployment / Receiver): 0 idle, 1 building, 2 submitting,
+   *  3 awaiting-confirmation. */
   submissionState: FeedGauge;            // dia_bridge_submission_state{client_id,customer_id}
+  /** Current coalescer lane lifecycle per client: 0 idle, 1 accumulating (buffering
+   *  intents), 2 in-flight (flushed to the submit pipeline). Independent of
+   *  submissionState — both can be active at once. */
+  coalescerState: FeedGauge;             // dia_bridge_coalescer_state{client_id,customer_id}
   /** Intents currently buffered in the coalescer for a client, waiting for the
    *  flush that batches them into one transaction. */
   coalescerBuffered: FeedGauge;          // dia_bridge_coalescer_buffered{client_id,customer_id}
@@ -247,6 +251,7 @@ export const noopMetrics: FeederMetrics = {
   workerPoolSize: noopGauge,
   workerQueueSize: noopGauge,
   submissionState: noopGauge,
+  coalescerState: noopGauge,
   coalescerBuffered: noopGauge,
   submitQueuePending: noopGauge,
   workerTasksCompleted: noopCounter,
@@ -600,7 +605,12 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     ),
     submissionState: gauge(
       "submission_state",
-      "Current submission phase of a client's serial lane (one lane per client deployment / Receiver): 0 = idle, 1 = accumulating (coalescer buffering), 2 = building, 3 = submitting, 4 = awaiting confirmation. Use a state-timeline panel to read the history; a point-in-time read is mostly 0 because lanes flip phases quickly.",
+      "Current submit-pipeline phase of a client's serial lane (one lane per client deployment / Receiver): 0 = idle, 1 = building, 2 = submitting, 3 = awaiting confirmation. Serial and monotonic per batch. Buffering/accumulation is tracked separately by `coalescer_state` (both can be active at once).",
+      ["client_id", "customer_id"],
+    ),
+    coalescerState: gauge(
+      "coalescer_state",
+      "Current coalescer lane lifecycle per client: 0 = idle, 1 = accumulating (buffering intents before a flush), 2 = in-flight (flushed to the submit pipeline). Independent of `submission_state`: a lane can accumulate the next batch while the current one is being submitted.",
       ["client_id", "customer_id"],
     ),
     coalescerBuffered: gauge(

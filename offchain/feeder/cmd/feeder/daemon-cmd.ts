@@ -104,7 +104,7 @@ import {
 } from "../../src/runtime/identity.js";
 import { clientLabels, routerMembershipLabels } from "../../src/api/metric-labels.js";
 import { seedDropdownSeriesFromConfig } from "../../src/metrics/seed-dropdown-series.js";
-import { submissionStateForStep, submissionStateForLaneEvent } from "../../src/metrics/submission-state.js";
+import { submissionStateForStep, submissionStateForLaneEvent, coalescerStateForLaneEvent } from "../../src/metrics/submission-state.js";
 import {
   createUpdateWorkerPoolManager,
   type UpdateWorkerPoolManager,
@@ -1552,12 +1552,15 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       });
     },
     onLaneEvent: async (event) => {
-      // Per-client submission phase from the lane lifecycle (idle/accumulating/
-      // hand-off to the submit pipeline). Finer phases come from onStep above.
-      const phase = submissionStateForLaneEvent(event.kind);
+      // Two independent per-client gauges from the lane lifecycle: the coalescer
+      // state (idle/accumulating/in-flight) and the submit-pipeline entry/idle
+      // (the finer building/submitting/awaiting phases come from onStep above).
       const laneOwner = laneIdentity.get(event.lane);
-      if (phase !== null && laneOwner) {
-        metrics.submissionState.set(laneOwner, phase);
+      if (laneOwner) {
+        const subPhase = submissionStateForLaneEvent(event.kind);
+        if (subPhase !== null) metrics.submissionState.set(laneOwner, subPhase);
+        const coPhase = coalescerStateForLaneEvent(event.kind);
+        if (coPhase !== null) metrics.coalescerState.set(laneOwner, coPhase);
       }
       await fileLogger.logLaneEvent({
         ts: new Date().toISOString(),

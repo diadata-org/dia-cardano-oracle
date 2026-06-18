@@ -618,55 +618,218 @@
       "type": "row"
     },
     {
+      "type": "stat",
+      "id": 341,
+      "title": "Tx counts per client (confirmed/failed, selected range)",
+      "description": "Real number of Cardano transactions per client over the selected time range, by outcome — counted once per tx. Not an average: the integer total in the window.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Real Cardano transactions per 5 min, grouped by client (= the serial submission lane / one Receiver) and outcome. A tx batches one client's pairs (possibly from several routers), so the clean per-unit count is per CLIENT, not per router.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 45
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "custom": {}
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "sum by (client_id, outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range]))",
+          "legendFormat": "{{client_id}} · {{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 345,
+      "title": "Submission state — now (per client)",
+      "description": "What each client's submit pipeline is doing RIGHT NOW: idle / building / submitting / awaiting-confirmation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 45
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "idle",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "building",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "submitting",
+                  "color": "orange",
+                  "index": 2
+                },
+                "3": {
+                  "text": "awaiting-confirm",
+                  "color": "purple",
+                  "index": 3
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_submission_state{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 347,
+      "title": "Coalescer state — now (per client)",
+      "description": "What each client's coalescer is doing RIGHT NOW: idle / accumulating (buffering intents) / in-flight (flushed to submit).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 45
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "idle",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "accumulating",
+                  "color": "blue",
+                  "index": 1
+                },
+                "2": {
+                  "text": "in-flight",
+                  "color": "orange",
+                  "index": 2
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_coalescer_state{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "state-timeline",
+      "id": 342,
+      "title": "Submission state per client (history)",
+      "description": "Submit-pipeline phase over time per client (0 idle / 1 building / 2 submitting / 3 awaiting-confirmation). Serial per batch; read how long each phase took.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 45
-      },
-      "id": 341,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (client_id, outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
-          "legendFormat": "{{client_id}} · {{outcome}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Tx counts per client (5m, confirmed/failed)",
-      "type": "timeseries"
-    },
-    {
-      "type": "state-timeline",
-      "id": 342,
-      "title": "Submission state per client",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "What each client's serial lane is doing over time: 0 idle, 1 accumulating (coalescer buffering), 2 building, 3 submitting, 4 awaiting confirmation. A timeline (not a point-in-time light) because lanes flip phases quickly.",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 45
+        "y": 53
       },
       "fieldConfig": {
         "defaults": {
@@ -684,24 +847,19 @@
                   "index": 0
                 },
                 "1": {
-                  "text": "accumulating",
-                  "color": "blue",
+                  "text": "building",
+                  "color": "yellow",
                   "index": 1
                 },
                 "2": {
-                  "text": "building",
-                  "color": "yellow",
+                  "text": "submitting",
+                  "color": "orange",
                   "index": 2
                 },
                 "3": {
-                  "text": "submitting",
-                  "color": "orange",
-                  "index": 3
-                },
-                "4": {
                   "text": "awaiting-confirm",
                   "color": "purple",
-                  "index": 4
+                  "index": 3
                 }
               }
             }
@@ -711,7 +869,7 @@
           },
           "unit": "short",
           "min": 0,
-          "max": 4
+          "max": 3
         },
         "overrides": []
       },
@@ -734,11 +892,140 @@
       ]
     },
     {
+      "type": "state-timeline",
+      "id": 346,
+      "title": "Coalescer state per client (history)",
+      "description": "Coalescer lane lifecycle over time per client (0 idle / 1 accumulating / 2 in-flight). Independent of the submit pipeline — a lane can accumulate the next batch while submitting the current one.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Intents currently buffered in the coalescer for each client, waiting for the flush that batches them into one transaction. Spikes then drops to 0 on each flush.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 53
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "idle",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "accumulating",
+                  "color": "blue",
+                  "index": 1
+                },
+                "2": {
+                  "text": "in-flight",
+                  "color": "orange",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "unit": "short",
+          "min": 0,
+          "max": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "auto",
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_coalescer_state{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 348,
+      "title": "Intents in coalescer queue — now (per client)",
+      "description": "Current number of intents buffered in the coalescer for each client, waiting for the flush that batches them into one transaction.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 0,
+        "y": 61
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "sum by (client_id) (dia_bridge_coalescer_buffered{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"})",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 343,
+      "title": "Coalescer buffered per client",
+      "description": "Intents buffered in the coalescer over time, per client. Sawtooths: climbs as intents accumulate, drops to 0 on each flush.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 4,
+        "y": 61
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -746,17 +1033,11 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 53
-      },
-      "id": 343,
       "options": {
         "legend": {
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         }
       },
       "targets": [
@@ -765,16 +1046,73 @@
           "legendFormat": "{{client_id}}",
           "refId": "A"
         }
-      ],
-      "title": "Coalescer buffered per client",
-      "type": "timeseries"
+      ]
     },
     {
+      "type": "stat",
+      "id": 349,
+      "title": "Tx in submit queue — now (per client)",
+      "description": "Current number of tasks waiting in each client's serial submit queue. Normally 0: the serial queue exists to prevent two txs spending the same Receiver UTxO at once, not to hold a backlog — it only rises under contention.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Tasks waiting in each client's serial submit queue — already flushed from the coalescer, waiting their turn to build/submit on that client's single Receiver lane. Sustained >0 means submissions are arriving faster than the lane drains.",
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 12,
+        "y": 61
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "sum by (client_id) (dia_bridge_submit_queue_pending{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"})",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 344,
+      "title": "Submit queue pending per client",
+      "description": "Tasks waiting in each client's serial submit queue over time. Usually 0 (the lane drains each batch immediately); a sustained value means submissions arrive faster than they confirm.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 61
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -782,17 +1120,11 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 53
-      },
-      "id": 344,
       "options": {
         "legend": {
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         }
       },
       "targets": [
@@ -801,9 +1133,7 @@
           "legendFormat": "{{client_id}}",
           "refId": "A"
         }
-      ],
-      "title": "Submit queue pending per client",
-      "type": "timeseries"
+      ]
     }
   ],
   "refresh": "30s",

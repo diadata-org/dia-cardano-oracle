@@ -935,11 +935,13 @@ Per-transaction axis (`feeder-tx.json`): `transactions_total`, `transaction_pair
 `tx_pair_membership_total`, `transaction_router_membership_total`,
 `tx_processing_to_submission_seconds`,
 `tx_submission_to_confirmation_seconds`, `tx_end_to_end_seconds`.
-Per-client lane (`feeder-tx.json`, "Per-client queues & state"): `submission_state`
-(0 idle / 1 accumulating / 2 building / 3 submitting / 4 awaiting-confirmation, one serial
-lane per client deployment / Receiver), `coalescer_buffered` (intents buffered before a
-flush), `submit_queue_pending` (tasks waiting in the serial submit queue). All labelled by
-`{client_id, customer_id}`.
+Per-client lane (`feeder-tx.json`, "Per-client queues & state"), one serial lane per client
+deployment / Receiver, all labelled by `{client_id, customer_id}`: `submission_state`
+(submit pipeline — 0 idle / 1 building / 2 submitting / 3 awaiting-confirmation),
+`coalescer_state` (coalescer lifecycle — 0 idle / 1 accumulating / 2 in-flight; independent
+of `submission_state`, both can be active at once), `coalescer_buffered` (intents buffered
+before a flush), `submit_queue_pending` (tasks waiting in the serial submit queue — normally
+0, a contention indicator, not a backlog).
 
 ### A — Missing, with real data (candidates to add)
 
