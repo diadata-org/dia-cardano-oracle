@@ -1,0 +1,12 @@
+[2026-06-18T15:30:57.378Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0x9dce2a56d0b17505d88a38ddc0e43f0d18f0b8257ea4900d0d6b32adf8c9979a"}
+[2026-06-18T15:31:11.688Z] [connecting] connecting
+[2026-06-18T15:31:16.531Z] [building] building
+[2026-06-18T15:31:19.239Z] [signing] signing
+  meta: {"txHash":"c5f991baed8450cafb24a188d64bf5e8354830c34066bb333ea0d48f1c025a88"}
+[2026-06-18T15:31:20.192Z] [submitting] submitting
+  meta: {"txHash":"c5f991baed8450cafb24a188d64bf5e8354830c34066bb333ea0d48f1c025a88"}
+[2026-06-18T15:31:20.457Z] [submitted] submitted
+  meta: {"txHash":"c5f991baed8450cafb24a188d64bf5e8354830c34066bb333ea0d48f1c025a88"}
+[2026-06-18T15:31:20.458Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"c5f991baed8450cafb24a188d64bf5e8354830c34066bb333ea0d48f1c025a88"}

@@ -1,0 +1,12 @@
+[2026-06-18T18:12:41.262Z] [enriched] Intent enriched: ARB/USD @ 81999549000000000
+  meta: {"price":"81999549000000000","timestamp":"1781806359","expiry":"1781809959","blockNumber":13617286}
+[2026-06-18T18:12:41.262Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T18:12:41.271Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:13:11.219Z] [connecting] connecting
+[2026-06-18T18:13:16.538Z] [connecting] connecting
+[2026-06-18T18:13:21.869Z] [connecting] connecting
+[2026-06-18T18:13:27.035Z] [connecting] connecting
+[2026-06-18T18:13:27.264Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":10,"batchMembers":[{"intentHash":"0x227e5c65af6a34320fbb4070e97fd0d41dd5a502b67cba04cf2058de0331815b","symbol":"ARB/USD","pairUnit":"","action":"update"},{"intentHash":"0xe85423021abc6f36d63b42feb0ea4ef6d405957de88bf53b0faae6dedb395063","symbol":"NEIRO/USD","pairUnit":"","action":"update"},{"intentHash":"0x9cb033ef995b64549a3200dcf939e042e7f11e62aa60c63338c76d147af2cbfb","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x3f1f8ec4297084c37862ef22cdebe09c44f9d032c44d30fbe2970a7626f4f339","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0xd4f5797456d1e720c80705030a2d3188af44d6a8a23c4fb57cc9d0cff2804263","symbol":"USDC/USD","pairUnit":"","action":"update"},{"intentHash":"0xa6a00b157c523cfb69f76d94a47eaf3676da7b79d57281aeaacd8fc35bb9068d","symbol":"DOGE/USD","pairUnit":"","action":"update"},{"intentHash":"0x472c04ae536d4e274ce8143617dda0489035329d1bf0a88718cb25e7dfd1a95e","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x4ee3cc97f5071b9d2c73cb7a1eb7da560bd70bcd778bfab948dbf523eff66c80","symbol":"SHIB/USD","pairUnit":"","action":"update"},{"intentHash":"0xae60f01c5e98c9e0cc32279be734b4666494b9aaf2b8e68d6690f71b68da12e8","symbol":"XVG/USD","pairUnit":"","action":"update"},{"intentHash":"0xd3768359cc75a14a564022a450eae8028b793c58193589d20c50eca5e3352e48","symbol":"USDT/USD","pairUnit":"","action":"update"}]}

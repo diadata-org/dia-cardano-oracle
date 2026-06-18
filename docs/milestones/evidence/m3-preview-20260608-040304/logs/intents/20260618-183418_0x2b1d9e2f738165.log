@@ -1,0 +1,15 @@
+[2026-06-18T18:34:18.384Z] [enriched] Intent enriched: DOGE/USD @ 82339517000000000
+  meta: {"price":"82339517000000000","timestamp":"1781807656","expiry":"1781811256","blockNumber":13620844}
+[2026-06-18T18:34:18.384Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T18:34:18.385Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:34:19.594Z] [connecting] connecting
+[2026-06-18T18:34:24.599Z] [connecting] connecting
+[2026-06-18T18:34:29.604Z] [connecting] connecting
+[2026-06-18T18:34:34.610Z] [connecting] connecting
+[2026-06-18T18:34:34.679Z] [failed] Cardano transaction failed: Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.","batchSize":9,"batchMembers":[{"intentHash":"0xf08836c4cb91e3b48b1eb46801f9e7eaccc5884d6677b97f66bac3e2d3024b49","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xd2553e0d98dd7ed28f9bded831ece004460bf5d331bc4237de0bcb8ca9360a29","symbol":"NEIRO/USD","pairUnit":"","action":"update"},{"intentHash":"0x1b7cf060695c1ebd96eb4e08fbe4311024fd64b06dabebf7d7881153cc1cdd1a","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xd2a2474997e0db350a5eef6995e7a27ae2428dd347869053ca7dfc4b09db9033","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0x2ff3c3ef5a49b0580af78d82516a93de70951e9a93c046c2eeaf8d8ecc85ac37","symbol":"USDC/USD","pairUnit":"","action":"update"},{"intentHash":"0x6a183a0126fa66a4725104759f2ce843deaa2107aa30b793c068de5baea2824b","symbol":"XVG/USD","pairUnit":"","action":"update"},{"intentHash":"0x2b1d9e2f7381652e5b012f60b1c3cbbbafb5c99c3d09d5ebc526be2c4ae168b0","symbol":"DOGE/USD","pairUnit":"","action":"update"},{"intentHash":"0x03e362059611b6b07e1ce458c42edc7e017a67882f5fc1add783172223b75c20","symbol":"USDT/USD","pairUnit":"","action":"update"},{"intentHash":"0x939db2f73e66e61b136f31217c169b4af2a2f1b33bf408c7b415b0831968e568","symbol":"SHIB/USD","pairUnit":"","action":"update"}]}
+[2026-06-18T18:34:34.695Z] [connecting] connecting
+[2026-06-18T18:34:39.699Z] [connecting] connecting
+[2026-06-18T18:34:44.708Z] [connecting] connecting

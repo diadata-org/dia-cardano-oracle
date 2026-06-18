@@ -1,0 +1,16 @@
+[2026-06-18T17:11:20.437Z] [enriched] Intent enriched: DOGE/USD @ 82425019137543600
+  meta: {"price":"82425019137543600","timestamp":"1781802678","expiry":"1781806278","blockNumber":13607367}
+[2026-06-18T17:11:20.437Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T17:11:20.438Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T17:11:21.441Z] [connecting] connecting
+[2026-06-18T17:11:29.630Z] [building] building
+[2026-06-18T17:11:33.510Z] [signing] signing
+  meta: {"txHash":"441be623040861e5efaee93c9e989daa1b8fc1a5ce2c72da07093dbb5f3a55cc"}
+[2026-06-18T17:11:34.990Z] [submitting] submitting
+  meta: {"txHash":"441be623040861e5efaee93c9e989daa1b8fc1a5ce2c72da07093dbb5f3a55cc"}
+[2026-06-18T17:11:35.282Z] [submitted] submitted
+  meta: {"txHash":"441be623040861e5efaee93c9e989daa1b8fc1a5ce2c72da07093dbb5f3a55cc"}
+[2026-06-18T17:11:35.283Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"441be623040861e5efaee93c9e989daa1b8fc1a5ce2c72da07093dbb5f3a55cc"}

@@ -1,21 +1,21 @@
 {
-  "generatedAtMs": 1781773656927,
-  "generatedAt": "2026-06-18T09:07:36.927Z",
+  "generatedAtMs": 1781809438469,
+  "generatedAt": "2026-06-18T19:03:58.469Z",
   "processedEventsByStatus": {
-    "processed": 270
+    "processed": 715
   },
   "transactionsByStatus": {
-    "confirmed": 33,
-    "failed": 134,
-    "submitted": 29
+    "confirmed": 223,
+    "failed": 776,
+    "submitted": 11
   },
-  "totalSymbols": 9,
-  "totalPairsUpdated": 10,
+  "totalSymbols": 10,
+  "totalPairsUpdated": 11,
   "totalFeePaidLovelace": "0",
   "timeWindow": {
-    "firstTxMs": 1781770567418,
-    "lastTxMs": 1781773640673,
-    "firstTxIso": "2026-06-18T08:16:07.418Z",
-    "lastTxIso": "2026-06-18T09:07:20.673Z"
+    "firstTxMs": 1781796492395,
+    "lastTxMs": 1781809433026,
+    "firstTxIso": "2026-06-18T15:28:12.395Z",
+    "lastTxIso": "2026-06-18T19:03:53.026Z"
   }
 }

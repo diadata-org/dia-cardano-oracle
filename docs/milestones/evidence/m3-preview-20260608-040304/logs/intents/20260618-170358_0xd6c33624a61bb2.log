@@ -1,0 +1,22 @@
+[2026-06-18T17:03:58.956Z] [enriched] Intent enriched: DOGE/USD @ 82415794913855984
+  meta: {"price":"82415794913855984","timestamp":"1781802237","expiry":"1781805837","blockNumber":13606150}
+[2026-06-18T17:03:58.956Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T17:03:58.957Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T17:04:03.561Z] [connecting] connecting
+[2026-06-18T17:04:14.690Z] [building] building
+[2026-06-18T17:04:17.987Z] [signing] signing
+  meta: {"txHash":"fc19a3535bd26daf913cdb975d6c9470b3406b6b6a0e6e2de998030cb359dcd7"}
+[2026-06-18T17:04:19.444Z] [submitting] submitting
+  meta: {"txHash":"fc19a3535bd26daf913cdb975d6c9470b3406b6b6a0e6e2de998030cb359dcd7"}
+[2026-06-18T17:04:19.710Z] [submitted] submitted
+  meta: {"txHash":"fc19a3535bd26daf913cdb975d6c9470b3406b6b6a0e6e2de998030cb359dcd7"}
+[2026-06-18T17:04:19.738Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"fc19a3535bd26daf913cdb975d6c9470b3406b6b6a0e6e2de998030cb359dcd7"}
+[2026-06-18T17:04:50.929Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"fc19a3535bd26daf913cdb975d6c9470b3406b6b6a0e6e2de998030cb359dcd7"}
+[2026-06-18T17:04:53.433Z] [writing_state] writing_state
+  meta: {"txHash":"fc19a3535bd26daf913cdb975d6c9470b3406b6b6a0e6e2de998030cb359dcd7"}
+[2026-06-18T17:04:56.830Z] [failed] Cardano transaction failed: Intent for DOGE/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for DOGE/USD superseded on chain; not submitted.","batchSize":2,"batchMembers":[{"intentHash":"0x09b04d223e6bbb70ff1033b7d31e460667c76d7ebfdf153cd4aec10ba3c33b0e","symbol":"NEIRO/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","action":"update"},{"intentHash":"0xa0ab9f4f3033829f0ef0705385da312c8d396f676c80e26ee38ccae8cbd3ccfd","symbol":"XVG/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902e6643031cebf937d080904cd1e6dd3d5aebcac06fc08dc15de991ade67363588","action":"update"}]}

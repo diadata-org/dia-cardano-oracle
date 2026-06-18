@@ -1,0 +1,22 @@
+[2026-06-18T17:03:02.679Z] [enriched] Intent enriched: XVG/USD @ 2499062897614528
+  meta: {"price":"2499062897614528","timestamp":"1781802181","expiry":"1781805781","blockNumber":13605995}
+[2026-06-18T17:03:02.679Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T17:03:02.680Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T17:03:23.159Z] [connecting] connecting
+[2026-06-18T17:03:33.443Z] [building] building
+[2026-06-18T17:03:36.745Z] [signing] signing
+  meta: {"txHash":"eea531be73c56839620e6712231565691096246c328b6e9d62b35ee8bb786bbf"}
+[2026-06-18T17:03:38.224Z] [submitting] submitting
+  meta: {"txHash":"eea531be73c56839620e6712231565691096246c328b6e9d62b35ee8bb786bbf"}
+[2026-06-18T17:03:38.512Z] [submitted] submitted
+  meta: {"txHash":"eea531be73c56839620e6712231565691096246c328b6e9d62b35ee8bb786bbf"}
+[2026-06-18T17:03:38.531Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"eea531be73c56839620e6712231565691096246c328b6e9d62b35ee8bb786bbf"}
+[2026-06-18T17:03:54.771Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"eea531be73c56839620e6712231565691096246c328b6e9d62b35ee8bb786bbf"}
+[2026-06-18T17:04:00.148Z] [writing_state] writing_state
+  meta: {"txHash":"eea531be73c56839620e6712231565691096246c328b6e9d62b35ee8bb786bbf"}
+[2026-06-18T17:04:03.526Z] [failed] Cardano transaction failed: Intent for XVG/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for XVG/USD superseded on chain; not submitted.","batchSize":3,"batchMembers":[{"intentHash":"0xf72adaaa7f3c454c7045c5f3df4bb8138d8a85082a2e49567688668739233470","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0x28b5dedd1a55475f9f0f20bf93b72e490aec25209c6bf3de6f8e25ccc102e9cc","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0xe7e6da28e03c16c78baccefb48c1e6344a07d3269e09bf2e5c6c564a21a93228","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"}]}

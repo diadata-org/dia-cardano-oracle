@@ -1,0 +1,8 @@
+[2026-06-18T16:06:14.430Z] [enriched] Intent enriched: ETH/USD @ 1705122285904687661056
+  meta: {"price":"1705122285904687661056","timestamp":"1781798772","expiry":"1781802372","blockNumber":13596649}
+[2026-06-18T16:06:14.430Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T16:06:14.432Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T16:06:52.229Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0x8a61c345ff8d5ee13b2ef76921d3481e1638cfc0a84e88d907f758e6661f4e2b"}

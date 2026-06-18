@@ -1,0 +1,14 @@
+[2026-06-18T18:22:23.229Z] [enriched] Intent enriched: XVG/USD @ 2507882900503334
+  meta: {"price":"2507882900503334","timestamp":"1781806941","expiry":"1781810541","blockNumber":13618884}
+[2026-06-18T18:22:23.229Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T18:22:23.255Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:22:35.888Z] [connecting] connecting
+[2026-06-18T18:22:41.119Z] [connecting] connecting
+[2026-06-18T18:22:46.435Z] [connecting] connecting
+[2026-06-18T18:22:51.690Z] [connecting] connecting
+[2026-06-18T18:22:51.992Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":9,"batchMembers":[{"intentHash":"0xb4b6b7aafdf72c8417dfbb35402d366464eb959a28546b05e0e96b0eb67356bc","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xfed00823dc3f78433290d15209e7cf1642c07486241c994a45b5f51dcb08dda8","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0x73c4d516d3f823ce4228a69450d95325e002e07b2789609cd9656fdf99c32066","symbol":"USDC/USD","pairUnit":"","action":"update"},{"intentHash":"0x9d86b71f20d5e50191ec80a01b2ca75b9248487d3eb0e4ce1f06874507aa8c7b","symbol":"DOGE/USD","pairUnit":"","action":"update"},{"intentHash":"0x50d4a9164fa880760ba137bddcd9a2efddef061b1473c5c42240d480c9c59de9","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x6f00ab25f1e5d93716686124c0b70dc527df771a083717ae0cabcf37a515eb1d","symbol":"SHIB/USD","pairUnit":"","action":"update"},{"intentHash":"0x72961804c79e6e33cca72f69d2c655d57d5a0a769d68fb03df7b4c415dfa0075","symbol":"NEIRO/USD","pairUnit":"","action":"update"},{"intentHash":"0x02945a78186ddaff3ddee232ca4d6f4ba87592c5a1cdb4bf15c6eab03843f17b","symbol":"XVG/USD","pairUnit":"","action":"update"},{"intentHash":"0xa10025b147cd2a3fbf28b9c4045906af1d4085784882512653e2d29d0bdab1b9","symbol":"USDT/USD","pairUnit":"","action":"update"}]}
+[2026-06-18T18:22:52.012Z] [connecting] connecting
+[2026-06-18T18:22:57.231Z] [connecting] connecting

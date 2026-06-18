@@ -1,0 +1,40 @@
+[2026-06-18T18:08:59.440Z] [enriched] Intent enriched: BTC/USD @ 62537028096532674510848
+  meta: {"price":"62537028096532674510848","timestamp":"1781806137","expiry":"1781809737","blockNumber":13616675}
+[2026-06-18T18:08:59.440Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T18:08:59.443Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:08:59.447Z] [enriched] Intent enriched: BTC/USD @ 62537028096532674510848
+  meta: {"price":"62537028096532674510848","timestamp":"1781806137","expiry":"1781809737","blockNumber":13616675}
+[2026-06-18T18:08:59.447Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0}
+[2026-06-18T18:08:59.449Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-02.json"}
+[2026-06-18T18:09:09.393Z] [connecting] connecting
+[2026-06-18T18:09:09.938Z] [connecting] connecting
+[2026-06-18T18:09:14.613Z] [connecting] connecting
+[2026-06-18T18:09:15.165Z] [connecting] connecting
+[2026-06-18T18:09:19.937Z] [connecting] connecting
+[2026-06-18T18:09:20.400Z] [connecting] connecting
+[2026-06-18T18:09:25.233Z] [connecting] connecting
+[2026-06-18T18:09:25.481Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":5,"batchMembers":[{"intentHash":"0xcae0d023b7707df45c6038efb8faec1a1734e533d6798e777a9193489a2df4d7","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x2e29459f2ebc5bb69001b12c14fee768e63aefff5653dc7d4cea9b3d9c8a0b2a","symbol":"NEIRO/USD","pairUnit":"","action":"update"},{"intentHash":"0x0a1c5507786856587b0e58dd37f4ee79ada646362300e329b6910ba9ea28aff1","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x7305aa4e80c233bff1e6f1ae5e242c26e0fb5ddba00346c1920a4cf57535b8a1","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0xf8ddef8520009f099967878def39172a8604ec98d5e657a0fbca11b6f3ff3170","symbol":"USDC/USD","pairUnit":"","action":"update"}]}
+[2026-06-18T18:09:25.509Z] [connecting] connecting
+[2026-06-18T18:09:25.567Z] [connecting] connecting
+[2026-06-18T18:09:25.902Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":1}
+[2026-06-18T18:09:25.909Z] [connecting] connecting
+[2026-06-18T18:09:30.736Z] [connecting] connecting
+[2026-06-18T18:09:31.197Z] [connecting] connecting
+[2026-06-18T18:09:36.082Z] [connecting] connecting
+[2026-06-18T18:09:36.422Z] [connecting] connecting
+[2026-06-18T18:09:41.738Z] [connecting] connecting
+[2026-06-18T18:09:42.110Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":9,"batchMembers":[{"intentHash":"0xcb66ae8d26cca730b051af62454af399d3bc3438f68d22b6c40cc15e3d708a95","symbol":"XVG/USD","pairUnit":"","action":"update"},{"intentHash":"0x8d268b278ca0f809beb0706764ae52ad8ba3c3d9242d4652a93896c478f2a0e3","symbol":"DOGE/USD","pairUnit":"","action":"update"},{"intentHash":"0xb58fa9b8ed96635b8bc3c7da7b322ef52149ad796d8fed633aa95654a78d8cc2","symbol":"USDT/USD","pairUnit":"","action":"update"},{"intentHash":"0x5a8e824153ede771af79ee29717331ede747d3a310edeb0ad22f587e41e5416b","symbol":"SHIB/USD","pairUnit":"","action":"update"},{"intentHash":"0x0a1c5507786856587b0e58dd37f4ee79ada646362300e329b6910ba9ea28aff1","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x7305aa4e80c233bff1e6f1ae5e242c26e0fb5ddba00346c1920a4cf57535b8a1","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0xf8ddef8520009f099967878def39172a8604ec98d5e657a0fbca11b6f3ff3170","symbol":"USDC/USD","pairUnit":"","action":"update"},{"intentHash":"0xcae0d023b7707df45c6038efb8faec1a1734e533d6798e777a9193489a2df4d7","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xf85f4d091a4d19ab88cb9729bfe2dd27e9a39a46fdde49dd0594c6bbf3ca31c6","symbol":"ARB/USD","pairUnit":"","action":"update"}]}
+[2026-06-18T18:09:42.126Z] [connecting] connecting
+[2026-06-18T18:09:42.369Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":1}
+[2026-06-18T18:09:53.235Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xb7efc6478b2e733929ce214110181cd35c643fb4ae2299ca510adf4ec0471d4e"}
+[2026-06-18T18:09:53.237Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xb7efc6478b2e733929ce214110181cd35c643fb4ae2299ca510adf4ec0471d4e"}

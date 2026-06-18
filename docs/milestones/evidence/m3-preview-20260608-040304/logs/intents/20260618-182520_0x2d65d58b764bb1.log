@@ -1,0 +1,12 @@
+[2026-06-18T18:25:20.941Z] [enriched] Intent enriched: ARB/USD @ 82057442750000016
+  meta: {"price":"82057442750000016","timestamp":"1781807119","expiry":"1781810719","blockNumber":13619367}
+[2026-06-18T18:25:20.941Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T18:25:20.942Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:25:21.621Z] [connecting] connecting
+[2026-06-18T18:25:26.628Z] [connecting] connecting
+[2026-06-18T18:25:31.634Z] [connecting] connecting
+[2026-06-18T18:25:36.641Z] [connecting] connecting
+[2026-06-18T18:25:36.652Z] [failed] Cardano transaction failed: Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.","batchSize":1}

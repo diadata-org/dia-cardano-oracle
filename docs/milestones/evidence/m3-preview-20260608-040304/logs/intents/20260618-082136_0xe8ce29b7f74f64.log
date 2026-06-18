@@ -1,8 +1,0 @@
-[2026-06-18T08:21:36.495Z] [enriched] Intent enriched: DOGE/USD @ 84953122862254760
-  meta: {"price":"84953122862254760","timestamp":"1781770895","expiry":"1781774495","blockNumber":13519651}
-[2026-06-18T08:21:36.495Z] [routed] Intent passed all filters
-  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
-[2026-06-18T08:21:36.496Z] [queued] Intent accepted by coalescer
-  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
-[2026-06-18T08:21:50.163Z] [superseded] Superseded by newer intent
-  meta: {"supersededByHash":"0x92978d9a60171216de0b6c4c433bb38c207a41ac27f4ae61f2ce51fa3782667f"}

@@ -1,0 +1,14 @@
+[2026-06-18T18:12:13.548Z] [enriched] Intent enriched: USDC/USD @ 999803669299999936
+  meta: {"price":"999803669299999936","timestamp":"1781806331","expiry":"1781809931","blockNumber":13617210}
+[2026-06-18T18:12:13.548Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T18:12:13.550Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:12:24.244Z] [connecting] connecting
+[2026-06-18T18:12:29.484Z] [connecting] connecting
+[2026-06-18T18:12:34.705Z] [connecting] connecting
+[2026-06-18T18:12:39.930Z] [connecting] connecting
+[2026-06-18T18:12:40.167Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":9,"batchMembers":[{"intentHash":"0x8ce929fe180329c4f46b8ab094753c4e743775266e78c509aca9ab209b1e8a9d","symbol":"USDC/USD","pairUnit":"","action":"update"},{"intentHash":"0x2430fa6197e78ef7b603b0e49597e4f7aceb49dacf1b2805cba76d0b9d79d261","symbol":"XVG/USD","pairUnit":"","action":"update"},{"intentHash":"0x13cc0562fc94724b803b31d354d90bda32db1e17c1cb85c9ad3f23f569895236","symbol":"DOGE/USD","pairUnit":"","action":"update"},{"intentHash":"0x7cbc6bffc18a1c04f010089030c46a43eb760839065a883e8caf723277825c5e","symbol":"USDT/USD","pairUnit":"","action":"update"},{"intentHash":"0x8a4274f3fcd1f32ea176027402296fef3f478988b9fea674a2291d7ceb93ec8c","symbol":"SHIB/USD","pairUnit":"","action":"update"},{"intentHash":"0x1bb82944603d024da1ed7cabcb406272e4f8e1a4955cf79ead8fa7168019bdc6","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xd6a177dd6cda59836209d4abce73bbd73b0c6d4e8a572d00ff20afcdc881cc31","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0xa8c78ebdbf19807874ee871b44f7af912b746ce2908a6407ba81afca754dcd98","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xb2a488a4498206f81c544056f31b90a931dd624b7b28e143ead002896d96a028","symbol":"ARB/USD","pairUnit":"","action":"update"}]}
+[2026-06-18T18:13:06.168Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xd4f5797456d1e720c80705030a2d3188af44d6a8a23c4fb57cc9d0cff2804263"}

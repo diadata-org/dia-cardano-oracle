@@ -1,0 +1,12 @@
+[2026-06-18T18:27:51.965Z] [enriched] Intent enriched: NEIRO/USD @ 64691763900000
+  meta: {"price":"64691763900000","timestamp":"1781807270","expiry":"1781810870","blockNumber":13619772}
+[2026-06-18T18:27:51.965Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T18:27:51.966Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:27:53.859Z] [connecting] connecting
+[2026-06-18T18:27:58.863Z] [connecting] connecting
+[2026-06-18T18:28:03.866Z] [connecting] connecting
+[2026-06-18T18:28:08.870Z] [connecting] connecting
+[2026-06-18T18:28:08.887Z] [failed] Cardano transaction failed: Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.","batchSize":4,"batchMembers":[{"intentHash":"0x288698901d375ed98014ec3895bb394df2b3db449b1c276b9b79c466a282d564","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x4cdbce2b2453c7bbfb3a2996ee63a49cf6e22c21e7a862a906fd3acd65b1dd27","symbol":"NEIRO/USD","pairUnit":"","action":"update"},{"intentHash":"0x3e14de043ae1d503700b3ae66ef24a7daee69ef577871285a6388d93f4e20f11","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x9198ef49749cd33d44830c139136d52cde80d39b8167f6f3fc68621930d59e8c","symbol":"ETH/USD","pairUnit":"","action":"update"}]}

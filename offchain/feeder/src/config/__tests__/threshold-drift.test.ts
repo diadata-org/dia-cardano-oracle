@@ -201,7 +201,7 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     assert.equal(overrideStep(wallets, "PaymentHook accrued", "yellow"), yaml.payment_hook_withdraw_ready_lovelace / 1_000_000);
     assert.equal(overrideStep(wallets, "Receiver accrued (sum)", "yellow"), yaml.settle_overdue_lovelace / 1_000_000);
     // Per-client accrued series (byRegexp override) use the same settle-overdue boundary.
-    assert.equal(overrideStep(wallets, "Receiver accrued — ", "yellow"), yaml.settle_overdue_lovelace / 1_000_000);
+    assert.equal(overrideStep(wallets, "Receiver accrued — .*", "yellow"), yaml.settle_overdue_lovelace / 1_000_000);
 
     // Fragmentation panel — largest pure-ADA UTxO vs the collateral floor.
     // Floor convention (same as the admin-wallet panel above): green AT the

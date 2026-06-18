@@ -1,0 +1,6 @@
+[2026-06-18T16:34:59.559Z] [connecting] connecting
+[2026-06-18T16:35:05.020Z] [building] building
+[2026-06-18T16:35:07.996Z] [signing] signing
+  meta: {"txHash":"2d3ed9e79c5ad86fb51ea18d9656bf9c874f1bf5fe1cbe7dbf90ee7e12f84822"}
+[2026-06-18T16:35:09.466Z] [submitting] submitting
+  meta: {"txHash":"2d3ed9e79c5ad86fb51ea18d9656bf9c874f1bf5fe1cbe7dbf90ee7e12f84822"}

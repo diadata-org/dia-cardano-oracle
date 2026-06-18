@@ -1,9 +1,0 @@
-[2026-06-18T06:52:30.888Z] [enriched] Intent enriched: LTC/USD @ 44276685700000002048
-  meta: {"price":"44276685700000002048","timestamp":"1781765549","expiry":"1781769149","blockNumber":13504536}
-[2026-06-18T06:52:30.888Z] [routed] Intent passed all filters
-  meta: {"routerId":"client_test_01_router_default","destinationIndex":0}
-[2026-06-18T06:52:30.889Z] [queued] Intent accepted by coalescer
-  meta: {"routerId":"client_test_01_router_default","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
-[2026-06-18T06:52:43.222Z] [connecting] connecting
-[2026-06-18T06:52:49.220Z] [failed] Cardano transaction failed: Intent for LTC/USD superseded on chain; not submitted.
-  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for LTC/USD superseded on chain; not submitted.","batchSize":1}

@@ -1,0 +1,9 @@
+[2026-06-18T16:08:27.104Z] [enriched] Intent enriched: ETH/USD @ 1700413546674316378112
+  meta: {"price":"1700413546674316378112","timestamp":"1781798905","expiry":"1781802505","blockNumber":13597007}
+[2026-06-18T16:08:27.104Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T16:08:27.105Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T16:08:43.066Z] [connecting] connecting
+[2026-06-18T16:08:47.297Z] [failed] Cardano transaction failed: Intent for ETH/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for ETH/USD superseded on chain; not submitted.","batchSize":1}

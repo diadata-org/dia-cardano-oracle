@@ -1,0 +1,16 @@
+[2026-06-18T15:59:58.234Z] [enriched] Intent enriched: ETH/USD @ 1718190776553807151104
+  meta: {"price":"1718190776553807151104","timestamp":"1781798396","expiry":"1781801996","blockNumber":13595620}
+[2026-06-18T15:59:58.234Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T15:59:58.235Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T16:00:28.220Z] [connecting] connecting
+[2026-06-18T16:00:39.583Z] [building] building
+[2026-06-18T16:00:43.087Z] [signing] signing
+  meta: {"txHash":"28b7fd21fec5f3279517e4dd6a67f30f8d3d87decf0da37080dda4f0daf55d25"}
+[2026-06-18T16:00:44.585Z] [submitting] submitting
+  meta: {"txHash":"28b7fd21fec5f3279517e4dd6a67f30f8d3d87decf0da37080dda4f0daf55d25"}
+[2026-06-18T16:00:44.891Z] [submitted] submitted
+  meta: {"txHash":"28b7fd21fec5f3279517e4dd6a67f30f8d3d87decf0da37080dda4f0daf55d25"}
+[2026-06-18T16:00:44.921Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"28b7fd21fec5f3279517e4dd6a67f30f8d3d87decf0da37080dda4f0daf55d25"}

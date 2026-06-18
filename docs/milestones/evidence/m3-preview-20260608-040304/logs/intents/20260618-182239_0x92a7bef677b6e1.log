@@ -1,0 +1,8 @@
+[2026-06-18T18:22:39.253Z] [enriched] Intent enriched: SHIB/USD @ 4654639412500
+  meta: {"price":"4654639412500","timestamp":"1781806957","expiry":"1781810557","blockNumber":13618928}
+[2026-06-18T18:22:39.253Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T18:22:39.254Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:22:52.011Z] [connecting] connecting
+[2026-06-18T18:22:57.231Z] [connecting] connecting

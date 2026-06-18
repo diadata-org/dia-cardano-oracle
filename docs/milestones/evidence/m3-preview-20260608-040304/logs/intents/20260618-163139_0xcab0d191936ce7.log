@@ -1,0 +1,10 @@
+[2026-06-18T16:31:39.164Z] [connecting] connecting
+[2026-06-18T16:31:46.266Z] [building] building
+[2026-06-18T16:31:49.306Z] [signing] signing
+  meta: {"txHash":"b12f005554666fb21c3894cb7422ae846f4624a8bb967c394f90dd33e6622589"}
+[2026-06-18T16:31:50.769Z] [submitting] submitting
+  meta: {"txHash":"b12f005554666fb21c3894cb7422ae846f4624a8bb967c394f90dd33e6622589"}
+[2026-06-18T16:31:51.045Z] [submitted] submitted
+  meta: {"txHash":"b12f005554666fb21c3894cb7422ae846f4624a8bb967c394f90dd33e6622589"}
+[2026-06-18T16:31:51.049Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"b12f005554666fb21c3894cb7422ae846f4624a8bb967c394f90dd33e6622589"}

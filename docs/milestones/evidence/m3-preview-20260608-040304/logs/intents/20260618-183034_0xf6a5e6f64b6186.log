@@ -1,0 +1,12 @@
+[2026-06-18T18:30:34.178Z] [enriched] Intent enriched: DOGE/USD @ 82315777260000008
+  meta: {"price":"82315777260000008","timestamp":"1781807432","expiry":"1781811032","blockNumber":13620209}
+[2026-06-18T18:30:34.178Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T18:30:34.205Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:30:49.274Z] [connecting] connecting
+[2026-06-18T18:30:54.208Z] [connecting] connecting
+[2026-06-18T18:30:59.212Z] [connecting] connecting
+[2026-06-18T18:31:04.216Z] [connecting] connecting
+[2026-06-18T18:31:04.246Z] [failed] Cardano transaction failed: Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.","batchSize":6,"batchMembers":[{"intentHash":"0x6c19f33499b6b655f38e7eb9bfd20f37c1c2d8f798f26bc09803b40dbcb154c3","symbol":"USDT/USD","pairUnit":"","action":"update"},{"intentHash":"0x4896e303bbd42346cecc26163209d1c14798f5192d17e3d64dc41f5476c4578f","symbol":"SHIB/USD","pairUnit":"","action":"update"},{"intentHash":"0x651a6b4723acc862b4e7e7f2b61bd65285f876873e6d409812c950b69f09db7a","symbol":"NEIRO/USD","pairUnit":"","action":"update"},{"intentHash":"0xba3a397807b28b75cbe431d4d4bc7b7ab8bd1ed83fce3d6c47ce18d82a2165ae","symbol":"XVG/USD","pairUnit":"","action":"update"},{"intentHash":"0xf6a5e6f64b618609df3617af85c44e2a92a05b4c47eabd5c85a54ba682da2e07","symbol":"DOGE/USD","pairUnit":"","action":"update"},{"intentHash":"0xc087cd55ad2ea98c7eaf3a47ce4ebc276d12c7e74a21e9288b4180954c1df268","symbol":"ARB/USD","pairUnit":"","action":"update"}]}

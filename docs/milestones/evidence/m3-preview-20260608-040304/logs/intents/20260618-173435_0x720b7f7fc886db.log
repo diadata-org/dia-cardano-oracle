@@ -1,0 +1,22 @@
+[2026-06-18T17:34:35.249Z] [enriched] Intent enriched: ARB/USD @ 82098894000000000
+  meta: {"price":"82098894000000000","timestamp":"1781804073","expiry":"1781807673","blockNumber":13611140}
+[2026-06-18T17:34:35.249Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T17:34:35.250Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T17:35:03.464Z] [connecting] connecting
+[2026-06-18T17:35:13.563Z] [building] building
+[2026-06-18T17:35:16.674Z] [signing] signing
+  meta: {"txHash":"13e4b0ea8456c31295e8481df6a8a6e8f1b4d70a7d72e3f288048898633e5bc3"}
+[2026-06-18T17:35:18.131Z] [submitting] submitting
+  meta: {"txHash":"13e4b0ea8456c31295e8481df6a8a6e8f1b4d70a7d72e3f288048898633e5bc3"}
+[2026-06-18T17:35:18.390Z] [submitted] submitted
+  meta: {"txHash":"13e4b0ea8456c31295e8481df6a8a6e8f1b4d70a7d72e3f288048898633e5bc3"}
+[2026-06-18T17:35:18.414Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"13e4b0ea8456c31295e8481df6a8a6e8f1b4d70a7d72e3f288048898633e5bc3"}
+[2026-06-18T17:35:37.594Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"13e4b0ea8456c31295e8481df6a8a6e8f1b4d70a7d72e3f288048898633e5bc3"}
+[2026-06-18T17:35:45.431Z] [writing_state] writing_state
+  meta: {"txHash":"13e4b0ea8456c31295e8481df6a8a6e8f1b4d70a7d72e3f288048898633e5bc3"}
+[2026-06-18T17:35:48.790Z] [failed] Cardano transaction failed: Intent for ARB/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for ARB/USD superseded on chain; not submitted.","batchSize":2,"batchMembers":[{"intentHash":"0x4241c594ad77aaab4a6cddde53ed1da8f42283478c2caa44a3477cbce99af99f","symbol":"NEIRO/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","action":"update"},{"intentHash":"0x482739797d1d7d4cecad96bd6e8ae1ddd2c01c7f266acbe2174f540d9d90f435","symbol":"USDT/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9025ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315","action":"update"}]}

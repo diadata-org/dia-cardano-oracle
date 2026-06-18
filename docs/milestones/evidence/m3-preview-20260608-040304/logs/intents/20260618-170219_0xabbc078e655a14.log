@@ -1,0 +1,8 @@
+[2026-06-18T17:02:19.964Z] [connecting] connecting
+[2026-06-18T17:02:21.700Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xbf780bdbd6037fb5ecf0fe0587752f7ce04385085b108f0818eae85ca4f0d263"}
+[2026-06-18T17:02:31.863Z] [building] building
+[2026-06-18T17:02:34.952Z] [signing] signing
+  meta: {"txHash":"3cdff0b032ce0a14ee5ad69a8227c16e109b151b38912ae4bfc0c8bee2cbf338"}
+[2026-06-18T17:02:36.418Z] [submitting] submitting
+  meta: {"txHash":"3cdff0b032ce0a14ee5ad69a8227c16e109b151b38912ae4bfc0c8bee2cbf338"}

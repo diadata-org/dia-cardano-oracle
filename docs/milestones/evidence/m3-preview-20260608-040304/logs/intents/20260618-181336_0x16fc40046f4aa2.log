@@ -1,0 +1,12 @@
+[2026-06-18T18:13:36.844Z] [enriched] Intent enriched: NEIRO/USD @ 64663882500000
+  meta: {"price":"64663882500000","timestamp":"1781806415","expiry":"1781810015","blockNumber":13617441}
+[2026-06-18T18:13:36.844Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T18:13:36.848Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:13:43.418Z] [connecting] connecting
+[2026-06-18T18:13:48.640Z] [connecting] connecting
+[2026-06-18T18:13:53.901Z] [connecting] connecting
+[2026-06-18T18:13:59.131Z] [connecting] connecting
+[2026-06-18T18:13:59.790Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":4,"batchMembers":[{"intentHash":"0xb9c88d4b06c558a591d7f28d6fac9be3d95921b40992757e929ecc04f1e91765","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x16fc40046f4aa2e960c1ca9484cf65b5fe309c9936c39d0df14ae2013b5b299f","symbol":"NEIRO/USD","pairUnit":"","action":"update"},{"intentHash":"0xc0a76d29ac8edc1687b91484cb8643a94dfdcc460445d0db966748e79b1bd3ac","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xbb5c56bf5a5d722c9f65e4c3f47bb993530f8354a3ac593a513e0b0557e9f70a","symbol":"ETH/USD","pairUnit":"","action":"update"}]}

@@ -1,0 +1,20 @@
+[2026-06-18T18:10:40.709Z] [enriched] Intent enriched: USDC/USD @ 999806166300000128
+  meta: {"price":"999806166300000128","timestamp":"1781806239","expiry":"1781809839","blockNumber":13616951}
+[2026-06-18T18:10:40.709Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T18:10:40.710Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:10:47.701Z] [connecting] connecting
+[2026-06-18T18:10:52.875Z] [connecting] connecting
+[2026-06-18T18:10:58.112Z] [connecting] connecting
+[2026-06-18T18:11:03.431Z] [connecting] connecting
+[2026-06-18T18:11:03.798Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":9,"batchMembers":[{"intentHash":"0x944860f761de6baeace53475cc174b9d5e5df776715d85cfb13b3bd8a571ad88","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x7c3b6e1d72d4974e3479cdaa2c1126355298bf1a301f89a0e8245efd17db3951","symbol":"NEIRO/USD","pairUnit":"","action":"update"},{"intentHash":"0x71f67d16dc209abe1b71140ee5a77cb94bb5f5aa4146774d4e6c3c23b6e0a639","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xfc4d4c655d9cd5774ba79b1a2b2dd77b710167e47acffa9fdf274ee9736daa57","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0xaa64e3a3da57b34941f90c8ddfce71f95e9f85576605e35af0eba0d66c4ca3c1","symbol":"USDC/USD","pairUnit":"","action":"update"},{"intentHash":"0xe730a09e42484f427dd7cdbab092f1b0bb287d6348d28c0f0fbbd0e97159badc","symbol":"XVG/USD","pairUnit":"","action":"update"},{"intentHash":"0xa1869080a895ec164a64f9c67883c76d30f5d4c876772cb4408e75bbbd73618b","symbol":"DOGE/USD","pairUnit":"","action":"update"},{"intentHash":"0xdc987a1f4d43e7424ad61c70d2dbc6cc5e9a884816850f78aaf35bcfd4ec0023","symbol":"USDT/USD","pairUnit":"","action":"update"},{"intentHash":"0x26c13bc0d52849ebba9939190f5a200f9ef1e9221b0a84ac10fce7d39eea21e5","symbol":"SHIB/USD","pairUnit":"","action":"update"}]}
+[2026-06-18T18:11:03.833Z] [connecting] connecting
+[2026-06-18T18:11:09.066Z] [connecting] connecting
+[2026-06-18T18:11:14.394Z] [connecting] connecting
+[2026-06-18T18:11:19.731Z] [connecting] connecting
+[2026-06-18T18:11:20.089Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":7,"batchMembers":[{"intentHash":"0x71f67d16dc209abe1b71140ee5a77cb94bb5f5aa4146774d4e6c3c23b6e0a639","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xfc4d4c655d9cd5774ba79b1a2b2dd77b710167e47acffa9fdf274ee9736daa57","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0xaa64e3a3da57b34941f90c8ddfce71f95e9f85576605e35af0eba0d66c4ca3c1","symbol":"USDC/USD","pairUnit":"","action":"update"},{"intentHash":"0xa1869080a895ec164a64f9c67883c76d30f5d4c876772cb4408e75bbbd73618b","symbol":"DOGE/USD","pairUnit":"","action":"update"},{"intentHash":"0x944860f761de6baeace53475cc174b9d5e5df776715d85cfb13b3bd8a571ad88","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x8972417ca47488e49f887b7a583d206149e3fb94beb7768dfe39ac63c616bfbd","symbol":"ARB/USD","pairUnit":"","action":"update"},{"intentHash":"0x26c13bc0d52849ebba9939190f5a200f9ef1e9221b0a84ac10fce7d39eea21e5","symbol":"SHIB/USD","pairUnit":"","action":"update"}]}
+[2026-06-18T18:11:34.116Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0x9b840352e4cd8b07d1e79b4b4570d0e47cf009883fecfce2426162cd6621936c"}

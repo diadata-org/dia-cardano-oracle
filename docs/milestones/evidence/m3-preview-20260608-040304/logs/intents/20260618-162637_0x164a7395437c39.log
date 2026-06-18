@@ -1,0 +1,22 @@
+[2026-06-18T16:26:37.893Z] [enriched] Intent enriched: BTC/USD @ 62598845804861083090944
+  meta: {"price":"62598845804861083090944","timestamp":"1781799996","expiry":"1781803596","blockNumber":13600023}
+[2026-06-18T16:26:37.893Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T16:26:37.894Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T16:26:37.898Z] [enriched] Intent enriched: BTC/USD @ 62598845804861083090944
+  meta: {"price":"62598845804861083090944","timestamp":"1781799996","expiry":"1781803596","blockNumber":13600023}
+[2026-06-18T16:26:37.898Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0}
+[2026-06-18T16:26:37.899Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-02.json"}
+[2026-06-18T16:27:01.175Z] [connecting] connecting
+[2026-06-18T16:27:07.876Z] [connecting] connecting
+[2026-06-18T16:27:09.453Z] [building] building
+[2026-06-18T16:27:12.201Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xf0de5c9a852c635a56d9501c975102d8a8b562c7bdda0eccffbc1fe580d99046"}
+[2026-06-18T16:27:12.727Z] [signing] signing
+  meta: {"txHash":"9acf7ee63d846fd04d7e5ea506ebf0b5f6234ec7f51ebf1a0da7f018dd1ccba9"}
+[2026-06-18T16:27:13.478Z] [building] building
+[2026-06-18T16:27:14.227Z] [submitting] submitting
+  meta: {"txHash":"9acf7ee63d846fd04d7e5ea506ebf0b5f6234ec7f51ebf1a0da7f018dd1ccba9"}

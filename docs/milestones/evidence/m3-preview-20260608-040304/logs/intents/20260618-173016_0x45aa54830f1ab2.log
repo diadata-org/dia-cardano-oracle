@@ -1,0 +1,12 @@
+[2026-06-18T17:30:16.305Z] [enriched] Intent enriched: ETH/USD @ 1683167154800000106496
+  meta: {"price":"1683167154800000106496","timestamp":"1781803814","expiry":"1781807414","blockNumber":13610452}
+[2026-06-18T17:30:16.305Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T17:30:16.306Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T17:30:46.267Z] [connecting] connecting
+[2026-06-18T17:30:58.768Z] [building] building
+[2026-06-18T17:31:02.266Z] [signing] signing
+  meta: {"txHash":"05fa0485da3fd0cd539e98624e7d75b54eea72033061f41eed39beb56347711d"}
+[2026-06-18T17:31:03.739Z] [submitting] submitting
+  meta: {"txHash":"05fa0485da3fd0cd539e98624e7d75b54eea72033061f41eed39beb56347711d"}

@@ -1,0 +1,6 @@
+[2026-06-18T18:34:41.118Z] [enriched] Intent enriched: ARB/USD @ 82099437300000016
+  meta: {"price":"82099437300000016","timestamp":"1781807679","expiry":"1781811279","blockNumber":13620907}
+[2026-06-18T18:34:41.118Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T18:34:41.118Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}

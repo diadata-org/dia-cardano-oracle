@@ -1,0 +1,16 @@
+[2026-06-18T16:00:28.221Z] [connecting] connecting
+[2026-06-18T16:00:39.583Z] [building] building
+[2026-06-18T16:00:41.069Z] [connecting] connecting
+[2026-06-18T16:00:43.088Z] [signing] signing
+  meta: {"txHash":"28b7fd21fec5f3279517e4dd6a67f30f8d3d87decf0da37080dda4f0daf55d25"}
+[2026-06-18T16:00:44.585Z] [submitting] submitting
+  meta: {"txHash":"28b7fd21fec5f3279517e4dd6a67f30f8d3d87decf0da37080dda4f0daf55d25"}
+[2026-06-18T16:00:44.901Z] [submitted] submitted
+  meta: {"txHash":"28b7fd21fec5f3279517e4dd6a67f30f8d3d87decf0da37080dda4f0daf55d25"}
+[2026-06-18T16:00:44.921Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"28b7fd21fec5f3279517e4dd6a67f30f8d3d87decf0da37080dda4f0daf55d25"}
+[2026-06-18T16:00:47.038Z] [building] building
+[2026-06-18T16:00:50.186Z] [signing] signing
+  meta: {"txHash":"2b04571759acf2cb5440569f461acff44dbf4908005c3dea2b31ce96ec93ef0a"}
+[2026-06-18T16:00:51.663Z] [submitting] submitting
+  meta: {"txHash":"2b04571759acf2cb5440569f461acff44dbf4908005c3dea2b31ce96ec93ef0a"}

@@ -1,0 +1,18 @@
+[2026-06-18T17:11:21.441Z] [connecting] connecting
+[2026-06-18T17:11:29.630Z] [building] building
+[2026-06-18T17:11:33.509Z] [signing] signing
+  meta: {"txHash":"441be623040861e5efaee93c9e989daa1b8fc1a5ce2c72da07093dbb5f3a55cc"}
+[2026-06-18T17:11:34.989Z] [submitting] submitting
+  meta: {"txHash":"441be623040861e5efaee93c9e989daa1b8fc1a5ce2c72da07093dbb5f3a55cc"}
+[2026-06-18T17:11:35.272Z] [submitted] submitted
+  meta: {"txHash":"441be623040861e5efaee93c9e989daa1b8fc1a5ce2c72da07093dbb5f3a55cc"}
+[2026-06-18T17:11:35.283Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"441be623040861e5efaee93c9e989daa1b8fc1a5ce2c72da07093dbb5f3a55cc"}
+[2026-06-18T17:11:42.213Z] [connecting] connecting
+[2026-06-18T17:11:43.236Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xf407340e27b5ef9af70e58bbb53845b93a9a1e361ac556e606bdf3a3e61ead7c"}
+[2026-06-18T17:11:47.798Z] [building] building
+[2026-06-18T17:11:50.735Z] [signing] signing
+  meta: {"txHash":"39ca1d45e232cbd4c33f3d4ee8aa3a6cf8ad2083c955df51ff28d4f37d28f33d"}
+[2026-06-18T17:11:52.202Z] [submitting] submitting
+  meta: {"txHash":"39ca1d45e232cbd4c33f3d4ee8aa3a6cf8ad2083c955df51ff28d4f37d28f33d"}

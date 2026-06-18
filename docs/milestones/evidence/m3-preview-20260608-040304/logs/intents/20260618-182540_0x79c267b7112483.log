@@ -1,0 +1,12 @@
+[2026-06-18T18:25:40.074Z] [enriched] Intent enriched: ETH/USD @ 1678825671600000204800
+  meta: {"price":"1678825671600000204800","timestamp":"1781807138","expiry":"1781810738","blockNumber":13619416}
+[2026-06-18T18:25:40.074Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T18:25:40.075Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:25:51.665Z] [connecting] connecting
+[2026-06-18T18:25:56.670Z] [connecting] connecting
+[2026-06-18T18:26:01.675Z] [connecting] connecting
+[2026-06-18T18:26:06.680Z] [connecting] connecting
+[2026-06-18T18:26:06.724Z] [failed] Cardano transaction failed: Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.","batchSize":7,"batchMembers":[{"intentHash":"0x5005532349ecc1c7676d7cbb7ade0008fa47ebdca6cf7301553dc28ff7b31b1e","symbol":"USDT/USD","pairUnit":"","action":"update"},{"intentHash":"0x2a3d523df0d7c13f24a161885cbbc7d5e31a57881853f38f65ac1fbcf1ddeb8b","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x106ecbbd377684680af3f2d1915e8cff5d28c5734e42f7eea25a7c4c4fb3c38d","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x79c267b71124837edace17e5416ee98b916d36ffeaf2d4c2d651583a8e1f308b","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0x21b7942b0d153503dcaa847e531800b309dc82279679d424be48117a9bbea379","symbol":"USDC/USD","pairUnit":"","action":"update"},{"intentHash":"0x9dcbef24bddb964701da7d27df8443f3e9836eb51d90cd33a89f652c1fe8b3a5","symbol":"DOGE/USD","pairUnit":"","action":"update"},{"intentHash":"0x5b0e1364a827b7821592ac6dd595d209dc9d1dd56c186419cfc5246cf6472770","symbol":"SHIB/USD","pairUnit":"","action":"update"}]}

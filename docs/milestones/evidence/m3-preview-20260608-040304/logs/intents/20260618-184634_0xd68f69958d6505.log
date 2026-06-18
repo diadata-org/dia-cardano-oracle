@@ -1,0 +1,18 @@
+[2026-06-18T18:46:34.056Z] [connecting] connecting
+[2026-06-18T18:46:43.145Z] [building] building
+[2026-06-18T18:46:46.457Z] [signing] signing
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:46:47.851Z] [submitting] submitting
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:46:48.115Z] [submitted] submitted
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:46:48.115Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:47:49.206Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:47:52.665Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xde380cdd37bc9e2e16f333362e9063aa95e81c1bcb8d1db607b7ef9cdfd799a3"}
+[2026-06-18T18:47:54.662Z] [writing_state] writing_state
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:47:58.074Z] [confirm] Cardano transaction confirmed
+  meta: {"cardanoTxHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9025ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315","pairAction":"update","batchSize":1}

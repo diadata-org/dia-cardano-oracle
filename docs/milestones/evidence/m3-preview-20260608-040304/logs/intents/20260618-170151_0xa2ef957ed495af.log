@@ -1,0 +1,14 @@
+[2026-06-18T17:01:51.853Z] [enriched] Intent enriched: SHIB/USD @ 4675333809807
+  meta: {"price":"4675333809807","timestamp":"1781802109","expiry":"1781805709","blockNumber":13605795}
+[2026-06-18T17:01:51.853Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T17:01:51.854Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T17:02:19.964Z] [connecting] connecting
+[2026-06-18T17:02:27.709Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xa208c1cebac6af71a6c58a6e8fb8e5e8fd2199861de00aebc67d498c9d946877"}
+[2026-06-18T17:02:31.863Z] [building] building
+[2026-06-18T17:02:34.952Z] [signing] signing
+  meta: {"txHash":"3cdff0b032ce0a14ee5ad69a8227c16e109b151b38912ae4bfc0c8bee2cbf338"}
+[2026-06-18T17:02:36.418Z] [submitting] submitting
+  meta: {"txHash":"3cdff0b032ce0a14ee5ad69a8227c16e109b151b38912ae4bfc0c8bee2cbf338"}

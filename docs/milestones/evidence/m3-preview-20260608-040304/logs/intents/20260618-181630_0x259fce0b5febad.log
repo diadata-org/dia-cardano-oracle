@@ -1,0 +1,20 @@
+[2026-06-18T18:16:30.629Z] [enriched] Intent enriched: ARB/USD @ 82016448224045736
+  meta: {"price":"82016448224045736","timestamp":"1781806588","expiry":"1781810188","blockNumber":13617925}
+[2026-06-18T18:16:30.629Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T18:16:30.630Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:16:41.123Z] [connecting] connecting
+[2026-06-18T18:16:46.343Z] [connecting] connecting
+[2026-06-18T18:16:51.668Z] [connecting] connecting
+[2026-06-18T18:16:56.831Z] [connecting] connecting
+[2026-06-18T18:16:57.166Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":1}
+[2026-06-18T18:16:57.169Z] [connecting] connecting
+[2026-06-18T18:17:02.404Z] [connecting] connecting
+[2026-06-18T18:17:07.717Z] [connecting] connecting
+[2026-06-18T18:17:13.381Z] [connecting] connecting
+[2026-06-18T18:17:13.775Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":8,"batchMembers":[{"intentHash":"0x20be0e6fe6b872aa0b3e6c1203a47ffd908cd1a74195f04bd8b4d77b678e4ccf","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0x45406047d6ba60ea4aa5da090c5ab379adf5211c0a867ea1ed404a8b3e1ef6ad","symbol":"NEIRO/USD","pairUnit":"","action":"update"},{"intentHash":"0x1111bd63d47f8a70664a077e6de61fd268d65d39e41e1e53ea49c17d18985b49","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xc2935960deae663da861551f752df2a4db971e11a8477f4586f71de2cea872f5","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0xddb74dec3e9634b95c72dd44da9714908e55cf1ffddd8e8e7603ca5a5ad2a5d4","symbol":"USDT/USD","pairUnit":"","action":"update"},{"intentHash":"0x259fce0b5febadf4ec6009e4527c2df137a781bd37b74c1a1db7c5d415dd1e10","symbol":"ARB/USD","pairUnit":"","action":"update"},{"intentHash":"0x239dd946ca092b8c1fb09da55d47501729535f417d0cf63fd9e26d0e2f6de351","symbol":"XVG/USD","pairUnit":"","action":"update"},{"intentHash":"0xe5203ee9dfbe71a972639f6905cc2701182e85e9469e1fc15402e7053abc8d74","symbol":"USDC/USD","pairUnit":"","action":"update"}]}
+[2026-06-18T18:17:26.448Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0x3da4b7cadb8968cf35dca47787bbae23cbf8aa2f63ba4f3711dc3875f8f6efd4"}

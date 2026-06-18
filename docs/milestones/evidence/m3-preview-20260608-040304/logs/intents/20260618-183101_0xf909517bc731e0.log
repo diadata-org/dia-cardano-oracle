@@ -1,0 +1,12 @@
+[2026-06-18T18:31:01.172Z] [enriched] Intent enriched: NEIRO/USD @ 64711252225000
+  meta: {"price":"64711252225000","timestamp":"1781807459","expiry":"1781811059","blockNumber":13620283}
+[2026-06-18T18:31:01.172Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T18:31:01.173Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:31:04.261Z] [connecting] connecting
+[2026-06-18T18:31:09.265Z] [connecting] connecting
+[2026-06-18T18:31:14.268Z] [connecting] connecting
+[2026-06-18T18:31:19.274Z] [connecting] connecting
+[2026-06-18T18:31:19.294Z] [failed] Cardano transaction failed: Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Missing required environment variable: BLOCKFROST_PROJECT_ID_TESTNET. Active CARDANO_NETWORK requires the *_TESTNET variant of every per-network setting.","batchSize":7,"batchMembers":[{"intentHash":"0x420604a685f2f8c8261ad5e27d58aa9ec691dff13eb717798c060fe47471f6b3","symbol":"LTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xf909517bc731e0b08a05f08207a80497ad61acf6e39422d5ae7770021fc08fee","symbol":"NEIRO/USD","pairUnit":"","action":"update"},{"intentHash":"0xe2a1f53ce1110d152b2494ace307d1e98bdfcb21fff299381c5bd103958e480b","symbol":"BTC/USD","pairUnit":"","action":"update"},{"intentHash":"0xe4aa6ab19ca2483c883899179cd3ddc70cd87efbaa2a0f0548119f5c282453be","symbol":"ETH/USD","pairUnit":"","action":"update"},{"intentHash":"0x6c19f33499b6b655f38e7eb9bfd20f37c1c2d8f798f26bc09803b40dbcb154c3","symbol":"USDT/USD","pairUnit":"","action":"update"},{"intentHash":"0xc087cd55ad2ea98c7eaf3a47ce4ebc276d12c7e74a21e9288b4180954c1df268","symbol":"ARB/USD","pairUnit":"","action":"update"},{"intentHash":"0xba3a397807b28b75cbe431d4d4bc7b7ab8bd1ed83fce3d6c47ce18d82a2165ae","symbol":"XVG/USD","pairUnit":"","action":"update"}]}

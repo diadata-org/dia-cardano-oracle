@@ -360,7 +360,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "Receiver accrued — "
+              "options": "Receiver accrued — .*"
             },
             "properties": [
               {

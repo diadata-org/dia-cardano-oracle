@@ -1,0 +1,28 @@
+[2026-06-18T16:28:10.039Z] [enriched] Intent enriched: BTC/USD @ 62598374945966348304384
+  meta: {"price":"62598374945966348304384","timestamp":"1781800088","expiry":"1781803688","blockNumber":13600284}
+[2026-06-18T16:28:10.039Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T16:28:10.040Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T16:28:10.044Z] [enriched] Intent enriched: BTC/USD @ 62598374945966348304384
+  meta: {"price":"62598374945966348304384","timestamp":"1781800088","expiry":"1781803688","blockNumber":13600284}
+[2026-06-18T16:28:10.044Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0}
+[2026-06-18T16:28:10.045Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-02.json"}
+[2026-06-18T16:28:33.796Z] [connecting] connecting
+[2026-06-18T16:28:40.016Z] [connecting] connecting
+[2026-06-18T16:28:41.812Z] [building] building
+[2026-06-18T16:28:44.885Z] [signing] signing
+  meta: {"txHash":"fc92d081933aa2bcea27ec5f44719d369ae3eaac0a1abec1050cee03e3c1ab07"}
+[2026-06-18T16:28:45.877Z] [building] building
+[2026-06-18T16:28:46.364Z] [submitting] submitting
+  meta: {"txHash":"fc92d081933aa2bcea27ec5f44719d369ae3eaac0a1abec1050cee03e3c1ab07"}
+[2026-06-18T16:28:46.661Z] [submitted] submitted
+  meta: {"txHash":"fc92d081933aa2bcea27ec5f44719d369ae3eaac0a1abec1050cee03e3c1ab07"}
+[2026-06-18T16:28:46.669Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"fc92d081933aa2bcea27ec5f44719d369ae3eaac0a1abec1050cee03e3c1ab07"}
+[2026-06-18T16:28:48.789Z] [signing] signing
+  meta: {"txHash":"8981be4b8e78405c3fac4cc53187123b4c699131375abc2b4d40de91ea5244c3"}
+[2026-06-18T16:28:50.262Z] [submitting] submitting
+  meta: {"txHash":"8981be4b8e78405c3fac4cc53187123b4c699131375abc2b4d40de91ea5244c3"}

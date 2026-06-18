@@ -1,0 +1,22 @@
+[2026-06-18T16:06:52.224Z] [enriched] Intent enriched: ETH/USD @ 1703559385280053641216
+  meta: {"price":"1703559385280053641216","timestamp":"1781798810","expiry":"1781802410","blockNumber":13596754}
+[2026-06-18T16:06:52.224Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T16:06:52.226Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T16:06:56.114Z] [connecting] connecting
+[2026-06-18T16:07:05.203Z] [building] building
+[2026-06-18T16:07:08.607Z] [signing] signing
+  meta: {"txHash":"81ade8886640be9444595ca92e4e35154cd621a8b6f0a0ae01245b39d4fa6bc4"}
+[2026-06-18T16:07:10.194Z] [submitting] submitting
+  meta: {"txHash":"81ade8886640be9444595ca92e4e35154cd621a8b6f0a0ae01245b39d4fa6bc4"}
+[2026-06-18T16:07:10.465Z] [submitted] submitted
+  meta: {"txHash":"81ade8886640be9444595ca92e4e35154cd621a8b6f0a0ae01245b39d4fa6bc4"}
+[2026-06-18T16:07:10.480Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"81ade8886640be9444595ca92e4e35154cd621a8b6f0a0ae01245b39d4fa6bc4"}
+[2026-06-18T16:07:29.708Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"81ade8886640be9444595ca92e4e35154cd621a8b6f0a0ae01245b39d4fa6bc4"}
+[2026-06-18T16:07:35.452Z] [writing_state] writing_state
+  meta: {"txHash":"81ade8886640be9444595ca92e4e35154cd621a8b6f0a0ae01245b39d4fa6bc4"}
+[2026-06-18T16:07:38.833Z] [failed] Cardano transaction failed: Intent for ETH/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for ETH/USD superseded on chain; not submitted.","batchSize":3,"batchMembers":[{"intentHash":"0xf9ba05debcda1370de8bd0ff8c00521c8d39b1274d40b0e3e4da4f7f1d8aa15d","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"},{"intentHash":"0x7444d22ce8688a1960ebdecde7fc09aabd5b854c01c70fc8eb2f49e891bb5c63","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0x9c7e6732eb92f41f4c71dbf8e4d5845ec2aaf6dd04d2a1cdade58df34402122b","symbol":"NEIRO/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","action":"update"}]}

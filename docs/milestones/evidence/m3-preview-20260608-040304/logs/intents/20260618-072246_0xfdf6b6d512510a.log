@@ -1,9 +1,0 @@
-[2026-06-18T07:22:46.217Z] [enriched] Intent enriched: BTC/USD @ 64013826755066398244864
-  meta: {"price":"64013826755066398244864","timestamp":"1781767364","expiry":"1781770964","blockNumber":13509689}
-[2026-06-18T07:22:46.217Z] [routed] Intent passed all filters
-  meta: {"routerId":"client_test_01_router_default","destinationIndex":0}
-[2026-06-18T07:22:46.218Z] [queued] Intent accepted by coalescer
-  meta: {"routerId":"client_test_01_router_default","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
-[2026-06-18T07:23:07.192Z] [connecting] connecting
-[2026-06-18T07:23:12.109Z] [failed] Cardano transaction failed: Intent for BTC/USD superseded on chain; not submitted.
-  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for BTC/USD superseded on chain; not submitted.","batchSize":1}

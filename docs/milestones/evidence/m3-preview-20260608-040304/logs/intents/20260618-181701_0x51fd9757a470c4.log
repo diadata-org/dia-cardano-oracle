@@ -1,0 +1,12 @@
+[2026-06-18T18:17:01.619Z] [enriched] Intent enriched: USDT/USD @ 998660000000000000
+  meta: {"price":"998660000000000000","timestamp":"1781806619","expiry":"1781810219","blockNumber":13618013}
+[2026-06-18T18:17:01.619Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T18:17:01.628Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:17:13.790Z] [connecting] connecting
+[2026-06-18T18:17:19.020Z] [connecting] connecting
+[2026-06-18T18:17:24.281Z] [connecting] connecting
+[2026-06-18T18:17:29.507Z] [connecting] connecting
+[2026-06-18T18:17:29.848Z] [failed] Cardano transaction failed: Unable to fetch protocol parameters from Blockfrost (402 Payment Required).
+  meta: {"code":"BuilderError","remediation":"A Cardano tx builder or signing error occurred. Check the feeder logs for the full stack trace.","error":"Unable to fetch protocol parameters from Blockfrost (402 Payment Required).","batchSize":4,"batchMembers":[{"intentHash":"0x545e53bd7943ad290141f9c5be3a454d646494416556b7870475c82dc35f034e","symbol":"XVG/USD","pairUnit":"","action":"update"},{"intentHash":"0xb62121ebcd7e1e88ee754f15555d5122a9568c92485bd948befe5d161903ce2a","symbol":"DOGE/USD","pairUnit":"","action":"update"},{"intentHash":"0x51fd9757a470c4d70d806bc6a8cdbddbf1c55c903b6c273bcb1b96cf7a58637e","symbol":"USDT/USD","pairUnit":"","action":"update"},{"intentHash":"0x959c468af9ae3989e135138f56882547b7b4c7f6bc1e7a3aab6e5c9208ba9a78","symbol":"SHIB/USD","pairUnit":"","action":"update"}]}

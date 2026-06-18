@@ -1,0 +1,34 @@
+[2026-06-18T18:45:52.921Z] [connecting] connecting
+[2026-06-18T18:46:01.157Z] [building] building
+[2026-06-18T18:46:04.633Z] [signing] signing
+  meta: {"txHash":"b84d3758764462645b804c3fe4a03ac608ff578ed295fb0af5c91361860c0547"}
+[2026-06-18T18:46:06.101Z] [submitting] submitting
+  meta: {"txHash":"b84d3758764462645b804c3fe4a03ac608ff578ed295fb0af5c91361860c0547"}
+[2026-06-18T18:46:06.402Z] [submitted] submitted
+  meta: {"txHash":"b84d3758764462645b804c3fe4a03ac608ff578ed295fb0af5c91361860c0547"}
+[2026-06-18T18:46:06.418Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"b84d3758764462645b804c3fe4a03ac608ff578ed295fb0af5c91361860c0547"}
+[2026-06-18T18:46:25.655Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"b84d3758764462645b804c3fe4a03ac608ff578ed295fb0af5c91361860c0547"}
+[2026-06-18T18:46:30.619Z] [writing_state] writing_state
+  meta: {"txHash":"b84d3758764462645b804c3fe4a03ac608ff578ed295fb0af5c91361860c0547"}
+[2026-06-18T18:46:34.026Z] [batched] Intent confirmed inside a batch of 4 intents
+  meta: {"cardanoTxHash":"b84d3758764462645b804c3fe4a03ac608ff578ed295fb0af5c91361860c0547","batchSize":4,"batchMembers":[{"intentHash":"0xce3ce09810ea8903ea3fe8cec1da62aaee32c39ba653f95d13842429c0eef35c","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0xa080590bd0f5c684c11d7a28fb615fda1f8249da3e5d08f31143bca637d94ecb","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0x9111e42b52e204843b9d67c7273c7713a13f55af3eb2f8683a0898677db29427","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0x016ceee7353773b738f46a41f533f967a256cb0ddf8819073de6f88554550607","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"}],"pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","pairAction":"update"}
+[2026-06-18T18:46:34.027Z] [confirm] Cardano batch transaction confirmed
+  meta: {"cardanoTxHash":"b84d3758764462645b804c3fe4a03ac608ff578ed295fb0af5c91361860c0547","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","pairAction":"update","batchSize":4}
+[2026-06-18T18:46:34.055Z] [connecting] connecting
+[2026-06-18T18:46:43.145Z] [building] building
+[2026-06-18T18:46:46.452Z] [signing] signing
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:46:47.851Z] [submitting] submitting
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:46:48.104Z] [submitted] submitted
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:46:48.115Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:47:49.206Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:47:54.661Z] [writing_state] writing_state
+  meta: {"txHash":"4a6e927dee5a87b5b7e5f9d3703b09f49463009362a5c8bef8d59d91c13a4ae9"}
+[2026-06-18T18:47:58.036Z] [failed] Cardano transaction failed: Intent for BTC/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for BTC/USD superseded on chain; not submitted.","batchSize":1,"batchMembers":[{"intentHash":"0xd68f69958d6505484db25b553808b7d7585a78ee41e4e554195164cd0d3cb41c","symbol":"USDT/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9025ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315","action":"update"}]}

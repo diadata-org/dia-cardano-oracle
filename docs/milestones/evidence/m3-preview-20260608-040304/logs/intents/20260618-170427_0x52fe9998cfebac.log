@@ -1,0 +1,9 @@
+[2026-06-18T17:04:27.192Z] [enriched] Intent enriched: NEIRO/USD @ 64213334175000
+  meta: {"price":"64213334175000","timestamp":"1781802265","expiry":"1781805865","blockNumber":13606228}
+[2026-06-18T17:04:27.192Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T17:04:27.193Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T17:04:56.873Z] [connecting] connecting
+[2026-06-18T17:05:02.095Z] [failed] Cardano transaction failed: Intent for NEIRO/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for NEIRO/USD superseded on chain; not submitted.","batchSize":1}

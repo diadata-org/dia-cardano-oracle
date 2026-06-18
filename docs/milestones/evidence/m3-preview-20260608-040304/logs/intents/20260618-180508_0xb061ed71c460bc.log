@@ -1,0 +1,7 @@
+[2026-06-18T18:05:08.315Z] [enriched] Intent enriched: LTC/USD @ 43180035060000002048
+  meta: {"price":"43180035060000002048","timestamp":"1781805906","expiry":"1781809506","blockNumber":13616047}
+[2026-06-18T18:05:08.315Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T18:05:08.316Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T18:05:33.019Z] [connecting] connecting

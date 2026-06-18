@@ -9,8 +9,8 @@ Pack stamp: **20260608-040304**
 
 Window observed in `transactions.jsonl`:
 
-- First tx event: `2026-06-18T08:16:02.673Z`
-- Last tx event:  `2026-06-18T09:05:11.834Z`
+- First tx event: `2026-06-18T15:28:02.422Z`
+- Last tx event:  `2026-06-18T18:59:02.014Z`
 
 Evidence pack location: this directory.
 
@@ -42,7 +42,7 @@ Evidence pack location: this directory.
 | Anomaly detection | Complete: `offchain/feeder/monitoring/alerts.yml` (13 alert rules) over price-deviation, price-age/staleness, reorg, and on-chain-vs-source feed-sanity signals; canonical thresholds in `infrastructure.<network>.yaml::alerting.*`. |
 | Uptime and accuracy reports | This pack: per-pair confirmed counts + latency + reorg stats; per-feed accuracy from the sanity check. |
 | Automated alerts | Complete: Prometheus rules → Alertmanager → feeder webhook → `alert_log` (single pipeline; Telegram/email one config flip away). |
-| Test coverage | Feeder `npm test`: **655 / 655 passing**, 0 failed (152 suites) — **PASS**. CLI `npm test`: **PASS**. Full output captured in [`tests/`](tests/). See [Test results](#test-results). |
+| Test coverage | Feeder `npm test`: **663 / 663 passing**, 0 failed (154 suites) — **PASS**. CLI `npm test`: **PASS**. Full output captured in [`tests/`](tests/). See [Test results](#test-results). |
 | Real-time dashboards | Complete: `dashboards/` (PNG snapshots taken at pack time). Source JSON in [`offchain/feeder/monitoring/grafana/dashboards/`](../../../../offchain/feeder/monitoring/grafana/dashboards/). |
 | Developer documentation | Complete: [feeder README](../../../../offchain/feeder/README.md), [CLI README](../../../../offchain/cli/README.md), [architecture](../../../architecture/cardano-oracle-architecture.md). |
 
@@ -53,7 +53,7 @@ saved alongside this report.
 
 | Suite | Result | Tests | Suites | Output |
 | --- | --- | ---: | ---: | --- |
-| Feeder (`offchain/feeder`, `npm test`) | **PASS** | 655 / 655 passing (0 failed) | 152 | [`tests/feeder-tests.txt`](tests/feeder-tests.txt) |
+| Feeder (`offchain/feeder`, `npm test`) | **PASS** | 663 / 663 passing (0 failed) | 154 | [`tests/feeder-tests.txt`](tests/feeder-tests.txt) |
 | CLI (`offchain/cli`, `npm test`) | **PASS** | — (custom runner; pass/fail by exit code) | — | [`tests/cli-tests.txt`](tests/cli-tests.txt) |
 
 ## Per-feed sanity (accuracy)
@@ -64,15 +64,15 @@ feed's own push-policy thresholds (price tolerance + freshness ceiling).
 
 # Feed sanity check — Preview
 
-5 feeds: 1 PASS · 4 WARN · 0 FAIL.
+5 feeds: 5 PASS · 0 WARN · 0 FAIL.
 
 | Symbol | Status | Deviation % | Staleness (s) | Reasons |
 |--------|--------|-------------|---------------|---------|
-| BTC/USD | WARN | 0.018818 | 720 | on_chain_stale |
-| ETH/USD | WARN | 0.016735 | 631 | on_chain_stale |
-| USDC/USD | WARN | 0.004621 | 4933 | on_chain_stale |
-| USDT/USD | WARN | 0.003002 | 1064 | on_chain_stale |
-| DOGE/USD | PASS | 0.000259 | 355 | — |
+| BTC/USD | PASS | 0 | 104 | — |
+| ETH/USD | PASS | 0.008234 | 104 | — |
+| USDC/USD | PASS | 0 | 103 | — |
+| USDT/USD | PASS | 0.000083 | 154 | — |
+| DOGE/USD | PASS | 0.019097 | 103 | — |
 
 ## Alert-trigger logs
 
@@ -100,36 +100,38 @@ Run stamp: **20260618-063047** · Prometheus: http://localhost:9090 · feeder: h
 
 | Metric | Value |
 | --- | ---: |
-| Confirmed Cardano oracle update txs | 24 |
-| Failed Cardano tx attempts (real, tx broadcast) | 0 |
-| Condemned intents (NonMonotonicNonce — no tx, no fee) | 122 |
+| Confirmed Cardano oracle update txs | 86 |
+| Failed Cardano tx attempts (real, tx broadcast) | 568 |
+| Condemned intents (NonMonotonicNonce — no tx, no fee) | 49 |
 | Chain reorgs that dropped a tx | 0 |
 
 ## Confirmed Cardano tx count per pair
 
 | Pair | Confirmed txs |
 | --- | --- |
-| BTC/USD | 10 |
-| USDT/USD | 4 |
-| ARB/USD | 2 |
-| DOGE/USD | 2 |
+| BTC/USD | 27 |
+| USDT/USD | 25 |
+| DOGE/USD | 9 |
+| USDC/USD | 9 |
+| NEIRO/USD | 6 |
+| ARB/USD | 4 |
 | ETH/USD | 2 |
-| NEIRO/USD | 2 |
-| LTC/USD | 1 |
-| XVG/USD | 1 |
+| LTC/USD | 2 |
+| XVG/USD | 2 |
 
 ## Sample Cardano tx hashes (one per pair, first observed)
 
 | Pair | Tx hash |
 | --- | --- |
-| ARB/USD | fc5724ac3567dc4cf16ba9389995afd6b302960d6a2d4676ac44ba0467e5a97c |
-| BTC/USD | 169654160978835a26e87b2a3bdf61f183839fbf2db3a4be3683616f0f973207 |
-| DOGE/USD | 1ce47ebf50efff41aba854af3f672c0dc05a99847594760c2062c380c08cb70a |
-| ETH/USD | 5fe87c0b626f52a0420f563754f3fc1eaf35bceff27acaf70da497a27f6191e3 |
-| LTC/USD | eef312d3906e5a54b2ef312aaa29c0b73dc2f3dd2c06371b292d52b99010f78e |
-| NEIRO/USD | 9920446c709c55c26c5f448adc429ae2dbe6ae56fa2f4df8a536a5baba3dfcac |
-| USDT/USD | 0c8ce442d77fb093fef5f4aaedfe254eb9295dc6d472f89f5c8c656c4f7e24c4 |
-| XVG/USD | e7865ed588685d3aea9195abf0eb863e5c2c2c3b42b429c2ab410349f5c25904 |
+| ARB/USD | ea171269fdf1cee9e012ee6d49bda4c224aa33416a7144283d7d99b4f961bc42 |
+| BTC/USD | 735cc6541fa91af75d73c9bcbb890bf1e39ebc7ab1a2c044ea24fae2d7ed264c |
+| DOGE/USD | 5c61419780c84b63e78cb8382fd23f64e4cc987afab7d297c821ce7dd3acaa7b |
+| ETH/USD | 26aa9c92fb59e96a3e7566e31d0c39db777206583c38eddf94f2055c92373a40 |
+| LTC/USD | c714078f231fe3fa1941a3a05bebaa858145d147302eb7ffb383aed4100bada9 |
+| NEIRO/USD | df8bdf52ee4c0854ffe196d21810fa43d8b65b3131fdadfc41dbee686e08c995 |
+| USDC/USD | 6aaa5e7d40bd49ab81aba8c6e6da00b37c0fc74aff68e1916297bc77cfbfc450 |
+| USDT/USD | 99e476119eb5553584149f1d38990db2f8a71fdca99ef50d58cb58086f388fb3 |
+| XVG/USD | dce9161eb82278b21d3e69206268efae36b18a0496185499e356183e8bc8724c |
 
 Verify on [Cardanoscan Preview](https://preview.cardanoscan.io/) or any
 public Preview explorer.
@@ -140,14 +142,15 @@ DIA `IntentRegistered` → Cardano `tx_confirmed`, milliseconds.
 
 | Pair | Samples | p50 (ms) | p95 (ms) |
 | --- | --- | --- | --- |
-| DOGE/USD | 1 | 59850 | 59850 |
-| ARB/USD | 1 | 38983 | 38983 |
-| USDT/USD | 3 | 59886 | 116180 |
-| NEIRO/USD | 1 | 44940 | 44940 |
-| BTC/USD | 9 | 41785 | 65759 |
-| ETH/USD | 1 | 106651 | 106651 |
-| LTC/USD | 0 | 0 | 0 |
-| XVG/USD | 0 | 0 | 0 |
+| DOGE/USD | 8 | 52646 | 112409 |
+| ARB/USD | 3 | 38720 | 50486 |
+| USDT/USD | 24 | 42075 | 89202 |
+| NEIRO/USD | 5 | 51056 | 60839 |
+| BTC/USD | 26 | 40938 | 77670 |
+| ETH/USD | 1 | 37888 | 37888 |
+| LTC/USD | 1 | 26172 | 26172 |
+| XVG/USD | 1 | 81192 | 81192 |
+| USDC/USD | 8 | 50903 | 91000 |
 
 ## Failures (grouped by error code)
 
@@ -156,7 +159,10 @@ failed on-chain. Routine non-failures (an update made obsolete by a newer one
 before it was sent, or an update interrupted by a restart) are not counted here.
 An empty table means there were no real failures in this run.
 
-_(no data)_
+| Error code | Count |
+| --- | --- |
+| BuilderError | 567 |
+| UtxoNotFound | 1 |
 
 ## Raw artefacts in this pack
 
@@ -235,11 +241,11 @@ _Each panel is also captured individually below. Every caption names the underly
 
 ### Overview panels
 
-**Confirmed oracle updates — all-time total (per pair)**
+**Confirmed oracle updates (selected range, per pair)**
 
-![Confirmed oracle updates — all-time total (per pair)](dashboards/panel-11.png)
+![Confirmed oracle updates (selected range, per pair)](dashboards/panel-11.png)
 
-Metric `sum by (symbol) (dia_bridge_transactions_confirmed_total)`. Running all-time count of oracle-update transactions that reached on-chain confirmation, split per price pair (the `symbol` label). This is the liveness proof — every active pair should show a non-zero, growing count.
+Confirmed Cardano oracle-update transactions per price pair over the selected time range. The liveness proof: every active feed should show a non-zero count.
 
 **Price data age p95 — 1 h window (per routed pair)**
 
@@ -295,6 +301,12 @@ Metric `sum by (symbol) (increase(dia_bridge_transactions_confirmed_total[5m]))`
 
 Metric `sum by (error_code) (increase(dia_bridge_transactions_failed_total[5m]))` — a 5-minute count grouped by `error_code`, REAL submission failures only. Superseded intents the feeder declined to submit (`NonMonotonicNonce`, no tx, no fee) are NOT counted here — they go to `dia_bridge_intents_superseded_total{reason}`. Codes are documented in `offchain/feeder/src/errors/codes.ts`.
 
+**Feed sanity verdict (per pair)**
+
+![Feed sanity verdict (per pair)](dashboards/panel-20.png)
+
+Metric `max by (symbol, client_id) (dia_bridge_feed_sanity_status)` (0 = ok, 1 = suspect, 2 = broken). Per-feed verdict from the periodic feed-sanity check: the live on-chain value vs the latest DIA source value, judged against that feed's push-policy thresholds (price tolerance + freshness ceiling). A sustained 2 triggers the `FeedAccuracyFail` alert.
+
 **Tx confirmed vs failed (5m)**
 
 ![Tx confirmed vs failed (5m)](dashboards/panel-16.png)
@@ -306,6 +318,12 @@ Metric `sum by (outcome) (increase(dia_bridge_transactions_total[5m]))` — Card
 ![Pairs per tx (p50/p95)](dashboards/panel-17.png)
 
 Metric `histogram_quantile(0.50 / 0.95, rate(dia_bridge_transaction_pairs_bucket[5m]))` — batch size: how many pairs travel in each transaction, at the median and 95th percentile.
+
+**Tx involving router (5m, by router & outcome)**
+
+![Tx involving router (5m, by router & outcome)](dashboards/panel-18.png)
+
+Metric `sum by (router_id, outcome) (increase(dia_bridge_transaction_router_membership_total[5m]))` — transactions that involved each router per 5-minute window, by outcome. A coalesced batch can mix routers on one shared lane, so this is tx↔router membership (one tx can credit several routers), not a pure tx count.
 
 **Reorg counter**
 
@@ -324,6 +342,12 @@ Metric `dia_bridge_scanner_block_lag`, in blocks. How many blocks behind the cha
 ![Intents filtered (5m, by reason)](dashboards/panel-9.png)
 
 Metric `sum by (reason) (increase(dia_bridge_intents_filtered_total[5m]))` — a 5-minute count grouped by `reason`. Intents the feeder deliberately suppressed before submitting. High counts are normal: the deviation/time-threshold policy suppresses most intents by design.
+
+**Intents superseded (5m, by reason)**
+
+![Intents superseded (5m, by reason)](dashboards/panel-21.png)
+
+Metric `sum by (reason) (increase(dia_bridge_intents_superseded_total[5m]))` — intents the feeder declined to submit because a newer one already won on-chain (NonMonotonicNonce): no tx, no fee. Correct no-ops, kept out of the failure counters.
 
 **Price deviation p95 — 1 h window (per pair)**
 
@@ -411,11 +435,71 @@ Metric `sum by (le) (rate(dia_bridge_transaction_pairs_bucket[5m]))`, batch-size
 
 Metric `sum by (symbol, outcome) (increase(dia_bridge_tx_pair_membership_total[5m]))` — one increment per (tx, pair). Filter by `$symbol` to find the transactions that included a given pair (their size is in "Pairs per tx"); carries confirmed vs failed and the customer dimension.
 
+**Tx involving router (5m, by router & outcome)**
+
+![Tx involving router (5m, by router & outcome)](dashboards/tx-panel-324.png)
+
+Metric `sum by (router_id, outcome) (increase(dia_bridge_transaction_router_membership_total[5m]))` — transactions that involved each router per 5-minute window, by outcome. A coalesced batch can mix routers on one shared lane, so this counts tx↔router membership (one tx can credit several routers) — not a pure tx count.
+
 **Tx counts — confirmed vs failed (selected range)**
 
 ![Tx counts — confirmed vs failed (selected range)](dashboards/tx-panel-331.png)
 
 The number of real Cardano oracle transactions over the window — how many confirmed on-chain and how many failed, counted once per transaction (one transaction can carry several price pairs).
+
+**Tx counts per client (confirmed/failed, selected range)**
+
+![Tx counts per client (confirmed/failed, selected range)](dashboards/tx-panel-341.png)
+
+Metric `sum by (client_id, outcome) (increase(dia_bridge_transactions_total[$__range]))` — the real integer count of Cardano transactions per client and outcome over the selected range (not an average). A tx batches one client's pairs, so the clean per-unit count is per client.
+
+**Submission state — now (per client)**
+
+![Submission state — now (per client)](dashboards/tx-panel-345.png)
+
+Metric `dia_bridge_submission_state{client_id}` (last value): what each client's submit pipeline is doing now — 0 idle / 1 building / 2 submitting / 3 awaiting-confirmation.
+
+**Coalescer state — now (per client)**
+
+![Coalescer state — now (per client)](dashboards/tx-panel-347.png)
+
+Metric `dia_bridge_coalescer_state{client_id}` (last value): what each client's coalescer is doing now — 0 idle / 1 accumulating / 2 in-flight.
+
+**Submission state per client (history)**
+
+![Submission state per client (history)](dashboards/tx-panel-342.png)
+
+State-timeline of `dia_bridge_submission_state{client_id}` (0 idle / 1 building / 2 submitting / 3 awaiting-confirmation). Serial per batch; shows how long each phase took.
+
+**Coalescer state per client (history)**
+
+![Coalescer state per client (history)](dashboards/tx-panel-346.png)
+
+State-timeline of `dia_bridge_coalescer_state{client_id}` (0 idle / 1 accumulating / 2 in-flight). Independent of the submit pipeline — a lane can accumulate the next batch while submitting the current one.
+
+**Intents in coalescer queue — now (per client)**
+
+![Intents in coalescer queue — now (per client)](dashboards/tx-panel-348.png)
+
+Metric `sum by (client_id) (dia_bridge_coalescer_buffered)` (last value) — intents buffered for each client, waiting for the flush that batches them into one transaction.
+
+**Coalescer buffered per client**
+
+![Coalescer buffered per client](dashboards/tx-panel-343.png)
+
+Metric `sum by (client_id) (dia_bridge_coalescer_buffered)` over time — intents buffered in the coalescer; sawtooths, climbing as intents accumulate and dropping to 0 on each flush.
+
+**Tx in submit queue — now (per client)**
+
+![Tx in submit queue — now (per client)](dashboards/tx-panel-349.png)
+
+Tasks waiting in each client's serial submit queue. Usually 0; rises when submissions arrive faster than they confirm.
+
+**Submit queue pending per client**
+
+![Submit queue pending per client](dashboards/tx-panel-344.png)
+
+Metric `sum by (client_id) (dia_bridge_submit_queue_pending)` over time — tasks waiting in each client's serial submit queue. Usually 0 (the lane drains each batch immediately).
 
 ### Internals dashboard
 
@@ -460,18 +544,6 @@ remediation lives in `alerts.yml` and the [feeder README](../../../../offchain/f
 
 ### Active at capture time
 
-Captured live from Prometheus `/api/v1/alerts` (raw: [`alerts-active.json`](./alerts-active.json)):
-
-| Alert | State | Key labels | Value | Active since |
-| --- | --- | --- | --- | --- |
-| OraclePairStale | firing | symbol=ARB/USD, client_id=client-test-01, run_dir=preview_run_20260608-040304 | 5.058292000055313e+03 | 2026-06-18T08:41:50.29264446Z |
-| OraclePairStale | firing | symbol=USDT/USD, client_id=client-test-01, run_dir=preview_run_20260608-040304 | 4.460292000055313e+03 | 2026-06-18T08:51:50.29264446Z |
-| OraclePairStale | firing | symbol=BTC/USD, client_id=client-test-01, run_dir=preview_run_20260608-040304 | 4.421292000055313e+03 | 2026-06-18T08:52:50.29264446Z |
-| OraclePairStale | firing | symbol=ETH/USD, client_id=client-test-01, run_dir=preview_run_20260608-040304 | 4.420292000055313e+03 | 2026-06-18T08:52:50.29264446Z |
-| OraclePairStale | firing | symbol=LTC/USD, client_id=client-test-01, run_dir=preview_run_20260608-040304 | 5.752292000055313e+03 | 2026-06-18T08:30:50.29264446Z |
-| OraclePairStale | firing | symbol=NEIRO/USD, client_id=client-test-01, run_dir=preview_run_20260608-040304 | 5.179292000055313e+03 | 2026-06-18T08:39:50.29264446Z |
-| OraclePairStale | firing | symbol=DOGE/USD, client_id=client-test-01, run_dir=preview_run_20260608-040304 | 4.856292000055313e+03 | 2026-06-18T08:45:50.29264446Z |
-| OraclePairStale | firing | symbol=USDC/USD, client_id=client-test-01, run_dir=preview_run_20260608-040304 | 4.859292000055313e+03 | 2026-06-18T08:45:50.29264446Z |
-| OraclePairStale | firing | symbol=XVG/USD, client_id=client-test-01, run_dir=preview_run_20260608-040304 | 5.616292000055313e+03 | 2026-06-18T08:32:50.29264446Z |
-| OraclePairStale | firing | symbol=SHIB/USD, client_id=client-test-01, run_dir=preview_run_20260608-040304 | 5.117292000055313e+03 | 2026-06-18T08:40:50.29264446Z |
-| SettleOverdue | firing | client_id=client-test-01, run_dir=preview_run_20260608-040304 | 2.525e+01 | 2026-06-18T08:34:50.29264446Z |
+No alerts were firing or pending at capture time — all feeds healthy. The raw snapshot is in
+[`alerts-active.json`](./alerts-active.json). (Pending/firing transitions over the window are
+also recorded in the feeder `alert_log` table — see `db/`.)
