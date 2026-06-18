@@ -61,7 +61,18 @@ Already multi-entity-correct (no change): Receiver balance/Deposit pending (by c
 Receiver accrued (total + by client), Tx by client, Tx fee p50 (by customer_id), Tx involving
 router (by router_id), and the global singletons (provider/scanner/admin/paymenthook).
 
-## 2. Living dashboards guide (docs/architecture)
+## 2. Living dashboards guide (docs/architecture) — ✅ DONE (2026-06-18)
+
+> Done: [`docs/architecture/grafana-dashboards.md`](../architecture/grafana-dashboards.md)
+> written (3 dashboards panel-by-panel, filter cascade incl. Router, the same-symbol-on-many-clients
+> rule, funnel/HTTP/feed-sanity panels, "how alerts surface", cheat sheet for 13 alerts, no
+> meta-language, no hardcoded "10"). The dated audit was bannered "superseded" and kept as a
+> historical snapshot; the new guide is linked from the root README. Per-panel inline detail
+> stays in the dashboard JSON `description` fields (the guide points to them rather than
+> duplicating). **With sections 1, 1b and 2 all done, this mini-plan is complete and can be
+> archived.**
+>
+> The notes below are the original plan, kept as the record.
 
 Turn the stale, dated audit into a maintained reference.
 

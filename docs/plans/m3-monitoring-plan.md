@@ -58,7 +58,7 @@ The monitoring **machinery** was built alongside the M2 feeder. M3 reuses it; th
 remaining work is validation artifacts + a live-mainnet demonstration, not new
 monitoring infrastructure.
 
-- [x] **Automated alerts — 12 rules**,
+- [x] **Automated alerts — 12 rules at the M3 baseline** (M3-A added `FeedAccuracyFail` → **13 now**),
   [`offchain/feeder/monitoring/alerts.yml`](../../offchain/feeder/monitoring/alerts.yml):
   `OraclePairStale`, `ReceiverBalanceLow`, `SettleOverdue`, `PaymentHookWithdrawReady`,
   `AdminWalletLow`, `AdminWalletFragmented`, `PriceDeviationHigh`, `PriceAgeHigh`,
