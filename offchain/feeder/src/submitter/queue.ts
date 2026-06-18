@@ -81,6 +81,9 @@ export type QueueOptions = {
   /** Retry policy applied after each failed attempt. When absent the queue
    *  surfaces the first failure immediately without retrying. */
   retryPolicy?: RetryPolicy;
+  /** Called once each time the queue decides to RETRY a failed submit (drives
+   *  the worker_task_retries metric). Not called for the first attempt. */
+  onRetry?: () => void;
   /** REQUIRED — timeout (ms) for in-flight entries created by this queue.
    *  Sourced from `infrastructure.<network>.yaml::worker_pool.inflight_timeout_ms`. */
   inflightTimeoutMs: number;
@@ -92,7 +95,7 @@ export type QueueOptions = {
 // ---------------------------------------------------------------------------
 
 export function createSubmissionQueue(options: QueueOptions): SubmissionQueue {
-  const { client, inflight, onResult, retryPolicy, inflightTimeoutMs, now } = options;
+  const { client, inflight, onResult, retryPolicy, onRetry, inflightTimeoutMs, now } = options;
 
   const pending: QueueEntry[] = [];
   let busy = false;
@@ -160,6 +163,7 @@ export function createSubmissionQueue(options: QueueOptions): SubmissionQueue {
         if (!firstError) break;
         const decision = retryPolicy.decide(firstError, attempt);
         if (!decision.shouldRetry) break;
+        onRetry?.();
         await sleep(decision.delayMs);
         attempt++;
         results = await trySubmitBatch(requests);

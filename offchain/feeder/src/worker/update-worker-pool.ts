@@ -41,6 +41,9 @@ export type UpdateWorkerPoolOptions = {
   /** Called once per task by the worker. Must not throw — errors are caught
    *  and logged. */
   onTask: (task: UpdateTask) => Promise<void>;
+  /** Called when a task threw or timed out (after it is caught + logged) — drives
+   *  the worker_tasks_failed metric. */
+  onTaskError?: (task: UpdateTask, err: unknown) => void;
   /** Optional structured-log sink for pool-level messages. */
   log?: (line: string) => void;
 };
@@ -89,7 +92,7 @@ function createUpdateWorkerPool(
   routerId: string,
   options: UpdateWorkerPoolOptions,
 ): UpdateWorkerPool {
-  const { maxWorkers, taskQueueSize, taskTimeoutMs, onTask, log } = options;
+  const { maxWorkers, taskQueueSize, taskTimeoutMs, onTask, onTaskError, log } = options;
 
   const queue: UpdateTask[] = [];
   let activeWorkers = 0;
@@ -144,6 +147,7 @@ function createUpdateWorkerPool(
         log?.(
           `[update-worker-pool] task failed routerId=${task.routerId}: ${String(err)}`,
         );
+        onTaskError?.(task, err);
       } finally {
         activeWorkers--;
       }
@@ -213,6 +217,7 @@ export function createUpdateWorkerPoolManager(
         taskQueueSize: options.taskQueueSize,
         taskTimeoutMs: options.taskTimeoutMs,
         onTask: (task) => options.onTask(routerId, task),
+        onTaskError: options.onTaskError,
         log: options.log,
       });
       pools.set(routerId, pool);

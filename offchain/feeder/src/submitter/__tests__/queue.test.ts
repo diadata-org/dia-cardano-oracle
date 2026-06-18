@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { createSubmissionQueue } from "../queue.js";
+import { createDefaultRetryPolicy } from "../retry-policy.js";
 import { createInflightTable } from "../inflight.js";
 import type { CardanoWriteClient, SubmitRequest, SubmitResult } from "../types.js";
 import type { EnrichedIntent } from "../../source/types.js";
@@ -391,5 +392,22 @@ describe("createSubmissionQueue", () => {
     const result = await q.enqueue(makeRequest("after-throw"));
     assert.equal(result.ok, true);
     assert.equal(q.busy, false);
+  });
+
+  it("calls onRetry once per retry decision (drives worker_task_retries)", async () => {
+    let retries = 0;
+    const q = createSubmissionQueue({
+      client: makeFailClient("rpc down"), // retriable code "Unknown", always fails
+      inflight: createInflightTable(),
+      inflightTimeoutMs: 60_000,
+      retryPolicy: createDefaultRetryPolicy({ maxRetries: 2, delayMs: 1 }),
+      onRetry: () => {
+        retries++;
+      },
+    });
+
+    const result = await q.enqueue(makeRequest("retry-me"));
+    assert.equal(result.ok, false, "still fails after exhausting retries");
+    assert.equal(retries, 2, "onRetry fires once per retry (maxRetries=2)");
   });
 });

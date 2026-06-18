@@ -45,6 +45,9 @@ export type QueueManagerOptions = {
    * Maps to `worker_pool.max_retries` + `worker_pool.retry_delay` in the YAML.
    */
   retryPolicy?: RetryPolicy;
+  /** Forwarded to each queue: called once per retry decision (drives
+   *  the worker_task_retries metric). */
+  onRetry?: () => void;
   /**
    * REQUIRED — how long an inflight-table entry remains valid before the
    * lock is released and a new submission for the same receiver can be
@@ -89,6 +92,7 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
     onResult,
     inflightOptions,
     retryPolicy,
+    onRetry,
     inflightTimeoutMs,
   } = options;
   if (!Number.isFinite(inflightTimeoutMs) || inflightTimeoutMs <= 0) {
@@ -110,6 +114,7 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
         client,
         inflight: sharedInflight,
         retryPolicy,
+        onRetry,
         inflightTimeoutMs,
         onResult,
       });

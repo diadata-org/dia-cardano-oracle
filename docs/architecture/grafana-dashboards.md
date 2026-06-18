@@ -312,6 +312,16 @@ higher = more amortized fees per pair.
 - **When to worry** — not by itself. Read with *Symbol updates confirmed*: lots of filtering **and**
   zero confirmations for a feed that should update is the signal.
 
+**Intents superseded (5m, by reason)** · `timeseries` · legend `{{reason}}`
+`sum by (reason) (increase(dia_bridge_intents_superseded_total{…}[5m]))`
+
+- **What it shows** — intents the feeder **declined to submit** because a newer one already won
+  on-chain (`NonMonotonicNonce`) — no tx, no fee. Correct no-ops, kept out of the failure counters.
+- **How to read it** — **high is normal under fast price movement** (newer intents supersede older
+  ones before they're sent). Sits next to *Intents filtered* because both are "intents we didn't
+  submit, and why".
+- **When to worry** — not on its own; it's expected behaviour, shown for transparency.
+
 ### Row 4 — Price Quality & Anomaly Detection
 
 **Price deviation p95 — 1 h window (per pair)** · `stat` · legend `{{symbol}} · {{router_id}}`
@@ -628,8 +638,10 @@ itself rather than the feeds.
 **Worker tasks (5m)** · `timeseries` — `increase(dia_bridge_worker_tasks_completed_total{pool_type}[5m])`.
 
 ![Worker tasks (5m)](img/internals-panel-5.png)
-Tasks completed by the pool; should track throughput. A drop to 0 while intents arrive = the pool
-stalled.
+Four series for the submission (update) pool: **completed** (should track throughput; a drop to 0
+while intents arrive = the pool stalled), **failed** (pool tasks that threw/timed out — normally 0,
+real submission failures live in the tx-failures panel), **dropped** (queue full — backpressure,
+event pool only), **retries** (submit retries from the queue's retry policy).
 
 **HTTP request latency p95 (by endpoint)** · `timeseries` — `histogram_quantile(0.95, … dia_bridge_http_request_duration_seconds_bucket …)`.
 

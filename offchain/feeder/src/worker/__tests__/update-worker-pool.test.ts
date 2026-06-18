@@ -201,4 +201,28 @@ describe("createUpdateWorkerPoolManager", () => {
 
     assert.ok(logOutput.includes("timed out"), `expected timeout log, got: ${logOutput}`);
   });
+
+  it("calls onTaskError when a task throws (drives worker_tasks_failed)", async () => {
+    const failed: UpdateTask[] = [];
+    const manager = createUpdateWorkerPoolManager({
+      maxWorkers: 1,
+      taskQueueSize: 10,
+      taskTimeoutMs: 5_000,
+      onTask: async () => {
+        throw new Error("boom");
+      },
+      onTaskError: (task) => {
+        failed.push(task);
+      },
+    });
+
+    const pool = manager.getOrCreatePool("router-err");
+    pool.start();
+    pool.submit(makeTask("router-err"));
+    await sleep(20);
+    await pool.stop();
+
+    assert.equal(failed.length, 1, "onTaskError should fire once for a thrown task");
+    assert.equal(failed[0]!.routerId, "router-err");
+  });
 });

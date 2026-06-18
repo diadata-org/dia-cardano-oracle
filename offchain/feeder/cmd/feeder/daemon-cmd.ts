@@ -1128,6 +1128,9 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       }),
     inflightTimeoutMs,
     retryPolicy,
+    onRetry: () => {
+      metrics.workerTaskRetries.inc({ pool_type: "update" });
+    },
   });
 
   const coalesceWindowMs = parseDurationMs(infra.event_processor?.coalesce_window, DEFAULT_COALESCE_WINDOW_MS);
@@ -1597,6 +1600,9 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       // A lane task that ran to completion — the submission worker pool that is
       // actually active (the parallel event pool is opt-in and off by default).
       metrics.workerTasksCompleted.inc({ pool_type: "update" });
+    },
+    onTaskError: () => {
+      metrics.workerTasksFailed.inc({ pool_type: "update" });
     },
     log: report,
   });

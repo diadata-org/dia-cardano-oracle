@@ -644,7 +644,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "decimals": 0
         },
         "overrides": []
       },
@@ -661,7 +662,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (client_id, outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range]))",
+          "expr": "round(sum by (client_id, outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range])))",
           "legendFormat": "{{client_id}} · {{outcome}}",
           "refId": "A"
         }

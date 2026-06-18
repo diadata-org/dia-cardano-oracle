@@ -913,15 +913,17 @@ prerequisites, env vars, and the full output description.
 
 ---
 
-## 19. Metrics that exist but are NOT in Grafana
+## 19. Metric coverage
 
-The feeder exposes ~60 `dia_bridge_*` metrics at `/metrics`, across **three** dashboards:
+The feeder emits **~66 `dia_bridge_*` families** at `/metrics`, across **three** dashboards:
 `monitoring/grafana/dashboards/feeder.json` (operational overview),
 `feeder-tx.json` (the per-transaction axis — see §6), and `feeder-internals.json`
-(feeder internals — per-phase latency, scanner, worker pools, DB, cron/recovery). The
-catalog below is the reference for which metric lives where; the internals dashboard
-surfaces most of the families in section A, split into **metrics with real data** and
-**metrics defined but with no emitter yet** (which read 0/empty).
+(feeder internals — per-phase latency, scanner, worker pools, DB, cron/recovery, the
+event/intent funnel, per-client lane state & queues). **58 families are on a dashboard;
+8 are deliberately not** — listed in [Not on a dashboard](#not-on-a-dashboard-and-why) at the
+end. Every declared metric has a production emitter (no dead series). The panel-by-panel
+reading guide is [`grafana-dashboards.md`](./grafana-dashboards.md); the catalog below is the
+metric-family reference.
 
 ### Already in Grafana (reference)
 
@@ -943,9 +945,12 @@ of `submission_state`, both can be active at once), `coalescer_buffered` (intent
 before a flush), `submit_queue_pending` (tasks waiting in the serial submit queue — normally
 0, a contention indicator, not a backlog).
 
-### A — Missing, with real data (candidates to add)
+### Metric families (reference — what each measures)
 
-**Event/intent funnel** (how many enter vs. survive each stage):
+These are all emitted and, unless noted in [Not on a dashboard](#not-on-a-dashboard-and-why),
+shown on a dashboard. The tables describe what each family measures.
+
+**Event/intent funnel** (how many enter vs. survive each stage) — shown on Internals:
 
 | Metric | What it measures |
 | --- | --- |
@@ -1015,13 +1020,16 @@ between Spectra and this feeder:
 `dia_bridge_intents_submitted_lifecycle_total`, `dia_bridge_intents_confirmed_lifecycle_total`,
 `dia_bridge_intents_failed_lifecycle_total` — same funnel stages, for naming parity.
 
-### B — Defined but with NO emitter in the current code (do NOT add yet)
+### Worker-task health (now wired)
 
-These exist in `src/api/metrics.ts` but **no module increments them today** — on a
-panel they'd read 0/empty. Don't add them until they're wired:
+- `dia_bridge_worker_tasks_failed_total{pool_type}` — update-pool tasks that threw or timed
+  out, emitted from the pool's task-error path (`onTaskError`). Normally 0: the pool task just
+  buffers into the coalescer; real submission failures are `transactions_failed_total`.
+- `dia_bridge_worker_task_retries_total{pool_type}` — submit retries, emitted from the submit
+  queue's retry loop (`onRetry`, driven by `worker_pool.max_retries`/`retry_delay`). The retry
+  lives in the queue, not the pool; the `pool_type="update"` label marks the originating pipeline.
 
-- `dia_bridge_worker_tasks_failed_total` — *intent:* tasks that failed or timed out.
-- `dia_bridge_worker_task_retries_total` — *intent:* task-level retries.
+Both are shown on the Internals "Worker tasks" panel alongside `completed` and `dropped`.
 
 ### C — Internals metrics, emitted and shown on the `feeder-internals.json` dashboard
 
@@ -1042,15 +1050,24 @@ alert watches it.
 > `nodejs_*`: CPU, heap, event-loop lag). These are Node runtime metrics, not feeder
 > domain, and are also not dashboarded.
 
-### Panel coverage
+### Not on a dashboard (and why)
 
-Most of the families above are now dashboarded: the **funnel**, **per-phase latency (1–5)**,
-**scanner health** (`rpc_errors`, `backfill`), **cron** (`cron_resubmissions_total`), and
-**HTTP request counts** on the Internals dashboard; **cost per tx** (`transaction_fee_lovelace`)
-and the **feed-sanity verdict** on the Overview. Still without a panel (low value, by choice):
-`scanner_last_block`, `cardano_receiver_topup_warnings_total`, `cardano_pair_is_create`, and the
-Spectra lifecycle aliases (`intents_*_lifecycle_total`, which duplicate the funnel for naming
-parity).
+8 of the ~66 families have no panel — on purpose:
+
+- **Spectra lifecycle aliases** — `dia_bridge_intents_{scanned,processed,routed,submitted,confirmed}_lifecycle_total`
+  (5): duplicate the event/intent funnel (shown on Internals) under Spectra's canonical
+  `bridge_intents_*` naming + a `customer_id` label, for dashboard parity with Spectra. No panel
+  of their own.
+- `dia_bridge_scanner_last_block` — redundant with `scanner_block_lag` (shown); the lag is the
+  actionable signal.
+- `dia_bridge_cardano_pair_is_create` — niche flag (last submission minted vs updated the pair).
+- `dia_bridge_cardano_receiver_topup_warnings_total` — niche; the Receiver-balance gauge + the
+  `ReceiverBalanceLow` alert already cover it.
+
+Everything else (58 families) is on one of the three dashboards — see
+[`grafana-dashboards.md`](./grafana-dashboards.md) for the panel-by-panel guide. `prom-client`
+default metrics (`process_*`, `nodejs_*`) are Node runtime, not feeder domain, and are not
+dashboarded.
 
 ---
 
