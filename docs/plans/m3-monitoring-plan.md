@@ -76,7 +76,7 @@ monitoring infrastructure.
   evaluates **only `OraclePairStale`** and writes the `alert_log` table; the other 11
   rules are Prometheus-side only, and Prometheus has **no Alertmanager** wired, so they
   fire but notify nowhere. **M3-H replaces this** with a single Prometheus → Alertmanager
-  → webhook pipeline that lands all 12 rules in `alert_log` and can notify.
+  → webhook pipeline that lands all 13 rules in `alert_log` and can notify.
 - [x] **Anomaly-detection metrics**: `price_deviation_percent` (misreport),
   `price_age_seconds` + per-pair staleness (stale data), reorg counter (chain
   instability) — defined in
@@ -343,7 +343,7 @@ metrics → Prometheus (rules from infrastructure.<network>.yaml) → Alertmanag
   `alerting.alertmanagers`.
 - [x] **Webhook receiver → feeder.** New feeder endpoint (e.g. `POST /api/v1/alerts/ingest`)
   that accepts the Alertmanager webhook payload and writes each firing/resolved alert to
-  `alert_log` + the feeder log. This makes **all 12 rules** land in `alert_log` and the
+  `alert_log` + the feeder log. This makes **all 13 rules** land in `alert_log` and the
   `/api/v1/alerts` API, not just `OraclePairStale`; grouping/dedup/silencing are handled
   by Alertmanager (10 stale pairs → 1 notification, not 10).
 - [x] **Single source of truth.** Retire the parallel in-process evaluator
