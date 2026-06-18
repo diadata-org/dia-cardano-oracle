@@ -103,6 +103,7 @@ import {
   type RouterRuntimeIdentity,
 } from "../../src/runtime/identity.js";
 import { clientLabels, routerMembershipLabels } from "../../src/api/metric-labels.js";
+import { seedDropdownSeriesFromConfig } from "../../src/metrics/seed-dropdown-series.js";
 import {
   createUpdateWorkerPoolManager,
   type UpdateWorkerPoolManager,
@@ -1588,6 +1589,12 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   if (hydratedPriceCache.maxUpdatedAtMs > 0) {
     healthState.lastConfirmedMs = hydratedPriceCache.maxUpdatedAtMs;
   }
+
+  // Populate the Grafana filter dropdowns (Customer/Client/Router/Symbol) from
+  // config at boot, at value 0, so they are not empty before the first
+  // confirmation; the live confirm path increments these same series.
+  seedDropdownSeriesFromConfig(config, metrics);
+  report("metrics: seeded dashboard filter series from config (value 0)");
 
   // ------------------------------------------------------------------
   // Cron service — Spectra parity. Re-submits the latest known
