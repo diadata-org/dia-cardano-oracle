@@ -1,0 +1,34 @@
+[2026-06-18T08:40:45.704Z] [enriched] Intent enriched: USDC/USD @ 999699120000000000
+  meta: {"price":"999699120000000000","timestamp":"1781772044","expiry":"1781775644","blockNumber":13522904}
+[2026-06-18T08:40:45.704Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T08:40:45.705Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T08:41:00.709Z] [connecting] connecting
+[2026-06-18T08:41:08.647Z] [building] building
+[2026-06-18T08:41:11.126Z] [signing] signing
+  meta: {"txHash":"2844ca8d6468fff489fcb2e089bb16a3abd4abb0a0614c59a39e029afbe19e3c"}
+[2026-06-18T08:41:12.076Z] [submitting] submitting
+  meta: {"txHash":"2844ca8d6468fff489fcb2e089bb16a3abd4abb0a0614c59a39e029afbe19e3c"}
+[2026-06-18T08:41:17.320Z] [connecting] connecting
+[2026-06-18T08:41:24.941Z] [building] building
+[2026-06-18T08:41:27.617Z] [signing] signing
+  meta: {"txHash":"d1421a80ba9041a27ecd65ad9b502d8f3895da9db292b5052a370d3ef2a29939"}
+[2026-06-18T08:41:28.561Z] [submitting] submitting
+  meta: {"txHash":"d1421a80ba9041a27ecd65ad9b502d8f3895da9db292b5052a370d3ef2a29939"}
+[2026-06-18T08:41:33.969Z] [connecting] connecting
+[2026-06-18T08:41:41.503Z] [building] building
+[2026-06-18T08:41:43.994Z] [signing] signing
+  meta: {"txHash":"6a9df51fd368731fced5216182706b6df396af92c56c93f31da951dece8af8cf"}
+[2026-06-18T08:41:44.947Z] [submitting] submitting
+  meta: {"txHash":"6a9df51fd368731fced5216182706b6df396af92c56c93f31da951dece8af8cf"}
+[2026-06-18T08:41:45.225Z] [submitted] submitted
+  meta: {"txHash":"6a9df51fd368731fced5216182706b6df396af92c56c93f31da951dece8af8cf"}
+[2026-06-18T08:41:45.231Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"6a9df51fd368731fced5216182706b6df396af92c56c93f31da951dece8af8cf"}
+[2026-06-18T08:42:34.802Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"6a9df51fd368731fced5216182706b6df396af92c56c93f31da951dece8af8cf"}
+[2026-06-18T08:42:36.880Z] [writing_state] writing_state
+  meta: {"txHash":"6a9df51fd368731fced5216182706b6df396af92c56c93f31da951dece8af8cf"}
+[2026-06-18T08:42:39.753Z] [failed] Cardano transaction failed: Intent for USDC/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for USDC/USD superseded on chain; not submitted.","batchSize":2,"batchMembers":[{"intentHash":"0x69617e05a30bcd88d4c93c4874320f331b1c85a877da22df8339ceeefd96f868","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0x0e96a0d0de4fbcbc5738e10e0fc3b0b9fcffda827cccf34de416e8a93e50278d","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"}]}

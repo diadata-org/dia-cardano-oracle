@@ -1,0 +1,22 @@
+{
+  "data": {
+    "alerts": [
+      {
+        "labels": {
+          "alertname": "ReceiverBalanceLow",
+          "client_id": "trigger",
+          "job": "alert-trigger",
+          "network": "Preview",
+          "severity": "warning"
+        },
+        "annotations": {
+          "description": "The Receiver for client trigger holds 1.00 ADA of spendable balance (alert fires below 2 ADA).\nClient Receiver address (on Preview, view on a testnet explorer):\n  \nClient deposit address to fund:\n  \n\nWHY / WHOSE MONEY: the Receiver is THE CLIENT'S PREPAID FEE POOL — the same model as the EVM side. The client prepays ADA into it and consumes prices off-chain; this balance pays the protocol fee (base_fee + n*per_pair_fee) on every update. When it hits zero, updates for this client stop with \"ReceiverInsufficientFunds\" and OraclePairStale follows. (The \"accrued\" bucket already collected is separate and cannot pay new fees — only this spendable balance can.) So topping it up is the CLIENT'S responsibility; the operator can do it on the client's behalf and bill it, but the ADA is the client's.\nHOW TO FUND IT — IMPORTANT: do NOT send ADA directly to the Receiver address above. It is a script UTxO; a plain transfer there does nothing useful and can be stranded.\nPreferred path: send ADA to the client's deposit address shown above. You can also verify it from the client artifact or print it with:\n  Docker: cd offchain && make cli CMD=\"deposit:address --protocol-state /app/offchain/state//config-bootstrap.json --client-state /app/offchain/state//clients/trigger.json\"\n  npm:    cd offchain/cli && npm run cli -- deposit:address --protocol-state ../state//config-bootstrap.json --client-state ../state//clients/trigger.json\n\nAfter the client sends ADA there, the feeder automatically folds it into Receiver balance by update-fold or auto-merge. Operator fallback, if you must top up directly from the configured wallet (amount is lovelace; 5000000 = 5 ADA):\n  Docker: cd offchain && make cli CMD=\"receiver:top-up --amount-lovelace 5000000 --protocol-state /app/offchain/state//config-bootstrap.json --client-state /app/offchain/state//clients/trigger.json\"\n  npm:    cd offchain/cli && npm run cli -- receiver:top-up --amount-lovelace 5000000 --protocol-state ../state//config-bootstrap.json --client-state ../state//clients/trigger.json\nThe alert clears within ~1 minute after funds are merged/top-up confirms.\n",
+          "summary": "Receiver prepaid balance for client trigger is below 2 ADA"
+        },
+        "state": "firing",
+        "activeAt": "2026-06-18T06:31:50.29264446Z",
+        "value": "1e+00"
+      }
+    ]
+  }
+}

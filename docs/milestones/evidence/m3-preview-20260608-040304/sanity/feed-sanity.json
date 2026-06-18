@@ -1,0 +1,53 @@
+{
+  "network": "Preview",
+  "generatedAtSec": 1781773656,
+  "total": 5,
+  "pass": 1,
+  "warn": 4,
+  "fail": 0,
+  "feeds": [
+    {
+      "symbol": "BTC/USD",
+      "status": "WARN",
+      "deviationPct": 0.018818,
+      "stalenessSec": 720,
+      "reasons": [
+        "on_chain_stale"
+      ]
+    },
+    {
+      "symbol": "ETH/USD",
+      "status": "WARN",
+      "deviationPct": 0.016735,
+      "stalenessSec": 631,
+      "reasons": [
+        "on_chain_stale"
+      ]
+    },
+    {
+      "symbol": "USDC/USD",
+      "status": "WARN",
+      "deviationPct": 0.004621,
+      "stalenessSec": 4933,
+      "reasons": [
+        "on_chain_stale"
+      ]
+    },
+    {
+      "symbol": "USDT/USD",
+      "status": "WARN",
+      "deviationPct": 0.003002,
+      "stalenessSec": 1064,
+      "reasons": [
+        "on_chain_stale"
+      ]
+    },
+    {
+      "symbol": "DOGE/USD",
+      "status": "PASS",
+      "deviationPct": 0.000259,
+      "stalenessSec": 355,
+      "reasons": []
+    }
+  ]
+}

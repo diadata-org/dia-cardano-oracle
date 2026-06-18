@@ -1,0 +1,19 @@
+[2026-06-18T09:04:00.240Z] [enriched] Intent enriched: BTC/USD @ 64475337965675005083648
+  meta: {"price":"64475337965675005083648","timestamp":"1781773439","expiry":"1781777039","blockNumber":13526864}
+[2026-06-18T09:04:00.240Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T09:04:00.241Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T09:04:00.244Z] [enriched] Intent enriched: BTC/USD @ 64475337965675005083648
+  meta: {"price":"64475337965675005083648","timestamp":"1781773439","expiry":"1781777039","blockNumber":13526864}
+[2026-06-18T09:04:00.244Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0}
+[2026-06-18T09:04:00.245Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-02.json"}
+[2026-06-18T09:04:16.088Z] [connecting] connecting
+[2026-06-18T09:04:17.236Z] [connecting] connecting
+[2026-06-18T09:04:21.811Z] [building] building
+[2026-06-18T09:04:21.823Z] [failed] Cardano transaction failed: Oracle intent nonce must be greater than the current on-chain nonce; intent superseded, not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Oracle intent nonce must be greater than the current on-chain nonce; intent superseded, not submitted.","batchSize":1}
+[2026-06-18T09:04:21.913Z] [failed] Cardano transaction failed: Intent for BTC/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for BTC/USD superseded on chain; not submitted.","batchSize":1}

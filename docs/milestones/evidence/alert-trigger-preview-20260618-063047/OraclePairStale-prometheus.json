@@ -1,0 +1,23 @@
+{
+  "data": {
+    "alerts": [
+      {
+        "labels": {
+          "alertname": "OraclePairStale",
+          "client_id": "trigger",
+          "job": "alert-trigger",
+          "network": "Preview",
+          "severity": "warning",
+          "symbol": "TRG/USD"
+        },
+        "annotations": {
+          "description": "Pair TRG/USD has not had a confirmed Cardano update for 1h 16m 33s (alert fires after 1 hour). The feeder is no longer landing price updates for this pair on-chain, so consumers read an increasingly stale price.\nWHY: an update lands on-chain only if (a) the client's Receiver has ADA to pay the per-update fee, (b) the operator (Admin) wallet has ADA to pay the network fee, and (c) the DIA source is still publishing this symbol. This alert does not say which of the three failed — work down the list.\nWHAT TO DO: 1. Read the running feeder's logs and look for TRG/USD\n   together with \"Insufficient\", \"error\", or \"failed\":\n     cd offchain && make logs\n2. Most common: the Receiver ran out of ADA (see ReceiverBalanceLow).\n   Top it up with 5 ADA:\n     Docker: cd offchain && make cli CMD=\"deposit:address --protocol-state /app/offchain/state//config-bootstrap.json --client-state /app/offchain/state//clients/trigger.json\"\n     npm:    cd offchain/cli && npm run cli -- deposit:address --protocol-state ../state//config-bootstrap.json --client-state ../state//clients/trigger.json\n   Then send client ADA to that deposit address. The feeder will\n   merge/fold it into the Receiver automatically; `receiver:top-up`\n   is still available as an operator-only fallback.\n3. Next: the Admin (signer) wallet may be empty — see AdminWalletLow\n   for how to replenish it by collecting accrued fees.\n4. If both wallets have ADA and the logs show no submit error, the\n   DIA source likely stopped publishing this symbol — see\n   PriceAgeHigh.\n",
+          "summary": "Oracle pair TRG/USD has stopped updating on-chain"
+        },
+        "state": "firing",
+        "activeAt": "2026-06-18T06:20:50.29264446Z",
+        "value": "4.593292000055313e+03"
+      }
+    ]
+  }
+}

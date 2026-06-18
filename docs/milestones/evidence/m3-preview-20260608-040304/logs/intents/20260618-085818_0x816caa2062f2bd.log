@@ -1,0 +1,9 @@
+[2026-06-18T08:58:18.144Z] [enriched] Intent enriched: DOGE/USD @ 85009849625000008
+  meta: {"price":"85009849625000008","timestamp":"1781773096","expiry":"1781776696","blockNumber":13525899}
+[2026-06-18T08:58:18.144Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T08:58:18.146Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T08:59:17.174Z] [connecting] connecting
+[2026-06-18T08:59:20.904Z] [failed] Cardano transaction failed: Intent for DOGE/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for DOGE/USD superseded on chain; not submitted.","batchSize":1}

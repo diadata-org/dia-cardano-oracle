@@ -1,0 +1,28 @@
+[2026-06-18T08:31:54.252Z] [enriched] Intent enriched: BTC/USD @ 64428631886750000611328
+  meta: {"price":"64428631886750000611328","timestamp":"1781771513","expiry":"1781775113","blockNumber":13521395}
+[2026-06-18T08:31:54.252Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T08:31:54.253Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T08:32:33.382Z] [connecting] connecting
+[2026-06-18T08:32:44.007Z] [building] building
+[2026-06-18T08:32:46.964Z] [signing] signing
+  meta: {"txHash":"ea035d35893b7645e993403d5327181604f33a111ecf9fbc2d40d632976b6c6f"}
+[2026-06-18T08:32:47.935Z] [submitting] submitting
+  meta: {"txHash":"ea035d35893b7645e993403d5327181604f33a111ecf9fbc2d40d632976b6c6f"}
+[2026-06-18T08:32:53.196Z] [connecting] connecting
+[2026-06-18T08:33:04.127Z] [building] building
+[2026-06-18T08:33:06.811Z] [signing] signing
+  meta: {"txHash":"0c8ce442d77fb093fef5f4aaedfe254eb9295dc6d472f89f5c8c656c4f7e24c4"}
+[2026-06-18T08:33:07.779Z] [submitting] submitting
+  meta: {"txHash":"0c8ce442d77fb093fef5f4aaedfe254eb9295dc6d472f89f5c8c656c4f7e24c4"}
+[2026-06-18T08:33:08.093Z] [submitted] submitted
+  meta: {"txHash":"0c8ce442d77fb093fef5f4aaedfe254eb9295dc6d472f89f5c8c656c4f7e24c4"}
+[2026-06-18T08:33:08.112Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"0c8ce442d77fb093fef5f4aaedfe254eb9295dc6d472f89f5c8c656c4f7e24c4"}
+[2026-06-18T08:34:15.705Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"0c8ce442d77fb093fef5f4aaedfe254eb9295dc6d472f89f5c8c656c4f7e24c4"}
+[2026-06-18T08:34:20.182Z] [writing_state] writing_state
+  meta: {"txHash":"0c8ce442d77fb093fef5f4aaedfe254eb9295dc6d472f89f5c8c656c4f7e24c4"}
+[2026-06-18T08:34:23.071Z] [failed] Cardano transaction failed: Intent for BTC/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for BTC/USD superseded on chain; not submitted.","batchSize":3,"batchMembers":[{"intentHash":"0x471658763341279c15b6f15c1bf6e070d572f893deceddbe13d60cf52dec04dd","symbol":"USDT/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9025ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315","action":"update"},{"intentHash":"0xdb8ef182c724b73613568a73646083e931e69e9e5df20cca36a2556df95a1fd9","symbol":"ARB/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902dfafb09cf4921baf2478651f0d7072b3a0df58b6c434443d32511927fa7919fb","action":"update"},{"intentHash":"0x5d0bea50e561e55b9a212f0075fbf78bf7760a20dca60c3ac3f9ea25d78cc8e6","symbol":"NEIRO/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","action":"update"}]}

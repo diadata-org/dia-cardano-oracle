@@ -39,11 +39,12 @@ ARGS ?=
 MON_PROFILE := $(if $(MONITORING),--profile monitoring,)
 
 # Volume toggle. Set VOLUMES=1 on `down` to ALSO delete this network's named
-# volumes (Prometheus TSDB + Grafana data) → fresh metrics/dashboards on the next
-# `up`. The bind-mounted ../state (feeder DB, logs, on-chain deploy) is NOT a
-# named volume and is therefore NEVER touched by this. `make fresh` always wipes.
+# volumes (Prometheus TSDB + Grafana data + Alertmanager data) → fresh
+# metrics/dashboards on the next `up`. The bind-mounted ../state (feeder DB, logs,
+# on-chain deploy) is NOT a named volume and is therefore NEVER touched by this.
+# `make fresh` always wipes.
 #   make down              → stop, keep volumes (safe default)
-#   make down VOLUMES=1    → stop + delete Prometheus + Grafana volumes
+#   make down VOLUMES=1    → stop + delete Prometheus + Grafana + Alertmanager volumes
 VOL_FLAG := $(if $(VOLUMES),--volumes,)
 
 # One-off feeder sub-commands run through the FEEDER binary inside the image
@@ -56,7 +57,7 @@ FEEDER_RUN_IT := $(COMPOSE) --profile sqlite run --rm -it --no-deps feeder-sqlit
 
 .PHONY: help
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F: '{printf "  %-22s %s\n", $$1, $$NF}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F: '{printf "  %-22s %s\n", $$1, $$NF}'
 
 .PHONY: build
 build: ## Build the unified feeder + CLI image
@@ -84,7 +85,7 @@ up-postgres: generate-monitoring ## Start the feeder daemon, Postgres backend (a
 # touches services whose profile is active. Without listing them all here,
 # `down` matches nothing and leaves the feeder + monitoring stack running.
 .PHONY: down
-down: ## Stop everything for the CURRENT network (all profiles; other network untouched). Add VOLUMES=1 to ALSO delete the Prometheus + Grafana volumes (fresh metrics; ../state/contracts untouched).
+down: ## Stop everything for the CURRENT network (all profiles incl. monitoring: Alertmanager + Pushgateway; other network untouched). Add VOLUMES=1 to ALSO delete the Prometheus + Grafana + Alertmanager volumes (fresh metrics; ../state/contracts untouched).
 	$(COMPOSE) --profile sqlite --profile postgres --profile cli --profile monitoring down $(VOL_FLAG) --remove-orphans
 
 # Stops BOTH network stacks regardless of feeder/.env — use it when you are not
@@ -216,3 +217,25 @@ evidence: ## Build the COMPLETE M2 evidence pack into ONE dir (network from feed
 	  EVIDENCE_STAMP=$$stamp CARDANO_NETWORK=$(EVIDENCE_NETWORK) node --import tsx/esm scripts/m2-evidence/build-stats.ts $$db && \
 	  EVIDENCE_STAMP=$$stamp CARDANO_NETWORK=$(EVIDENCE_NETWORK) node --import tsx/esm scripts/m2-evidence/build-error-counts.ts $$db; \
 	echo "Complete evidence pack: $$out/"
+
+.PHONY: evidence3
+evidence3: ## Build the COMPLETE M3 evidence pack into ONE dir (network from feeder/.env CARDANO_NETWORK)
+	@if [ -z "$(EVIDENCE_NETWORK)" ]; then \
+	  echo "ERROR: CARDANO_NETWORK not set in feeder/.env — cannot pick evidence network." >&2; exit 1; \
+	fi; \
+	net=$$(echo "$(EVIDENCE_NETWORK)" | tr '[:upper:]' '[:lower:]'); \
+	if [ -n "$(RUN_ID)" ]; then sdir=state/$${net}_run_$(RUN_ID); \
+	else sdir=$$(ls -d state/$${net}_run_*/ 2>/dev/null | sort | tail -1); sdir=$${sdir%/}; sdir=$${sdir:-state/$$net}; fi; \
+	runid=$${sdir##*_run_}; [ "$$runid" = "$$sdir" ] && runid=$$(date -u +%Y%m%d-%H%M%S); \
+	stamp=$$runid; base=docs/milestones/evidence/m3-$$net-$$stamp; \
+	if [ -e "$$base" ]; then n=1; while [ -e "$$base-$$(printf '%02d' $$n)" ]; do n=$$((n+1)); done; stamp=$$stamp-$$(printf '%02d' $$n); fi; \
+	out=docs/milestones/evidence/m3-$$net-$$stamp; \
+	db=$$(pwd)/$$sdir/feeder.sqlite; \
+	echo "Building $(EVIDENCE_NETWORK) COMPLETE M3 evidence pack — stamp=$$stamp db=$$db"; \
+	EVIDENCE_STAMP=$$stamp EVIDENCE_NETWORK=$$net \
+	  GRAFANA_ADMIN_PASSWORD=$${GRAFANA_ADMIN_PASSWORD:-admin} \
+	  feeder/scripts/m3-evidence/package-m3-evidence.sh && \
+	cd feeder && \
+	  EVIDENCE_STAMP=$$stamp CARDANO_NETWORK=$(EVIDENCE_NETWORK) node --import tsx/esm scripts/m3-evidence/build-stats.ts $$db && \
+	  EVIDENCE_STAMP=$$stamp CARDANO_NETWORK=$(EVIDENCE_NETWORK) node --import tsx/esm scripts/m3-evidence/build-error-counts.ts $$db; \
+	echo "Complete M3 evidence pack: $$out/"

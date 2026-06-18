@@ -1,0 +1,9 @@
+[2026-06-18T08:58:55.873Z] [enriched] Intent enriched: USDT/USD @ 998990000000000000
+  meta: {"price":"998990000000000000","timestamp":"1781773134","expiry":"1781776734","blockNumber":13526006}
+[2026-06-18T08:58:55.873Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T08:58:55.874Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T08:59:17.174Z] [connecting] connecting
+[2026-06-18T08:59:20.909Z] [failed] Cardano transaction failed: Intent for USDT/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for USDT/USD superseded on chain; not submitted.","batchSize":1}

@@ -1,0 +1,18 @@
+Feed sanity check — Preview
+Router   : client_test_01_router_a_majors (5 feeds)
+Registry : 0xF8c614A483A0427A13512F52ac72A576678bE317
+Window   : last 5000 blocks
+
+# Feed sanity check — Preview
+
+5 feeds: 1 PASS · 4 WARN · 0 FAIL.
+
+| Symbol | Status | Deviation % | Staleness (s) | Reasons |
+|--------|--------|-------------|---------------|---------|
+| BTC/USD | WARN | 0.018818 | 720 | on_chain_stale |
+| ETH/USD | WARN | 0.016735 | 631 | on_chain_stale |
+| USDC/USD | WARN | 0.004621 | 4933 | on_chain_stale |
+| USDT/USD | WARN | 0.003002 | 1064 | on_chain_stale |
+| DOGE/USD | PASS | 0.000259 | 355 | — |
+
+[sanity] report written: docs/milestones/evidence/m3-preview-20260608-040304/sanity/

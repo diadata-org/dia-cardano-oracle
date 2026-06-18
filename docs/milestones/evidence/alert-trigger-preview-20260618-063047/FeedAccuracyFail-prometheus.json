@@ -1,0 +1,24 @@
+{
+  "data": {
+    "alerts": [
+      {
+        "labels": {
+          "alertname": "FeedAccuracyFail",
+          "client_id": "trigger",
+          "customer_id": "trigger",
+          "job": "alert-trigger",
+          "network": "Preview",
+          "severity": "critical",
+          "symbol": "TRG/USD"
+        },
+        "annotations": {
+          "description": "The per-feed sanity check rated TRG/USD as BROKEN (status 2) for over 10 minutes: the value published on Cardano differs from the latest DIA source price beyond the configured tolerance AND is stale past its freshness window. This is a DATA-ACCURACY signal — the on-chain oracle no longer reflects the DIA source.\nWHAT TO DO: 1. Inspect the deviation / staleness — query the API or run the\n   on-demand check:\n     curl -s localhost:8080/api/v1/alerts\n     cd offchain/feeder && npm run sanity:feeds\n2. Confirm the feeder is still publishing TRG/USD and that\n   the DIA source is delivering fresh intents for it:\n     cd offchain && make logs\n3. A feed that stays BROKEN means the on-chain pair stopped tracking the\n   source — investigate the submission path for that pair. No wallet\n   top-up fixes a data-accuracy fault.\n",
+          "summary": "On-chain value for TRG/USD disagrees with the DIA source"
+        },
+        "state": "firing",
+        "activeAt": "2026-06-18T06:38:50.29264446Z",
+        "value": "2e+00"
+      }
+    ]
+  }
+}

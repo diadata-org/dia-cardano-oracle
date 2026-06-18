@@ -1,0 +1,20 @@
+[2026-06-18T06:10:56.596Z] [connecting] connecting
+[2026-06-18T06:11:00.943Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0x494cddd119c31c33d2f9dfe51f58c32718f76e096ad62075535546b7c8137a55"}
+[2026-06-18T06:11:09.260Z] [building] building
+[2026-06-18T06:11:12.521Z] [signing] signing
+  meta: {"txHash":"16e6a13e16e0fc656cc11b03610bdea1cdbeedba06ad7823790e87db35683f4b"}
+[2026-06-18T06:11:13.467Z] [submitting] submitting
+  meta: {"txHash":"16e6a13e16e0fc656cc11b03610bdea1cdbeedba06ad7823790e87db35683f4b"}
+[2026-06-18T06:11:13.794Z] [submitted] submitted
+  meta: {"txHash":"16e6a13e16e0fc656cc11b03610bdea1cdbeedba06ad7823790e87db35683f4b"}
+[2026-06-18T06:11:13.800Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"16e6a13e16e0fc656cc11b03610bdea1cdbeedba06ad7823790e87db35683f4b"}
+[2026-06-18T06:11:30.027Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"16e6a13e16e0fc656cc11b03610bdea1cdbeedba06ad7823790e87db35683f4b"}
+[2026-06-18T06:11:37.623Z] [writing_state] writing_state
+  meta: {"txHash":"16e6a13e16e0fc656cc11b03610bdea1cdbeedba06ad7823790e87db35683f4b"}
+[2026-06-18T06:11:40.523Z] [batched] Intent confirmed inside a batch of 9 intents
+  meta: {"cardanoTxHash":"16e6a13e16e0fc656cc11b03610bdea1cdbeedba06ad7823790e87db35683f4b","batchSize":9,"batchMembers":[{"intentHash":"0x95fd412a0026c17859f6ef7b3f7311654ddd499b403cafcf74d8dcbcef5c7c98","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"},{"intentHash":"0x8b3a6176e4284cdf9f4557df3385988d6c803c779523cbcf540587bf2cac0b9c","symbol":"SHIB/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902406a90956881e5fbe476ff634fd41235fb114c833053daebd4af3b30c0bde839","action":"update"},{"intentHash":"0xb0f877bbfd49e5516bc62f620a768be762a84a819dd70eae5772425f8da8a552","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0x2f82b3cdd250a932d71951e5a935d94c95d32434441292960e7095acadbb9df0","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0xf51bd9337829a39d025c0d6e22fb5a9939c6e3503de999930bf89059785207e9","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0x3dd60d872f4367f21fd0b0f34aace59792a544c5edf6e061cdb30446d5d60731","symbol":"USDT/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9025ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315","action":"update"},{"intentHash":"0x97379c0870d1d3f2401c8f4b37f67a44fa92ba05f8d2a029e567dadc76085ce7","symbol":"LTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90201f8ca4f564d04963a1ffccbb3f49da8bf09c0373f278d84047413cf09399650","action":"update"},{"intentHash":"0x971a3006f39f70e73355a6847572a6360c6cd8ebd147471744addcb0d5c99ea5","symbol":"XVG/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902e6643031cebf937d080904cd1e6dd3d5aebcac06fc08dc15de991ade67363588","action":"update"},{"intentHash":"0xb02654d4e4d88be7a92329881e5dd130426469fff9afec8b0394c7a04bd8b112","symbol":"NEIRO/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","action":"update"}],"pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902e6643031cebf937d080904cd1e6dd3d5aebcac06fc08dc15de991ade67363588","pairAction":"update"}
+[2026-06-18T06:11:40.524Z] [confirm] Cardano batch transaction confirmed
+  meta: {"cardanoTxHash":"16e6a13e16e0fc656cc11b03610bdea1cdbeedba06ad7823790e87db35683f4b","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902e6643031cebf937d080904cd1e6dd3d5aebcac06fc08dc15de991ade67363588","pairAction":"update","batchSize":9}
