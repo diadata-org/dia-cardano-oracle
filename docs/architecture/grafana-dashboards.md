@@ -272,8 +272,12 @@ The operational home base: liveness, money, latency, health, accuracy and billin
 **Tx confirmed vs failed (5m)** · `timeseries` — `sum by (outcome) (increase(dia_bridge_transactions_total{…}[5m]))`.
 Confirmed should dominate; a rising failed line is the warning.
 
+![Tx confirmed vs failed (5m) — preview](img/overview-panel-16.png)
+
 **Pairs per tx (p50/p95)** · `timeseries` — the **batch size** (pairs per tx) at median and 95th;
 higher = more amortized fees per pair.
+
+![Pairs per tx (p50/p95) — preview](img/overview-panel-17.png)
 
 ### Row 3 — Chain & Scanner Health
 
@@ -364,7 +368,7 @@ higher = more amortized fees per pair.
 
 **Tx involving router (5m, by router & outcome)** · `timeseries` · legend `{{router_id}} · {{outcome}}`
 
-![Tx involving router (5m, by router & outcome)](img/overview-panel-16.png)
+![Tx involving router (5m, by router & outcome)](img/overview-panel-18.png)
 `sum by (router_id, outcome) (increase(dia_bridge_transaction_router_membership_total{…}[5m]))`
 
 - **What it shows** — which **routers** contributed at least one member to a transaction, split
