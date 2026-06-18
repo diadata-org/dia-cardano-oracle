@@ -47,6 +47,11 @@ This is a status note, not a remediation document.
   against DIA's own signed source for each feed, plus alerts for data-source health and
   operator-wallet health. A third dashboard was added covering the system's internal
   health.
+- **A way to test the alerts.** We built a small harness that fires any alert on demand by
+  pushing a test value through the **real** alerting pipeline (via a Prometheus
+  Pushgateway), so we can demonstrate each alert actually works and capture the
+  firing-then-resolving evidence — exactly the alert-trigger logs the Milestone 3 QA report
+  needs. A first capture on the Preview network is already recorded.
 - **Self-maintenance.** The feeder now keeps itself healthy automatically — it recovers
   from transient failures, tops up client balances from their deposits, and keeps the
   operator wallet tidy — so it needs less hands-on attention during a run.
@@ -54,8 +59,11 @@ This is a status note, not a remediation document.
   the system batches more updates together, lowering the number of on-chain transactions
   (and therefore cost) without losing freshness.
 - **Cleaner tooling and docs.** Internal terminology was normalized end to end, a client
-  can now run more than one routing lane, interactive API documentation was added, and the
-  monitoring/dashboard documentation was refreshed.
+  can now run more than one routing lane, and interactive API documentation was added. We
+  also wrote a **panel-by-panel Grafana dashboards guide**
+  ([`../architecture/grafana-dashboards.md`](../architecture/grafana-dashboards.md)) — a
+  non-specialist reference that explains, for every chart, what it shows, how to read it,
+  and when to worry, plus a one-page "when to panic" cheat sheet.
 
 ## What is left for Milestone 3
 
@@ -109,6 +117,7 @@ Details: [`../plans/m4-plan.md`](../plans/m4-plan.md).
   + the mainnet evidence pack `m2-mainnet-20260616-074413`
 - **Architecture:** [`../architecture/feeder.md`](../architecture/feeder.md) ·
   [`../architecture/cardano-oracle-architecture.md`](../architecture/cardano-oracle-architecture.md)
+- **Grafana dashboards guide:** [`../architecture/grafana-dashboards.md`](../architecture/grafana-dashboards.md)
 - **Operator manual:** [`../../offchain/feeder/README.md`](../../offchain/feeder/README.md)
 - **Previous update:** [`20260609-progress-update-for-dia.md`](./20260609-progress-update-for-dia.md)
 </content>
