@@ -9,7 +9,7 @@
 //                        awaiting-confirmation -> idle).
 //   coalescer_state   — the coalescer lane lifecycle (`onLaneEvent`):
 //                        idle -> accumulating -> in-flight.
-// No new hot-path instrumentation — these translate callbacks that already fire.
+// These translate the coalescer/write-client callbacks that already fire into a phase code.
 
 /** Submit-pipeline phase codes, in order. Driven by onStep (+ lane idle/flush). */
 export const SUBMISSION_STATE = {

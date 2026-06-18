@@ -30,7 +30,7 @@
 - [16. HTTP API](#16-http-api)
 - [17. State: implemented / M2 / deferred to M3](#17-state-implemented--m2--deferred-to-m3)
 - [18. Current limitations](#18-current-limitations)
-- [19. Metrics that exist but are NOT in Grafana](#19-metrics-that-exist-but-are-not-in-grafana)
+- [19. Metric coverage](#19-metric-coverage)
 - [20. lucid WASM build resilience (submission/finality hardening)](#20-lucid-wasm-build-resilience-submissionfinality-hardening)
 - [Fee loop & automatic maintenance (settle / withdraw / consolidate)](#fee-loop--automatic-maintenance-settle--withdraw--consolidate)
 - [Alerts & automatic remediation — at a glance](#alerts--automatic-remediation--at-a-glance)
@@ -921,153 +921,118 @@ The feeder emits **~66 `dia_bridge_*` families** at `/metrics`, across **three**
 (feeder internals — per-phase latency, scanner, worker pools, DB, cron/recovery, the
 event/intent funnel, per-client lane state & queues). **58 families are on a dashboard;
 8 are deliberately not** — listed in [Not on a dashboard](#not-on-a-dashboard-and-why) at the
-end. Every declared metric has a production emitter (no dead series). The panel-by-panel
+end. Every declared metric is emitted by production code. The panel-by-panel
 reading guide is [`grafana-dashboards.md`](./grafana-dashboards.md); the catalog below is the
 metric-family reference.
 
-### Already in Grafana (reference)
+### Oracle updates & transactions
 
-`transactions_confirmed_total`, `transactions_failed_total`, `transactions_reorg_total`,
-`intents_filtered_total`, `end_to_end_latency_seconds` (phase 6),
-`price_deviation_percent`, `price_age_seconds`, `scanner_block_lag`,
-`cardano_receiver_balance_lovelace`, `cardano_receiver_accrued_lovelace`,
-`cardano_payment_hook_accrued_lovelace`, `cardano_admin_wallet_lovelace`,
-`cardano_oracle_last_confirmed_timestamp_seconds`, `transaction_fee_lovelace`.
-Per-transaction axis (`feeder-tx.json`): `transactions_total`, `transaction_pairs`,
-`tx_pair_membership_total`, `transaction_router_membership_total`,
-`tx_processing_to_submission_seconds`,
-`tx_submission_to_confirmation_seconds`, `tx_end_to_end_seconds`.
-Per-client lane (`feeder-tx.json`, "Per-client queues & state"), one serial lane per client
-deployment / Receiver, all labelled by `{client_id, customer_id}`: `submission_state`
-(submit pipeline — 0 idle / 1 building / 2 submitting / 3 awaiting-confirmation),
-`coalescer_state` (coalescer lifecycle — 0 idle / 1 accumulating / 2 in-flight; independent
-of `submission_state`, both can be active at once), `coalescer_buffered` (intents buffered
-before a flush), `submit_queue_pending` (tasks waiting in the serial submit queue — normally
-0, a contention indicator, not a backlog).
+| Metric | What it measures | Shown on |
+| --- | --- | --- |
+| `transactions_confirmed_total{symbol,client_id,customer_id,router_id}` | Confirmed oracle updates per pair (liveness). | Overview |
+| `transactions_failed_total{symbol,client_id,customer_id,error_code}` | Real submission failures, by error code. | Overview |
+| `transactions_total{client_id,customer_id,outcome}` | Cardano transactions, counted once per tx, by outcome. | Transactions |
+| `transactions_reorg_total{symbol,client_id}` | Confirmed txs dropped by a chain reorg. | Overview |
+| `transaction_pairs{client_id,customer_id,outcome}` | Batch size — pairs per transaction. | Transactions |
+| `tx_pair_membership_total{client_id,customer_id,router_id,destination_index,symbol,outcome}` | One increment per (tx, pair). | Transactions |
+| `transaction_router_membership_total{client_id,customer_id,router_id,outcome}` | One increment per (tx, router). | Overview + Transactions |
+| `transaction_fee_lovelace{symbol,client_id,customer_id}` | Network fee per tx (per-customer billing). | Overview |
 
-### Metric families (reference — what each measures)
+### Event / intent funnel
 
-These are all emitted and, unless noted in [Not on a dashboard](#not-on-a-dashboard-and-why),
-shown on a dashboard. The tables describe what each family measures.
+| Metric | What it measures | Shown on |
+| --- | --- | --- |
+| `events_detected_total{scanner_type}` | Raw events detected, before dedup. | Internals |
+| `events_duplicate_total` | Events dropped by the dedup cache. | Internals |
+| `events_invalid_total{reason}` | Events rejected at decode/enrich. | Internals |
+| `intents_scanned_total{symbol,scanner_type}` | Enriched intents entering routing. | Internals |
+| `intents_routed_total{symbol,router_id}` | Intents accepted by a destination. | Internals |
+| `transactions_submitted_total{symbol,client_id,customer_id}` | Submission attempts broadcast (success-rate denominator). | Internals |
+| `intents_filtered_total{symbol,reason}` | Intents the policy gate suppressed, by reason. | Overview |
+| `intents_superseded_total{symbol,client_id,customer_id,reason}` | Intents declined because a newer one won on-chain (`NonMonotonicNonce`) — no-ops. | Overview |
 
-**Event/intent funnel** (how many enter vs. survive each stage) — shown on Internals:
+### Latency — the 6 pipeline phases
 
-| Metric | What it measures |
-| --- | --- |
-| `dia_bridge_events_detected_total{scanner_type}` | Raw events detected by the scanner, **before** dedup. Inbound chain traffic, per path (http/ws). |
-| `dia_bridge_events_duplicate_total` | Events dropped by the dedup cache (arrived on both HTTP and WS, or re-scan after reconnect). |
-| `dia_bridge_events_invalid_total{reason}` | Events rejected at decode/enrich time (malformed, `getIntent` failed). |
-| `dia_bridge_intents_scanned_total{symbol,scanner_type}` | Enriched intents **entering** the routing pipeline. |
-| `dia_bridge_intents_routed_total{symbol,router_id}` | Intents **accepted** by a destination (passed trigger conditions). |
-| `dia_bridge_transactions_submitted_total{symbol,client_id,customer_id}` | Submission attempts **broadcast** to Cardano (the denominator for success rate, with confirmed/failed). |
-| `dia_bridge_intents_superseded_total{symbol,client_id,customer_id,reason}` | Intents the feeder **declined to submit** because a newer one already won on chain (`NonMonotonicNonce`) — no tx, no fee. Correct no-ops, kept out of the failure counters. |
+| Metric | Phase | Shown on |
+| --- | --- | --- |
+| `intent_to_registration_seconds{symbol}` | 1 — price created → registered on-chain (EVM). | Internals |
+| `registration_to_scan_seconds{symbol}` | 2 — registered → scanner delivers it. | Internals |
+| `scan_to_processing_seconds{symbol}` | 3 — delivered → processing starts. | Internals |
+| `processing_to_submission_seconds{symbol,client_id,customer_id}` | 4 — processing → submitted. | Internals |
+| `submission_to_confirmation_seconds{symbol,client_id,customer_id}` | 5 — submitted → confirmed (Cardano). | Internals |
+| `end_to_end_latency_seconds{symbol,...}` | 6 — full per-symbol latency. | Overview |
+| `tx_processing_to_submission_seconds` / `tx_submission_to_confirmation_seconds` / `tx_end_to_end_seconds` | Per-transaction stage latencies. | Transactions |
 
-**Latency breakdown (phases 1–5)** — today only phase 6 (end-to-end) is shown. These
-show **WHERE** latency lives:
-
-| Metric | What it measures |
-| --- | --- |
-| `dia_bridge_intent_to_registration_seconds{symbol}` | **Phase 1**: price created → registered on-chain (EVM). DIA/EVM side. |
-| `dia_bridge_registration_to_scan_seconds{symbol}` | **Phase 2**: registered → scanner delivers it. Transport + polling. |
-| `dia_bridge_scan_to_processing_seconds{symbol}` | **Phase 3**: delivered → processing starts. Internal backlog. |
-| `dia_bridge_processing_to_submission_seconds{symbol,client_id,customer_id}` | **Phase 4**: processing → submitted to Cardano. enrich + route + coalesce time. |
-| `dia_bridge_submission_to_confirmation_seconds{symbol,client_id,customer_id}` | **Phase 5**: submitted → confirmed. Pure Cardano-chain latency. |
-
-**Scanner health** (today only `block_lag`):
+### Price quality & feed accuracy (Overview)
 
 | Metric | What it measures |
 | --- | --- |
-| `dia_bridge_scanner_last_block{chain_id,scanner_type}` | Last block observed by each scanner. Progress cursor. |
-| `dia_bridge_scanner_rpc_errors_total{chain_id,error_type}` | Scanner RPC errors. Health of the RPC/WS endpoint. |
-| `dia_bridge_scanner_backfill_blocks_total{chain_id}` | Blocks backfilled after detecting a gap > `max_block_gap`. >0 = a gap was recovered. |
-| `dia_bridge_scanner_backfill_chunks_total{chain_id}` | Number of backfill chunks executed (one per `eth_getLogs` in recovery). |
+| `price_deviation_percent{symbol,router_id}` | % move between consecutive prices at gate time → `PriceDeviationHigh`. |
+| `price_age_seconds{symbol,router_id}` | Age of the DIA source price when consumed → `PriceAgeHigh`. |
+| `feed_sanity_status{client_id,customer_id,symbol}` | Per-feed verdict (0 ok / 1 suspect / 2 broken): on-chain vs source → `FeedAccuracyFail`. |
 
-**Cost / fees** (today balances are shown, but not per-tx cost):
-
-| Metric | What it measures |
-| --- | --- |
-| `dia_bridge_transaction_fee_lovelace{symbol,client_id,customer_id}` | Histogram of lovelace paid **per oracle-update tx** (the Cardano equivalent of EVM gas). Key for cost tracking. |
-| `dia_bridge_cardano_receiver_topup_warnings_total{client_id}` | How many times the receiver balance was below threshold after a confirmed tx. |
-| `dia_bridge_cardano_pair_is_create{symbol,client_id,customer_id}` | Whether the last submission **minted** the pair (1) or **updated** it (0). |
-
-**Cron service** (today none shown):
+### Balances & fee loop (Overview)
 
 | Metric | What it measures |
 | --- | --- |
-| `dia_bridge_cron_resubmissions_total{router_id,symbol,client_id,customer_id,outcome}` | Cron decisions by outcome: `submitted`, `skipped_already_fresh`, `skipped_superseded`, `skipped_no_intent`, `skipped_uninitialised`. Shows whether the cron is working and why it skips. |
+| `cardano_oracle_last_confirmed_timestamp_seconds{symbol,client_id,customer_id,router_id}` | Timestamp of the last confirmed on-chain update → staleness → `OraclePairStale`. |
+| `cardano_receiver_balance_lovelace{client_id,receiver_address,deposit_address}` | Receiver spendable ADA → `ReceiverBalanceLow`. |
+| `cardano_receiver_accrued_lovelace{client_id}` | Fees accrued at the Receiver → `SettleOverdue`. |
+| `cardano_payment_hook_accrued_lovelace` | Fees in the PaymentHook → `PaymentHookWithdrawReady`. |
+| `cardano_admin_wallet_lovelace` | Admin/signer wallet total → `AdminWalletLow`. |
+| `cardano_admin_wallet_max_utxo_lovelace` | Largest pure-ADA UTxO (collateral floor) → `AdminWalletFragmented`. |
+| `cardano_deposit_pending_lovelace{client_id,deposit_address}` | Un-merged side-deposits per client. |
 
-**HTTP API** (today none shown):
+### Scanner health
 
-| Metric | What it measures |
-| --- | --- |
-| `dia_bridge_http_requests_total{method,endpoint,status}` | Requests served by the API, per endpoint and status code. |
-| `dia_bridge_http_request_duration_seconds{method,endpoint}` | API latency per endpoint. |
+| Metric | What it measures | Shown on |
+| --- | --- | --- |
+| `scanner_block_lag` | Blocks behind the source-chain tip. | Overview |
+| `scanner_rpc_errors_total{chain_id,error_type}` | Scanner RPC/WS errors. | Internals |
+| `scanner_backfill_blocks_total{chain_id}` / `scanner_backfill_chunks_total{chain_id}` | Gap-recovery backfill activity. | Internals |
 
-**Worker pools** (emitted, but only meaningful with `enable_parallel_mode` ON):
+### Worker pool, submit queue & per-client lane
 
-| Metric | What it measures |
-| --- | --- |
-| `dia_bridge_active_workers{pool_type}` | Workers currently executing a task, per pool type (event/update). |
-| `dia_bridge_worker_pool_size{pool_type}` | Configured concurrency limit per pool. |
-| `dia_bridge_worker_queue_size{pool_type}` | Tasks/events waiting in the pool queue. |
-| `dia_bridge_worker_tasks_dropped_total{pool_type}` | Tasks dropped because the queue was full. **Backpressure signal.** |
+| Metric | What it measures | Shown on |
+| --- | --- | --- |
+| `active_workers{pool_type}` / `worker_pool_size{pool_type}` / `worker_queue_size{pool_type}` | Worker-pool occupancy + queue depth. | Internals |
+| `worker_tasks_completed_total{pool_type}` | Update-pool tasks completed. | Internals |
+| `worker_tasks_failed_total{pool_type}` | Update-pool tasks that threw or timed out (`onTaskError`). | Internals |
+| `worker_tasks_dropped_total{pool_type}` | Tasks dropped because the queue was full (backpressure; event pool). | Internals |
+| `worker_task_retries_total{pool_type}` | Submit retries from the queue's retry loop (`onRetry`). | Internals |
+| `submission_state{client_id,customer_id}` | Submit-pipeline phase per client (0 idle / 1 building / 2 submitting / 3 awaiting). | Transactions |
+| `coalescer_state{client_id,customer_id}` | Coalescer lifecycle per client (0 idle / 1 accumulating / 2 in-flight). | Transactions |
+| `coalescer_buffered{client_id,customer_id}` | Intents buffered before a flush. | Transactions |
+| `submit_queue_pending{client_id,customer_id}` | Tasks in the serial submit queue (contention indicator; ~0 at low load). | Transactions |
 
-**Spectra lifecycle aliases** — duplicate the funnel with Spectra's canonical naming
-(`bridge_intents_*`) plus a `customer_id` label. Useful if DIA compares dashboards
-between Spectra and this feeder:
+### Cron, HTTP, database & providers
 
-`dia_bridge_intents_scanned_lifecycle_total`, `dia_bridge_intents_processed_lifecycle_total`,
-`dia_bridge_intents_submitted_lifecycle_total`, `dia_bridge_intents_confirmed_lifecycle_total`,
-`dia_bridge_intents_failed_lifecycle_total` — same funnel stages, for naming parity.
+| Metric | What it measures | Shown on |
+| --- | --- | --- |
+| `cron_resubmissions_total{router_id,symbol,client_id,customer_id,outcome}` | Cron decisions by outcome (`submitted`, `skipped_*`). | Internals |
+| `http_requests_total{method,endpoint,status}` | API requests by status code. | Internals |
+| `http_request_duration_seconds{method,endpoint}` | API latency per endpoint. | Internals |
+| `db_operations_total{table,operation}` / `db_operation_duration_seconds{table,operation}` | DB load + latency (the `instrumentDb` wrapper). | Internals |
+| `recovery_attempts_total{component,reason}` | Recovery events (e.g. crash recovery on startup). | Internals |
+| `component_health{component,role}` / `provider_last_ok_timestamp_seconds{provider,role}` | Cardano provider health → `Primary`/`SecondaryProviderDown`. | Overview |
 
-### Worker-task health (now wired)
+### Spectra lifecycle aliases (naming parity)
 
-- `dia_bridge_worker_tasks_failed_total{pool_type}` — update-pool tasks that threw or timed
-  out, emitted from the pool's task-error path (`onTaskError`). Normally 0: the pool task just
-  buffers into the coalescer; real submission failures are `transactions_failed_total`.
-- `dia_bridge_worker_task_retries_total{pool_type}` — submit retries, emitted from the submit
-  queue's retry loop (`onRetry`, driven by `worker_pool.max_retries`/`retry_delay`). The retry
-  lives in the queue, not the pool; the `pool_type="update"` label marks the originating pipeline.
-
-Both are shown on the Internals "Worker tasks" panel alongside `completed` and `dropped`.
-
-### C — Internals metrics, emitted and shown on the `feeder-internals.json` dashboard
-
-The feeder emits these; the **Internals** Grafana dashboard renders them:
-
-- `dia_bridge_worker_tasks_completed_total{pool_type}` — tasks completed by the submission pool.
-- `dia_bridge_recovery_attempts_total{component,reason}` — recovery attempts (e.g. crash recovery on startup).
-- `dia_bridge_db_operations_total{table,operation}` / `dia_bridge_db_operation_duration_seconds{table,operation}` — DB load and latency, from the `instrumentDb` wrapper that times every data operation.
-- **Pipeline funnel** (`events_detected_total` / `events_duplicate_total` / `events_invalid_total`, `intents_scanned_total`, `intents_routed_total`, `transactions_submitted_total`) — the event → intent → submission drop-off, on the "Pipeline funnel & HTTP" row.
-- `dia_bridge_http_requests_total{method,endpoint,status}` — API request counts by status, alongside the HTTP latency panel.
-
-The per-feed sanity verdict `dia_bridge_feed_sanity_status{client_id,customer_id,symbol}`
-(0 ok / 1 suspect / 2 broken) is shown on the **Overview** dashboard (Row 4 — Price Quality &
-Anomaly Detection), next to the price-deviation panels it complements; the `FeedAccuracyFail`
-alert watches it.
-
-> Note: `/metrics` also includes `prom-client` default metrics (`process_*`,
-> `nodejs_*`: CPU, heap, event-loop lag). These are Node runtime metrics, not feeder
-> domain, and are also not dashboarded.
+`intents_scanned_lifecycle_total`, `intents_processed_lifecycle_total`,
+`intents_submitted_lifecycle_total`, `intents_confirmed_lifecycle_total`,
+`intents_failed_lifecycle_total` — the same funnel stages under Spectra's canonical
+`bridge_intents_*` naming plus a `customer_id` label, for dashboard parity with Spectra.
 
 ### Not on a dashboard (and why)
 
-8 of the ~66 families have no panel — on purpose:
+8 families have no panel, by choice:
 
-- **Spectra lifecycle aliases** — `dia_bridge_intents_{scanned,processed,routed,submitted,confirmed}_lifecycle_total`
-  (5): duplicate the event/intent funnel (shown on Internals) under Spectra's canonical
-  `bridge_intents_*` naming + a `customer_id` label, for dashboard parity with Spectra. No panel
-  of their own.
-- `dia_bridge_scanner_last_block` — redundant with `scanner_block_lag` (shown); the lag is the
-  actionable signal.
-- `dia_bridge_cardano_pair_is_create` — niche flag (last submission minted vs updated the pair).
-- `dia_bridge_cardano_receiver_topup_warnings_total` — niche; the Receiver-balance gauge + the
-  `ReceiverBalanceLow` alert already cover it.
+- The **5 Spectra lifecycle aliases** above — they duplicate the event/intent funnel, which is shown.
+- `scanner_last_block{chain_id,scanner_type}` — redundant with `scanner_block_lag`; the lag is the actionable signal.
+- `cardano_pair_is_create{symbol,client_id,customer_id}` — niche flag (last submission minted vs updated the pair).
+- `cardano_receiver_topup_warnings_total{client_id}` — niche; the Receiver-balance gauge + the `ReceiverBalanceLow` alert cover it.
 
-Everything else (58 families) is on one of the three dashboards — see
-[`grafana-dashboards.md`](./grafana-dashboards.md) for the panel-by-panel guide. `prom-client`
-default metrics (`process_*`, `nodejs_*`) are Node runtime, not feeder domain, and are not
-dashboarded.
+`prom-client` default metrics (`process_*`, `nodejs_*`) are Node runtime, not feeder domain, and are not dashboarded.
 
 ---
 
@@ -1163,9 +1128,9 @@ module. So the daemon layers on top of Layer 1:
    resets to 0 on any successful submission — see `src/submitter/wasm-failure-guard.ts`,
    kept pure for unit testing). The classifier (`isProcessRecoverableWasmError`) matches
    **both** signatures — the detached-ArrayBuffer family **and** the `unreachable` trap —
-   precisely because both only clear on a fresh process. (This is the fix for the ~13 h
-   outage: the classifier previously matched only `detached`, so an `unreachable` trap
-   storm never incremented the counter and the self-exit never fired.) A *non*-WASM
+   precisely because both only clear on a fresh process. (Matching both is what guards the
+   ~13 h outage class: an `unreachable` trap storm must increment the counter so the
+   self-exit fires, exactly as a detached-ArrayBuffer storm does.) A *non*-WASM
    failure — e.g. `NonMonotonicNonce`, or a collateral-exhaustion build error that
    auto-consolidate resolves — leaves the streak unchanged, so the daemon never restarts
    for a condition a restart cannot fix. Once the count reaches

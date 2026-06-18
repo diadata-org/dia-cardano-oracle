@@ -81,8 +81,8 @@ export type QueueOptions = {
   /** Retry policy applied after each failed attempt. When absent the queue
    *  surfaces the first failure immediately without retrying. */
   retryPolicy?: RetryPolicy;
-  /** Called once each time the queue decides to RETRY a failed submit (drives
-   *  the worker_task_retries metric). Not called for the first attempt. */
+  /** Called once each time the queue retries a failed submit — i.e. from the
+   *  second attempt onward (drives the worker_task_retries metric). */
   onRetry?: () => void;
   /** REQUIRED — timeout (ms) for in-flight entries created by this queue.
    *  Sourced from `infrastructure.<network>.yaml::worker_pool.inflight_timeout_ms`. */
