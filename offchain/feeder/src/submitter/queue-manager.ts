@@ -75,6 +75,8 @@ export type QueueManager = {
   queueKeys(): string[];
   /** Total pending items across all queues. */
   totalPending(): number;
+  /** Pending items per lane key (for the per-client queue-depth gauge). */
+  pendingByLane(): Record<string, number>;
 };
 
 // ---------------------------------------------------------------------------
@@ -158,6 +160,14 @@ export function createQueueManager(options: QueueManagerOptions): QueueManager {
         total += queue.pending;
       }
       return total;
+    },
+
+    pendingByLane() {
+      const out: Record<string, number> = {};
+      for (const [key, queue] of queues) {
+        out[key] = queue.pending;
+      }
+      return out;
     },
   };
 }

@@ -97,6 +97,9 @@ describe("createCoalescerManager", () => {
       totalPending() {
         return 0;
       },
+      pendingByLane() {
+        return {};
+      },
     };
 
     const coalescer = createCoalescerManager({
@@ -140,6 +143,9 @@ describe("createCoalescerManager", () => {
       },
       totalPending() {
         return 0;
+      },
+      pendingByLane() {
+        return {};
       },
     };
 
@@ -186,6 +192,9 @@ describe("createCoalescerManager", () => {
       totalPending() {
         return 0;
       },
+      pendingByLane() {
+        return {};
+      },
     };
 
     const coalescer = createCoalescerManager({
@@ -226,6 +235,9 @@ describe("createCoalescerManager", () => {
       },
       totalPending() {
         return 0;
+      },
+      pendingByLane() {
+        return {};
       },
     };
 

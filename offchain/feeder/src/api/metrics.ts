@@ -135,6 +135,16 @@ export type FeederMetrics = {
   workerPoolSize: FeedGauge;             // dia_bridge_worker_pool_size{pool_type}
   /** Tasks/events currently waiting in the pool queue, partitioned by pool type. */
   workerQueueSize: FeedGauge;            // dia_bridge_worker_queue_size{pool_type}
+  /** Current submission phase of each client's serial lane (one lane per client
+   *  deployment / Receiver): 0 idle, 1 accumulating, 2 building, 3 submitting,
+   *  4 awaiting-confirmation. */
+  submissionState: FeedGauge;            // dia_bridge_submission_state{client_id,customer_id}
+  /** Intents currently buffered in the coalescer for a client, waiting for the
+   *  flush that batches them into one transaction. */
+  coalescerBuffered: FeedGauge;          // dia_bridge_coalescer_buffered{client_id,customer_id}
+  /** Tasks currently waiting in a client's serial submit queue (already flushed
+   *  from the coalescer, waiting their turn to build/submit). */
+  submitQueuePending: FeedGauge;         // dia_bridge_submit_queue_pending{client_id,customer_id}
   /** Total tasks/events successfully processed across all pools. */
   workerTasksCompleted: FeedCounter;     // dia_bridge_worker_tasks_completed_total
   /** Total tasks/events that failed or timed out across all pools. */
@@ -236,6 +246,9 @@ export const noopMetrics: FeederMetrics = {
   activeWorkers: noopGauge,
   workerPoolSize: noopGauge,
   workerQueueSize: noopGauge,
+  submissionState: noopGauge,
+  coalescerBuffered: noopGauge,
+  submitQueuePending: noopGauge,
   workerTasksCompleted: noopCounter,
   workerTasksFailed: noopCounter,
   workerTasksDropped: noopCounter,
@@ -584,6 +597,21 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "worker_queue_size",
       "Tasks currently waiting in the pool queue, partitioned by pool type",
       ["pool_type"],
+    ),
+    submissionState: gauge(
+      "submission_state",
+      "Current submission phase of a client's serial lane (one lane per client deployment / Receiver): 0 = idle, 1 = accumulating (coalescer buffering), 2 = building, 3 = submitting, 4 = awaiting confirmation. Use a state-timeline panel to read the history; a point-in-time read is mostly 0 because lanes flip phases quickly.",
+      ["client_id", "customer_id"],
+    ),
+    coalescerBuffered: gauge(
+      "coalescer_buffered",
+      "Intents currently buffered in the coalescer for a client, waiting for the flush that batches them into one Cardano transaction.",
+      ["client_id", "customer_id"],
+    ),
+    submitQueuePending: gauge(
+      "submit_queue_pending",
+      "Tasks waiting in a client's serial submit queue — already flushed from the coalescer, waiting their turn to build/submit on that client's single Receiver lane.",
+      ["client_id", "customer_id"],
     ),
     workerTasksCompleted: counter(
       "worker_tasks_completed_total",

@@ -110,6 +110,8 @@ export type CoalescerManager = {
   accept(req: SubmitRequest): void;
   /** Total intents currently buffered across all lanes (diagnostic). */
   totalBuffered(): number;
+  /** Intents buffered per lane key (for the per-client coalescer-buffer gauge). */
+  bufferedByLane(): Record<string, number>;
 };
 
 // ---------------------------------------------------------------------------
@@ -380,6 +382,12 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
       let n = 0;
       for (const lane of lanes.values()) n += lane.buffer.size;
       return n;
+    },
+
+    bufferedByLane(): Record<string, number> {
+      const out: Record<string, number> = {};
+      for (const [key, lane] of lanes) out[key] = lane.buffer.size;
+      return out;
     },
   };
 }

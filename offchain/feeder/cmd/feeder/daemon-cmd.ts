@@ -104,6 +104,7 @@ import {
 } from "../../src/runtime/identity.js";
 import { clientLabels, routerMembershipLabels } from "../../src/api/metric-labels.js";
 import { seedDropdownSeriesFromConfig } from "../../src/metrics/seed-dropdown-series.js";
+import { submissionStateForStep, submissionStateForLaneEvent } from "../../src/metrics/submission-state.js";
 import {
   createUpdateWorkerPoolManager,
   type UpdateWorkerPoolManager,
@@ -1031,6 +1032,21 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // tick for how the lock is honoured.
   const inflightTable: InflightTable = createInflightTable();
 
+  // One serial submission lane per client deployment (Receiver). Map each lane
+  // key to its client/customer so the per-client queue-depth and submission-state
+  // gauges can be labelled with the identities users already see in the filters.
+  const laneIdentity = new Map<string, { client_id: string; customer_id: string }>();
+  for (const r of Object.values(config.routers)) {
+    if (!r.enabled) continue;
+    for (const d of r.destinations) {
+      if (!d?.cardano) continue;
+      laneIdentity.set(laneKey(d.cardano), {
+        client_id: clientIdFromStatePath(d.cardano.client_state_path),
+        customer_id: r.customer_id,
+      });
+    }
+  }
+
   const queueManager = createQueueManager({
     inflightTable,
     clientFactory: (clientStatePath, protocolStatePath) =>
@@ -1039,6 +1055,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         log: debugReport,
         onStep: (intentHash, symbol, step, txHash) => {
           const runtime = intentRuntime.get(intentHash);
+          // Per-client submission phase (building/submitting/awaiting-confirmation).
+          const phase = submissionStateForStep(step);
+          if (phase !== null && runtime) {
+            metrics.submissionState.set(clientLabels(runtime), phase);
+          }
           if (step === "submitted" && txHash && runtime && runtime.submittedAtMs === undefined) {
             runtime.submittedAtMs = Date.now();
             metrics.transactionsSubmitted.inc({ symbol, ...clientLabels(runtime), router_id: runtime.routerId });
@@ -1531,6 +1552,13 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       });
     },
     onLaneEvent: async (event) => {
+      // Per-client submission phase from the lane lifecycle (idle/accumulating/
+      // hand-off to the submit pipeline). Finer phases come from onStep above.
+      const phase = submissionStateForLaneEvent(event.kind);
+      const laneOwner = laneIdentity.get(event.lane);
+      if (phase !== null && laneOwner) {
+        metrics.submissionState.set(laneOwner, phase);
+      }
       await fileLogger.logLaneEvent({
         ts: new Date().toISOString(),
         lane: event.lane,
@@ -1671,6 +1699,16 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       metrics.activeWorkers.set({ pool_type: "update" }, active);
       metrics.workerPoolSize.set({ pool_type: "update" }, capacity);
       metrics.workerQueueSize.set({ pool_type: "update" }, queueManager.totalPending());
+
+      // Per-client queue depths: the coalescer buffer (intents accumulating before
+      // a flush) and the serial submit queue (tasks waiting their turn). Iterate
+      // every configured lane so idle clients report 0, not a stale last value.
+      const buffered = coalescerManager.bufferedByLane();
+      const pending = queueManager.pendingByLane();
+      for (const [lane, owner] of laneIdentity) {
+        metrics.coalescerBuffered.set(owner, buffered[lane] ?? 0);
+        metrics.submitQueuePending.set(owner, pending[lane] ?? 0);
+      }
     },
     healthCheckIntervalMs,
   );

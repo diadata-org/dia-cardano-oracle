@@ -69,6 +69,7 @@ describe("coalescer reflush loop", () => {
       async enqueueLaneTask(_dest, run) { await run(); },
       queueKeys() { return []; },
       totalPending() { return 0; },
+      pendingByLane() { return {}; },
     };
 
     let next = 1;
