@@ -44,7 +44,7 @@ This document is the single architecture reference for the Cardano port of DIA's
   - [9.1 Persistence model — DB + pair-state files](#91-persistence-model--db--pair-state-files)
   - [9.2 Worker-pool layering](#92-worker-pool-layering)
   - [9.3 Cron service](#93-cron-service)
-  - [9.4 Alert evaluator and `alert_log`](#94-alert-evaluator-and-alert_log)
+  - [9.4 Alert pipeline and `alert_log`](#94-alert-pipeline-and-alert_log)
   - [9.5 API endpoint → table map](#95-api-endpoint--table-map)
   - [9.6 Spectra parity](#96-spectra-parity)
 
@@ -1384,7 +1384,7 @@ source used to rebuild the in-memory price cache.
 | `transaction_log` | One row per Cardano submission attempt. Full lifecycle: `pending → submitted → confirmed \| failed`. Stores `fee_paid_lovelace`, `confirmed_at_depth`, error codes. |
 | `contract_symbol_updates` | One row per `(chainId, contract, symbol)`, upserted on every confirmation. For Cardano: `chainId` = network magic (Preview 2, Mainnet 764824073), `contract` = the client's pair validator address (the Spectra destination-contract analogue — one per client, holds all its symbols), `symbol` = the pair. Stores the latest confirmed `price`, `timestamp`, `nonce` (`last_nonce`), intent hash, tx hash, `update_count`, and fee. `last_nonce` lets a restart rehydrate the cron's monotonic-nonce baseline. |
 | `performance_metrics` | Time-series metric samples for the 6-phase latency histogram. Queried by `/api/v1/performance`. |
-| `alert_log` | Fired / resolved alert events written by the alert evaluator. Queried by `/api/v1/alerts`. |
+| `alert_log` | Fired / resolved alert events recorded via the Alertmanager webhook (Prometheus → Alertmanager → feeder webhook). Queried by `/api/v1/alerts`. |
 
 The checkpoint value (`chain_state.last_processed_block`) always wins over the YAML
 `start_block` once the feeder has seen at least one block. Crash recovery on startup
@@ -1474,19 +1474,21 @@ nonce (`outcome = "skipped_superseded"`): the `pair_state` validator requires a 
 greater `(timestamp, nonce)`, so such a re-submission would be rejected on chain — the
 cron drops it instead of wasting a pipeline pass and a fee.
 
-### 9.4 Alert evaluator and `alert_log`
+### 9.4 Alert pipeline and `alert_log`
 
-The alert evaluator is an in-process periodic loop started alongside the feeder daemon.
-It implements exactly one rule: it reads the in-memory `priceCache` (refreshed on every
-confirm, hydrated from the reconciled pair-state files at startup) to find pairs whose
-last confirmed entry is older than the staleness window and writes an `OraclePairStale`
-event to `alert_log`. **Every other operational condition** — price deviation, price age,
-balances, fee-loop, reorgs, and Cardano API provider health — is evaluated **externally**
-by the Prometheus rules in `monitoring/alerts.yml` (PromQL), not by this loop.
+All operational conditions — staleness, price deviation, price age, balances, fee-loop,
+reorgs, on-chain-vs-source feed accuracy, and Cardano API provider health — are evaluated
+by the Prometheus rules in `offchain/feeder/monitoring/alerts.yml` (PromQL) against the
+canonical `alerting.*` thresholds. Prometheus delivers firing/resolved alerts to
+Alertmanager, which groups, deduplicates, and silences them, then posts to the feeder
+webhook `POST /api/v1/alerts/ingest`; the feeder records each alert (keyed by its
+Alertmanager fingerprint) in `alert_log` and the feeder log. Alertmanager additionally
+delivers to Telegram/email when those channels are enabled in
+`infrastructure.<network>.yaml::notifications`.
 
-Fired in-process alerts are visible at `/api/v1/alerts` (active = unresolved) and
-`/api/v1/alerts?active=false` (all). The Prometheus rules cover the full set against the
-same canonical `alerting.*` thresholds — including provider health: `PrimaryProviderDown`
+Recorded alerts are visible at `/api/v1/alerts` (active = unresolved) and
+`/api/v1/alerts?active=false` (all), against the same canonical `alerting.*` thresholds —
+including provider health: `PrimaryProviderDown`
 / `SecondaryProviderDown` fire on
 `time() - dia_bridge_provider_last_ok_timestamp_seconds{role} > alerting.provider_{primary,secondary}_unhealthy_seconds`,
 with `dia_bridge_component_health{component,role}` as the 1/0 health gauge. The `role`

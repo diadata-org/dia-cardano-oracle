@@ -26,6 +26,8 @@ Every "already built" claim below was verified against the tree on 2026-06-16
     - [M3-E · Live Mainnet monitoring demo + M3 video](#m3-e--live-mainnet-monitoring-demo--m3-video)
     - [M3-F · QA validation report](#m3-f--qa-validation-report)
     - [M3-G · milestone-3-poa.md](#m3-g--milestone-3-poamd)
+    - [M3-H · Production alerting — notification delivery + single pipeline](#m3-h--production-alerting--notification-delivery--single-pipeline)
+    - [M3-I · Documentation of the new work (in-repo, proportionate)](#m3-i--documentation-of-the-new-work-in-repo-proportionate)
   - [Dependencies \& ordering](#dependencies--ordering)
   - [Plan alignment status](#plan-alignment-status)
   - [Open questions / decisions](#open-questions--decisions)
@@ -72,9 +74,9 @@ monitoring infrastructure.
 - [~] **In-process alert evaluator**
   [`src/alerting/evaluator.ts`](../../offchain/feeder/src/alerting/evaluator.ts) —
   evaluates **only `OraclePairStale`** and writes the `alert_log` table; the other 11
-  rules are Prometheus-side only. (Relevant to M3-B: in-process firings are queryable
-  via `/api/v1/alerts`; Prometheus-only firings are captured from `/api/v1/alerts`
-  Prometheus state.)
+  rules are Prometheus-side only, and Prometheus has **no Alertmanager** wired, so they
+  fire but notify nowhere. **M3-H replaces this** with a single Prometheus → Alertmanager
+  → webhook pipeline that lands all 12 rules in `alert_log` and can notify.
 - [x] **Anomaly-detection metrics**: `price_deviation_percent` (misreport),
   `price_age_seconds` + per-pair staleness (stale data), reorg counter (chain
   instability) — defined in
@@ -108,24 +110,38 @@ is shape validation only.
 
 **Scope (code):**
 
-- [ ] A script/command that, per configured feed, reads the **live Pair UTxO**
-  (price, timestamp, nonce, signer, intent-hash) from the on-chain datum and compares
-  it against the **current DIA source price** for the same symbol, emitting:
-  - absolute + relative price delta vs the DIA source at read time,
-  - on-chain timestamp age vs the source publish time (freshness),
-  - a PASS/WARN/FAIL verdict per feed against thresholds sourced from
-    `infrastructure.<network>.yaml` (NO hardcoded tolerances — reuse the
-    `price_deviation` / freshness keys; add a dedicated `sanity_check.*` block only if
-    no existing key fits).
-- [ ] Reuse the existing on-chain read path (the `pair-state` reconcile datum decode)
-  rather than a second decoder; reuse the feeder's DIA price cache / source client for
-  the source side.
-- [ ] Output: machine-readable JSON (per-feed rows) + a human table, written under the
-  evidence tree so M3-F can fold it in.
+> Status: the **pure verdict core is implemented + tested** —
+> [`src/sanity-check/feed-sanity.ts`](../../offchain/feeder/src/sanity-check/feed-sanity.ts)
+> (9 tests, the PASS/WARN/FAIL matrix). What remains below is `deriveThresholds`, the
+> on-chain + registry I/O, the output, and the metric/alert.
 
-**Tests:** unit tests on the comparison/verdict logic (matching, within-tolerance,
-stale, missing-on-chain, source-unavailable). Adversarial: tampered/old on-chain datum
-→ FAIL; source outage → WARN not crash.
+- [x] Pure `evaluateFeedSanity(reading, thresholds)` → PASS/WARN/FAIL per feed, reusing
+  `computePriceDeviationPct` (same math as the push gate). FAIL only on a confirmed
+  misreport (price drifted past tolerance) that is ALSO stale.
+- [x] Map the active router destination to the verdict thresholds, **mirroring the
+  push-policy modes** ([push-policy ref](../audit/20260609-feeder-push-policy-config.md)),
+  NO hardcoded tolerances: price tolerance = `price_deviation`; freshness ceiling =
+  `time_threshold` when > 0 (modes 1–4), else `max_staleness` (modes 6–7), else no ceiling
+  (mode 5 → never FAIL on freshness). Done + tested (4 tests). The check has its **own
+  config block + clock** (`feed_sanity` in `infrastructure.<network>.yaml`: `enabled`,
+  `interval`, `freshness_grace_seconds`), deliberately separate from `cron_service` and
+  the balance refresh so cadence/naming are never conflated. The grace comes from
+  `feed_sanity.freshness_grace_seconds` — not hardcoded.
+- [x] I/O: on-chain side reuses `decodePairDatum` (via the feeder lib-bridge) — no
+  second decoder. Source side reads the **latest `IntentRegistered` for the symbol from
+  the DIA registry** (reuse the `scan-dia-intents.ts` path), robust for a standalone run
+  without the daemon — not the in-memory price cache.
+- [x] Output: machine-readable JSON (per-feed rows) + a human table, written under the
+  evidence tree so M3-F can fold it in.
+- [x] Emit a **`dia_bridge_feed_sanity_status{symbol}`** gauge (PASS/WARN/FAIL) + an
+  on-chain-vs-source deviation gauge, and add a **`FeedAccuracyFail`** Prometheus alert.
+  This fills the real gap: no current alert fires on on-chain-vs-source divergence
+  (`PriceDeviationHigh` is event-driven at intent time, not a poll). Routes through the
+  M3-H pipeline.
+
+**Tests:** verdict logic + threshold derivation covered (13 tests). Still to test: the
+aggregation across feeds and the metric emission. Adversarial: tampered/old on-chain
+datum → FAIL; source outage → WARN not crash.
 
 **Deliverable:** the script + a sample per-feed accuracy table (10 Preview feeds, then
 the 10 Mainnet RWA feeds for the live run).
@@ -137,27 +153,45 @@ evidence list calls out **alert-trigger logs**. Today firing is **manual** (docu
 in [`_archived/m2-demo-video-script.md`](./_archived/m2-demo-video-script.md)); no
 automated trigger exists.
 
-**Scope:**
+All alerts now flow through one pipeline (Prometheus rules → Alertmanager → the
+feeder webhook → `alert_log`), so the harness fires a real alert by pushing a synthetic
+metric value at the **input** of that pipeline and lets the rest run untouched.
 
-- [ ] A harness (script or `node:test` suite) that **deliberately drives each
-  safe alert** to fire and captures the transition. Safe-on-Preview set first:
-  `OraclePairStale` (stop refreshing a pair / lower its staleness threshold for the
-  run), `PriceDeviationHigh`, `PriceAgeHigh`, `ReceiverBalanceLow`, `SettleOverdue`,
-  `ReceiverDepositsPending`. Financial-drain alerts (`AdminWalletLow`) stay
-  **simulated/never forced on Mainnet**.
-- [ ] For in-process alerts (`OraclePairStale`) capture the `alert_log` fire→resolve
-  rows via `/api/v1/alerts`; for Prometheus-only rules capture the `/api/v1/alerts`
-  Prometheus state (pending→firing→resolved) snapshots.
-- [ ] Decide per alert whether it is forced **live** (state manipulation) or
-  **demonstrated** via a unit test that feeds the evaluator/PromQL a synthetic series —
-  prefer a real firing where safe, a deterministic test where forcing is unsafe/slow.
+- [x] **Trigger harness — Pushgateway (built + verified).**
+  [`scripts/monitoring/trigger-alert.sh`](../../offchain/feeder/scripts/monitoring/trigger-alert.sh)
+  pushes a synthetic metric value for one alert to a **Pushgateway** scraped by
+  Prometheus (`honor_labels: true`, tagged with the active `network`). The metric crosses
+  the **real** threshold from `alerts.yml`, so the actual rule fires after its `for:`
+  window and flows through Alertmanager → the feeder webhook → `alert_log` — nothing is
+  faked except the one input series. Covers every alert (single-push for
+  gauge/timestamp/status rules; a rising-series push for the rate/histogram rules
+  `ReorgRateHigh`, `PriceDeviationHigh`, `PriceAgeHigh` that are unsafe/slow to force
+  live). `clear` resets. The pushed series is independent of the feeder's own series, so
+  the feeder's live beats never overwrite it; the alert stays firing until `clear`.
+  **Verified** on the live stack: `OraclePairStale`, `ReceiverBalanceLow`,
+  `FeedAccuracyFail` reached `firing` with `network=Preview`. Replaces the earlier
+  `promtool`-rule-test idea (dropped — `promtool` compares rule annotations with no
+  ignore flag, so the network-injected annotations made it brittle; the Pushgateway
+  exercises the whole pipeline, not just the rule, which is stronger evidence).
+- [x] **Timed demo + evidence capture orchestrator — built.**
+  [`scripts/monitoring/trigger-alert-demo.sh`](../../offchain/feeder/scripts/monitoring/trigger-alert-demo.sh)
+  walks the alert list (a safe default set, `all`, or named alerts), and for each: fires
+  it via `trigger-alert.sh` → polls Prometheus until it reports `firing` (capturing the
+  real fire latency, up to `MAX_FIRE_WAIT`) → snapshots the Prometheus alert state AND the
+  feeder `alert_log` row (`/api/v1/alerts`) AND a dashboard PNG → `clear` → polls until it
+  resolves. It appends a documented timeline (alert · pushed-at · fire latency · cleared-at
+  · resolved) to `timeline.md`. One tool produces both the on-screen demo for the M3 video
+  and the **alert-trigger logs** evidence. Run live (against the up stack) in the live
+  session.
+- [ ] **Live forcing (optional, during the live session).** Where cheap and safe, also
+  drive one or two alerts by real state on Preview (`OraclePairStale` by pausing a pair
+  refresh; balance alerts by letting balances move) to show a non-synthetic firing
+  alongside the harness. Financial-drain alerts (`AdminWalletLow`) stay synthetic, never
+  forced on Mainnet.
 
-**Tests:** the harness itself is test-shaped; assert each targeted alert reaches
-`firing` and then `resolved` after remediation.
-
-**Deliverable:** captured alert-trigger logs (one bundle per alert: the rule, the
-forced condition, the fire timestamp, the `/alerts` transition, the remediation, the
-resolve) — feeds the QA report and the M3 video.
+**Deliverable:** the Pushgateway trigger harness (done) + the timed capture orchestrator,
+producing a per-alert bundle (rule · forced condition · fire timestamp · `/alerts`
+transition · `alert_log` row · resolve) — feeds the QA report (M3-F) and the M3 video.
 
 ### M3-C · Uptime & accuracy report
 
@@ -200,16 +234,31 @@ panel. Verified emitted-not-dashboarded families in
 
 **Scope:**
 
-- [ ] **Verify emission first.** The Explore pass flagged several of these as
-  *defined but possibly not incremented at runtime* (stubs). Before adding a panel,
-  confirm the metric actually moves in a live run — a panel for a never-incremented
-  metric is worse than none. Drop or fix any stub instead of dashboarding a flat line.
-- [ ] New dashboard JSON (e.g. `feeder-internals.json`) grouped by subsystem
+- [x] **Verify emission first.** Static check done (2026-06-17): most candidates ARE
+  emitted in code (the 5 per-symbol latency phases, scanner rpc-errors + backfill,
+  worker active/pool/queue/dropped, http duration, cron resubmissions, provider-last-ok).
+  **Four are true stubs** — declared + registered but emitted by NO production code,
+  only touched by `metrics.test.ts`: `workerTasksCompleted`, `bridgeRecoveryAttempts`,
+  `bridgeDbOperations`, `bridgeDbOperationDuration`. They get NO panel.
+- [x] **The 4 stubs — WIRED (DIA chose "connect them").** Now emitted by real code:
+  `worker_tasks_completed` (the always-running submission pool), `recovery_attempts`
+  (crash-recovery sweep), `db_operations` + `db_operation_duration` (a `instrumentDb`
+  wrapper timing every data op). Also fixed: the worker active/queue/pool gauges now
+  emit for the submission pool too, so they work in ANY mode (not only parallel).
+- [x] New dashboard JSON (`feeder-internals.json`) grouped by subsystem
   (scanner / workers / http+db / recovery+cron / per-phase latency), wired into
   Grafana provisioning, with template vars consistent with the existing dashboards.
-- [ ] Align panel windows with the alert windows (PriceAge/PriceDeviation alert at
+- [x] Align panel windows with the alert windows (PriceAge/PriceDeviation alert at
   10 m) so panels and alerts agree.
-- [ ] Extend `threshold-drift.test.ts` template-var assertions to the new dashboard.
+- [x] Extend `threshold-drift.test.ts` template-var assertions to the new dashboard.
+- [x] **Coverage audit + close the gaps (2026-06-18).** Audited every declared
+  `dia_bridge_*` metric vs every dashboard panel `expr`: 62 declared, 16 unshown. Two real
+  gaps closed — the **`feed_sanity_status` verdict** (emitted + alerted by `FeedAccuracyFail`
+  but on no panel; added to Overview Row 4) and the **event/intent funnel** (the "#1 suggested
+  panel"; added to Internals as "Pipeline funnel & HTTP", with `http_requests_total`). Also
+  corrected `feeder.md §19C`, which wrongly claimed `feed_sanity_status` was already on
+  Internals. The remaining unshown metrics (Spectra lifecycle aliases, `scanner_last_block`,
+  `receiver_topup_warnings`, `pair_is_create`) are low-value and deliberately skipped.
 
 **Deliverable:** the dashboard + PNGs captured by `make evidence`.
 
@@ -221,7 +270,7 @@ requires a **demo video** of dashboards + live mainnet logs showing feed health 
 **Scope:**
 
 - [ ] Short **Mainnet** monitoring run with the full stack attached (Prometheus +
-  Grafana + alert evaluator) against the live `client-test-01` mainnet feeds — reuse
+  Grafana + Alertmanager) against the live `client-test-01` mainnet feeds — reuse
   the M2 mainnet deployment (`mainnet_run_20260616-074413`). The M2 mainnet pack
   (`m2-mainnet-20260616-074413`) is the baseline; M3 adds the **monitoring-centric**
   capture (dashboards live, M3-A sanity check on mainnet feeds, M3-B alert firing).
@@ -238,16 +287,25 @@ requires a **demo video** of dashboards + live mainnet logs showing feed health 
 
 **Scope:**
 
-- [ ] **Generalize the evidence packaging** beyond M2: the scripts hardcode
-  `m2-`/`milestone-2-` naming (dir `m2-<network>-<stamp>`, `milestone-2-<network>-evidence.md`).
-  Parameterize the milestone number (or add an M3 mode) so `make evidence` can emit an
-  M3 QA pack with the same capture machinery. Keep it DRY — one packaging path, a
-  milestone variable.
-- [ ] **Integration tests** validating (a) oracle data ingestion end-to-end and
-  (b) alert triggering — wire the existing feeder + Aiken suites + the M3-B harness into
-  a named QA run, capture exit codes/counts (the pack already records test results).
-- [ ] **Per-feed sanity checks** (M3-A output) embedded as the accuracy section.
-- [ ] Assemble `qa-validation-report.md` (with `## Contents` TOC) + supporting logs.
+- [x] **A fresh, standalone M3 evidence packager — built.** The M2 script
+  (`scripts/m2-evidence/`) is left **untouched**. New
+  [`scripts/m3-evidence/`](../../offchain/feeder/scripts/m3-evidence/)
+  (`package-m3-evidence.sh` + `build-stats.ts` + `build-error-counts.ts` +
+  `build-alerts.ts`) emits an M3 QA pack (`m3-<network>-<stamp>/`,
+  `milestone-3-<network>-evidence.md`) via the new `make evidence3` target. Outputs table
+  rewritten to M3's official outputs. M3-specific captures wired in: the **Internals**
+  dashboard render (M3-D), a **per-feed sanity** step (`step 5e`, runs `sanity:feeds` into
+  the pack) and an **alert-trigger logs** step (`step 5f`, folds in a
+  `trigger-alert-demo.sh` bundle via `ALERT_TRIGGER_DIR`). Both degrade to a documented
+  note when the live stack/chain is offline. The no-duplication rule is waived **here
+  only** — these milestone packagers are single-use and frozen once delivered.
+- [x] **Integration tests** — the pack runs the feeder + CLI suites (`step 5d`) and
+  records exit codes/counts; the **alert-trigger logs** section is produced by the M3-B
+  orchestrator (fire → capture `/alerts` + `alert_log` → resolve), folded in via `step 5f`.
+- [x] **Per-feed sanity checks** (M3-A output) embedded as the accuracy section (`step 5e`
+  → "Per-feed sanity (accuracy)").
+- [ ] Assemble the final QA validation report from a live pack (with `## Contents` TOC) —
+  the live-session output once the pack is captured against a running deployment.
 
 **Deliverable:** the QA validation report doc + its evidence pack.
 
@@ -260,20 +318,103 @@ requires a **demo video** of dashboards + live mainnet logs showing feed health 
   uptime/accuracy report, the live-mainnet dashboards/video, and the per-feed accuracy
   table.
 
+### M3-H · Production alerting — notification delivery + single pipeline
+
+**Why:** the system is going to **production**, not just a milestone demo. Today the 12
+`alerts.yml` rules are evaluated by Prometheus but **route nowhere** (no Alertmanager →
+no mail/Telegram; a firing alert is an alarm in an empty room), and a parallel in-process
+evaluator independently writes only `OraclePairStale` to `alert_log`. A production oracle
+needs anomalies to (a) be able to reach a human and (b) flow through **one** source of
+truth.
+
+**Target architecture** (decided 2026-06-17):
+
+```
+metrics → Prometheus (rules from infrastructure.<network>.yaml) → Alertmanager
+                                                                    ├─ webhook → feeder ingest → alert_log + logs   [active now]
+                                                                    ├─ telegram_configs   [scaffolded, disabled]
+                                                                    └─ email_configs      [scaffolded, disabled]
+```
+
+**Scope:**
+
+- [x] Add an **Alertmanager** service (docker-compose, network-scoped volume like the
+  rest of the stack) + `monitoring/alertmanager.yml`; wire Prometheus
+  `alerting.alertmanagers`.
+- [x] **Webhook receiver → feeder.** New feeder endpoint (e.g. `POST /api/v1/alerts/ingest`)
+  that accepts the Alertmanager webhook payload and writes each firing/resolved alert to
+  `alert_log` + the feeder log. This makes **all 12 rules** land in `alert_log` and the
+  `/api/v1/alerts` API, not just `OraclePairStale`; grouping/dedup/silencing are handled
+  by Alertmanager (10 stale pairs → 1 notification, not 10).
+- [x] **Single source of truth.** Retire the parallel in-process evaluator
+  ([`src/alerting/evaluator.ts`](../../offchain/feeder/src/alerting/evaluator.ts)) now
+  that Prometheus → Alertmanager → webhook owns the pipeline. If a thin app-side
+  staleness net is still wanted, document it as deliberate, not a second evaluator that
+  silently diverges.
+- [x] **Notification channels — one place to configure, off for now.** Where you turn
+  them on/off and set recipients: a new `alerting.notifications` block in
+  [`config/infrastructure.preview.yaml`](../../offchain/feeder/config/infrastructure.preview.yaml)
+  / `infrastructure.mainnet.yaml` — the **same file that already holds the alert
+  thresholds** — e.g. `telegram: { enabled: false, chat_id: … }`,
+  `email: { enabled: false, to: [ … ] }`. At startup the generator writes those into the
+  generated `monitoring/alertmanager.yml` (you never hand-edit the generated file),
+  exactly as it already writes thresholds into the alert rules. **Secrets** (Telegram bot
+  token, SMTP password) live in `.env`, never in the YAML. Today both stay
+  `enabled: false` → alerts go only to logs + the database; flipping `enabled: true` and
+  adding the secret turns on delivery with no code change.
+- [x] **Fix the hardcoded network in alert messages.** `generate-monitoring.ts` already
+  injects per-config thresholds into `alerts.yml` at startup; extend it to inject the
+  **active network** (from `CARDANO_NETWORK` / the active infra file) into the alert
+  annotations instead of the hardcoded "Preview"/"Mainnet" strings — same
+  generate-on-start mechanism, network becomes a variable, not a literal.
+
+**Tests:** webhook ingest (payload → `alert_log` rows, fire + resolve); the generator
+injects the network (drift test asserts no hardcoded network literal remains in
+`alerts.yml` annotations); Alertmanager config validates (`amtool check-config`).
+
+**Deliverable:** alerts flowing through one pipeline into `alert_log` + logs now, with
+Telegram/email one config flip away; no hardcoded network in any alert message.
+
+### M3-I · Documentation of the new work (in-repo, proportionate)
+
+Document the M3 additions AND the changes to existing pieces (config blocks,
+docker/monitoring, usage) — **only where a reader/operator would actually look**.
+New code does not earn a line in every README; it goes where it belongs, no more,
+no less, and is never weighted above existing content.
+
+- [x] **Feeder architecture** ([`../architecture/feeder.md`](../architecture/feeder.md)):
+  update in place (don't bolt on) the monitoring/alerting section to the pipeline as it
+  now is (Prometheus → Alertmanager → webhook → `alert_log`; the in-process evaluator is
+  gone), and add the per-feed sanity check (on-chain vs DIA source, its own clock).
+- [x] **Feeder README / operator guide** (+ `config/README.md`): the `feed_sanity` + `notifications` config
+  blocks (what they do, on/off), the `npm run sanity:feeds` command, the Alertmanager
+  service + its `:9093` UI, and how to turn Telegram/email on (infra YAML + `.env`
+  secret). A short usage section — not a re-paste of the YAML comments.
+- [x] **Docker / monitoring section** (the `make up MONITORING=1` docs): mention the
+  Alertmanager service + the secret-via-file mechanism where the stack is described —
+  there, not everywhere.
+- [x] `.env.example` documents the new notification secret keys.
+- [x] Touch ONLY the docs a reader would consult for these features; do not spread the
+  same paragraph across every README. Proportionate to weight.
+
 ## Dependencies & ordering
 
-1. **M3-A (per-feed sanity check)** — start here. Pure code, testable on Preview now,
-   no long run needed; it is the core of the QA report and the accuracy report.
-2. **M3-B (alert-trigger harness)** — parallel to A; both feed M3-F.
-3. **M3-D (broad dashboard)** — independent code; do the *verify-emission* sub-step
-   early since it may surface stub metrics to fix.
-4. **M3-C (uptime/accuracy)** — needs a sustained window; consumes A's output.
-5. **M3-F (QA report)** — generalize evidence packaging, then assemble A+B+tests.
-6. **M3-E (live mainnet demo + video)** — needs A, B, D ready so the demo shows the
-   real sanity check + a real alert + the dashboards; reuses the M2 mainnet deployment.
-7. **M3-G (PoA)** — last, once the artifacts exist.
+1. **M3-H (alerting pipeline)** — foundational. Alertmanager + webhook → `alert_log` is
+   what makes alerts notify and unifies the source of truth; do early (parallel to the
+   M3-A core). Underpins M3-B and M3-A's `FeedAccuracyFail` alert.
+2. **M3-A (per-feed sanity check)** — core done; next `deriveThresholds` + I/O + output,
+   then the metric/alert (needs M3-H). Core of the QA + accuracy reports.
+3. **M3-B (alert-trigger harness)** — needs M3-H so firings land in `alert_log`; parallel
+   to A. Both feed M3-F.
+4. **M3-D (broad dashboard)** — independent code; do the *verify-emission* sub-step early
+   (may surface stub metrics to fix).
+5. **M3-C (uptime/accuracy)** — needs a sustained window; consumes A's output.
+6. **M3-F (QA report)** — generalize evidence packaging, then assemble A+B+tests.
+7. **M3-E (live mainnet demo + video)** — needs A, B, D, H ready; reuses the M2 mainnet
+   deployment.
+8. **M3-G (PoA)** — last, once the artifacts exist.
 
-A→(B,D) parallel → C → F → E → G.
+H + A-core in parallel → A-io/metric, B, D → C → F → E → G.
 
 ## Plan alignment status
 
@@ -288,10 +429,9 @@ The grounded discrepancies found on 2026-06-16 were applied to
 
 ## Open questions / decisions
 
-- [ ] **DIA source for the accuracy comparison.** M3-A compares on-chain vs the DIA
-  source — confirm the canonical source endpoint/price semantics to compare against
-  (the same source the feeder consumes vs the DIA public API), so "accuracy" is
-  measured against the right reference.
+- [x] **DIA source for the accuracy comparison — resolved.** The reference is the latest
+  `IntentRegistered` for the symbol from the DIA registry (the same DIA-signed source the
+  feeder consumes), not a public REST API.
 - [ ] **Authorized signer set completeness** (carried from the feeder plan) — accuracy
   of the signer field in M3-A's read assumes the authorized set is complete; still
   unconfirmed by DIA.

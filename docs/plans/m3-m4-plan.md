@@ -42,18 +42,20 @@ documentation/closeout).
 Separating **code** from evidence / reports / video / ops, the remaining code surface is small
 and lives almost entirely in M4:
 
-**M3 — no core feature code.** The monitoring machinery (dashboards, `alerts.yml`, alert
-evaluator, anomaly metrics) is already written. Only small, optional tooling:
+**M3 — tooling now built (no core feature code remained).** The monitoring machinery
+(dashboards, `alerts.yml`, the Prometheus → Alertmanager → webhook pipeline, anomaly metrics)
+was already written; the small M3 tooling is now done:
 
-- [ ] Broad metrics dashboard (JSON) for the still-unshown metric families — the metrics already
-  exist as registered Prometheus families, but **runtime emission must be verified first** before
-  dashboarding them. A panel for a never-incremented metric is worse than no panel.
-- [ ] Per-feed **accuracy / sanity-check** script (on-chain price + timestamp vs the DIA source per
-  pair) to back the QA validation report — does not exist today (only the abi-parser config
-  sanity check does).
-- [ ] Small script/test to deliberately **trigger each safe alert** so the QA pack can capture
-  alert-trigger logs; unsafe financial/provider alerts should be demonstrated synthetically or on
-  Preview only, not forced on Mainnet.
+- [x] Broad metrics dashboard (`feeder-internals.json`) plus a coverage pass that added the
+  **feed-sanity verdict** and the **event/intent funnel** panels (runtime emission verified
+  first; only low-value metrics left unshown, by choice).
+- [x] Per-feed **accuracy / sanity-check** (`src/sanity-check/feed-sanity.ts`, `npm run sanity:feeds`):
+  the live on-chain price + timestamp vs the latest DIA source per pair, emitting
+  `feed_sanity_status` and backing the `FeedAccuracyFail` alert.
+- [x] Alert-trigger tooling (`scripts/monitoring/trigger-alert.sh` + `trigger-alert-demo.sh`):
+  pushes synthetic metric values to a Pushgateway so the **real** rules fire and flow through the
+  whole pipeline, capturing each fire→resolve transition for the QA pack. Unsafe financial/provider
+  alerts are demonstrated synthetically, never forced on Mainnet.
 
 **M4 — two real code items + one minor:**
 
@@ -98,17 +100,21 @@ listings, the DIA-site documentation publication, and the closeout report/video.
 
 ### M3 — already built (verified)
 
-- [x] Real-time dashboards (Grafana `feeder.json` + `feeder-tx.json`): balances, staleness, data
-  age, per-symbol and per-transaction throughput, latency, price-deviation quality, billing.
-- [x] Automated alerts: `monitoring/alerts.yml` (**12 rules**, thresholds single-sourced from
+- [x] Real-time dashboards (Grafana `feeder.json` + `feeder-tx.json` + `feeder-internals.json`):
+  balances, staleness, data age, per-symbol and per-transaction throughput, latency,
+  price-deviation quality, billing, the pipeline funnel, and feeder internals. All per-pair panels
+  distinguish the same symbol across clients (`symbol, client_id`).
+- [x] Automated alerts: `monitoring/alerts.yml` (**13 rules**, thresholds single-sourced from
   `infrastructure.<network>.yaml::alerting.*`) — `OraclePairStale`, `ReceiverBalanceLow`,
   `SettleOverdue`, `PaymentHookWithdrawReady`, `AdminWalletLow`, `AdminWalletFragmented`,
-  `PriceDeviationHigh`, `PriceAgeHigh`, `ReorgRateHigh`, `ReceiverDepositsPending`,
+  `PriceDeviationHigh`, `PriceAgeHigh`, `FeedAccuracyFail`, `ReorgRateHigh`, `ReceiverDepositsPending`,
   `PrimaryProviderDown`, `SecondaryProviderDown`.
-- [~] In-process alert evaluator writing **only `OraclePairStale`** to `alert_log`; the other 11
-  rules, including `PriceDeviationHigh`, are Prometheus-side alerts.
+- [x] One alert pipeline: Prometheus rules → Alertmanager → the feeder webhook
+  (`POST /api/v1/alerts/ingest`) → `alert_log`, landing **all** rules (Telegram/email one config
+  flip away). Replaced the earlier single-rule in-process evaluator.
 - [x] Anomaly-detection metrics: `price_deviation_percent` (misreport), `price_age_seconds` +
-  pair staleness (stale data), reorg counter (chain instability).
+  pair staleness (stale data), reorg counter (chain instability), and `feed_sanity_status`
+  (on-chain-vs-source per-feed accuracy).
 - [x] Anomaly/QA HTTP surface: `/api/v1/alerts`, `/api/v1/performance`, `/health/*`, `/metrics`.
 - [x] Evidence packaging (`make evidence`) captures dashboards (both), error-counts, live alert
   snapshot, per-intent logs, db CSVs, and test logs — demonstrated by the M2 Preview and Mainnet
@@ -118,12 +124,11 @@ listings, the DIA-site documentation publication, and the closeout report/video.
 
 - [ ] **QA validation report**: integration tests validating (a) oracle data ingestion end-to-end
   and (b) alert triggering, plus **per-feed sanity checks** confirming on-chain timestamp and
-  price accuracy for each of the 10 pairs. Assemble as a report doc + supporting logs. (Much of the
-  test machinery exists — feeder + Aiken suites; this packages it as the QA validation artifact.)
-- [ ] **Alert-trigger logs**: capture each alert actually firing (e.g. force a stale pair / a
-  deviation / a low balance on Preview or mainnet) and export the `alert_log` + Prometheus
-  `/alerts` state showing the transition. Today the evidence lists the alert rules but not a
-  captured firing.
+  price accuracy for each routed pair. Assemble with `make evidence3` (the M3 packager folds in the
+  sanity table + alert-trigger logs). (Test machinery + tooling exist; this packages the QA artifact.)
+- [ ] **Alert-trigger logs**: the harness is built (`trigger-alert-demo.sh` → Pushgateway → real
+  rules fire); what remains is **running it against the live stack** and folding the captured
+  fire→resolve bundle (`alert_log` + Prometheus `/alerts`) into the QA pack via `ALERT_TRIGGER_DIR`.
 - [ ] **Uptime & accuracy report**: a sustained-window report (confirmed-tx liveness as uptime,
   price/timestamp accuracy vs the DIA source per feed). Builds on the evidence-pack stats.
 - [ ] **Live mainnet monitoring demonstration**: the acceptance criterion is explicit that
@@ -132,9 +137,6 @@ listings, the DIA-site documentation publication, and the closeout report/video.
   dashboards live, logs, M3-A sanity-check output, and at least one safe alert firing/resolving.
 - [ ] **Demo video** (M3): dashboards + live mainnet logs showing feed health checks and alert
   behaviour. (Distinct from the M2 demo video, which previews the 10 feeds + QA logs.)
-- [ ] **Broad metrics dashboard** (the families still unshown — 5 per-symbol latency phases,
-  scanner RPC errors + backfill, worker pools, HTTP/db/component-health, cron resubmissions,
-  node/process). Tracked in work-plan Workstream E.
 - [ ] **`milestone-3-poa.md`** mapping M3 AC → evidence.
 
 ## Milestone 4 — End-to-End Integration and Mainnet Deployment
@@ -182,6 +184,14 @@ listings, the DIA-site documentation publication, and the closeout report/video.
   results, uptime/accuracy, doc-site link, closeout links).
 - [ ] Off-chain Lucid emulator adversarial matrix (work-plan A, `[~]`) — finish the negative-case
   matrix if it is to back the E2E functional-verification claim.
+- [ ] **File-source intent injection (E2E fault drill)** — a mechanism to drive the feeder from a
+  file of hand-signed intents instead of the live DIA registry: pause the DIA network read, feed
+  pre-signed intents (built with the CLI wallet) from a file for a window, then resume. This forces
+  the *real* update path end-to-end with controlled inputs — stale, drifted, or out-of-order values
+  — so accuracy/freshness alerts (`FeedAccuracyFail`, `OraclePairStale`, `PriceDeviationHigh`) fire
+  on genuine on-chain state, not just on synthetic metrics. Complements the M3 Pushgateway harness
+  (which fires alerts at the metric layer): this exercises ingestion → submission → confirmation
+  with manipulated data. Heavier (touches real state + ADA), hence M4.
 
 ## Dependencies and ordering
 

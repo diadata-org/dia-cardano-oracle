@@ -622,7 +622,7 @@ own runtime state and the monitoring volumes are. See
 | HTTP scanner | `scan_interval` **10s** | EVM block polling (baseline) |
 | WS scanner | real time, reconnect **5s** | event fast-path (concurrent with HTTP) |
 | **Cron service** | `tick_interval` **30s** | resubmits stale pairs |
-| Alert evaluator | continuous | evaluates rules → `alert_log` table |
+| Feed sanity check | `feed_sanity.interval` **5m** | on-chain value vs latest DIA source → `feed_sanity_status` |
 | Health check / queue-depth | `check_interval` **30s** | refreshes queue depth → `/health/ready` |
 | Balance refresh | cron cadence **30s** | refreshes wallet-balance gauges (independent of traffic) |
 
@@ -850,10 +850,11 @@ path or the customer from a side map.
 
 ## 17. State: implemented / M2 / deferred to M3
 
-- **Implemented and active (this IS M2):** full scanner→tx pipeline, dedup, enricher,
-  OR-gate router, coalescer + lanes, serial queue manager, cron service, alert
-  evaluator, the 6 latency phases, both worker pools wired, inline backfill/gap
-  recovery, full API, the 6 tables, state reconciliation at startup.
+- **Implemented and active:** full scanner→tx pipeline, dedup, enricher,
+  OR-gate router, coalescer + lanes, serial queue manager, cron service, the
+  Prometheus → Alertmanager → webhook alert pipeline (writing `alert_log`), the
+  per-feed sanity check, the 6 latency phases, both worker pools wired, inline
+  backfill/gap recovery, full API, the 6 tables, state reconciliation at startup.
 - **Implemented but OFF by default:** `enable_parallel_mode` (sequential is enough).
 - **Deferred to M3 (typed, parses, but NOT wired):**
   - `replica.*` — **multi-instance HA / failover** (see §14).
@@ -914,11 +915,13 @@ prerequisites, env vars, and the full output description.
 
 ## 19. Metrics that exist but are NOT in Grafana
 
-The feeder exposes ~60 `dia_bridge_*` metrics at `/metrics`, across **two** dashboards:
-`monitoring/grafana/dashboards/feeder.json` (operational overview) and
-`feeder-tx.json` (the per-transaction axis — see §6). Below is what neither shows yet —
-split into **metrics with real data** (worth adding) and **metrics defined but with no
-emitter yet** (do NOT add: they'd read 0/empty).
+The feeder exposes ~60 `dia_bridge_*` metrics at `/metrics`, across **three** dashboards:
+`monitoring/grafana/dashboards/feeder.json` (operational overview),
+`feeder-tx.json` (the per-transaction axis — see §6), and `feeder-internals.json`
+(feeder internals — per-phase latency, scanner, worker pools, DB, cron/recovery). The
+catalog below is the reference for which metric lives where; the internals dashboard
+surfaces most of the families in section A, split into **metrics with real data** and
+**metrics defined but with no emitter yet** (which read 0/empty).
 
 ### Already in Grafana (reference)
 
@@ -1009,27 +1012,37 @@ between Spectra and this feeder:
 These exist in `src/api/metrics.ts` but **no module increments them today** — on a
 panel they'd read 0/empty. Don't add them until they're wired:
 
-- `dia_bridge_worker_tasks_completed_total` — *intent:* tasks completed successfully in the pools.
 - `dia_bridge_worker_tasks_failed_total` — *intent:* tasks that failed or timed out.
 - `dia_bridge_worker_task_retries_total` — *intent:* task-level retries.
-- `dia_bridge_db_operations_total{table,operation}` — *intent:* DB operations by table and type.
-- `dia_bridge_db_operation_duration_seconds{table,operation}` — *intent:* DB operation latency.
-- `dia_bridge_component_health{component}` — *intent:* per-component health (1/0).
-- `dia_bridge_recovery_attempts_total{component,reason}` — *intent:* recovery attempts after transient errors.
+
+### C — Internals metrics, emitted and shown on the `feeder-internals.json` dashboard
+
+The feeder emits these; the **Internals** Grafana dashboard renders them:
+
+- `dia_bridge_worker_tasks_completed_total{pool_type}` — tasks completed by the submission pool.
+- `dia_bridge_recovery_attempts_total{component,reason}` — recovery attempts (e.g. crash recovery on startup).
+- `dia_bridge_db_operations_total{table,operation}` / `dia_bridge_db_operation_duration_seconds{table,operation}` — DB load and latency, from the `instrumentDb` wrapper that times every data operation.
+- **Pipeline funnel** (`events_detected_total` / `events_duplicate_total` / `events_invalid_total`, `intents_scanned_total`, `intents_routed_total`, `transactions_submitted_total`) — the event → intent → submission drop-off, on the "Pipeline funnel & HTTP" row.
+- `dia_bridge_http_requests_total{method,endpoint,status}` — API request counts by status, alongside the HTTP latency panel.
+
+The per-feed sanity verdict `dia_bridge_feed_sanity_status{client_id,customer_id,symbol}`
+(0 ok / 1 suspect / 2 broken) is shown on the **Overview** dashboard (Row 4 — Price Quality &
+Anomaly Detection), next to the price-deviation panels it complements; the `FeedAccuracyFail`
+alert watches it.
 
 > Note: `/metrics` also includes `prom-client` default metrics (`process_*`,
 > `nodejs_*`: CPU, heap, event-loop lag). These are Node runtime metrics, not feeder
 > domain, and are also not dashboarded.
 
-### Suggested panels to add (by value)
+### Panel coverage
 
-1. **Funnel** (detected → scanned → routed → submitted → confirmed/failed/filtered):
-   shows at a glance where intents drop off.
-2. **Per-phase latency breakdown** (1–5): isolates whether latency is DIA, transport,
-   internal, or Cardano.
-3. **Cost per tx** (`transaction_fee_lovelace`): tracks ADA spend.
-4. **Scanner health** (`last_block`, `rpc_errors`, `backfill`).
-5. **Cron** (`cron_resubmissions_total` by outcome).
+Most of the families above are now dashboarded: the **funnel**, **per-phase latency (1–5)**,
+**scanner health** (`rpc_errors`, `backfill`), **cron** (`cron_resubmissions_total`), and
+**HTTP request counts** on the Internals dashboard; **cost per tx** (`transaction_fee_lovelace`)
+and the **feed-sanity verdict** on the Overview. Still without a panel (low value, by choice):
+`scanner_last_block`, `cardano_receiver_topup_warnings_total`, `cardano_pair_is_create`, and the
+Spectra lifecycle aliases (`intents_*_lifecycle_total`, which duplicate the funnel for naming
+parity).
 
 ---
 
@@ -1207,10 +1220,17 @@ happens (prevention) nor needs a human restart (recovery).
 ## Alerts & automatic remediation — at a glance
 
 Every operational threshold lives in **one** place —
-`infrastructure.<network>.yaml::alerting.*` — mirrored into `monitoring/alerts.yml`
-(Prometheus) and the Grafana panels, with the `threshold-drift` test failing the build on
-any divergence. Preview and Mainnet carry **identical values** (the alerts/dashboard are
-network-agnostic). Current values:
+`infrastructure.<network>.yaml::alerting.*` — and `make generate-monitoring` writes it
+into `monitoring/alerts.yml` (Prometheus rules), `monitoring/alertmanager.yml`, and the
+Grafana panels, with the `threshold-drift` test failing the build on any divergence.
+Preview and Mainnet carry **identical values** (the alerts/dashboard are network-agnostic).
+Prometheus evaluates the rules and hands firing alerts to **Alertmanager**, which records
+them all in `alert_log` through the feeder's `POST /api/v1/alerts/ingest` webhook and
+delivers to Telegram/email when those channels are enabled
+(`infrastructure.<network>.yaml::notifications` + the secrets in `.env`). One further
+alert, **FeedAccuracyFail**, fires from the per-feed sanity check (on-chain value vs the
+DIA source) on a fixed `feed_sanity_status == 2`, so it sits outside the threshold table
+below. Current values:
 
 | Key | Value | Drives | Severity / effect |
 |---|---|---|---|

@@ -27,6 +27,7 @@ For how it works internally and how it diverges from its EVM ancestor, see
   - [Admin commands (CLI)](#admin-commands-cli)
   - [Operator setup — pick your scenario](#operator-setup--pick-your-scenario)
   - [Day-2 operations (Docker)](#day-2-operations-docker)
+  - [Deploy, contracts & teardown (Docker)](#deploy-contracts--teardown-docker)
   - [Volume layout](#volume-layout)
 - [Running locally (npm)](#running-locally-npm)
   - [Operator setup — pick your scenario](#operator-setup--pick-your-scenario-1)
@@ -46,15 +47,17 @@ For how it works internally and how it diverges from its EVM ancestor, see
   - [`worker_pool` knobs](#worker_pool-knobs)
   - [`cron_service` knobs](#cron_service-knobs)
   - [`api` knobs](#api-knobs)
+  - [Code-level defaults](#code-level-defaults)
 - [HTTP API](#http-api)
   - [What "confirmed" means](#what-confirmed-means)
 - [Thresholds and alerts](#thresholds-and-alerts)
-  - [Built-in alert evaluator](#built-in-alert-evaluator)
-  - [Prometheus alert thresholds](#prometheus-alert-thresholds)
+  - [How alerts work — one pipeline](#how-alerts-work--one-pipeline)
+  - [Alert thresholds — single source of truth](#alert-thresholds--single-source-of-truth)
   - [Client funding (side-deposits)](#client-funding-side-deposits)
   - [Full alert map](#full-alert-map)
   - [Operational wallets at a glance](#operational-wallets-at-a-glance)
   - [Automatic fee-loop maintenance (settle / withdraw / consolidate)](#automatic-fee-loop-maintenance-settle--withdraw--consolidate)
+  - [Provider health (primary vs secondary)](#provider-health-primary-vs-secondary)
 - [Architecture (see also)](#architecture-see-also)
 
 ## Directory guide
@@ -124,14 +127,16 @@ leaves the process stopped). Deep detail →
 
 ## Service URLs — where to look (once it's running)
 
-Start with `make up MONITORING=1` (feeder + Grafana + Prometheus) or
-`make up` (feeder only), then open these in a browser. All are published
-on `localhost`.
+Start with `make up MONITORING=1` (feeder + Grafana + Prometheus + Alertmanager +
+Pushgateway) or `make up` (feeder only), then open these in a browser. All are
+published on `localhost`.
 
 | What | URL | Up with |
 | --- | --- | --- |
 | **Grafana** dashboards | <http://localhost:3000> — login `admin` / `${GRAFANA_ADMIN_PASSWORD:-admin}` | `make up MONITORING=1` |
-| **Prometheus** (raw metrics, alert state) | <http://localhost:9090> | `make up MONITORING=1` |
+| **Prometheus** (raw metrics, alert state) | <http://localhost:9090> — `/alerts` shows rule state (pending → firing) | `make up MONITORING=1` |
+| **Alertmanager** (active alerts, silences) | <http://localhost:9093> — routes firing alerts to the feeder webhook (→ `alert_log`) and, when enabled, Telegram/email | `make up MONITORING=1` |
+| **Pushgateway** (alert-trigger harness target) | <http://localhost:9091> — empty in normal operation; `scripts/monitoring/trigger-alert.sh` pushes here to fire an alert on demand | `make up MONITORING=1` |
 | Feeder **API reference** (Swagger UI, interactive — Try it out) | <http://localhost:8080/docs> | `make up` |
 | Feeder **OpenAPI schema** (3.0 JSON) | <http://localhost:8080/api/v1/openapi.json> | `make up` |
 | Feeder **liveness** | <http://localhost:8080/health/live> | `make up` |
@@ -308,35 +313,46 @@ Open `http://localhost:8080/health/live` to verify the daemon is running.
 ### Daemon + monitoring
 
 `MONITORING=1` is a toggle on any start target (`up`, `up-postgres`,
-`restart-latest`, `reset-restart`). With it, Prometheus + Grafana + the
-renderer come up alongside the feeder; without it, only the feeder starts.
+`restart-latest`, `reset-restart`). With it, Prometheus + Alertmanager + Grafana +
+the renderer come up alongside the feeder; without it, only the feeder starts.
 There is no separate `up-monitoring` target. Monitoring stays up until
 `make down`.
 
 ```sh
 cd offchain
-make up MONITORING=1   # feeder-sqlite + Prometheus + Grafana + renderer
+make up MONITORING=1   # feeder-sqlite + Prometheus + Alertmanager + Grafana + renderer
 make up                # feeder only (monitoring untouched)
 make down              # stops everything (DB + volumes kept)
-make down VOLUMES=1    # stops + DELETES the Prometheus + Grafana volumes (fresh metrics; ../state/contracts untouched)
+make down VOLUMES=1    # stops + DELETES the Prometheus + Grafana + Alertmanager volumes (fresh metrics; ../state/contracts untouched)
 make fresh             # code changed? rebuild image + wipe volumes/DB/logs + reseed + start (keeps on-chain deploy)
 ```
 
 - Prometheus: `http://localhost:9090` — raw metrics and alert state
   (`/alerts` shows the configured alert rules).
+- Alertmanager: `http://localhost:9093` — routes firing alerts to the feeder
+  webhook (→ `alert_log`) and, when enabled, Telegram/email; its UI shows active
+  alerts and lets you silence them.
 - Grafana: `http://localhost:3000` — login `admin` / value of
-  `GRAFANA_ADMIN_PASSWORD` in `.env` (defaults to `admin`). Two dashboards are
+  `GRAFANA_ADMIN_PASSWORD` in `.env` (defaults to `admin`). Three dashboards are
   pre-provisioned: **DIA Cardano Oracle Feeder** (operational overview, balances,
-  per-symbol throughput) and **DIA Cardano Oracle Feeder — Transactions**
-  (per-transaction view: stage latency, confirmed-vs-failed, batch size). Both filter
-  by **network → customer → client → router → symbol** (cascading; `router` and the
-  per-router panels read the tx↔router membership metric). A batch tx of N pairs counts
-  as one transaction in the tx view and as N symbol updates in the overview.
+  per-symbol throughput), **DIA Cardano Oracle Feeder — Transactions**
+  (per-transaction view: stage latency, confirmed-vs-failed, batch size), and
+  **DIA Cardano Oracle Feeder — Internals** (pipeline-phase latency, scanner, worker
+  pool, DB, cron/recovery — for troubleshooting the feeder itself). The first two
+  filter by **network → customer → client → router → symbol** (cascading); Internals
+  is feeder-wide (network only). A batch tx of N pairs counts as one transaction in
+  the tx view and as N symbol updates in the overview.
 - Renderer: a `grafana/grafana-image-renderer` sidecar that produces PNG
   snapshots of the dashboard for Grafana. No exposed port; intra-compose only.
+- Pushgateway: `http://localhost:9091` — empty in normal operation; the
+  `scripts/monitoring/trigger-alert.sh` harness pushes synthetic metric values here to
+  fire an alert on demand (see *How alerts work* → *Fire an alert on demand*).
 
-To add a new alert rule, edit `offchain/feeder/monitoring/alerts.yml` and restart
-Prometheus (`docker compose restart prometheus`) — no Grafana changes needed.
+Alert rules, thresholds and the Alertmanager config are **generated** from
+`infrastructure.<network>.yaml` (see *Alert thresholds — single source of truth*).
+To change a threshold or a notification channel, edit that YAML and run
+`make generate-monitoring` (automatic on `make up`) — do not hand-edit
+`monitoring/alerts.yml` or `monitoring/alertmanager.yml`.
 
 ### Capturing an operational snapshot
 
@@ -463,7 +479,7 @@ These targets run the **feeder** binary as one-off containers (not `dia-cli`):
 | `make reset` | Delete runtime state (DB + logs + pairs) and exit; keeps CLI bootstrap files |
 | `make reset-restart` | Stop → `reset` → reseed checkpoint → start the daemon (no rebuild — config-only changes) |
 | `make fresh` | After **code** changes: rebuild image → wipe Prometheus/Grafana volumes + DB/logs/pairs → reseed → start. Keeps on-chain deploy. (`MONITORING=1` opt) |
-| `make down VOLUMES=1` | Stop the stack **and** delete the Prometheus + Grafana volumes (fresh metrics; `../state`/contracts untouched) |
+| `make down VOLUMES=1` | Stop the stack **and** delete the Prometheus + Grafana + Alertmanager volumes (fresh metrics; `../state`/contracts untouched) |
 | `make prune` | Prune only **old** rows/logs (keeps DB). `make prune MAX_AGE=30m` |
 
 ### Deploy, contracts & teardown (Docker)
@@ -617,6 +633,7 @@ npm run feeder:dev -- --validate-only                        # load + validate t
 npm run feeder:dev -- --scan                                 # scanner + enricher only, HTTP (verify connectivity)
 npm run feeder:dev -- --scan --transport ws                  # same over WebSocket — requires DIA_WS_CREDENTIAL_*
 npm run feeder:dev -- --dry-run                              # full pipeline, no-op write-client (no txs, no fees)
+npm run sanity:feeds                                         # per-feed accuracy check: on-chain value vs latest DIA source → report under docs/.../evidence
 
 # ── Scanner checkpoint (run while the daemon is stopped) ───────────
 npm run feeder:dev -- checkpoint get                         # show the persisted checkpoint + next scan block
@@ -758,7 +775,7 @@ Postgres set `database.driver: postgres` and supply `DATABASE_DSN_<NETWORK>`.
 | `transaction_log` | Full pending → submitted → confirmed → failed lifecycle for every Cardano tx, including `txHash`, error codes, and latency breakdowns. |
 | `contract_symbol_updates` | Latest confirmed value per `(chain, contract, symbol)`, upserted on every confirmation — for Cardano: `chain` = network magic, `contract` = the client's pair validator address, `symbol` = the pair. Stores `last_price`, `last_timestamp`, `last_nonce`, intent/tx hash, `update_count`, and fee. Runtime cold-start hydration of the price cache uses the reconciled pair-state files (so the cron and policy gate see the same on-disk Cardano state); `last_nonce` is the persistent backing for the cron's monotonic-nonce baseline. |
 | `performance_metrics` | Persistent counters (event totals, confirmed tx counts, latencies) that survive restarts. Used by the evidence-pack scripts to produce aggregate statistics. |
-| `alert_log` | Alert firing history written by the in-process alert evaluator. Includes `acknowledged` and `resolved` state. Queryable via `GET /api/v1/alerts`. |
+| `alert_log` | Alert firing history recorded via the Alertmanager webhook (Prometheus → Alertmanager → feeder webhook → `alert_log`). Includes `acknowledged` and `resolved` state. Queryable via `GET /api/v1/alerts`. |
 
 `feeder prune --max-age <duration>` prunes old rows from `processed_events`
 and `transaction_log` (keeps recent rows). It never deletes the DB file or
@@ -896,38 +913,60 @@ how the feeder detects a rollback, the `ReorgCounter` panel), see
 
 ## Thresholds and alerts
 
-### Built-in alert evaluator
+### How alerts work — one pipeline
 
-The feeder runs an in-process alert evaluator loop that writes firing and
-resolved events to the `alert_log` DB table, readable at `GET /api/v1/alerts`.
+Every alert flows through a single path, so a firing condition reaches both the
+queryable record and (optionally) a human:
 
-Current rules — the in-process evaluator implements exactly one:
+```
+feeder emits metrics → Prometheus evaluates monitoring/alerts.yml
+  → Alertmanager (groups · deduplicates · silences)
+      ├─ webhook → feeder POST /api/v1/alerts/ingest → alert_log (GET /api/v1/alerts) + logs   [always on]
+      └─ Telegram / email                                                                        [off by default]
+```
 
-| Rule | Fires when | Threshold |
-|---|---|---|
-| `OraclePairStale` | A price-cache entry has not been refreshed within the staleness window | code default `DEFAULT_PAIR_STALENESS_THRESHOLD_MS` (5 min) |
+**All** rules (including `OraclePairStale`) are Prometheus rules; Alertmanager's
+webhook records them in `alert_log`. Alertmanager runs under the `monitoring`
+profile on port **9093** (its own UI at http://localhost:9093) and is wired
+automatically; the log + DB path needs no configuration.
 
-`ScannerLag` and `WorkerQueueDepth` are planned (`TODO` in
-`src/alerting/evaluator.ts`) and not yet wired. **Every other operational
-condition** — price deviation, price age, balances, fee-loop, reorgs, provider
-health — is evaluated **externally** by the Prometheus rules in
-`monitoring/alerts.yml` (PromQL), not by this loop. The evaluator runs on the
-same cadence as `cron_service.tick_interval` (default 30 s).
+**Notifications (Telegram / email) — off by default.** Turn a channel on in
+`infrastructure.<network>.yaml::notifications` (`enabled: true` + chat id /
+recipients) and put its secret in `feeder/.env`
+(`ALERTMANAGER_TELEGRAM_BOT_TOKEN` / `ALERTMANAGER_SMTP_PASSWORD`); the generator
+writes it into the generated `monitoring/alertmanager.yml`. Until then, alerts go
+only to the logs + DB.
 
-### Prometheus alert thresholds
+**Fire an alert on demand (testing / demo).** With the stack up
+(`make up MONITORING=1`), `scripts/monitoring/trigger-alert.sh <AlertName>` makes one
+alert fire for real. It pushes a synthetic value for that alert's metric to a
+**Pushgateway** (port 9091, `monitoring` profile) that Prometheus scrapes; the value
+crosses the **real** threshold from `alerts.yml`, so the genuine rule fires and runs the
+whole pipeline above (Alertmanager → webhook → `alert_log` → notifications). Only the one
+input metric is synthetic — the rules and routing are the production ones. The pushed
+series carries its own labels (`client_id="trigger"`), so it stands alongside the feeder's
+real metrics and the alert stays firing until you `clear` it. Watch it land and reset:
 
-Operational thresholds live in two places with explicit responsibilities:
+```sh
+scripts/monitoring/trigger-alert.sh list                 # supported alerts
+scripts/monitoring/trigger-alert.sh OraclePairStale      # fire one
+curl -s localhost:9090/api/v1/alerts                     # Prometheus: pending → firing
+curl -s localhost:8080/api/v1/alerts                     # feeder alert_log (recorded via the webhook)
+scripts/monitoring/trigger-alert.sh clear                # remove the pushed value → alert resolves
+```
 
-- `infrastructure.<network>.yaml::alerting.<key>` — **canonical source**.
-  The feeder code reads these values directly.
-- `monitoring/alerts.yml` (Prometheus rules) **and** the Grafana panels in
-  `monitoring/grafana/dashboards/feeder.json` — mirror the YAML values.
-  Operators tune thresholds in the YAML; if you change a number, update
-  `alerts.yml` and the dashboard to match.
+### Alert thresholds — single source of truth
+
+Operational thresholds live in ONE place: `infrastructure.<network>.yaml::alerting.<key>`,
+which the feeder code reads directly. `monitoring/alerts.yml` (Prometheus rules),
+`monitoring/alertmanager.yml`, and the Grafana panel thresholds are **generated
+from that YAML** by `make generate-monitoring` (run automatically before
+`make up`). Do **not** hand-edit the generated files — change the YAML and
+regenerate.
 
 **Enforced — they cannot drift silently.** `src/config/__tests__/threshold-drift.test.ts`
 (run by `npm test`, or on demand with `make check-thresholds`) fails if any
-alert `expr` or Grafana panel threshold diverges from the YAML, if the two
+generated `expr` or Grafana panel threshold diverges from the YAML, if the two
 network YAMLs disagree, or if a dashboard template variable is left dead.
 
 ### Client funding (side-deposits)
@@ -977,6 +1016,7 @@ Price deviation is **percent** (0–100).
 | `ReceiverDepositsPending` | `dia_bridge_cardano_deposit_pending_lovelace` | `deposit_pending_merge_lovelace` | `5 000 000` (5 ADA) | Un-merged client deposits waiting; the daemon auto-merges. Operator fallback: `make cli CMD="deposit:merge --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json --client-state /app/offchain/state/preview_run_<id>/clients/<client>.json"`. |
 | `PrimaryProviderDown` | `dia_bridge_provider_last_ok_timestamp_seconds{role="primary"}` | `provider_primary_unhealthy_seconds` | `600` s | **Critical** — the build/submit provider (selected by `CARDANO_PROVIDER`) is down → nothing builds, every pair freezes. Often a Blockfrost `402` (quota). Rotate `BLOCKFROST_PROJECT_ID_<NET>` / `KOIOS_API_URL_<NET>` in `feeder/.env` or switch `CARDANO_PROVIDER`, then `make restart`. |
 | `SecondaryProviderDown` | `dia_bridge_provider_last_ok_timestamp_seconds{role="secondary"}` | `provider_secondary_unhealthy_seconds` | `900` s | **Warning** — the confirmation/reorg redundancy provider is down; core operation continues. Fix/rotate its endpoint in `feeder/.env`, then `make restart`. |
+| `FeedAccuracyFail` | `dia_bridge_feed_sanity_status` | — (fixed: status `2` = broken, sustained 10 m) | n/a | The on-chain value for a feed both diverged from the latest DIA source beyond tolerance AND went stale — the per-feed sanity check rated it BROKEN. Inspect with `npm run sanity:feeds` or `GET /api/v1/alerts`; confirm the feeder still publishes that pair and the source delivers fresh intents. Not a wallet issue. |
 
 ### Operational wallets at a glance
 

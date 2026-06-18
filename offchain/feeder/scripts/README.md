@@ -6,8 +6,10 @@
   - [Prerequisites](#prerequisites)
   - [Scripts](#scripts)
   - [Output](#output)
+- [M3 evidence pack (`make evidence3`)](#m3-evidence-pack-make-evidence3)
 - [Other scripts](#other-scripts)
   - [`scan-dia-intents.ts`](#scan-dia-intentsts)
+  - [Alert-trigger scripts (`monitoring/`)](#alert-trigger-scripts-monitoring)
   - [`cost-forecast/forecast-mainnet-cost.ts`](#cost-forecastforecast-mainnet-costts)
 
 ## Evidence pack
@@ -48,6 +50,30 @@ Each run writes to `docs/milestones/evidence/m2-<network>-<timestamp>/`:
 - `milestone-2-preview-evidence.md` — the reviewer-facing report (embeds the
   dashboards and explains each metric)
 
+## M3 evidence pack (`make evidence3`)
+
+Run `make evidence3` from `offchain/` for the **Milestone 3** QA pack. Same
+capture machinery as `make evidence`, into `docs/milestones/evidence/m3-<network>-<timestamp>/`
+with a `milestone-3-<network>-evidence.md` report. The M2 scripts are left
+untouched — `scripts/m3-evidence/` is a separate, single-use packager.
+
+On top of the M2 captures it adds:
+
+- **Internals dashboard** PNG (per-phase latency, scanner, workers, DB, cron/recovery).
+- **Per-feed sanity (accuracy)** — runs `sanity:feeds` into `sanity/` and embeds the
+  on-chain-vs-DIA-source table (oracle timestamp + price accuracy per feed).
+- **Alert-trigger logs** — folds in a `trigger-alert-demo.sh` run when you point
+  `ALERT_TRIGGER_DIR` at its output:
+
+  ```sh
+  cd offchain && make up MONITORING=1
+  cd feeder && scripts/monitoring/trigger-alert-demo.sh
+  cd .. && ALERT_TRIGGER_DIR=docs/milestones/evidence/alert-trigger-<net>-<stamp> make evidence3
+  ```
+
+Each M3-specific step degrades to a documented note when the live stack or chain
+is offline, so the pack always assembles.
+
 ## Other scripts
 
 ### `scan-dia-intents.ts`
@@ -71,6 +97,27 @@ Options:
 | `--blocks N` | `100` | Number of blocks to scan from chain head |
 | `--top N` | `10` | Maximum pairs to display in the summary table |
 | `--chunk N` | `100` | Block range per RPC `eth_getLogs` call |
+
+### Alert-trigger scripts (`monitoring/`)
+
+Fire alerts on demand against the live monitoring stack (`make up MONITORING=1`)
+by pushing synthetic metric values to the Pushgateway — the real rules fire and
+flow through the whole pipeline (Prometheus → Alertmanager → feeder webhook →
+`alert_log`). Only the input metric is synthetic.
+
+```sh
+# Run from offchain/feeder/
+scripts/monitoring/trigger-alert.sh list                 # supported alerts
+scripts/monitoring/trigger-alert.sh OraclePairStale      # fire one; `clear` resets
+scripts/monitoring/trigger-alert-demo.sh                 # default mix, capturing each transition (~40 min)
+scripts/monitoring/trigger-alert-demo.sh fast            # short-for: alerts only (~10-15 min)
+scripts/monitoring/trigger-alert-demo.sh all             # every alert (~55 min)
+```
+
+`trigger-alert-demo.sh` writes a `timeline.md` + per-alert snapshots (Prometheus
+state, feeder `alert_log`, dashboard PNG) under
+`docs/milestones/evidence/alert-trigger-<net>-<stamp>/` — the alert-trigger-logs
+evidence that `make evidence3` folds in via `ALERT_TRIGGER_DIR`.
 
 ### `cost-forecast/forecast-mainnet-cost.ts`
 
