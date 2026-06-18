@@ -173,7 +173,7 @@ echo "[package-m3] step 4/6 — rendering Grafana dashboard"
 # report and explains the metric (NOT the data). Single-quoted so the literal
 # backticks survive into the markdown unevaluated.
 PANELS=(
-  '11|Confirmed oracle updates (selected range, per pair)|Metric `round(sum by (symbol, client_id) (increase(dia_bridge_transactions_confirmed_total[$__range])))` — confirmed oracle-update transactions per feed over the selected range, via increase() so the count is correct across feeder restarts. The liveness proof: every active feed should show a non-zero count.'
+  '11|Confirmed oracle updates (selected range, per pair)|Confirmed Cardano oracle-update transactions per price pair over the selected time range. The liveness proof: every active feed should show a non-zero count.'
   '12|Price data age p95 — 1 h window (per routed pair)|Metric `histogram_quantile(0.95, rate(dia_bridge_price_age_seconds_bucket[1h]))` per `symbol`, in seconds. 95th percentile of how old the DIA source price was at the moment the feeder consumed it — i.e. data freshness, not transaction speed. Recorded ONLY for the pairs this feeder routes (not the hundreds of other symbols the source feed carries). Lower is better; high values feed the `PriceAgeHigh` alert.'
   '1|Pair staleness (per symbol)|Metric `time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds`, in seconds. Wall-clock age of the most recent confirmed on-chain update for each pair — how stale the value currently living on Cardano is. Drives the `OraclePairStale` alert.'
   '2|Receiver balance — ADA (per client)|Metric `dia_bridge_cardano_receiver_balance_lovelace / 1000000`, in ADA. Current spendable balance of each Receiver address, converted from lovelace. The metric labels include both `receiver_address` and the client `deposit_address` operators should fund when `ReceiverBalanceLow` fires.'
@@ -217,7 +217,7 @@ PANELS_TX=(
   '346|Coalescer state per client (history)|State-timeline of `dia_bridge_coalescer_state{client_id}` (0 idle / 1 accumulating / 2 in-flight). Independent of the submit pipeline — a lane can accumulate the next batch while submitting the current one.'
   '348|Intents in coalescer queue — now (per client)|Metric `sum by (client_id) (dia_bridge_coalescer_buffered)` (last value) — intents buffered for each client, waiting for the flush that batches them into one transaction.'
   '343|Coalescer buffered per client|Metric `sum by (client_id) (dia_bridge_coalescer_buffered)` over time — intents buffered in the coalescer; sawtooths, climbing as intents accumulate and dropping to 0 on each flush.'
-  '349|Tx in submit queue — now (per client)|Metric `sum by (client_id) (dia_bridge_submit_queue_pending)` (last value). Normally 0: the serial submit queue prevents two txs spending the same Receiver UTxO at once (serialization), not a backlog — it only rises under contention.'
+  '349|Tx in submit queue — now (per client)|Tasks waiting in each client'"'"'s serial submit queue. Usually 0; rises when submissions arrive faster than they confirm.'
   '344|Submit queue pending per client|Metric `sum by (client_id) (dia_bridge_submit_queue_pending)` over time — tasks waiting in each client'"'"'s serial submit queue. Usually 0 (the lane drains each batch immediately).'
 )
 

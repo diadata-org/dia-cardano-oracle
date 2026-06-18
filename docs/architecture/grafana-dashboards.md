@@ -137,11 +137,9 @@ The operational home base: liveness, money, latency, health, accuracy and billin
 
 - **What it shows** — confirmed on-chain oracle updates per feed over the selected time range, as
   an integer count. Keyed by `(symbol, client_id)`, so the same pair on two clients is two tiles.
-- **How to read it** — the liveness proof. Uses `increase()`, which is reset-aware, so the count
-  is correct **across feeder restarts** (it stitches over the counter reset) — exactly like the
-  per-window timeseries below. Set the time picker wide for a since-deployment view. (The raw
-  counter value would reset to 0 on each restart, which is why the panel sums `increase()` instead.
-  The true since-the-start total is also persisted in the DB and exposed at `/api/v1/performance`.)
+- **How to read it** — the liveness proof: every active feed shows a non-zero count over the
+  window, and the count holds across feeder restarts. Set the time picker wide for a
+  since-deployment view; the absolute since-start total is also at `/api/v1/performance`.
 - **When to worry** — a feed at 0 while others climb, for a feed you expect active. Cross-check
   *Pair staleness*.
 
@@ -602,10 +600,9 @@ the next batch in the coalescer while it is *submitting* the current one:
 ![Submit queue pending per client](img/tx-panel-344.png)
 
 - **What they show** — how many **transactions are queued** in each client's serial submit queue.
-- **How to read it** — **usually 0**: the serial queue exists to stop two txs spending the same
-  Receiver UTxO at once (serialization), not to hold a backlog — the real backlog lives in the
-  coalescer buffer above. It only rises **under contention** (a flush arrives while the previous tx
-  is still building/submitting/awaiting).
+- **How to read it** — **usually 0**: the serial queue serializes submissions per client (one tx
+  at a time on one Receiver). The accumulating backlog is the *Coalescer buffered* panel above;
+  this rises only under contention (a flush arrives while the previous tx is still in flight).
 - **When to worry** — a sustained value > a few → submissions arrive faster than the lane confirms;
   pair it with the per-stage latency panels (Row T1).
 
