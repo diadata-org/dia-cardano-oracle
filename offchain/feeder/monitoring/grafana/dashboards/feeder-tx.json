@@ -235,7 +235,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Confirmed transactions as a percentage of all real tx attempts (confirmed + failed) over a 5-minute window. Superseded no-ops are excluded from both. Shows \"No data\" during an idle window (no tx in the last 5 min) instead of a misleading 0%.",
+      "description": "Confirmed transactions as a percentage of all real attempts (confirmed + failed) over a 5-minute window. Superseded no-ops are excluded. Shows \"No data\" when no transactions were sent in the window.",
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
@@ -1053,7 +1053,7 @@
       "type": "stat",
       "id": 349,
       "title": "Tx in submit queue — now (per client)",
-      "description": "Current number of tasks waiting in each client's serial submit queue. Normally 0: the serial queue exists to prevent two txs spending the same Receiver UTxO at once, not to hold a backlog — it only rises under contention.",
+      "description": "Tasks waiting in each client's serial submit queue. Usually 0; rises when submissions arrive faster than they confirm.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"

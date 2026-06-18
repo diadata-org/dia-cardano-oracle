@@ -675,7 +675,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "API requests served over 5 min, grouped by HTTP status code. Pairs with the HTTP latency panel above (which shows how long, not how many).",
+      "description": "API requests served over 5 min, grouped by HTTP status code. Counts requests; the HTTP latency panel shows how long they take.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",

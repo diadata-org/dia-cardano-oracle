@@ -41,7 +41,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Confirmed Cardano oracle updates per pair over the selected time range, via increase() so it is correct across feeder restarts (a non-zero count means the feed is live in the window). Integer count, not the raw counter (which resets each restart).",
+      "description": "Confirmed Cardano oracle updates per price pair over the selected time range. A non-zero count means the feed is live in the window.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
