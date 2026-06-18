@@ -86,8 +86,12 @@ This is a status note, not a remediation document.
 
 ## What is left for Milestone 3
 
-The monitoring system is built and proven on the Preview test network. What remains is to
-capture the same thing **on mainnet** and write it up:
+The monitoring system is built and **already proven on the Preview test network** — the
+evidence is captured in the Milestone 3 Preview evidence pack
+([`milestone-3-preview-evidence.md`](../milestones/evidence/m3-preview-20260608-040304/milestone-3-preview-evidence.md)):
+the three dashboards rendered with real data, the per-feed sanity check, the alert-trigger
+logs, and the test-suite run. What remains is to capture the same thing **on mainnet** and
+write it up:
 
 - A short **monitoring run on mainnet** with the dashboards live, the per-feed accuracy
   check running against the mainnet feeds, and at least one alert shown firing and then
@@ -134,6 +138,8 @@ Details: [`../plans/m4-plan.md`](../plans/m4-plan.md).
   [`../plans/m4-plan.md`](../plans/m4-plan.md)
 - **Milestone 2 delivery:** [`../milestones/milestone-2-poa.md`](../milestones/milestone-2-poa.md)
   + the mainnet evidence pack `m2-mainnet-20260616-074413`
+- **Milestone 3 evidence (Preview):** [`milestone-3-preview-evidence.md`](../milestones/evidence/m3-preview-20260608-040304/milestone-3-preview-evidence.md)
+  — dashboards, per-feed sanity check, alert-trigger logs, and test run
 - **Architecture:** [`../architecture/feeder.md`](../architecture/feeder.md) ·
   [`../architecture/cardano-oracle-architecture.md`](../architecture/cardano-oracle-architecture.md)
 - **Grafana dashboards guide:** [`../architecture/grafana-dashboards.md`](../architecture/grafana-dashboards.md)
