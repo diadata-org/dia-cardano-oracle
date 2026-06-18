@@ -1,0 +1,41 @@
+# Router A - client-test-01 majors (fast) on Cardano Preview.
+# Shares the client-test-01 lane with router B; their symbol sets MUST stay
+# disjoint. Edit any value and restart the feeder to pick up the change.
+
+routers:
+  client_test_01_router_a_majors:
+    id: client_test_01_router_a_majors
+    name: client-test-01 majors -> Cardano Preview
+    customer_id: customer-test-01
+    type: event
+    enabled: true
+    # Env var holding the Cardano wallet mnemonic seed (from .env).
+    private_key_env: CARDANO_WALLET_SEED_TESTNET
+
+    triggers:
+      events:
+        - IntentRegistered
+      conditions:
+        - field: ${enrichment.fullIntent.Symbol}
+          operator: in
+          value:
+            - BTC/USD
+            - ETH/USD
+            - USDC/USD
+            - USDT/USD
+            - DOGE/USD
+
+    processing:
+      datasource: enrichment
+      transformations: []
+      validationenabled: true
+
+    destinations:
+      - cardano:
+          network: Preview
+          client_state_path: ../state/preview_run_20260608-040304/clients/client-test-01.json
+          protocol_state_path: ../state/preview_run_20260608-040304/config-bootstrap.json
+        # Tight deviation + short heartbeat: this router tracks the source closely.
+        price_deviation: "0.2%"
+        time_threshold: 5m
+        cron: true

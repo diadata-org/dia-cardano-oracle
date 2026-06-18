@@ -8,7 +8,11 @@ routers:
     name: client-test-01 -> Cardano Preview
     customer_id: customer-test-01
     type: event
-    enabled: true
+    # Disabled: split into client-test-01-router-a-majors.yaml (5 symbols) and
+    # client-test-01-router-b-alts.yaml (5 symbols). Two routers share this same
+    # client/lane, so their symbol sets must stay disjoint - this 10-symbol router
+    # cannot run alongside them.
+    enabled: false
     # Env var holding the Cardano wallet mnemonic seed (from .env).
     private_key_env: CARDANO_WALLET_SEED_TESTNET
 

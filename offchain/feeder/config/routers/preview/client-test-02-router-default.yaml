@@ -1,0 +1,38 @@
+# Router C - client-test-02 (new customer) on Cardano Preview.
+# Its own on-chain client/lane and its own customer_id, so the dashboard cascade
+# (customer -> client -> router -> symbol) shows a second, fully independent
+# tenant. Single symbol on this lane; the feeder mints the pair on first update.
+
+routers:
+  client_test_02_router_default:
+    id: client_test_02_router_default
+    name: client-test-02 -> Cardano Preview
+    customer_id: customer-test-02
+    type: event
+    enabled: true
+    # Env var holding the Cardano wallet mnemonic seed (from .env). Must be a
+    # config admin so the feeder can mint this client's pair on the first update.
+    private_key_env: CARDANO_WALLET_SEED_TESTNET
+
+    triggers:
+      events:
+        - IntentRegistered
+      conditions:
+        - field: ${enrichment.fullIntent.Symbol}
+          operator: in
+          value:
+            - BTC/USD
+
+    processing:
+      datasource: enrichment
+      transformations: []
+      validationenabled: true
+
+    destinations:
+      - cardano:
+          network: Preview
+          client_state_path: ../state/preview_run_20260608-040304/clients/client-test-02.json
+          protocol_state_path: ../state/preview_run_20260608-040304/config-bootstrap.json
+        price_deviation: "0.5%"
+        time_threshold: 10m
+        cron: true
