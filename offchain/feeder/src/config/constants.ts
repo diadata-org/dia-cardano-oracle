@@ -125,19 +125,17 @@ export const DEFAULT_PROVIDER_PROBE_TIMEOUT_MS = 8_000;
 export const DEFAULT_MAX_STALENESS_MS = 5 * 60_000;
 
 // ---------------------------------------------------------------------------
-// Alerting evaluator defaults
+// Feed sanity-check defaults
 //
-// `oracle_pair_stale_seconds` / `evaluation_interval` come from
-// `infrastructure.<network>.yaml::alerting`; these are the fallbacks.
+// Fallbacks for the `feed_sanity` block of `infrastructure.<network>.yaml`; the
+// YAML carries the operative values, these apply only when a key is absent.
 // ---------------------------------------------------------------------------
 
-/** How often the alert evaluator runs (ms). YAML fallback: `alerting.evaluation_interval`. */
-export const DEFAULT_ALERT_EVALUATION_INTERVAL_MS = 30_000;
-/** Age before OraclePairStale fires (ms). 5 minutes. YAML fallback derived from
- *  `alerting.oracle_pair_stale_seconds` (3600s) when the daemon wires it. */
-export const DEFAULT_PAIR_STALENESS_THRESHOLD_MS = 300_000;
-/** Fallback `oracle_pair_stale_seconds` when the YAML key is absent (1 hour). */
-export const DEFAULT_ORACLE_PAIR_STALE_SECONDS = 3600;
+/** How often the per-feed sanity check runs (ms). YAML: `feed_sanity.interval`. */
+export const DEFAULT_FEED_SANITY_INTERVAL_MS = 300_000; // 5 min
+/** Grace added to a feed's freshness ceiling (confirmation + clock skew), in
+ *  seconds. YAML: `feed_sanity.freshness_grace_seconds`. */
+export const DEFAULT_FEED_SANITY_GRACE_SECONDS = 120; // 2 min
 
 // ---------------------------------------------------------------------------
 // Metrics namespace

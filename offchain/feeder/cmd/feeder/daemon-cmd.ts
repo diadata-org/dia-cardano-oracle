@@ -125,8 +125,18 @@ import {
   type HealthState,
 } from "../../src/api/index.js";
 import { getCliConfig } from "@diadata-org/dia-cardano-oracle-cli/core/config";
+import { makeConfiguredLucidWithConfig } from "@diadata-org/dia-cardano-oracle-cli/core/lucid";
+import { readClientContext } from "@diadata-org/dia-cardano-oracle-cli/core/artifact-context";
+import { decodePairDatum } from "@diadata-org/dia-cardano-oracle-cli/core/chain-helpers";
+import {
+  deriveFeedThresholds,
+  runFeedSanityChecks,
+  readOnChainPairs,
+  sanityStatusCode,
+  type FeedSanityDeps,
+} from "../../src/sanity-check/feed-sanity.js";
 import { createDb, type Db, type DbConfig } from "../../src/persistence/index.js";
-import { startAlertEvaluator } from "../../src/alerting/evaluator.js";
+import { instrumentDb } from "../../src/persistence/db-metrics.js";
 import { createFileLogger, type FileLogger } from "../../src/logger/file-logger.js";
 import { runPreflight } from "../../src/submitter/preflight.js";
 import { createDefaultRetryPolicy } from "../../src/submitter/retry-policy.js";
@@ -154,8 +164,8 @@ import {
   DEFAULT_ALIGNED_HEARTBEAT,
   DEFAULT_HEALTH_CHECK_INTERVAL_MS,
   DEFAULT_PROVIDER_PROBE_TIMEOUT_MS,
-  DEFAULT_ALERT_EVALUATION_INTERVAL_MS,
-  DEFAULT_ORACLE_PAIR_STALE_SECONDS,
+  DEFAULT_FEED_SANITY_INTERVAL_MS,
+  DEFAULT_FEED_SANITY_GRACE_SECONDS,
   DEFAULT_API_HOST,
   DEFAULT_API_PORT,
   API_WILDCARD_HOST,
@@ -665,7 +675,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   let report = leveledConsole;
 
   // ------------------------------------------------------------------
-  // 1. Load + validate config.
+  // Load + validate config.
   // ------------------------------------------------------------------
   report(`daemon: loading config at ${configPath} for network=${network}`);
   let config: ModularConfig;
@@ -683,7 +693,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }
 
   // ------------------------------------------------------------------
-  // 1b. Bootstrap state-file check — fast-fail with actionable hint.
+  // Bootstrap state-file check — fast-fail with actionable hint.
   // ------------------------------------------------------------------
   if (!await checkBootstrapStateFiles(config, network, report)) return 1;
 
@@ -702,10 +712,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }
 
   // ------------------------------------------------------------------
-  // 2. Database.
+  // Database.
   // ------------------------------------------------------------------
   const dbConfig = resolveDbConfig(network);
-  const db = await createDb(dbConfig);
+  let db = await createDb(dbConfig);
   await db.migrate();
   // Ensure chain_state row exists for this network before checkpoint reads it.
   await db.initialiseChainState({
@@ -716,7 +726,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   report(`daemon: database driver=${dbConfig.driver} ready`);
 
   // ------------------------------------------------------------------
-  // 2a. Crash recovery — mark any pending/submitted rows from a
+  // Crash recovery — mark any pending/submitted rows from a
   //     previous run as failed. Pending rows never reached the chain;
   //     submitted rows may have been in-flight when the process died.
   //     Both are marked failed so the event-driven flow can re-process
@@ -751,7 +761,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }
 
   // ------------------------------------------------------------------
-  // 2b. File logger — structured JSON logs per intent/transaction.
+  // File logger — structured JSON logs per intent/transaction.
   // ------------------------------------------------------------------
   const logDir = process.env.FEEDER_LOG_DIR?.trim() ?? path.join(resolveRunStateDir(network), "logs");
   const fileLogger: FileLogger = await createFileLogger(logDir);
@@ -763,7 +773,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   report(`daemon: file logger ready at ${logDir}`);
 
   // ------------------------------------------------------------------
-  // 3. Metrics — YAML wins over env, env is fallback.
+  // Metrics — YAML wins over env, env is fallback.
   // ------------------------------------------------------------------
   const metricsEnabledYaml = config.infrastructure?.metrics?.enabled;
   const metricsEnabled =
@@ -794,9 +804,22 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // Persistence failures are throttled-logged (R10.B.9), never fatal. Skipped
   // for noopMetrics (metrics disabled) — nothing to persist.
   const metrics = metricsEnabled ? wrapWithPersistence(db, baseMetrics, report) : baseMetrics;
+  // Count + time every data operation from here on (db_operations_total /
+  // db_operation_duration_seconds). The few startup ops above (crash recovery)
+  // run once and stay un-instrumented, which is fine for a steady-state load metric.
+  db = instrumentDb(db, metrics);
+
+  // Crash-recovery attempts from the startup sweep above (counted now that the
+  // metrics registry exists).
+  if (crashPending.length + crashSubmitted.length > 0) {
+    metrics.bridgeRecoveryAttempts.inc(
+      { component: "daemon", reason: "crash_recovery" },
+      crashPending.length + crashSubmitted.length,
+    );
+  }
 
   // ------------------------------------------------------------------
-  // 4. Health state (mutated by the pipeline as it runs).
+  // Health state (mutated by the pipeline as it runs).
   // ------------------------------------------------------------------
   const healthState: HealthState = {
     lastRegistryPollMs: 0,
@@ -806,7 +829,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   };
 
   // ------------------------------------------------------------------
-  // 5. Price cache.
+  // Price cache.
   // ------------------------------------------------------------------
   const priceCache = createPriceCache();
   // Latest-intent cache feeds the cron service. Updated on every
@@ -817,7 +840,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const intentRuntime = new Map<string, IntentRuntimeEntry>();
 
   // ------------------------------------------------------------------
-  // 6. HTTP API server — YAML wins over env, env is fallback.
+  // HTTP API server — YAML wins over env, env is fallback.
   // ------------------------------------------------------------------
   const { host: apiHost, port: apiPort } = resolveApiAddr(config.infrastructure?.api);
   // The update pool manager is created later (depends on coalescerManager).
@@ -838,7 +861,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   report(`daemon: API server listening on ${apiHost}:${apiPort}`);
 
   // ------------------------------------------------------------------
-  // 7. Resolve all YAML knobs before any subsystem that needs them.
+  // Resolve all YAML knobs before any subsystem that needs them.
   // ------------------------------------------------------------------
   const infra: InfrastructureConfig =
     config.infrastructure ?? ({} as InfrastructureConfig);
@@ -961,7 +984,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }
 
   // ------------------------------------------------------------------
-  // 8. Router registry.
+  // Router registry.
   // ------------------------------------------------------------------
   const routerRegistry = createRouterRegistry(config.routers);
   report(`daemon: router registry loaded (${routerRegistry.all.length} router(s))`);
@@ -981,7 +1004,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   );
 
   // ------------------------------------------------------------------
-  // 9. Oracle intent bridge + queue manager.
+  // Oracle intent bridge + queue manager.
   // ------------------------------------------------------------------
   // Bridge internals (UTxO fetches, Lucid calls) and write-client step
   // logs are debug-level — too verbose for normal operation.
@@ -1017,10 +1040,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           const runtime = intentRuntime.get(intentHash);
           if (step === "submitted" && txHash && runtime && runtime.submittedAtMs === undefined) {
             runtime.submittedAtMs = Date.now();
-            metrics.transactionsSubmitted.inc({ symbol, ...clientLabels(runtime) });
-            metrics.bridgeIntentsSubmitted.inc({ symbol, ...clientLabels(runtime) });
+            metrics.transactionsSubmitted.inc({ symbol, ...clientLabels(runtime), router_id: runtime.routerId });
+            metrics.bridgeIntentsSubmitted.inc({ symbol, ...clientLabels(runtime), router_id: runtime.routerId });
             metrics.processingToSubmissionSeconds.observe(
-              { symbol, ...clientLabels(runtime) },
+              { symbol, ...clientLabels(runtime), router_id: runtime.routerId },
               (runtime.submittedAtMs - runtime.observedAtMs) / 1_000,
             );
             // onStep is a synchronous void callback (the write-client does
@@ -1135,8 +1158,14 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         const batchMember = result.batch?.members.find((member) => member.intentHash === result.intentHash);
         const customerId = routerCustomers.get(routerId)!;
         const labels = clientLabels({ clientId, customerId });
-        metrics.transactionsConfirmed.inc({ symbol, ...labels });
-        metrics.bridgeIntentsConfirmed.inc({ symbol, ...labels });
+        // Per-pair (per-symbol) series also carry router_id: on a shared lane
+        // each symbol belongs to exactly one router (disjoint symbol sets are
+        // enforced at config load), so the dashboard Router filter can scope
+        // them. The tx-level series below keep `labels` (no router_id) — one
+        // batch tx can mix several routers on one lane.
+        const symbolLabels = { ...labels, router_id: routerId };
+        metrics.transactionsConfirmed.inc({ symbol, ...symbolLabels });
+        metrics.bridgeIntentsConfirmed.inc({ symbol, ...symbolLabels });
 
         // Tx-level metrics — counted once per TRANSACTION, not per symbol.
         // onResult fires once per intent, so a batch of N pairs fires N times
@@ -1185,19 +1214,19 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         }
         if (result.feePaidLovelace !== undefined) {
           metrics.bridgeTransactionFeeLovelace.observe(
-            { symbol, ...labels },
+            { symbol, ...symbolLabels },
             Number(result.feePaidLovelace),
           );
         }
         if (runtime?.submittedAtMs !== undefined) {
           metrics.submissionToConfirmationSeconds.observe(
-            { symbol, ...labels },
+            { symbol, ...symbolLabels },
             (nowMs - runtime.submittedAtMs) / 1_000,
           );
         }
         if (runtime) {
           metrics.endToEndLatencySeconds.observe(
-            { symbol, ...labels },
+            { symbol, ...symbolLabels },
             (nowMs - runtime.observedAtMs) / 1_000,
           );
         }
@@ -1218,11 +1247,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           },
         );
         metrics.cardanoOracleLastConfirmedTimestampSeconds.set(
-          { symbol, ...labels },
+          { symbol, ...symbolLabels },
           Number(timestamp),
         );
         metrics.cardanoPairIsCreate.set(
-          { symbol, ...labels },
+          { symbol, ...symbolLabels },
           (batchMember?.action ?? result.pairAction) === "mint" ? 1 : 0,
         );
 
@@ -1348,6 +1377,9 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         const batchSize = result.batch?.size ?? 1;
         const customerId = routerCustomers.get(req.routerId)!;
         const labels = clientLabels({ clientId, customerId });
+        // Per-pair (per-symbol) series carry router_id (see the confirmed path);
+        // tx-level series below keep `labels` only.
+        const symbolLabels = { ...labels, router_id: req.routerId };
         // A NonMonotonicNonce result means the feeder DECLINED to submit (a
         // newer intent already won on chain) — no tx was broadcast and no fee
         // was paid. It is a correct no-op, not a failure, so it is counted in
@@ -1355,18 +1387,18 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         if (isNoTransactionFailure(result)) {
           metrics.intentsSuperseded.inc({
             symbol,
-            ...labels,
+            ...symbolLabels,
             reason: result.code,
           });
         } else {
           metrics.transactionsFailed.inc({
             symbol,
-            ...labels,
+            ...symbolLabels,
             error_code: result.code,
           });
           metrics.bridgeIntentsFailed.inc({
             symbol,
-            ...labels,
+            ...symbolLabels,
             reason: result.code,
           });
         }
@@ -1402,7 +1434,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           }
         }
         if (result.code === "TxDroppedFromChain") {
-          metrics.transactionsReorg.inc({ symbol, ...labels });
+          metrics.transactionsReorg.inc({ symbol, ...symbolLabels });
         }
         if (isNoTransactionFailure(result)) {
           // No tx broadcast, no fee — a newer intent already won on chain.
@@ -1513,7 +1545,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   });
 
   // ------------------------------------------------------------------
-  // 9.3b. Update worker pool manager — per-router task concurrency.
+  // Update worker pool manager — per-router task concurrency.
   //       Mirrors Spectra's Bridge.getOrCreateOraclePool(routerID).
   //       Tasks are update requests routed through the coalescer;
   //       all Cardano submission remains serial via the lane queue.
@@ -1530,13 +1562,16 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       for (const req of task.requests) {
         coalescerManager.accept(req);
       }
+      // A lane task that ran to completion — the submission worker pool that is
+      // actually active (the parallel event pool is opt-in and off by default).
+      metrics.workerTasksCompleted.inc({ pool_type: "update" });
     },
     log: report,
   });
   updatePoolManagerRef = updatePoolManager;
 
   // ------------------------------------------------------------------
-  // 9.3c. Startup reconciliation + cache hydrate — sync local pair-state
+  // Startup reconciliation + cache hydrate — sync local pair-state
   //       files with live on-chain UTxOs, then seed priceCache before
   //       cron/alerting read it.
   // ------------------------------------------------------------------
@@ -1555,7 +1590,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }
 
   // ------------------------------------------------------------------
-  // 9.4. Cron service — Spectra parity. Re-submits the latest known
+  // Cron service — Spectra parity. Re-submits the latest known
   //      intent for any cron-enabled destination whose on-chain pair
   //      has gone stale beyond its `time_threshold`. The service runs
   //      alongside the scan pipeline; when disabled it is a no-op.
@@ -1605,26 +1640,6 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // reference prevents the linter from flagging an unused binding.
   void cronHandle;
 
-  // ------------------------------------------------------------------
-  // 9.4b. Alert evaluator — in-process Prometheus-style rules engine.
-  //       Writes to alert_log on fire/resolve transitions.
-  // ------------------------------------------------------------------
-  const alertEvalIntervalMs = parseDurationMs(
-    (infra.alerting as { evaluation_interval?: string } | undefined)?.evaluation_interval,
-    DEFAULT_ALERT_EVALUATION_INTERVAL_MS,
-  );
-  const pairStalenessThresholdMs =
-    (alerting.oracle_pair_stale_seconds ?? DEFAULT_ORACLE_PAIR_STALE_SECONDS) * 1_000;
-  const alertEvaluatorHandle = startAlertEvaluator({
-    db,
-    priceCache,
-    evaluationIntervalMs: alertEvalIntervalMs,
-    pairStalenessThresholdMs,
-    log: report,
-    signal,
-  });
-  void alertEvaluatorHandle;
-
   // Refresh healthState.workerQueueDepth from the queue manager so the
   // /health/ready max_queue_size check works in BOTH sequential and
   // parallel modes. In parallel mode the EventWorkerPool also writes
@@ -1637,6 +1652,18 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   let queueDepthTimer: ReturnType<typeof setInterval> | null = setInterval(
     () => {
       healthState.workerQueueDepth = queueManager.totalPending();
+      // Submission (update) worker pool gauges — this pool ALWAYS runs, so its
+      // worker metrics populate in sequential mode too, not only when the
+      // opt-in parallel event pool is enabled. Summed across per-router pools.
+      let active = 0;
+      let capacity = 0;
+      for (const s of updatePoolManager.listAllStats()) {
+        active += s.activeWorkers;
+        capacity += s.maxWorkers;
+      }
+      metrics.activeWorkers.set({ pool_type: "update" }, active);
+      metrics.workerPoolSize.set({ pool_type: "update" }, capacity);
+      metrics.workerQueueSize.set({ pool_type: "update" }, queueManager.totalPending());
     },
     healthCheckIntervalMs,
   );
@@ -1650,7 +1677,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }, { once: true });
 
   // ------------------------------------------------------------------
-  // 9.4d. Balance refresh — keep the wallet/contract balance gauges current
+  // Balance refresh — keep the wallet/contract balance gauges current
   //       INDEPENDENTLY of oracle-update traffic. A balance dashboard must
   //       show the real numbers even when no update is flowing (e.g. the
   //       Receiver is empty), so we poll chain on the cron cadence rather
@@ -1680,7 +1707,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }
 
   // ------------------------------------------------------------------
-  // 9.4e. Deposit auto-merge — fold each client's pending side-deposits into
+  // Deposit auto-merge — fold each client's pending side-deposits into
   //       its Receiver balance on the same cadence as the balance refresh.
   //       Safe-by-default: only when NOT dry-run and only for destinations
   //       that have a deposit address.
@@ -1994,7 +2021,123 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }
 
   // ------------------------------------------------------------------
-  // 10. Source pipeline.
+  // Feed sanity — periodic on-chain-vs-DIA-source accuracy/freshness
+  //       check on its OWN clock (`feed_sanity.interval`), independent of the
+  //       cron tick and the balance refresh. Per feed it reads the LIVE Pair
+  //       UTxO (verify the real chain), compares it to the latest DIA intent
+  //       the feeder has seen in memory, and publishes `feed_sanity_status`
+  //       (0 ok / 1 suspect / 2 broken) which the FeedAccuracyFail alert
+  //       watches. The same logic is runnable on demand via `npm run sanity:feeds`.
+  // ------------------------------------------------------------------
+  const feedSanityCfg = infra.feed_sanity;
+  const feedSanityGraceSec = feedSanityCfg?.freshness_grace_seconds ?? DEFAULT_FEED_SANITY_GRACE_SECONDS;
+  const feedSanityDests: Array<{
+    routerId: string;
+    destinationIndex: number;
+    customerId: string;
+    symbols: string[];
+    cardano: CardanoDestinationConfig;
+    thresholds: ReturnType<typeof deriveFeedThresholds>;
+  }> = [];
+  if (feedSanityCfg?.enabled) {
+    for (const router of Object.values(config.routers)) {
+      if (!router.enabled) continue;
+      const symbols = extractRouterSymbols(router);
+      router.destinations.forEach((dest, destinationIndex) => {
+        if (!dest.cardano) return;
+        feedSanityDests.push({
+          routerId: router.id,
+          destinationIndex,
+          customerId: router.customer_id,
+          symbols,
+          cardano: dest.cardano,
+          thresholds: deriveFeedThresholds(
+            {
+              price_deviation: dest.price_deviation,
+              time_threshold: dest.time_threshold,
+              max_staleness: dest.max_staleness,
+            },
+            { graceSec: feedSanityGraceSec },
+          ),
+        });
+      });
+    }
+  }
+
+  async function refreshFeedSanity(): Promise<void> {
+    let lucid: Awaited<ReturnType<typeof makeConfiguredLucidWithConfig>>;
+    try {
+      lucid = await makeConfiguredLucidWithConfig(getCliConfig());
+    } catch (err) {
+      report(`feed-sanity: lucid init failed: ${(err as Error).message}`);
+      return;
+    }
+    for (const dest of feedSanityDests) {
+      try {
+        const { client } = await readClientContext({
+          clientStatePath: dest.cardano.client_state_path,
+          protocolStatePath: dest.cardano.protocol_state_path,
+        });
+        const pairValidatorAddress = client.scripts.pairValidatorAddress;
+        const pairPolicyId = client.scripts.pairPolicyId;
+        if (!pairValidatorAddress || !pairPolicyId) continue;
+
+        const onChain = await readOnChainPairs({
+          utxosAt: (address) => lucid.utxosAt(address),
+          decodePairDatum,
+          pairValidatorAddress,
+          pairPolicyId,
+        });
+
+        const clientId = clientIdFromStatePath(dest.cardano.client_state_path);
+        const deps: FeedSanityDeps = {
+          readOnChain: async (symbol) => onChain.get(symbol) ?? null,
+          readLatestSource: async (symbol) => {
+            const latest = latestIntents.get({
+              routerId: dest.routerId,
+              destinationIndex: dest.destinationIndex,
+              symbol,
+            });
+            if (!latest) return null;
+            return {
+              price: latest.enriched.fullIntent.price,
+              timestampSec: latest.enriched.fullIntent.timestamp,
+            };
+          },
+          thresholdsFor: () => dest.thresholds,
+        };
+
+        const results = await runFeedSanityChecks(dest.symbols, deps);
+        const labels = clientLabels({ clientId, customerId: dest.customerId });
+        for (const result of results) {
+          metrics.feedSanityStatus.set(
+            { ...labels, symbol: result.symbol },
+            sanityStatusCode(result.status),
+          );
+        }
+      } catch (err) {
+        report(`feed-sanity: ${dest.cardano.client_state_path} failed: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  let feedSanityTimer: ReturnType<typeof setInterval> | null = null;
+  if (!dryRun && feedSanityDests.length > 0) {
+    const feedSanityIntervalMs = parseDurationMs(feedSanityCfg?.interval, DEFAULT_FEED_SANITY_INTERVAL_MS);
+    void refreshFeedSanity();
+    feedSanityTimer = setInterval(() => {
+      void refreshFeedSanity();
+    }, feedSanityIntervalMs);
+    signal?.addEventListener("abort", () => {
+      if (feedSanityTimer) {
+        clearInterval(feedSanityTimer);
+        feedSanityTimer = null;
+      }
+    }, { once: true });
+  }
+
+  // ------------------------------------------------------------------
+  // Source pipeline.
   // ------------------------------------------------------------------
   // DB checkpoint: scanner position lives in chain_state.last_scan_block.
   // No JSON file; chain_state row was created by initialiseChainState above.
@@ -2299,11 +2442,22 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
   // would flood the price-age panel and fire PriceAgeHigh for pairs we never
   // publish. Scoping to routed symbols keeps the metric / panel / alert about the
   // data the oracle actually consumes.
-  if (output.dispatched.length > 0 || output.policyFiltered.length > 0) {
-    metrics.priceAgeSeconds.observe(
-      { symbol: enriched.fullIntent.symbol },
-      Math.max(0, Date.now() / 1_000 - Number(enriched.fullIntent.timestamp)),
-    );
+  // Source-data age per (router, symbol): recorded for every router this intent
+  // routed to (dispatched or policy-filtered), so the dashboard Router filter
+  // scopes it. A symbol maps to one router per lane, but the same symbol may feed
+  // routers on different clients, so it can be recorded under more than one.
+  {
+    const priceAge = Math.max(0, Date.now() / 1_000 - Number(enriched.fullIntent.timestamp));
+    const ageRouterIds = new Set<string>([
+      ...output.dispatched.map((d) => d.routerId),
+      ...output.policyFiltered.map((p) => p.routerId),
+    ]);
+    for (const ageRouterId of ageRouterIds) {
+      metrics.priceAgeSeconds.observe(
+        { symbol: enriched.fullIntent.symbol, router_id: ageRouterId },
+        priceAge,
+      );
+    }
   }
 
   for (const { routerId, reason } of output.conditionFiltered) {
@@ -2324,7 +2478,7 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     );
     if (deviationPct !== undefined) {
       metrics.priceDeviationPercent.observe(
-        { symbol: enriched.fullIntent.symbol },
+        { symbol: enriched.fullIntent.symbol, router_id: routerId },
         deviationPct,
       );
     }
@@ -2348,7 +2502,7 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     });
     if (dispatch.deviationPct !== undefined) {
       metrics.priceDeviationPercent.observe(
-        { symbol: enriched.fullIntent.symbol },
+        { symbol: enriched.fullIntent.symbol, router_id: dispatch.routerId },
         dispatch.deviationPct,
       );
     }
@@ -2383,7 +2537,7 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     // Log intent lifecycle start (only for intents that pass filters)
     const now = new Date().toISOString();
     
-    // 1. enriched (await to ensure order)
+    // enriched (await to ensure order)
     await fileLogger.logIntentStep({
       ts: now,
       level: "info",
@@ -2399,7 +2553,7 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
       },
     });
     
-    // 2. routed (passed filters)
+    // routed (passed filters)
     await fileLogger.logIntentStep({
       ts: now,
       level: "info",
@@ -2410,7 +2564,7 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
       meta: { routerId: dispatch.routerId, destinationIndex: dispatch.destinationIndex },
     });
 
-    // 3. preflight — fast checks before the intent occupies a queue slot
+    // preflight — fast checks before the intent occupies a queue slot
     const preflight = runPreflight({ enriched, intentHash: event.intentHash });
     if (!preflight.ok) {
       report(
@@ -2451,7 +2605,7 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
       signer: routerSigners.get(dispatch.routerId),
     };
 
-    // 3. hand off to coalescer (supersession + accumulation window)
+    // hand off to coalescer (supersession + accumulation window)
     await fileLogger.logIntentStep({
       ts: new Date().toISOString(),
       level: "info",

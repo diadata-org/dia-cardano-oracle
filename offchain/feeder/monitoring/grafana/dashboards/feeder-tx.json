@@ -458,8 +458,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (symbol, outcome) (increase(dia_bridge_tx_pair_membership_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
-          "legendFormat": "{{symbol}} · {{outcome}}",
+          "expr": "sum by (symbol, client_id, outcome) (increase(dia_bridge_tx_pair_membership_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{symbol}} · {{client_id}} · {{outcome}}",
           "refId": "A"
         }
       ],

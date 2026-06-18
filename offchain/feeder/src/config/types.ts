@@ -72,6 +72,13 @@ export type InfrastructureConfig = {
   dry_run?: boolean;
   /** Not consumed yet (periodic mandatory updates). Kept typed for Spectra parity. */
   cron_service?: CronServiceConfig;
+  /** Per-feed sanity check (on-chain value vs DIA source). Its OWN clock and
+   *  config, deliberately separate from cron_service / the balance refresh so
+   *  the cadence and naming never get conflated with those. */
+  feed_sanity?: FeedSanityConfig;
+  /** Alertmanager delivery channels (Telegram / email). Off by default; the
+   *  monitoring generator writes these into `monitoring/alertmanager.yml`. */
+  notifications?: NotificationsConfig;
 };
 
 /**
@@ -339,6 +346,43 @@ export type CronServiceConfig = {
    *  deviation-only mode, where `max_staleness` is the ceiling. Default false
    *  (per-pair cadence). */
   aligned_heartbeat?: boolean;
+};
+
+/**
+ * Per-feed sanity-check loop — compares each feed's live on-chain value against
+ * the latest DIA source value and emits `feed_sanity_status`. Its OWN clock and
+ * config block, deliberately independent of `cron_service` and the balance
+ * refresh so the cadence/naming are never conflated with those.
+ */
+export type FeedSanityConfig = {
+  /** Master switch — when false, the in-feeder periodic sanity check does not run. */
+  enabled?: boolean;
+  /** How often the feeder runs the sanity check (duration string, e.g. "5m"). */
+  interval?: string;
+  /** Grace added to a feed's freshness ceiling (confirmation + clock skew) so a
+   *  value read just before its heartbeat is not flagged stale. */
+  freshness_grace_seconds?: number;
+};
+
+/**
+ * Alertmanager delivery channels. Off by default — alerts reach only the logs +
+ * database (via the feeder webhook). Recipients / on-off live here; the SECRETS
+ * (Telegram bot token, SMTP password) live in `.env`, never in this file. The
+ * monitoring generator writes these into `monitoring/alertmanager.yml`.
+ */
+export type NotificationsConfig = {
+  telegram?: {
+    enabled?: boolean;
+    /** Numeric chat/group id; the bot token comes from `.env`. */
+    chat_id?: string | number;
+  };
+  email?: {
+    enabled?: boolean;
+    to?: string[];
+    from?: string;
+    /** SMTP `host:port`; the username/password come from `.env`. */
+    smarthost?: string;
+  };
 };
 
 // ---------------------------------------------------------------------------

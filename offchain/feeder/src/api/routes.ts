@@ -371,6 +371,13 @@ export const apiRoutes: readonly RouteDescriptor[] = [
     responseSchema: AlertAckResponse,
   },
   {
+    method: "POST",
+    path: "/api/v1/alerts/ingest",
+    kind: "alerts-ingest",
+    summary: "Alertmanager webhook — record firing/resolved alerts in the alert log.",
+    responseSchema: AnyObject,
+  },
+  {
     method: "GET",
     path: "/api/v1/performance",
     kind: "performance",

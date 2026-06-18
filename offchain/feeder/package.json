@@ -10,6 +10,7 @@
     "feeder:dev": "tsx cmd/feeder/main.ts",
     "feeder:supervised": "bash scripts/run-feeder-supervised.sh",
     "scan:pairs": "tsx scripts/scan-dia-intents.ts",
+    "sanity:feeds": "tsx scripts/sanity-check-feeds.ts",
     "forecast:cost": "tsx scripts/cost-forecast/forecast-mainnet-cost.ts",
     "test": "node --import tsx/esm --test $(find src cmd -path '*/__tests__/*.test.ts' | tr '\\n' ' ')"
   },

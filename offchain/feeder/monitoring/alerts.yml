@@ -343,6 +343,34 @@ groups:
                There is no operator-side fix; do NOT top up wallets for this.
 
       # ---------------------------------------------------------------------
+      - alert: FeedAccuracyFail
+        expr: >
+          dia_bridge_feed_sanity_status >= 2
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "On-chain value for {{ $labels.symbol }} disagrees with the DIA source"
+          description: >
+            The per-feed sanity check rated {{ $labels.symbol }} as BROKEN
+            (status 2) for over 10 minutes: the value published on Cardano differs
+            from the latest DIA source price beyond the configured tolerance AND is
+            stale past its freshness window. This is a DATA-ACCURACY signal — the
+            on-chain oracle no longer reflects the DIA source.
+
+            WHAT TO DO:
+            1. Inspect the deviation / staleness — query the API or run the
+               on-demand check:
+                 curl -s localhost:8080/api/v1/alerts
+                 cd offchain/feeder && npm run sanity:feeds
+            2. Confirm the feeder is still publishing {{ $labels.symbol }} and that
+               the DIA source is delivering fresh intents for it:
+                 cd offchain && make logs
+            3. A feed that stays BROKEN means the on-chain pair stopped tracking the
+               source — investigate the submission path for that pair. No wallet
+               top-up fixes a data-accuracy fault.
+
+      # ---------------------------------------------------------------------
       - alert: ReorgRateHigh
         expr: >
           increase(dia_bridge_transactions_reorg_total[1h]) > 3

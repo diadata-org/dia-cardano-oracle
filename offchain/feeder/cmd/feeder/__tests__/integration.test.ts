@@ -16,7 +16,6 @@ import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
 import { createDb, type Db, type TransactionLogInsert } from "../../../src/persistence/index.js";
-import { startAlertEvaluator } from "../../../src/alerting/evaluator.js";
 import { createPriceCache } from "../../../src/processor/price-cache.js";
 import { createApiServer } from "../../../src/api/server.js";
 import { createChainRuntimeState } from "../../../src/api/chains.js";
@@ -70,39 +69,6 @@ describe("integration: crash recovery (C.19.d)", () => {
     assert.equal((await db.listTransactions({ status: "failed" })).length, 2);
     // The confirmed row is untouched.
     assert.equal((await db.listTransactions({ status: "confirmed" })).length, 1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// C.19.e — multi-client alert labelling
-// ---------------------------------------------------------------------------
-
-describe("integration: multi-client alert labelling (C.19.e)", () => {
-  it("fires OraclePairStale per stale client with correct symbol labels", async () => {
-    let fakeNow = 1_000;
-    const cache = createPriceCache({ now: () => fakeNow });
-    cache.set({ routerId: "client-a", destinationIndex: 0, symbol: "BTC/USD" },
-      { symbol: "BTC/USD", price: 1n, timestamp: 1n, intentHash: "0x1", updatedAtMs: 1_000 });
-    cache.set({ routerId: "client-b", destinationIndex: 0, symbol: "ETH/USD" },
-      { symbol: "ETH/USD", price: 1n, timestamp: 1n, intentHash: "0x2", updatedAtMs: 1_000 });
-
-    fakeNow = 1_000 + 400_000; // both stale (> 300s)
-
-    const controller = new AbortController();
-    const handle = startAlertEvaluator({
-      db, priceCache: cache, evaluationIntervalMs: 5,
-      pairStalenessThresholdMs: 300_000, signal: controller.signal,
-    });
-    await new Promise((r) => setTimeout(r, 25));
-    controller.abort();
-    await handle.done;
-
-    const alerts = await db.listAlerts({ active: true });
-    assert.equal(alerts.length, 2, "one OraclePairStale per stale client");
-    const symbols = alerts
-      .map((a) => (JSON.parse(a.labelsJson) as { symbol?: string }).symbol)
-      .sort();
-    assert.deepEqual(symbols, ["BTC/USD", "ETH/USD"]);
   });
 });
 

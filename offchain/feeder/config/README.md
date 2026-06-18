@@ -16,6 +16,8 @@ infrastructure files is documented inline and summarised in
   - [Side-deposit thresholds](#side-deposit-thresholds)
   - [Automatic fee-loop maintenance thresholds](#automatic-fee-loop-maintenance-thresholds)
   - [Cardano provider health thresholds](#cardano-provider-health-thresholds)
+  - [Per-feed sanity check (`feed_sanity`)](#per-feed-sanity-check-feed_sanity)
+  - [Notification channels (`notifications`)](#notification-channels-notifications)
 
 ## Files
 
@@ -130,3 +132,39 @@ Backed by `dia_bridge_provider_last_ok_timestamp_seconds{provider,role}` and
 critical one always tracks whichever provider `CARDANO_PROVIDER` selects to build.
 Full rationale:
 [Architecture → Cardano API provider health](../../../docs/architecture/feeder.md#cardano-api-provider-health-primary-vs-secondary).
+
+## Per-feed sanity check (`feed_sanity`)
+
+The feeder periodically compares each feed's live on-chain value against the latest
+DIA source value and publishes `dia_bridge_feed_sanity_status{symbol}` (0 = ok,
+1 = suspect, 2 = broken), which the `FeedAccuracyFail` alert watches. It runs on its
+OWN clock, separate from `cron_service` and the balance refresh. The same check is
+available on demand: `npm run sanity:feeds`.
+
+| Key | Role | Default |
+| --- | --- | --- |
+| `feed_sanity.enabled` | Run the in-feeder periodic check. | `true` |
+| `feed_sanity.interval` | How often it runs (duration string). | `5m` |
+| `feed_sanity.freshness_grace_seconds` | Grace added to a feed's freshness ceiling (confirmation + clock skew) so a value read just before its heartbeat reads as fresh. | `120` |
+
+The price tolerance and freshness ceiling per feed come from that router's own
+`price_deviation` / `time_threshold` / `max_staleness` (the push-policy knobs), so the
+check judges a feed against the same bounds the feeder guarantees.
+
+## Notification channels (`notifications`)
+
+Where Alertmanager delivery is turned on and addressed. Off by default → alerts reach
+the logs + database (via the feeder webhook) only. The SECRETS live in `feeder/.env`,
+never in this file; the generator writes these channels into the generated
+`monitoring/alertmanager.yml`.
+
+| Key | Role |
+| --- | --- |
+| `notifications.telegram.enabled` | Deliver firing/resolved alerts to Telegram. |
+| `notifications.telegram.chat_id` | Target chat/group id (bot token → `.env` `ALERTMANAGER_TELEGRAM_BOT_TOKEN`). |
+| `notifications.email.enabled` | Deliver alerts by email. |
+| `notifications.email.to` / `from` / `smarthost` | Recipients, sender, and SMTP `host:port` (password → `.env` `ALERTMANAGER_SMTP_PASSWORD`). |
+
+`monitoring/alerts.yml` and `monitoring/alertmanager.yml` are generated from this YAML
+by `make generate-monitoring` (automatic on `make up`) — edit the YAML, not the
+generated files.

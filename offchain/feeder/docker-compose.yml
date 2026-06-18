@@ -150,6 +150,50 @@ services:
       retries: 3
       start_period: 10s
 
+  alertmanager:
+    profiles: ["monitoring"]
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    # Secrets travel from .env → container env → secret FILES that the generated
+    # alertmanager.yml references via bot_token_file / auth_password_file. They
+    # are empty (and unused) until a channel is enabled in the infra YAML. The
+    # config never contains the secret.
+    environment:
+      ALERTMANAGER_TELEGRAM_BOT_TOKEN: ${ALERTMANAGER_TELEGRAM_BOT_TOKEN:-}
+      ALERTMANAGER_SMTP_PASSWORD: ${ALERTMANAGER_SMTP_PASSWORD:-}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /etc/alertmanager/secrets
+        printf '%s' "$${ALERTMANAGER_TELEGRAM_BOT_TOKEN:-}" > /etc/alertmanager/secrets/telegram-token
+        printf '%s' "$${ALERTMANAGER_SMTP_PASSWORD:-}" > /etc/alertmanager/secrets/smtp-password
+        exec /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  pushgateway:
+    profiles: ["monitoring"]
+    image: prom/pushgateway:v1.9.0
+    restart: unless-stopped
+    ports:
+      - "9091:9091"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9091/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   grafana:
     profiles: ["monitoring"]
     image: grafana/grafana:10.4.2
@@ -189,3 +233,4 @@ volumes:
   postgres-data:
   prometheus-data:
   grafana-data:
+  alertmanager-data:

@@ -93,13 +93,14 @@ describe("createMetrics", () => {
     metrics.cardanoAdminWalletLovelace.set({}, 10000000000);
     metrics.cardanoReceiverTopupWarnings.inc({ client_id: "c1" });
     metrics.cardanoPairIsCreate.set({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" }, 0);
+    metrics.feedSanityStatus.set({ symbol: "BTC/USD", client_id: "c1", customer_id: "acme" }, 0);
     metrics.cronResubmissions.inc({ router_id: "r1", symbol: "BTC/USD", client_id: "c1", outcome: "submitted" });
     metrics.httpRequests.inc({ method: "GET", endpoint: "/health/live", status: "200" });
     metrics.httpRequestDurationSeconds.observe({ method: "GET", endpoint: "/health/live" }, 0.001);
     metrics.activeWorkers.set({ pool_type: "event" }, 0);
     metrics.workerPoolSize.set({ pool_type: "event" }, 4);
     metrics.workerQueueSize.set({ pool_type: "event" }, 0);
-    metrics.workerTasksCompleted.inc();
+    metrics.workerTasksCompleted.inc({ pool_type: "update" });
     metrics.workerTasksFailed.inc();
     metrics.workerTasksDropped.inc({ pool_type: "event" });
     metrics.workerTaskRetries.inc();
@@ -153,6 +154,7 @@ describe("createMetrics", () => {
       "dia_bridge_cardano_payment_hook_accrued_lovelace",
       "dia_bridge_cardano_admin_wallet_lovelace",
       "dia_bridge_cardano_receiver_topup_warnings_total",
+      "dia_bridge_feed_sanity_status",
       "dia_bridge_transactions_reorg_total",
       // Tx-level metrics (counted once per transaction, not per symbol)
       "dia_bridge_transactions_total",
@@ -186,6 +188,73 @@ describe("createMetrics", () => {
 
     for (const name of requiredNames) {
       assert.ok(text.includes(name), `required metric absent from /metrics output: ${name}`);
+    }
+  });
+
+  // Per-pair updates belong to exactly one router (the config validator forbids
+  // overlapping symbols on a shared lane), so every PER-SYMBOL series carries a
+  // `router_id` label and the dashboard Router filter can scope them. TX-LEVEL
+  // series must NOT carry `router_id`: a single batch tx can mix several routers
+  // on one lane, so a scalar router_id there would be ambiguous.
+  it("per-symbol metrics carry router_id; tx-level metrics do not", async () => {
+    const metrics = await createMetrics({ namespace: "dia_bridge" });
+    const pair = { symbol: "BTC/USD", client_id: "c1", customer_id: "acme", router_id: "router_a" };
+
+    metrics.transactionsSubmitted.inc({ ...pair });
+    metrics.transactionsConfirmed.inc({ ...pair });
+    metrics.transactionsFailed.inc({ ...pair, error_code: "Err" });
+    metrics.transactionsReorg.inc({ ...pair });
+    metrics.intentsSuperseded.inc({ ...pair, reason: "NonMonotonicNonce" });
+    metrics.processingToSubmissionSeconds.observe({ ...pair }, 1);
+    metrics.submissionToConfirmationSeconds.observe({ ...pair }, 5);
+    metrics.endToEndLatencySeconds.observe({ ...pair }, 6);
+    metrics.cardanoOracleLastConfirmedTimestampSeconds.set({ ...pair }, 1234567890);
+    metrics.cardanoPairIsCreate.set({ ...pair }, 1);
+    metrics.bridgeTransactionFeeLovelace.observe({ ...pair }, 200000);
+    metrics.bridgeIntentsSubmitted.inc({ ...pair });
+    metrics.bridgeIntentsConfirmed.inc({ ...pair });
+    metrics.bridgeIntentsFailed.inc({ ...pair, reason: "timeout" });
+    metrics.priceDeviationPercent.observe({ symbol: "BTC/USD", router_id: "router_a" }, 0.5);
+    metrics.priceAgeSeconds.observe({ symbol: "BTC/USD", router_id: "router_a" }, 30);
+
+    const text = await metrics.getMetricsText();
+    const perPairSeries = [
+      "dia_bridge_transactions_submitted_total",
+      "dia_bridge_transactions_confirmed_total",
+      "dia_bridge_transactions_failed_total",
+      "dia_bridge_transactions_reorg_total",
+      "dia_bridge_intents_superseded_total",
+      "dia_bridge_processing_to_submission_seconds_count",
+      "dia_bridge_submission_to_confirmation_seconds_count",
+      "dia_bridge_end_to_end_latency_seconds_count",
+      "dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds",
+      "dia_bridge_cardano_pair_is_create",
+      "dia_bridge_transaction_fee_lovelace_count",
+      "dia_bridge_intents_submitted_lifecycle_total",
+      "dia_bridge_intents_confirmed_lifecycle_total",
+      "dia_bridge_intents_failed_lifecycle_total",
+      "dia_bridge_price_deviation_percent_count",
+      "dia_bridge_price_age_seconds_count",
+    ];
+    for (const name of perPairSeries) {
+      const sample = text
+        .split("\n")
+        .find((line) => line.startsWith(name) && line.includes('router_id="router_a"'));
+      assert.ok(sample, `per-symbol series ${name} must carry a router_id label`);
+    }
+
+    // Tx-level series must stay router-agnostic.
+    metrics.transactionsTotal.inc({ client_id: "c1", customer_id: "acme", outcome: "confirmed" });
+    metrics.transactionPairs.observe({ client_id: "c1", customer_id: "acme", outcome: "confirmed" }, 3);
+    const txText = await metrics.getMetricsText();
+    for (const name of ["dia_bridge_transactions_total", "dia_bridge_transaction_pairs_count"]) {
+      const samples = txText
+        .split("\n")
+        .filter((line) => line.startsWith(name) && !line.startsWith("#"));
+      assert.ok(samples.length > 0, `expected ${name} samples`);
+      for (const line of samples) {
+        assert.ok(!line.includes("router_id="), `tx-level series ${name} must NOT carry router_id: ${line}`);
+      }
     }
   });
 

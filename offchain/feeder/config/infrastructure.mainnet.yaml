@@ -159,6 +159,33 @@ infrastructure:
     aligned_heartbeat: true
 
   # --------------------------------------------------------------------------
+  # feed_sanity — per-feed accuracy/freshness check (on-chain vs DIA source).
+  #   Its OWN clock, separate from cron_service and the balance refresh. Kept
+  #   identical to Preview. See infrastructure.preview.yaml for the full note.
+  # --------------------------------------------------------------------------
+  feed_sanity:
+    enabled: true
+    interval: 5m
+    freshness_grace_seconds: 120
+
+  # --------------------------------------------------------------------------
+  # notifications — Alertmanager delivery channels. OFF by default: alerts go
+  #   only to logs + the database. Turn a channel on with `enabled: true` and
+  #   put its SECRET in `.env` (Telegram → ALERTMANAGER_TELEGRAM_BOT_TOKEN;
+  #   SMTP password → ALERTMANAGER_SMTP_PASSWORD). The generator writes these
+  #   into monitoring/alertmanager.yml on `make up`.
+  # --------------------------------------------------------------------------
+  notifications:
+    telegram:
+      enabled: false
+      chat_id: ""
+    email:
+      enabled: false
+      to: []
+      from: ""
+      smarthost: ""
+
+  # --------------------------------------------------------------------------
   # alerting — canonical thresholds for feeder warnings + Prometheus rules.
   # See infrastructure.preview.yaml for the full unit / semantic notes.
   # alerts.yml mirrors these values; both must stay in sync.

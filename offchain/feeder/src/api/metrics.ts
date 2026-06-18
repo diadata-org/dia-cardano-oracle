@@ -92,6 +92,11 @@ export type FeederMetrics = {
    *  provider rate limits. */
   scannerBackfillChunks: FeedCounter;
   cardanoOracleLastConfirmedTimestampSeconds: FeedGauge;
+  /** Per-feed sanity-check verdict (0 = ok, 1 = suspect, 2 = broken): the live
+   *  on-chain value vs the latest DIA source value, judged against the feed's
+   *  thresholds. Updated by the feeder's periodic feed_sanity loop; watched by
+   *  the FeedAccuracyFail alert. */
+  feedSanityStatus: FeedGauge;
   cardanoReceiverBalanceLovelace: FeedGauge;
   /** Fees accumulated in the Receiver UTxO (`accruedToHookLovelace`) that
    *  are pending transfer to the PaymentHook via a `settle` tx. High
@@ -216,6 +221,7 @@ export const noopMetrics: FeederMetrics = {
   scannerBackfillBlocks: noopCounter,
   scannerBackfillChunks: noopCounter,
   cardanoOracleLastConfirmedTimestampSeconds: noopGauge,
+  feedSanityStatus: noopGauge,
   cardanoReceiverBalanceLovelace: noopGauge,
   cardanoReceiverAccruedLovelace: noopGauge,
   cardanoPaymentHookAccruedLovelace: noopGauge,
@@ -361,27 +367,27 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     transactionsSubmitted: counter(
       "transactions_submitted_total",
       "Cardano submission attempts broadcast to the chain",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
     ),
     transactionsConfirmed: counter(
       "transactions_confirmed_total",
       "Cardano submission attempts confirmed on-chain",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
     ),
     transactionsFailed: counter(
       "transactions_failed_total",
       "Cardano submission attempts that failed",
-      ["symbol", "client_id", "customer_id", "error_code"],
+      ["symbol", "client_id", "customer_id", "error_code", "router_id"],
     ),
     transactionsReorg: counter(
       "transactions_reorg_total",
       "Cardano transactions dropped by a rollback after submission",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
     ),
     intentsSuperseded: counter(
       "intents_superseded_total",
       "Intents the feeder declined to submit because a newer one already won on chain (no tx, no fee) — correct no-ops, not failures",
-      ["symbol", "client_id", "customer_id", "reason"],
+      ["symbol", "client_id", "customer_id", "reason", "router_id"],
     ),
     transactionsTotal: counter(
       "transactions_total",
@@ -443,31 +449,31 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     processingToSubmissionSeconds: histogram(
       "processing_to_submission_seconds",
       "Seconds from per-intent processing start to Cardano submission",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
       LATENCY_BUCKETS,
     ),
     submissionToConfirmationSeconds: histogram(
       "submission_to_confirmation_seconds",
       "Seconds from Cardano submission to confirmation",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
       LATENCY_BUCKETS,
     ),
     endToEndLatencySeconds: histogram(
       "end_to_end_latency_seconds",
       "Seconds from feeder processing start to Cardano confirmation",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
       LATENCY_BUCKETS,
     ),
     priceDeviationPercent: histogram(
       "price_deviation_percent",
       "Observed price deviation at policy-gating time",
-      ["symbol"],
+      ["symbol", "router_id"],
       PRICE_DEVIATION_BUCKETS,
     ),
     priceAgeSeconds: histogram(
       "price_age_seconds",
       "Age of the incoming intent price at processing time, recorded ONLY for symbols this feeder routes (matched a router) — not every symbol the source feed carries. Drives the PriceAgeHigh alert.",
-      ["symbol"],
+      ["symbol", "router_id"],
       PRICE_AGE_BUCKETS,
     ),
     scannerLastBlock: gauge(
@@ -498,7 +504,12 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     cardanoOracleLastConfirmedTimestampSeconds: gauge(
       "cardano_oracle_last_confirmed_timestamp_seconds",
       "Latest confirmed oracle timestamp per symbol and client",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
+    ),
+    feedSanityStatus: gauge(
+      "feed_sanity_status",
+      "Per-feed sanity-check verdict (0 = ok, 1 = suspect, 2 = broken): the live on-chain value vs the latest DIA source value, judged against the feed's push-policy thresholds. Updated by the feeder's periodic feed_sanity loop; watched by the FeedAccuracyFail alert.",
+      ["client_id", "customer_id", "symbol"],
     ),
     cardanoReceiverBalanceLovelace: gauge(
       "cardano_receiver_balance_lovelace",
@@ -541,7 +552,7 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     cardanoPairIsCreate: gauge(
       "cardano_pair_is_create",
       "Whether the last confirmed submission for a symbol minted the pair (1) or updated it (0)",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
     ),
     cronResubmissions: counter(
       "cron_resubmissions_total",
@@ -576,7 +587,8 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     ),
     workerTasksCompleted: counter(
       "worker_tasks_completed_total",
-      "Total tasks successfully completed across all worker pools",
+      "Tasks successfully completed, by worker pool (`update` = the submission pool, always running; `event` = the opt-in parallel enrichment pool).",
+      ["pool_type"],
     ),
     workerTasksFailed: counter(
       "worker_tasks_failed_total",
@@ -604,22 +616,22 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     bridgeIntentsSubmitted: counter(
       "intents_submitted_lifecycle_total",
       "Intents submitted to Cardano — Spectra bridge_intents_submitted_total lifecycle alias",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
     ),
     bridgeIntentsConfirmed: counter(
       "intents_confirmed_lifecycle_total",
       "Intents confirmed on Cardano — Spectra bridge_intents_confirmed_total lifecycle alias",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
     ),
     bridgeIntentsFailed: counter(
       "intents_failed_lifecycle_total",
       "Intents failed — Spectra bridge_intents_failed_total lifecycle alias",
-      ["symbol", "client_id", "customer_id", "reason"],
+      ["symbol", "client_id", "customer_id", "reason", "router_id"],
     ),
     bridgeTransactionFeeLovelace: histogram(
       "transaction_fee_lovelace",
       "Lovelace paid per Cardano oracle update transaction (Cardano equivalent of EVM gas cost)",
-      ["symbol", "client_id", "customer_id"],
+      ["symbol", "client_id", "customer_id", "router_id"],
       [10_000, 50_000, 100_000, 200_000, 500_000, 1_000_000, 2_000_000],
     ),
     bridgeDbOperations: counter(

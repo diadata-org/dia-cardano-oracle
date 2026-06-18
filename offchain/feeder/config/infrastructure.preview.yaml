@@ -262,6 +262,41 @@ infrastructure:
     aligned_heartbeat: true
 
   # --------------------------------------------------------------------------
+  # feed_sanity — per-feed accuracy/freshness check (on-chain value vs the DIA
+  #   source). Its OWN clock, deliberately separate from cron_service and the
+  #   balance refresh so the cadence/naming are never conflated. The feeder runs
+  #   the check every `interval` and emits `feed_sanity_status` per feed
+  #   (0 = ok, 1 = suspect, 2 = broken); the FeedAccuracyFail alert watches it.
+  #   The same check is runnable on demand for QA/evidence: `npm run sanity:feeds`.
+  # --------------------------------------------------------------------------
+  feed_sanity:
+    enabled: true
+    # How often the feeder runs the per-feed sanity check. Independent of the
+    # cron tick and the balance-refresh cadence. Duration string ("5m").
+    interval: 5m
+    # Grace added to a feed's freshness ceiling (confirmation + clock skew) so a
+    # value read just before its heartbeat is not flagged stale.
+    freshness_grace_seconds: 120
+
+  # --------------------------------------------------------------------------
+  # notifications — Alertmanager delivery channels. OFF by default: alerts go
+  #   only to logs + the database (via the feeder webhook). Turn a channel on
+  #   with `enabled: true` here and put its SECRET in `.env` (never here):
+  #   Telegram bot token → ALERTMANAGER_TELEGRAM_BOT_TOKEN; SMTP password →
+  #   ALERTMANAGER_SMTP_PASSWORD. The generator writes these into
+  #   monitoring/alertmanager.yml on `make up`.
+  # --------------------------------------------------------------------------
+  notifications:
+    telegram:
+      enabled: false
+      chat_id: ""          # numeric chat/group id (bot token lives in .env)
+    email:
+      enabled: false
+      to: []               # recipient addresses
+      from: ""
+      smarthost: ""        # smtp host:port (user/password live in .env)
+
+  # --------------------------------------------------------------------------
   # alerting — canonical thresholds for both feeder-emitted warnings and
   #   Prometheus alert rules in monitoring/alerts.yml. Every alert rule in
   #   alerts.yml carries an inline comment naming the YAML key here; values

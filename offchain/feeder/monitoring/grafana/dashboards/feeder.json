@@ -17,7 +17,7 @@
   "annotations": {
     "list": []
   },
-  "description": "DIA Cardano Oracle Feeder — operational overview and M2 evidence",
+  "description": "DIA Cardano Oracle Feeder — operational overview",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -33,7 +33,7 @@
         "y": 0
       },
       "id": 200,
-      "title": "Oracle Feed Liveness — M2 Evidence (10 Asset Price Pairs)",
+      "title": "Oracle Feed Liveness (confirmed updates per pair)",
       "type": "row"
     },
     {
@@ -41,7 +41,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Cumulative count of confirmed Cardano oracle update transactions per price pair. Non-zero values for all 10 pairs confirm oracle liveness. This is the primary M2 evidence metric.",
+      "description": "Cumulative count of confirmed Cardano oracle update transactions per price pair. A non-zero, growing value for each active pair confirms oracle liveness.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -86,8 +86,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (symbol) (dia_bridge_transactions_confirmed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"})",
-          "legendFormat": "{{symbol}}",
+          "expr": "sum by (symbol, client_id) (dia_bridge_transactions_confirmed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"})",
+          "legendFormat": "{{symbol}} · {{client_id}}",
           "refId": "A"
         }
       ],
@@ -144,7 +144,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_age_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\"}[1h])))",
+          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_age_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", router_id=~\"$router\"}[1h])))",
           "legendFormat": "{{symbol}}",
           "refId": "A"
         }
@@ -214,8 +214,8 @@
       },
       "targets": [
         {
-          "expr": "time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}",
-          "legendFormat": "{{symbol}}",
+          "expr": "time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}",
+          "legendFormat": "{{symbol}} · {{client_id}}",
           "refId": "A"
         }
       ],
@@ -391,6 +391,11 @@
           "expr": "sum(dia_bridge_cardano_receiver_accrued_lovelace{network=~\"$network\"}) / 1000000",
           "legendFormat": "Receiver accrued (sum)",
           "refId": "C"
+        },
+        {
+          "expr": "sum by (client_id) (dia_bridge_cardano_receiver_accrued_lovelace{network=~\"$network\", client_id=~\"$client\"}) / 1000000",
+          "legendFormat": "Receiver accrued — {{client_id}}",
+          "refId": "D"
         }
       ],
       "title": "Admin wallet • PaymentHook • Receiver accrued — ADA",
@@ -553,17 +558,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[5m])))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -601,8 +606,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (symbol) (increase(dia_bridge_transactions_confirmed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[5m]))",
-          "legendFormat": "{{symbol}}",
+          "expr": "sum by (symbol, client_id) (increase(dia_bridge_transactions_confirmed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{symbol}} · {{client_id}}",
           "refId": "A"
         }
       ],
@@ -639,7 +644,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (error_code) (increase(dia_bridge_transactions_failed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", error_code=~\"$error_code\"}[5m]))",
+          "expr": "sum by (error_code) (increase(dia_bridge_transactions_failed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", error_code=~\"$error_code\", router_id=~\"$router\"}[5m]))",
           "legendFormat": "{{error_code}}",
           "refId": "A"
         }
@@ -802,7 +807,7 @@
       },
       "targets": [
         {
-          "expr": "sum(increase(dia_bridge_transactions_reorg_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[1h]))",
+          "expr": "sum(increase(dia_bridge_transactions_reorg_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[1h]))",
           "legendFormat": "reorgs / 1h",
           "refId": "A"
         }
@@ -878,7 +883,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (reason) (increase(dia_bridge_intents_filtered_total{network=~\"$network\", symbol=~\"$symbol\"}[5m]))",
+          "expr": "sum by (reason) (increase(dia_bridge_intents_filtered_total{network=~\"$network\", symbol=~\"$symbol\", router_id=~\"$router\"}[5m]))",
           "legendFormat": "{{reason}}",
           "refId": "A"
         }
@@ -948,8 +953,8 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket{network=~\"$network\", symbol=~\"$symbol\"}[1h])))",
-          "legendFormat": "{{symbol}}",
+          "expr": "histogram_quantile(0.95, sum by (le, symbol, router_id) (rate(dia_bridge_price_deviation_percent_bucket{network=~\"$network\", symbol=~\"$symbol\", router_id=~\"$router\"}[1h])))",
+          "legendFormat": "{{symbol}} · {{router_id}}",
           "refId": "A"
         }
       ],
@@ -989,8 +994,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (le, symbol) (rate(dia_bridge_price_deviation_percent_bucket{network=~\"$network\", symbol=~\"$symbol\"}[5m]))",
-          "legendFormat": "{{symbol}} le={{le}}",
+          "expr": "sum by (le, symbol, router_id) (rate(dia_bridge_price_deviation_percent_bucket{network=~\"$network\", symbol=~\"$symbol\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{symbol}} {{router_id}} le={{le}}",
           "refId": "A",
           "format": "heatmap"
         }
@@ -999,12 +1004,72 @@
       "type": "heatmap"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Per-feed sanity verdict from the periodic feed-sanity check: the live on-chain value vs the latest DIA source value, judged against that feed's push-policy thresholds. 0 = ok, 1 = suspect, 2 = broken. A value of 2 sustained triggers the FeedAccuracyFail alert. Inspect with `npm run sanity:feeds`.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 70
+      },
+      "id": 20,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "max by (symbol, client_id) (dia_bridge_feed_sanity_status{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"})",
+          "legendFormat": "{{symbol}} · {{client_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Feed sanity verdict (per pair)",
+      "type": "stat"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 70
+        "y": 78
       },
       "id": 104,
       "title": "Row 5 — Billing (per client / customer)",
@@ -1029,7 +1094,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 79
       },
       "id": 14,
       "options": {
@@ -1040,7 +1105,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, customer_id) (rate(dia_bridge_transaction_fee_lovelace_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le, customer_id) (rate(dia_bridge_transaction_fee_lovelace_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\", router_id=~\"$router\"}[5m])))",
           "legendFormat": "{{customer_id}}",
           "refId": "A"
         }
@@ -1067,7 +1132,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 79
+        "y": 87
       },
       "id": 16,
       "options": {
@@ -1095,7 +1160,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 87
+        "y": 95
       },
       "panels": []
     },
@@ -1150,7 +1215,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 96
       },
       "id": 203,
       "options": {

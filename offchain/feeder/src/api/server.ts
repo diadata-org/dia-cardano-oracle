@@ -31,6 +31,11 @@ import {
   buildEventByHashResponse,
 } from "./events.js";
 import { buildAlertsResponse, buildAlertResponse } from "./alerts.js";
+import {
+  normalizeAlertmanagerWebhook,
+  ingestNormalizedAlerts,
+  type AlertmanagerWebhook,
+} from "../alerting/webhook.js";
 import { buildPerformanceResponse } from "./performance.js";
 import { sanitizeLogLine } from "../utils/sanitize.js";
 import { apiRoutes } from "./routes.js";
@@ -92,6 +97,7 @@ type RouteMatch =
   | { endpoint: "/api/v1/alerts"; kind: "alerts" }
   | { endpoint: "/api/v1/alerts/:id"; kind: "alert-by-id"; id: string }
   | { endpoint: "/api/v1/alerts/:id/ack"; kind: "alert-ack"; id: string }
+  | { endpoint: "/api/v1/alerts/ingest"; kind: "alerts-ingest" }
   | { endpoint: "/api/v1/performance"; kind: "performance" }
   | { endpoint: "/api/v1/pools"; kind: "pools" }
   | { endpoint: "/api/v1/pools/:router_id/tasks"; kind: "pool-tasks"; routerId: string };
@@ -222,8 +228,9 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
 
     // Alert ack is POST — allow it before the GET-only gate.
     const isAlertAck = route?.kind === "alert-ack";
+    const isAlertsIngest = route?.kind === "alerts-ingest";
 
-    if (method !== "GET" && !(isAlertAck && method === "POST")) {
+    if (method !== "GET" && !((isAlertAck || isAlertsIngest) && method === "POST")) {
       sendJson(405, { error: "Method Not Allowed" });
       return;
     }
@@ -406,6 +413,47 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
           return;
         }
 
+        case "alerts-ingest": {
+          if (method !== "POST") {
+            sendJson(405, { error: "Method Not Allowed" });
+            return;
+          }
+          let payload: AlertmanagerWebhook;
+          try {
+            payload = (await readJsonBody(req)) as AlertmanagerWebhook;
+          } catch {
+            sendJson(400, { error: "Invalid JSON body" });
+            return;
+          }
+          const normalized = normalizeAlertmanagerWebhook(payload);
+          const summary = await ingestNormalizedAlerts(normalized, {
+            listActiveFingerprints: async () => {
+              const rows = await db.listAlerts({ active: true, limit: 1000 });
+              const out: Array<{ id: number; fingerprint: string }> = [];
+              for (const row of rows) {
+                try {
+                  const fp = (JSON.parse(row.labelsJson) as Record<string, string>).__fingerprint;
+                  if (fp) out.push({ id: row.id, fingerprint: fp });
+                } catch {
+                  /* skip rows whose labels are not parseable JSON */
+                }
+              }
+              return out;
+            },
+            record: (alert) =>
+              db.recordAlert({
+                name: alert.name,
+                severity: alert.severity,
+                message: alert.message,
+                labels: { ...alert.labels, __fingerprint: alert.fingerprint },
+              }),
+            resolve: (id, ms) => db.resolveAlert(id, ms),
+            nowMs: Date.now(),
+          });
+          sendJson(200, summary);
+          return;
+        }
+
         case "alert-by-id": {
           const alertId = parseInt(route.id, 10);
           if (isNaN(alertId)) {
@@ -514,6 +562,13 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
   };
 }
 
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  return raw ? JSON.parse(raw) : {};
+}
+
 function matchRoute(pathname: string): RouteMatch | null {
   if (pathname === "/health") return { endpoint: "/health", kind: "health" };
   if (pathname === "/health/live") return { endpoint: "/health/live", kind: "health-live" };
@@ -532,6 +587,7 @@ function matchRoute(pathname: string): RouteMatch | null {
   if (pathname === "/api/v1/events") return { endpoint: "/api/v1/events", kind: "events" };
   if (pathname === "/api/v1/events/names") return { endpoint: "/api/v1/events/names", kind: "event-names" };
   if (pathname === "/api/v1/alerts") return { endpoint: "/api/v1/alerts", kind: "alerts" };
+  if (pathname === "/api/v1/alerts/ingest") return { endpoint: "/api/v1/alerts/ingest", kind: "alerts-ingest" };
   if (pathname === "/api/v1/performance") return { endpoint: "/api/v1/performance", kind: "performance" };
   if (pathname === "/api/v1/pools") return { endpoint: "/api/v1/pools", kind: "pools" };
 

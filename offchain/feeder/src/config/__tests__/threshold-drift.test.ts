@@ -210,6 +210,16 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     );
   });
 
+  it("feed-sanity panel verdict colours match the FeedAccuracyFail boundary", () => {
+    // The verdict codes (0 ok / 1 suspect / 2 broken) are fixed, not a YAML threshold,
+    // but the panel's red step MUST equal the status the FeedAccuracyFail rule fires on
+    // (>= 2) so the chart and the alert can never silently diverge.
+    const { panels } = loadDashboard();
+    const p = panelByTitle(panels, "Feed sanity verdict (per pair)");
+    assert.equal(step(p, "yellow"), 1, "feed-sanity yellow step must be 1 (suspect)");
+    assert.equal(step(p, "red"), 2, "feed-sanity red step must be 2 (FeedAccuracyFail fires on status >= 2)");
+  });
+
   it("dashboard has no dead template variables (every filter var is wired to a panel)", () => {
     const dashboard = loadDashboard() as unknown as {
       templating: { list: Array<{ name: string }> };
@@ -249,6 +259,23 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     }
   });
 
+  it("internals dashboard (feeder-internals.json) has no dead template variables", () => {
+    const dashboard = loadDashboard("feeder-internals.json") as unknown as {
+      templating: { list: Array<{ name: string }> };
+      panels: Array<{ targets?: Array<{ expr?: string }> }>;
+    };
+    assert.deepEqual(
+      dashboard.templating.list.map((v) => v.name),
+      ["datasource", "network"],
+      "feeder-internals.json: remove unused template vars or wire them to a panel",
+    );
+    const exprs = dashboard.panels.flatMap((p) => (p.targets ?? []).map((t) => t.expr ?? ""));
+    assert.ok(
+      exprs.some((e) => e.includes("$network")),
+      "feeder-internals.json: template var $network is not referenced by any panel target expr",
+    );
+  });
+
   it("count panels show counts (increase), not per-second rates, grouped by the right label", () => {
     const { panels } = loadDashboard();
     const exprOf = (title: string): string => {
@@ -260,7 +287,7 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     };
     // title -> the label the panel aggregates by (`sum by (<group>)`).
     const countPanels: Array<{ title: string; group: string }> = [
-      { title: "Symbol updates confirmed (5m)", group: "symbol" },
+      { title: "Symbol updates confirmed (5m)", group: "symbol, client_id" },
       { title: "Symbol-update failures (5m, by error code)", group: "error_code" },
       { title: "Intents filtered (5m, by reason)", group: "reason" },
       { title: "Tx confirmed vs failed (5m)", group: "outcome" },

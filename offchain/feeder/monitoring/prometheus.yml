@@ -7,5 +7,22 @@ scrape_configs:
       - targets: ["feeder-sqlite:8080"]
     metrics_path: /metrics
 
+  # Alert-trigger Pushgateway (monitoring profile). Empty by default; the
+  # `scripts/monitoring/trigger-alert.sh` harness pushes synthetic metric values
+  # here to fire an alert on demand — the real rules + pipeline take it from there.
+  # `honor_labels: true` keeps the pushed labels instead of the pushgateway's own.
+  - job_name: alert-trigger-pushgateway
+    honor_labels: true
+    static_configs:
+      - targets: ["pushgateway:9091"]
+
 rule_files:
   - alerts.yml
+
+# Send firing alerts to Alertmanager (the monitoring-profile sidecar), which
+# routes them to the feeder webhook (→ alert_log) and, once enabled, to
+# Telegram / email.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
