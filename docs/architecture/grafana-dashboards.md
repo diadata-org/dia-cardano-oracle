@@ -527,6 +527,49 @@ Decomposes the end-to-end transaction time so you can tell **where** time is spe
 - **When to worry** — a non-trivial `failed` count → cross-check the failures-by-error-code panel
   and `make logs`.
 
+### Row T5 — Per-client queues & state
+
+One **client deployment = one serial submission lane = one Receiver UTxO**. Routers feed a lane;
+the building, submitting and queueing all happen at the lane (client) level — so these panels are
+keyed by **client**, not router (a single tx can batch several routers on one lane).
+
+**Tx counts per client (5m, confirmed/failed)** · `timeseries` · legend `{{client_id}} · {{outcome}}`
+`sum by (client_id, outcome) (increase(dia_bridge_transactions_total{…}[5m]))`
+
+- **What it shows** — real Cardano transactions per 5 min, per client and outcome — the clean
+  per-unit count (one tx batches one client's pairs).
+- **How to read it** — confirmed should dominate per client; reacts to Customer/Client (not Router).
+- **When to worry** — a client's confirmed line going flat, or a rising failed line.
+
+**Submission state per client** · `state-timeline`
+`dia_bridge_submission_state{…}` — 0 idle · 1 accumulating · 2 building · 3 submitting · 4 awaiting-confirmation
+
+- **What it shows** — what each client's lane is **doing over time**: idle, accumulating (coalescer
+  buffering), building, submitting, awaiting confirmation.
+- **How to read it** — a timeline, not a point-in-time light: lanes flip phases quickly, so the
+  history is what's legible. A healthy lane spends most time `idle`/`accumulating` with brief
+  build→submit→await bursts.
+- **When to worry** — a lane **stuck** in `building`/`submitting`/`awaiting-confirmation` (not
+  returning to idle) → a slow build, a provider stall, or a confirmation that never lands.
+
+**Coalescer buffered per client** · `timeseries` · legend `{{client_id}}`
+`sum by (client_id) (dia_bridge_coalescer_buffered{…})`
+
+- **What it shows** — intents buffered in the coalescer for each client, waiting for the flush that
+  batches them into one transaction.
+- **How to read it** — sawtooths: climbs as intents accumulate, drops to 0 on each flush.
+- **When to worry** — a value that **keeps climbing without dropping** → flushes are not firing
+  (check the submission-state timeline and the lane logs).
+
+**Submit queue pending per client** · `timeseries` · legend `{{client_id}}`
+`sum by (client_id) (dia_bridge_submit_queue_pending{…})`
+
+- **What it shows** — tasks waiting in each client's **serial submit queue** (already flushed from
+  the coalescer, waiting their turn to build/submit on that single Receiver lane).
+- **How to read it** — usually 0–1: the lane processes serially and fast.
+- **When to worry** — a sustained backlog (> a few) → submissions arrive faster than the lane
+  drains; pair it with the per-stage latency panels (Row T1).
+
 ## 6. Dashboard 3 — Internals (`dia-cardano-feeder-internals`)
 
 ![Internals dashboard — full dashboard](img/internals-full.png)

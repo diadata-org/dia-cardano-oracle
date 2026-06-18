@@ -932,8 +932,14 @@ surfaces most of the families in section A, split into **metrics with real data*
 `cardano_payment_hook_accrued_lovelace`, `cardano_admin_wallet_lovelace`,
 `cardano_oracle_last_confirmed_timestamp_seconds`, `transaction_fee_lovelace`.
 Per-transaction axis (`feeder-tx.json`): `transactions_total`, `transaction_pairs`,
-`tx_pair_membership_total`, `tx_processing_to_submission_seconds`,
+`tx_pair_membership_total`, `transaction_router_membership_total`,
+`tx_processing_to_submission_seconds`,
 `tx_submission_to_confirmation_seconds`, `tx_end_to_end_seconds`.
+Per-client lane (`feeder-tx.json`, "Per-client queues & state"): `submission_state`
+(0 idle / 1 accumulating / 2 building / 3 submitting / 4 awaiting-confirmation, one serial
+lane per client deployment / Receiver), `coalescer_buffered` (intents buffered before a
+flush), `submit_queue_pending` (tasks waiting in the serial submit queue). All labelled by
+`{client_id, customer_id}`.
 
 ### A — Missing, with real data (candidates to add)
 

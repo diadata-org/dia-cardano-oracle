@@ -209,6 +209,10 @@ PANELS_TX=(
   '322|Batch size distribution (heatmap)|Metric `sum by (le) (rate(dia_bridge_transaction_pairs_bucket[5m]))`, batch-size buckets. Heatmap of pairs-per-transaction over time; bright bands show the typical batch size.'
   '323|Tx touching pair (5m, by symbol & outcome)|Metric `sum by (symbol, outcome) (increase(dia_bridge_tx_pair_membership_total[5m]))` — one increment per (tx, pair). Filter by `$symbol` to find the transactions that included a given pair (their size is in "Pairs per tx"); carries confirmed vs failed and the customer dimension.'
   '331|Tx counts — confirmed vs failed (selected range)|The number of real Cardano oracle transactions over the window — how many confirmed on-chain and how many failed, counted once per transaction (one transaction can carry several price pairs).'
+  '341|Tx counts per client (5m, confirmed/failed)|Metric `sum by (client_id, outcome) (increase(dia_bridge_transactions_total[5m]))` — real transactions per 5 min by client (one serial submission lane / one Receiver) and outcome. A tx batches one client'"'"'s pairs, so the clean per-unit count is per client.'
+  '342|Submission state per client|Metric `dia_bridge_submission_state{client_id}` over time (0 idle, 1 accumulating, 2 building, 3 submitting, 4 awaiting-confirmation). State-timeline of what each client'"'"'s serial lane is doing.'
+  '343|Coalescer buffered per client|Metric `sum by (client_id) (dia_bridge_coalescer_buffered)` — intents buffered in the coalescer for each client, waiting for the flush that batches them into one transaction.'
+  '344|Submit queue pending per client|Metric `sum by (client_id) (dia_bridge_submit_queue_pending)` — tasks waiting in each client'"'"'s serial submit queue (already flushed, waiting their turn to build/submit on that Receiver lane).'
 )
 
 render_dashboard() {
