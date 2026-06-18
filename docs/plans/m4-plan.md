@@ -46,6 +46,15 @@ monitoring working together; documentation published on DIA's site.
 - [x] **Feeder service + CLI tooling exercised on Mainnet** (M2:
   `m2-mainnet-20260616-074413` — 10 DIA mainnet RWA feeds, 23 confirmed txs, 0 reorgs),
   plus the longer Preview QA/video run and `milestone-2-poa.md`.
+- [x] **Multi-router / multi-client operation, validated.** Multiple routing lanes can
+  share one client and multiple clients run side by side; configuration guard-rails reject
+  cross-client and symbol-collision misconfigurations
+  ([`config/__tests__/validate.test.ts`](../../offchain/feeder/src/config/__tests__/validate.test.ts)),
+  the per-lane serial queue enforces mutual exclusion between a client's updates, and
+  Preview exercises a two-lane client (majors / alts) plus a second client
+  (`client-test-02`) with single-transaction multi-receiver settle
+  ([`settle-manifest.ts`](../../offchain/cli/src/preflight/settle-manifest.ts)). Covered by
+  the feeder test suite (531 cases).
 - [x] **Monitoring stack** (M3 machinery): 3 dashboards, 13 alerts, Alertmanager →
   webhook → `alert_log` pipeline, per-feed sanity check. See [`m3-plan.md`](./m3-plan.md).
 

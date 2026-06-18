@@ -38,6 +38,14 @@ This is a status note, not a remediation document.
 - **Two additional DIA signing keys authorized.** The on-chain configuration was updated
   on mainnet to accept two more DIA signer keys, so the authorized signer set can grow
   without redeploying.
+- **Confirmed multi-feed and multi-client operation.** The system supports more than one
+  routing lane per client and more than one client running side by side, with guard-rails
+  that reject misconfigurations — two lanes claiming the same client, one client owned by
+  two customers, or two lanes publishing the same symbol into the same client. This is
+  covered by the feeder's automated test suite (531 test cases) and exercised on Preview
+  with one client split into two lanes (majors / alts) plus a second client; fee
+  settlement can drain several clients' balances in a single transaction, and a per-lane
+  serial queue guarantees one client's updates never collide with each other.
 - **Real alert delivery.** Previously the alerts were evaluated but did not actually reach
   anyone — they fired into an empty room. We added a proper delivery pipeline so every
   alert is recorded and can notify a human (e-mail / Telegram are one configuration switch
