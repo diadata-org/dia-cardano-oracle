@@ -112,6 +112,25 @@ exist today.
   but the root cause of the recurrent WASM build failures must be diagnosed and fixed so a
   long mainnet window can hit the 99.99% uptime bar. This is feeder code, not ops, and it
   is the **prerequisite** for any credible sustained-uptime number.
+- [ ] **Scan pipeline must survive a transient RPC rate-limit instead of exiting.** In the
+  Preview pack window the recurrent restarts were not the WASM guard — the last line before
+  every restart (21:31, 00:03, 02:32 UTC) was `daemon: scan pipeline failed — RPC Request
+  failed … Rate Limit Exceeded` from the DIA testnet RPC (`testnet-rpc.diadata.org`, a keyless
+  conduit.xyz node). A transient upstream rate-limit is treated as fatal, so the daemon exits
+  and Docker restarts it (~every 2.5 h). Fix: retry the scan read with backoff so a transient
+  RPC error never terminates the daemon. Parallel ops mitigation: provision an API key for the
+  DIA RPC.
+- [ ] **Reconcile the local UTxO view before building (stale-input failures).** The
+  `UtxoNotFound` failures in the pack are a single coalesced batch tx per lane (e.g. at
+  22:03:15: `batch submit failed: intents=10`), built against a UTxO already spent on-chain —
+  `BadInputsUTxO` / `TranslationLogicMissingInput` for a coin the local view still believed
+  existed (value short by the missing input). The lane serialization is correct (one batch per
+  lane); the gap is that after a restart / RPC turbulence the local chain-state tracking drifts,
+  so the next build selects a consumed UTxO. The daemon already logs the remedy ("chain state
+  may need reconciliation — run the feeder's reconcile step") but does not act on it. Fix:
+  refresh the tracked UTxO set before building, and auto-reconcile + rebuild on a
+  `BadInputsUTxO` rejection instead of failing the batch. Downstream of the scan-pipeline item
+  above — the restarts are what cause the drift.
 
 ### 3 · Sustained mainnet run + 99.99% uptime/accuracy evidence
 
