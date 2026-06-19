@@ -167,8 +167,7 @@ Cardano Mainnet.
 
 <https://youtu.be/W-vfgsoeXp4> — the real-time Grafana dashboards on the live mainnet run, the per-feed
 accuracy check, the alerting pipeline (Alertmanager UI + the `GET /api/v1/alerts` log), and
-an alert firing and clearing. (Recording guide:
-[`docs/plans/m3-demo-video-script.md`](../plans/m3-demo-video-script.md).)
+an alert firing and clearing. 
 
 ### 4.3. Local repro (feeder + monitoring)
 
