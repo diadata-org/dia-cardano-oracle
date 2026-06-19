@@ -3,7 +3,7 @@
 **Project:** DIA Oracles on Cardano
 **Milestone:** 3 — Implement Monitoring Library for DIA Oracles on Cardano
 **Public repository:** <https://github.com/diadata-org/dia-cardano-oracle>
-**Submission commit:** `<PENDIENTE: pin del commit de submission cuando se cierre>`
+**Submission commit:** `7749df66fa8953818d75945126dd2e4cb705a0f5`
 
 Primary evidence:
 
@@ -174,7 +174,7 @@ an alert firing and clearing. (Recording guide:
 
 ```bash
 git clone https://github.com/diadata-org/dia-cardano-oracle.git
-cd dia-cardano-oracle && git checkout <PENDIENTE: submission commit>
+cd dia-cardano-oracle && git checkout 7749df66fa8953818d75945126dd2e4cb705a0f5
 
 # Tests
 ( cd offchain/feeder && npm ci && npm test )
