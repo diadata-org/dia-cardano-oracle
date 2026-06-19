@@ -1,0 +1,8 @@
+[2026-06-18T22:33:12.979Z] [enriched] Intent enriched: XVG/USD @ 2552061750000000
+  meta: {"price":"2552061750000000","timestamp":"1781821991","expiry":"1781825591","blockNumber":13659543}
+[2026-06-18T22:33:12.979Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T22:33:12.980Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T22:33:55.113Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0x81daef78f13a3b8ebcc6c5c4d20dd357cbdf9a6a485c94af76e50ebfd6d0eadf"}

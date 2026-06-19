@@ -1,0 +1,22 @@
+[2026-06-18T20:27:11.331Z] [enriched] Intent enriched: ARB/USD @ 83961600050000008
+  meta: {"price":"83961600050000008","timestamp":"1781814429","expiry":"1781818029","blockNumber":13639117}
+[2026-06-18T20:27:11.331Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T20:27:11.332Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T20:27:45.455Z] [connecting] connecting
+[2026-06-18T20:27:52.574Z] [building] building
+[2026-06-18T20:27:56.149Z] [signing] signing
+  meta: {"txHash":"d00f46e7cf8dbeea978697975e1dd25a334e52bb23493f97f261b01ebec9df74"}
+[2026-06-18T20:27:57.615Z] [submitting] submitting
+  meta: {"txHash":"d00f46e7cf8dbeea978697975e1dd25a334e52bb23493f97f261b01ebec9df74"}
+[2026-06-18T20:27:57.891Z] [submitted] submitted
+  meta: {"txHash":"d00f46e7cf8dbeea978697975e1dd25a334e52bb23493f97f261b01ebec9df74"}
+[2026-06-18T20:27:57.903Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"d00f46e7cf8dbeea978697975e1dd25a334e52bb23493f97f261b01ebec9df74"}
+[2026-06-18T20:28:49.959Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"d00f46e7cf8dbeea978697975e1dd25a334e52bb23493f97f261b01ebec9df74"}
+[2026-06-18T20:28:57.877Z] [writing_state] writing_state
+  meta: {"txHash":"d00f46e7cf8dbeea978697975e1dd25a334e52bb23493f97f261b01ebec9df74"}
+[2026-06-18T20:29:01.185Z] [failed] Cardano transaction failed: Intent for ARB/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for ARB/USD superseded on chain; not submitted.","batchSize":1,"batchMembers":[{"intentHash":"0xe3f398f9381c893fed9def32f1e630cfe816dfb8c4d141ccc271cdf40038a7c9","symbol":"NEIRO/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","action":"update"}]}

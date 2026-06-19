@@ -1,0 +1,24 @@
+[2026-06-18T21:35:40.711Z] [enriched] Intent enriched: NEIRO/USD @ 66732500400000
+  meta: {"price":"66732500400000","timestamp":"1781818538","expiry":"1781822138","blockNumber":13650156}
+[2026-06-18T21:35:40.711Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T21:35:40.712Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T21:36:15.741Z] [connecting] connecting
+[2026-06-18T21:36:27.583Z] [building] building
+[2026-06-18T21:36:31.125Z] [signing] signing
+  meta: {"txHash":"813a73be7732ea641ff3b080d5993531466bf1b153e2df0d0223c0b3473858cd"}
+[2026-06-18T21:36:32.683Z] [submitting] submitting
+  meta: {"txHash":"813a73be7732ea641ff3b080d5993531466bf1b153e2df0d0223c0b3473858cd"}
+[2026-06-18T21:36:32.967Z] [submitted] submitted
+  meta: {"txHash":"813a73be7732ea641ff3b080d5993531466bf1b153e2df0d0223c0b3473858cd"}
+[2026-06-18T21:36:32.997Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"813a73be7732ea641ff3b080d5993531466bf1b153e2df0d0223c0b3473858cd"}
+[2026-06-18T21:37:01.125Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"813a73be7732ea641ff3b080d5993531466bf1b153e2df0d0223c0b3473858cd"}
+[2026-06-18T21:37:03.887Z] [writing_state] writing_state
+  meta: {"txHash":"813a73be7732ea641ff3b080d5993531466bf1b153e2df0d0223c0b3473858cd"}
+[2026-06-18T21:37:07.322Z] [batched] Intent confirmed inside a batch of 7 intents
+  meta: {"cardanoTxHash":"813a73be7732ea641ff3b080d5993531466bf1b153e2df0d0223c0b3473858cd","batchSize":7,"batchMembers":[{"intentHash":"0x85b2b960b804c2e254290ba73b49c4f4fa54c54f56949782fffd4932c829f13a","symbol":"ARB/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902dfafb09cf4921baf2478651f0d7072b3a0df58b6c434443d32511927fa7919fb","action":"update"},{"intentHash":"0x59e5f1356e55d1cba959ab7f532156ab696b6b8686b3720e7b08a24e9f6ab495","symbol":"USDT/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9025ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315","action":"update"},{"intentHash":"0xaf5b00b565cdfb3db4fd4340b9f52c3edd05798e48b51a70394059bcc563c294","symbol":"NEIRO/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","action":"update"},{"intentHash":"0xa0e0f9906daa9dc3c18c73b2a8de54ab14b1f3738f7f5e780d1eb919a13e2757","symbol":"XVG/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902e6643031cebf937d080904cd1e6dd3d5aebcac06fc08dc15de991ade67363588","action":"update"},{"intentHash":"0x453fb3da9ff5b2a2c811dac93241a50938456904a99926a0dfe3fe3ee74c2f44","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0x7136f2779b71fdac56baeeed902efff83cd2fd7f92356b8ca3aa6dd2d03bf458","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0x8e41259fbf7e9ce78debbc33de2a059d77edba0e3f9234cbf07458aba6d484ae","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"}],"pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","pairAction":"update"}
+[2026-06-18T21:37:07.323Z] [confirm] Cardano batch transaction confirmed
+  meta: {"cardanoTxHash":"813a73be7732ea641ff3b080d5993531466bf1b153e2df0d0223c0b3473858cd","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","pairAction":"update","batchSize":7}

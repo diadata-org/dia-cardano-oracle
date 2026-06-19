@@ -1,0 +1,28 @@
+[2026-06-18T23:33:40.134Z] [enriched] Intent enriched: NEIRO/USD @ 66811102924999
+  meta: {"price":"66811102924999","timestamp":"1781825618","expiry":"1781829218","blockNumber":13669689}
+[2026-06-18T23:33:40.134Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T23:33:40.135Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T23:34:54.300Z] [connecting] connecting
+[2026-06-18T23:35:01.292Z] [building] building
+[2026-06-18T23:35:04.496Z] [signing] signing
+  meta: {"txHash":"c3c938b5ffad600db796fc6f50fadacdd7c815b4a9407962c8c455c5afe2aed6"}
+[2026-06-18T23:35:05.995Z] [submitting] submitting
+  meta: {"txHash":"c3c938b5ffad600db796fc6f50fadacdd7c815b4a9407962c8c455c5afe2aed6"}
+[2026-06-18T23:35:11.255Z] [connecting] connecting
+[2026-06-18T23:35:17.734Z] [building] building
+[2026-06-18T23:35:20.666Z] [signing] signing
+  meta: {"txHash":"53fe6cb17918398150bb0da116311367a86a86ddc2dde888b2730100e11142bd"}
+[2026-06-18T23:35:22.148Z] [submitting] submitting
+  meta: {"txHash":"53fe6cb17918398150bb0da116311367a86a86ddc2dde888b2730100e11142bd"}
+[2026-06-18T23:35:22.426Z] [submitted] submitted
+  meta: {"txHash":"53fe6cb17918398150bb0da116311367a86a86ddc2dde888b2730100e11142bd"}
+[2026-06-18T23:35:22.432Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"53fe6cb17918398150bb0da116311367a86a86ddc2dde888b2730100e11142bd"}
+[2026-06-18T23:36:48.988Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"53fe6cb17918398150bb0da116311367a86a86ddc2dde888b2730100e11142bd"}
+[2026-06-18T23:36:54.489Z] [writing_state] writing_state
+  meta: {"txHash":"53fe6cb17918398150bb0da116311367a86a86ddc2dde888b2730100e11142bd"}
+[2026-06-18T23:36:57.905Z] [confirm] Cardano transaction confirmed
+  meta: {"cardanoTxHash":"53fe6cb17918398150bb0da116311367a86a86ddc2dde888b2730100e11142bd","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","pairAction":"update","batchSize":1}

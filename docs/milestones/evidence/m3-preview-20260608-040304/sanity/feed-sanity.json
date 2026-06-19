@@ -1,6 +1,6 @@
 {
   "network": "Preview",
-  "generatedAtSec": 1781809438,
+  "generatedAtSec": 1781838100,
   "total": 5,
   "pass": 5,
   "warn": 0,
@@ -9,36 +9,36 @@
     {
       "symbol": "BTC/USD",
       "status": "PASS",
-      "deviationPct": 0,
-      "stalenessSec": 104,
+      "deviationPct": 0.003614,
+      "stalenessSec": 350,
       "reasons": []
     },
     {
       "symbol": "ETH/USD",
       "status": "PASS",
-      "deviationPct": 0.008234,
-      "stalenessSec": 104,
+      "deviationPct": 0,
+      "stalenessSec": 350,
       "reasons": []
     },
     {
       "symbol": "USDC/USD",
       "status": "PASS",
-      "deviationPct": 0,
-      "stalenessSec": 103,
+      "deviationPct": 0.000498,
+      "stalenessSec": 350,
       "reasons": []
     },
     {
       "symbol": "USDT/USD",
       "status": "PASS",
-      "deviationPct": 0.000083,
-      "stalenessSec": 154,
+      "deviationPct": 0.001251,
+      "stalenessSec": 309,
       "reasons": []
     },
     {
       "symbol": "DOGE/USD",
       "status": "PASS",
-      "deviationPct": 0.019097,
-      "stalenessSec": 103,
+      "deviationPct": 0.008815,
+      "stalenessSec": 350,
       "reasons": []
     }
   ]

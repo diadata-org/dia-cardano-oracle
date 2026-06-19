@@ -1,0 +1,16 @@
+[2026-06-19T00:01:52.826Z] [connecting] connecting
+[2026-06-19T00:01:58.692Z] [building] building
+[2026-06-19T00:02:03.639Z] [signing] signing
+  meta: {"txHash":"ea17a64ba2b0cd793977af0f083187d45f6e98a3af8abad36fd04d4013c4c012"}
+[2026-06-19T00:02:05.116Z] [submitting] submitting
+  meta: {"txHash":"ea17a64ba2b0cd793977af0f083187d45f6e98a3af8abad36fd04d4013c4c012"}
+[2026-06-19T00:02:05.385Z] [submitted] submitted
+  meta: {"txHash":"ea17a64ba2b0cd793977af0f083187d45f6e98a3af8abad36fd04d4013c4c012"}
+[2026-06-19T00:02:05.385Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"ea17a64ba2b0cd793977af0f083187d45f6e98a3af8abad36fd04d4013c4c012"}
+[2026-06-19T00:02:30.114Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"ea17a64ba2b0cd793977af0f083187d45f6e98a3af8abad36fd04d4013c4c012"}
+[2026-06-19T00:02:35.006Z] [writing_state] writing_state
+  meta: {"txHash":"ea17a64ba2b0cd793977af0f083187d45f6e98a3af8abad36fd04d4013c4c012"}
+[2026-06-19T00:02:37.715Z] [confirm] Cardano transaction confirmed
+  meta: {"cardanoTxHash":"ea17a64ba2b0cd793977af0f083187d45f6e98a3af8abad36fd04d4013c4c012","pairUnit":"02435906b5bf2ebac57a72d8d5609aa7f642b5e0e4d79666e0b1a2938a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","pairAction":"update","batchSize":1}

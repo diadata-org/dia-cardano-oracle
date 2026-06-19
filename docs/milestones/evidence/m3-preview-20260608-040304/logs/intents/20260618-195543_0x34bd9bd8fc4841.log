@@ -1,0 +1,20 @@
+[2026-06-18T19:55:43.197Z] [connecting] connecting
+[2026-06-18T19:55:51.473Z] [building] building
+[2026-06-18T19:55:54.833Z] [signing] signing
+  meta: {"txHash":"255071202a7ae21e665097e0497cf6ee600e146ee5d715541ca1db220e2f5938"}
+[2026-06-18T19:55:56.308Z] [submitting] submitting
+  meta: {"txHash":"255071202a7ae21e665097e0497cf6ee600e146ee5d715541ca1db220e2f5938"}
+[2026-06-18T19:55:56.607Z] [submitted] submitted
+  meta: {"txHash":"255071202a7ae21e665097e0497cf6ee600e146ee5d715541ca1db220e2f5938"}
+[2026-06-18T19:55:56.612Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"255071202a7ae21e665097e0497cf6ee600e146ee5d715541ca1db220e2f5938"}
+[2026-06-18T19:56:39.671Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"255071202a7ae21e665097e0497cf6ee600e146ee5d715541ca1db220e2f5938"}
+[2026-06-18T19:56:43.081Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xdfea33c413ac8c3cfe88a84102c544417a2127f78cbd6f01444301c831efa482"}
+[2026-06-18T19:56:45.144Z] [writing_state] writing_state
+  meta: {"txHash":"255071202a7ae21e665097e0497cf6ee600e146ee5d715541ca1db220e2f5938"}
+[2026-06-18T19:56:48.600Z] [batched] Intent confirmed inside a batch of 4 intents
+  meta: {"cardanoTxHash":"255071202a7ae21e665097e0497cf6ee600e146ee5d715541ca1db220e2f5938","batchSize":4,"batchMembers":[{"intentHash":"0x4a2f611cebedfd85e461f4d46db3b88dbff341c9aa73c85e3fb852a003781aa8","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0x793d972f6bcdbf1f690333301a4eae1937cc861dc82fa69003208eca9c0b7459","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0x34bd9bd8fc484192ba1e5829355bfbd30a9a41bcabb80c71b5a899b85777bd77","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0x47d6d87e2dd520f4cf7ab4582c95031aab525577ad688ad33af46c709cbdeb34","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"}],"pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","pairAction":"update"}
+[2026-06-18T19:56:48.601Z] [confirm] Cardano batch transaction confirmed
+  meta: {"cardanoTxHash":"255071202a7ae21e665097e0497cf6ee600e146ee5d715541ca1db220e2f5938","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","pairAction":"update","batchSize":4}

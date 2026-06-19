@@ -1,0 +1,18 @@
+[2026-06-18T22:36:16.008Z] [connecting] connecting
+[2026-06-18T22:36:22.103Z] [building] building
+[2026-06-18T22:36:25.192Z] [signing] signing
+  meta: {"txHash":"9eb994426afe27cfea0799518b51041cf7eac0fb67731111010d824bd67a8498"}
+[2026-06-18T22:36:26.644Z] [submitting] submitting
+  meta: {"txHash":"9eb994426afe27cfea0799518b51041cf7eac0fb67731111010d824bd67a8498"}
+[2026-06-18T22:36:26.929Z] [submitted] submitted
+  meta: {"txHash":"9eb994426afe27cfea0799518b51041cf7eac0fb67731111010d824bd67a8498"}
+[2026-06-18T22:36:26.930Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"9eb994426afe27cfea0799518b51041cf7eac0fb67731111010d824bd67a8498"}
+[2026-06-18T22:36:43.011Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"9eb994426afe27cfea0799518b51041cf7eac0fb67731111010d824bd67a8498"}
+[2026-06-18T22:36:47.862Z] [writing_state] writing_state
+  meta: {"txHash":"9eb994426afe27cfea0799518b51041cf7eac0fb67731111010d824bd67a8498"}
+[2026-06-18T22:36:51.240Z] [batched] Intent confirmed inside a batch of 2 intents
+  meta: {"cardanoTxHash":"9eb994426afe27cfea0799518b51041cf7eac0fb67731111010d824bd67a8498","batchSize":2,"batchMembers":[{"intentHash":"0x31a148ccd8e592391ad74be9cd6e8fc95c29436a78d16cdee057dfb291fe902e","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0x02c7c02d186b90ad9a3d93a0c980baabe3779968af83e5a07495e30fb6f5cd55","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"}],"pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","pairAction":"update"}
+[2026-06-18T22:36:51.241Z] [confirm] Cardano batch transaction confirmed
+  meta: {"cardanoTxHash":"9eb994426afe27cfea0799518b51041cf7eac0fb67731111010d824bd67a8498","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","pairAction":"update","batchSize":2}

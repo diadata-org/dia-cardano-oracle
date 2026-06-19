@@ -10,7 +10,7 @@ Pack stamp: **20260608-040304**
 Window observed in `transactions.jsonl`:
 
 - First tx event: `2026-06-18T15:28:02.422Z`
-- Last tx event:  `2026-06-18T18:59:02.014Z`
+- Last tx event:  `2026-06-19T02:57:06.612Z`
 
 Evidence pack location: this directory.
 
@@ -68,56 +68,47 @@ feed's own push-policy thresholds (price tolerance + freshness ceiling).
 
 | Symbol | Status | Deviation % | Staleness (s) | Reasons |
 |--------|--------|-------------|---------------|---------|
-| BTC/USD | PASS | 0 | 104 | — |
-| ETH/USD | PASS | 0.008234 | 104 | — |
-| USDC/USD | PASS | 0 | 103 | — |
-| USDT/USD | PASS | 0.000083 | 154 | — |
-| DOGE/USD | PASS | 0.019097 | 103 | — |
+| BTC/USD | PASS | 0.003614 | 350 | — |
+| ETH/USD | PASS | 0 | 350 | — |
+| USDC/USD | PASS | 0.000498 | 350 | — |
+| USDT/USD | PASS | 0.001251 | 309 | — |
+| DOGE/USD | PASS | 0.008815 | 350 | — |
 
 ## Alert-trigger logs
 
-A run of `scripts/monitoring/trigger-alert-demo.sh` fired each alert through the live pipeline and captured the transitions. The full timeline and per-alert snapshots (Prometheus state + feeder `alert_log` + dashboard PNGs) are under [`alert-trigger/`](alert-trigger/timeline.md).
+_No alert-trigger run was folded into this pack. Generate one against the live monitoring stack and re-run with `ALERT_TRIGGER_DIR` pointing at its output:_
 
-# Alert-trigger logs — Preview
+```sh
+cd offchain && make up MONITORING=1
+cd feeder && scripts/monitoring/trigger-alert-demo.sh        # fires the safe set
+# then: ALERT_TRIGGER_DIR=docs/milestones/evidence/alert-trigger-<net>-<stamp> make evidence3
+```
 
-Each alert below was fired by pushing a synthetic value for its metric to the
-Pushgateway (`trigger-alert.sh`). The value crosses the real threshold from
-`monitoring/alerts.yml`, so the genuine rule fires and flows through the live
-pipeline (Prometheus → Alertmanager → feeder webhook → `alert_log`). Only the
-input metric is synthetic; the rules, routing, and recording are production.
-
-Run stamp: **20260618-063047** · Prometheus: http://localhost:9090 · feeder: http://localhost:8080
-
-| Alert | Pushed at | Reached `firing` | Cleared at | Resolved | Prometheus | alert_log |
-| --- | --- | --- | --- | --- | --- | --- |
-| OraclePairStale | 2026-06-18T06:30:47Z | 0s | 2026-06-18T06:30:50Z | yes (15s) | [`OraclePairStale-prometheus.json`](OraclePairStale-prometheus.json) | [`OraclePairStale-alertlog.json`](OraclePairStale-alertlog.json) |
-| ReceiverBalanceLow | 2026-06-18T06:31:05Z | 360s | 2026-06-18T06:37:14Z | yes (55s) | [`ReceiverBalanceLow-prometheus.json`](ReceiverBalanceLow-prometheus.json) | [`ReceiverBalanceLow-alertlog.json`](ReceiverBalanceLow-alertlog.json) |
-| FeedAccuracyFail | 2026-06-18T06:38:09Z | 655s | 2026-06-18T06:49:16Z | yes (60s) | [`FeedAccuracyFail-prometheus.json`](FeedAccuracyFail-prometheus.json) | [`FeedAccuracyFail-alertlog.json`](FeedAccuracyFail-alertlog.json) |
-| SettleOverdue | 2026-06-18T06:50:17Z | not within 720s | 2026-06-18T07:02:29Z | yes (0s) | [`SettleOverdue-prometheus.json`](SettleOverdue-prometheus.json) | [`SettleOverdue-alertlog.json`](SettleOverdue-alertlog.json) |
-| ReceiverDepositsPending | 2026-06-18T07:02:30Z | 645s | 2026-06-18T07:13:26Z | yes (60s) | [`ReceiverDepositsPending-prometheus.json`](ReceiverDepositsPending-prometheus.json) | [`ReceiverDepositsPending-alertlog.json`](ReceiverDepositsPending-alertlog.json) |
+_Each alert is fired by pushing its metric to the Pushgateway; the real rule fires and flows through Prometheus → Alertmanager → the feeder webhook → `alert_log`._
 
 ## Totals (this window)
 
 | Metric | Value |
 | --- | ---: |
-| Confirmed Cardano oracle update txs | 86 |
-| Failed Cardano tx attempts (real, tx broadcast) | 568 |
-| Condemned intents (NonMonotonicNonce — no tx, no fee) | 49 |
+| Confirmed Cardano oracle update txs | 406 |
+| Failed Cardano tx attempts (real, tx broadcast) | 614 |
+| Condemned intents (NonMonotonicNonce — no tx, no fee) | 139 |
 | Chain reorgs that dropped a tx | 0 |
 
 ## Confirmed Cardano tx count per pair
 
 | Pair | Confirmed txs |
 | --- | --- |
-| BTC/USD | 27 |
-| USDT/USD | 25 |
-| DOGE/USD | 9 |
-| USDC/USD | 9 |
-| NEIRO/USD | 6 |
-| ARB/USD | 4 |
-| ETH/USD | 2 |
-| LTC/USD | 2 |
+| BTC/USD | 214 |
+| USDT/USD | 97 |
+| DOGE/USD | 27 |
+| USDC/USD | 26 |
+| NEIRO/USD | 13 |
+| ETH/USD | 11 |
+| LTC/USD | 9 |
+| ARB/USD | 6 |
 | XVG/USD | 2 |
+| SHIB/USD | 1 |
 
 ## Sample Cardano tx hashes (one per pair, first observed)
 
@@ -129,6 +120,7 @@ Run stamp: **20260618-063047** · Prometheus: http://localhost:9090 · feeder: h
 | ETH/USD | 26aa9c92fb59e96a3e7566e31d0c39db777206583c38eddf94f2055c92373a40 |
 | LTC/USD | c714078f231fe3fa1941a3a05bebaa858145d147302eb7ffb383aed4100bada9 |
 | NEIRO/USD | df8bdf52ee4c0854ffe196d21810fa43d8b65b3131fdadfc41dbee686e08c995 |
+| SHIB/USD | 68e2a72c6677009edd2b52ce3d0bb23d0b45dc143bdebbc2b3cdcc4d0b10cec0 |
 | USDC/USD | 6aaa5e7d40bd49ab81aba8c6e6da00b37c0fc74aff68e1916297bc77cfbfc450 |
 | USDT/USD | 99e476119eb5553584149f1d38990db2f8a71fdca99ef50d58cb58086f388fb3 |
 | XVG/USD | dce9161eb82278b21d3e69206268efae36b18a0496185499e356183e8bc8724c |
@@ -142,15 +134,16 @@ DIA `IntentRegistered` → Cardano `tx_confirmed`, milliseconds.
 
 | Pair | Samples | p50 (ms) | p95 (ms) |
 | --- | --- | --- | --- |
-| DOGE/USD | 8 | 52646 | 112409 |
-| ARB/USD | 3 | 38720 | 50486 |
-| USDT/USD | 24 | 42075 | 89202 |
-| NEIRO/USD | 5 | 51056 | 60839 |
-| BTC/USD | 26 | 40938 | 77670 |
-| ETH/USD | 1 | 37888 | 37888 |
-| LTC/USD | 1 | 26172 | 26172 |
+| DOGE/USD | 26 | 48034 | 112409 |
+| ARB/USD | 5 | 38720 | 51554 |
+| USDT/USD | 96 | 46946 | 112421 |
+| NEIRO/USD | 12 | 53258 | 106608 |
+| BTC/USD | 213 | 49761 | 113212 |
+| ETH/USD | 10 | 49167 | 86555 |
+| LTC/USD | 8 | 44229 | 143201 |
+| SHIB/USD | 0 | 0 | 0 |
 | XVG/USD | 1 | 81192 | 81192 |
-| USDC/USD | 8 | 50903 | 91000 |
+| USDC/USD | 25 | 43344 | 76223 |
 
 ## Failures (grouped by error code)
 
@@ -162,7 +155,7 @@ An empty table means there were no real failures in this run.
 | Error code | Count |
 | --- | --- |
 | BuilderError | 567 |
-| UtxoNotFound | 1 |
+| UtxoNotFound | 47 |
 
 ## Raw artefacts in this pack
 
@@ -544,6 +537,8 @@ remediation lives in `alerts.yml` and the [feeder README](../../../../offchain/f
 
 ### Active at capture time
 
-No alerts were firing or pending at capture time — all feeds healthy. The raw snapshot is in
-[`alerts-active.json`](./alerts-active.json). (Pending/firing transitions over the window are
-also recorded in the feeder `alert_log` table — see `db/`.)
+Captured live from Prometheus `/api/v1/alerts` (raw: [`alerts-active.json`](./alerts-active.json)):
+
+| Alert | State | Key labels | Value | Active since |
+| --- | --- | --- | --- | --- |
+| SettleOverdue | firing | client_id=client-test-01, run_dir=preview_run_20260608-040304 | 2.455e+01 | 2026-06-19T02:36:50.29264446Z |

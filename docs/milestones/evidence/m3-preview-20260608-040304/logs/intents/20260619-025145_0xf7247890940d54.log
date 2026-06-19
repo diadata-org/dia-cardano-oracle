@@ -1,0 +1,36 @@
+[2026-06-19T02:51:45.649Z] [connecting] connecting
+[2026-06-19T02:51:53.999Z] [building] building
+[2026-06-19T02:51:57.653Z] [signing] signing
+  meta: {"txHash":"5364b96503086f89e33a06492803b56d0c499fb20829542bd3764b8eb65f1558"}
+[2026-06-19T02:51:59.134Z] [submitting] submitting
+  meta: {"txHash":"5364b96503086f89e33a06492803b56d0c499fb20829542bd3764b8eb65f1558"}
+[2026-06-19T02:52:04.409Z] [connecting] connecting
+[2026-06-19T02:52:12.652Z] [building] building
+[2026-06-19T02:52:15.127Z] [signing] signing
+  meta: {"txHash":"7f5e1cb6db53d53a65685d24ee84329420859cdc20cd9a593c9bf500beb44836"}
+[2026-06-19T02:52:16.615Z] [submitting] submitting
+  meta: {"txHash":"7f5e1cb6db53d53a65685d24ee84329420859cdc20cd9a593c9bf500beb44836"}
+[2026-06-19T02:52:21.886Z] [connecting] connecting
+[2026-06-19T02:52:30.101Z] [building] building
+[2026-06-19T02:52:33.306Z] [signing] signing
+  meta: {"txHash":"4dc6531df0ee8e9211eec95bb1713654dd038e73bc6c4d8e45beafc9c1c7903a"}
+[2026-06-19T02:52:34.821Z] [submitting] submitting
+  meta: {"txHash":"4dc6531df0ee8e9211eec95bb1713654dd038e73bc6c4d8e45beafc9c1c7903a"}
+[2026-06-19T02:52:40.084Z] [connecting] connecting
+[2026-06-19T02:52:47.551Z] [building] building
+[2026-06-19T02:52:50.724Z] [signing] signing
+  meta: {"txHash":"4e99a76564d21de1fbbc66fe234b2989f9db132d772a35d48696b7c36b0fc72c"}
+[2026-06-19T02:52:52.199Z] [submitting] submitting
+  meta: {"txHash":"4e99a76564d21de1fbbc66fe234b2989f9db132d772a35d48696b7c36b0fc72c"}
+[2026-06-19T02:52:52.507Z] [submitted] submitted
+  meta: {"txHash":"4e99a76564d21de1fbbc66fe234b2989f9db132d772a35d48696b7c36b0fc72c"}
+[2026-06-19T02:52:52.507Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"4e99a76564d21de1fbbc66fe234b2989f9db132d772a35d48696b7c36b0fc72c"}
+[2026-06-19T02:53:08.750Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"4e99a76564d21de1fbbc66fe234b2989f9db132d772a35d48696b7c36b0fc72c"}
+[2026-06-19T02:53:15.850Z] [writing_state] writing_state
+  meta: {"txHash":"4e99a76564d21de1fbbc66fe234b2989f9db132d772a35d48696b7c36b0fc72c"}
+[2026-06-19T02:53:19.460Z] [batched] Intent confirmed inside a batch of 4 intents
+  meta: {"cardanoTxHash":"4e99a76564d21de1fbbc66fe234b2989f9db132d772a35d48696b7c36b0fc72c","batchSize":4,"batchMembers":[{"intentHash":"0x74e9d66c2442d64371a19eb0e6e0dee8ef3013766957e4433127e06ed2380eea","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0xab1b01e42e2cda5e137f81185c6703fc3e63501972aaf1406c70d823e8fbe4a6","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0x3c2f342d060cc12e5dc45f43154df4776349fe92717a5527cb31e95d371f9fd3","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0xf7247890940d54d609b08d36f5323f16e4b6943de5179c75270778d1ee800206","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"}],"pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","pairAction":"update"}
+[2026-06-19T02:53:19.461Z] [confirm] Cardano batch transaction confirmed
+  meta: {"cardanoTxHash":"4e99a76564d21de1fbbc66fe234b2989f9db132d772a35d48696b7c36b0fc72c","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","pairAction":"update","batchSize":4}

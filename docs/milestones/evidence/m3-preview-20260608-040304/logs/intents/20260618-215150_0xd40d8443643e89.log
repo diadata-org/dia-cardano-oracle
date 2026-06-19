@@ -1,0 +1,28 @@
+[2026-06-18T21:51:50.953Z] [enriched] Intent enriched: USDT/USD @ 998850000000000000
+  meta: {"price":"998850000000000000","timestamp":"1781819509","expiry":"1781823109","blockNumber":13652797}
+[2026-06-18T21:51:50.953Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T21:51:50.954Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T21:52:03.470Z] [connecting] connecting
+[2026-06-18T21:52:12.239Z] [building] building
+[2026-06-18T21:52:15.299Z] [signing] signing
+  meta: {"txHash":"e99bc7f64ae9793d19d3ea4537c73627111dbf6c926c44f53f4fe52a98f3999c"}
+[2026-06-18T21:52:16.744Z] [submitting] submitting
+  meta: {"txHash":"e99bc7f64ae9793d19d3ea4537c73627111dbf6c926c44f53f4fe52a98f3999c"}
+[2026-06-18T21:52:22.002Z] [connecting] connecting
+[2026-06-18T21:52:30.911Z] [building] building
+[2026-06-18T21:52:34.207Z] [signing] signing
+  meta: {"txHash":"9af50ae66af54cf8d776a71473af0d04bdbc018e31baf96fe6990fd56446f8c0"}
+[2026-06-18T21:52:35.677Z] [submitting] submitting
+  meta: {"txHash":"9af50ae66af54cf8d776a71473af0d04bdbc018e31baf96fe6990fd56446f8c0"}
+[2026-06-18T21:52:35.976Z] [submitted] submitted
+  meta: {"txHash":"9af50ae66af54cf8d776a71473af0d04bdbc018e31baf96fe6990fd56446f8c0"}
+[2026-06-18T21:52:35.976Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"9af50ae66af54cf8d776a71473af0d04bdbc018e31baf96fe6990fd56446f8c0"}
+[2026-06-18T21:53:39.956Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"9af50ae66af54cf8d776a71473af0d04bdbc018e31baf96fe6990fd56446f8c0"}
+[2026-06-18T21:53:44.745Z] [writing_state] writing_state
+  meta: {"txHash":"9af50ae66af54cf8d776a71473af0d04bdbc018e31baf96fe6990fd56446f8c0"}
+[2026-06-18T21:53:48.103Z] [failed] Cardano transaction failed: Intent for USDT/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for USDT/USD superseded on chain; not submitted.","batchSize":4,"batchMembers":[{"intentHash":"0x760fc41f1f1d8a10acde6a2555ad05f7ab1717a66fb681c2e31407e57117f509","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0xa6576764938e0c81cd62a05b91ade775e04907467278404afd14abdf65c1c187","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0x3801fcedd1a1415a8229e751812e73420696336ef951dc0be1fc08d48530a072","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0xe9cb0ae19266f797944b8fde9f11ec9422109810c0456fb7dfdd0b09557a1d7a","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"}]}

@@ -1,0 +1,8 @@
+[2026-06-18T23:33:02.811Z] [enriched] Intent enriched: NEIRO/USD @ 66803945299999
+  meta: {"price":"66803945299999","timestamp":"1781825580","expiry":"1781829180","blockNumber":13669587}
+[2026-06-18T23:33:02.811Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-18T23:33:02.814Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T23:33:40.139Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xe412717f318faaf274699d4995858048e5aad38da2b80de3f46f94113b1f40d4"}

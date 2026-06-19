@@ -1,0 +1,22 @@
+[2026-06-18T23:56:42.614Z] [enriched] Intent enriched: USDT/USD @ 998940000000000000
+  meta: {"price":"998940000000000000","timestamp":"1781827000","expiry":"1781830600","blockNumber":13673605}
+[2026-06-18T23:56:42.614Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T23:56:42.615Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T23:56:53.823Z] [connecting] connecting
+[2026-06-18T23:57:03.004Z] [building] building
+[2026-06-18T23:57:11.211Z] [signing] signing
+  meta: {"txHash":"c284a8edbafe7c31a0801d579ae3d2b912abdedab65267318f3fa6c523351340"}
+[2026-06-18T23:57:13.288Z] [submitting] submitting
+  meta: {"txHash":"c284a8edbafe7c31a0801d579ae3d2b912abdedab65267318f3fa6c523351340"}
+[2026-06-18T23:57:13.588Z] [submitted] submitted
+  meta: {"txHash":"c284a8edbafe7c31a0801d579ae3d2b912abdedab65267318f3fa6c523351340"}
+[2026-06-18T23:57:13.589Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"c284a8edbafe7c31a0801d579ae3d2b912abdedab65267318f3fa6c523351340"}
+[2026-06-19T00:00:34.793Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"c284a8edbafe7c31a0801d579ae3d2b912abdedab65267318f3fa6c523351340"}
+[2026-06-19T00:00:44.990Z] [writing_state] writing_state
+  meta: {"txHash":"c284a8edbafe7c31a0801d579ae3d2b912abdedab65267318f3fa6c523351340"}
+[2026-06-19T00:00:48.414Z] [failed] Cardano transaction failed: Intent for USDT/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for USDT/USD superseded on chain; not submitted.","batchSize":3,"batchMembers":[{"intentHash":"0xe67319094716505ade6721ab1f91c6eb980ea7f388b92a2e9c901d4333c04db6","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0x6dc402cbbff35687c64e57a78c25f401df613a0f22da1a85fd0ba1281ca643d4","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0x30415797e18ebc7ccb4cb428e711355ef229d0ecef62efd9394eb21f279b9b7a","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"}]}

@@ -1,0 +1,8 @@
+[2026-06-18T19:43:16.712Z] [enriched] Intent enriched: USDC/USD @ 999718720000000000
+  meta: {"price":"999718720000000000","timestamp":"1781811795","expiry":"1781815395","blockNumber":13632013}
+[2026-06-18T19:43:16.712Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T19:43:16.713Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T19:43:53.860Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xfcfed262245f91213159e082f6ac7336f4d3d497cd9ff11ae426995a07e0e3c2"}

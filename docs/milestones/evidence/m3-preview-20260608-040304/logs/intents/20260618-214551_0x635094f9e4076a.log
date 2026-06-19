@@ -1,0 +1,32 @@
+[2026-06-18T21:45:51.701Z] [connecting] connecting
+[2026-06-18T21:45:57.665Z] [building] building
+[2026-06-18T21:46:01.307Z] [signing] signing
+  meta: {"txHash":"8037dc7ae1f0b824ef8418fbb108d47de7dff00cb0f47bb17d386bea98ccd8c1"}
+[2026-06-18T21:46:02.783Z] [submitting] submitting
+  meta: {"txHash":"8037dc7ae1f0b824ef8418fbb108d47de7dff00cb0f47bb17d386bea98ccd8c1"}
+[2026-06-18T21:46:03.064Z] [submitted] submitted
+  meta: {"txHash":"8037dc7ae1f0b824ef8418fbb108d47de7dff00cb0f47bb17d386bea98ccd8c1"}
+[2026-06-18T21:46:03.064Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"8037dc7ae1f0b824ef8418fbb108d47de7dff00cb0f47bb17d386bea98ccd8c1"}
+[2026-06-18T21:46:34.196Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"8037dc7ae1f0b824ef8418fbb108d47de7dff00cb0f47bb17d386bea98ccd8c1"}
+[2026-06-18T21:46:39.166Z] [writing_state] writing_state
+  meta: {"txHash":"8037dc7ae1f0b824ef8418fbb108d47de7dff00cb0f47bb17d386bea98ccd8c1"}
+[2026-06-18T21:46:42.640Z] [confirm] Cardano transaction confirmed
+  meta: {"cardanoTxHash":"8037dc7ae1f0b824ef8418fbb108d47de7dff00cb0f47bb17d386bea98ccd8c1","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9025ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315","pairAction":"update","batchSize":1}
+[2026-06-18T21:46:42.642Z] [connecting] connecting
+[2026-06-18T21:46:51.538Z] [building] building
+[2026-06-18T21:46:54.717Z] [signing] signing
+  meta: {"txHash":"04155b8af6072930fc94c20994527322e1e67b25a8a5953805cffe6c8debdd38"}
+[2026-06-18T21:46:56.196Z] [submitting] submitting
+  meta: {"txHash":"04155b8af6072930fc94c20994527322e1e67b25a8a5953805cffe6c8debdd38"}
+[2026-06-18T21:46:56.491Z] [submitted] submitted
+  meta: {"txHash":"04155b8af6072930fc94c20994527322e1e67b25a8a5953805cffe6c8debdd38"}
+[2026-06-18T21:46:56.497Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"04155b8af6072930fc94c20994527322e1e67b25a8a5953805cffe6c8debdd38"}
+[2026-06-18T21:47:15.609Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"04155b8af6072930fc94c20994527322e1e67b25a8a5953805cffe6c8debdd38"}
+[2026-06-18T21:47:23.939Z] [writing_state] writing_state
+  meta: {"txHash":"04155b8af6072930fc94c20994527322e1e67b25a8a5953805cffe6c8debdd38"}
+[2026-06-18T21:47:27.326Z] [failed] Cardano transaction failed: Intent for USDT/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for USDT/USD superseded on chain; not submitted.","batchSize":4,"batchMembers":[{"intentHash":"0xf9f5cdf9d14896c54cc3142e8231f4dcddca6de49c2dbcd5991fdb0d1e3d4047","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0xdbcca5c065358266b9349e751aa4ebea13169acb838583c9f0465d8f8086457b","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0x8933a25548fa9930d93e37f16cce1f225d2b1d0e2b184e0fdf127b032fbcc91f","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0x1ec84145d1d754ba6356d19cbcbfd1db71a241c97252e962f271188f699b3169","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"}]}

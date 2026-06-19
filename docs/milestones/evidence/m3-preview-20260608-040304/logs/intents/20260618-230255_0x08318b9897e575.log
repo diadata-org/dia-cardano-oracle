@@ -1,0 +1,22 @@
+[2026-06-18T23:02:55.338Z] [enriched] Intent enriched: USDC/USD @ 999739036800000128
+  meta: {"price":"999739036800000128","timestamp":"1781823773","expiry":"1781827373","blockNumber":13664410}
+[2026-06-18T23:02:55.338Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T23:02:55.339Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T23:03:25.378Z] [connecting] connecting
+[2026-06-18T23:03:34.259Z] [building] building
+[2026-06-18T23:03:37.563Z] [signing] signing
+  meta: {"txHash":"96d67cd0067b75839c4978b0b67482d160ce2abd5cb351a7cb9ffb9749194e5e"}
+[2026-06-18T23:03:39.029Z] [submitting] submitting
+  meta: {"txHash":"96d67cd0067b75839c4978b0b67482d160ce2abd5cb351a7cb9ffb9749194e5e"}
+[2026-06-18T23:03:39.322Z] [submitted] submitted
+  meta: {"txHash":"96d67cd0067b75839c4978b0b67482d160ce2abd5cb351a7cb9ffb9749194e5e"}
+[2026-06-18T23:03:39.323Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"96d67cd0067b75839c4978b0b67482d160ce2abd5cb351a7cb9ffb9749194e5e"}
+[2026-06-18T23:03:58.393Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"96d67cd0067b75839c4978b0b67482d160ce2abd5cb351a7cb9ffb9749194e5e"}
+[2026-06-18T23:04:03.826Z] [writing_state] writing_state
+  meta: {"txHash":"96d67cd0067b75839c4978b0b67482d160ce2abd5cb351a7cb9ffb9749194e5e"}
+[2026-06-18T23:04:07.295Z] [failed] Cardano transaction failed: Intent for USDC/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for USDC/USD superseded on chain; not submitted.","batchSize":2,"batchMembers":[{"intentHash":"0x2130fda3ddb5e31abb5856f4ddee046196fc049e4a93fd57740dbe46d6a6c7b0","symbol":"LTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90201f8ca4f564d04963a1ffccbb3f49da8bf09c0373f278d84047413cf09399650","action":"update"},{"intentHash":"0xcf3e33d94345bb3bbbd636f41d3d19b240620f8aabddbf46101053cf6e863e3c","symbol":"ARB/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902dfafb09cf4921baf2478651f0d7072b3a0df58b6c434443d32511927fa7919fb","action":"update"}]}

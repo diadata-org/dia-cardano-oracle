@@ -1,0 +1,28 @@
+[2026-06-19T02:03:13.510Z] [enriched] Intent enriched: ARB/USD @ 85754477277652312
+  meta: {"price":"85754477277652312","timestamp":"1781834591","expiry":"1781838191","blockNumber":13695170}
+[2026-06-19T02:03:13.510Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-19T02:03:13.511Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-19T02:03:24.619Z] [connecting] connecting
+[2026-06-19T02:03:38.782Z] [building] building
+[2026-06-19T02:03:42.297Z] [signing] signing
+  meta: {"txHash":"016fb36b91869133decf53b6a67ac54b261cf33691aa573b8c9df4cc80edb997"}
+[2026-06-19T02:03:43.777Z] [submitting] submitting
+  meta: {"txHash":"016fb36b91869133decf53b6a67ac54b261cf33691aa573b8c9df4cc80edb997"}
+[2026-06-19T02:03:48.156Z] [connecting] connecting
+[2026-06-19T02:04:02.249Z] [building] building
+[2026-06-19T02:04:05.865Z] [signing] signing
+  meta: {"txHash":"4676f0603cc047d97a2509b6e649ab062bf5ce1d92d632af011e87b9b8fa992f"}
+[2026-06-19T02:04:07.397Z] [submitting] submitting
+  meta: {"txHash":"4676f0603cc047d97a2509b6e649ab062bf5ce1d92d632af011e87b9b8fa992f"}
+[2026-06-19T02:04:07.742Z] [submitted] submitted
+  meta: {"txHash":"4676f0603cc047d97a2509b6e649ab062bf5ce1d92d632af011e87b9b8fa992f"}
+[2026-06-19T02:04:07.751Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"4676f0603cc047d97a2509b6e649ab062bf5ce1d92d632af011e87b9b8fa992f"}
+[2026-06-19T02:04:20.114Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"4676f0603cc047d97a2509b6e649ab062bf5ce1d92d632af011e87b9b8fa992f"}
+[2026-06-19T02:04:28.151Z] [writing_state] writing_state
+  meta: {"txHash":"4676f0603cc047d97a2509b6e649ab062bf5ce1d92d632af011e87b9b8fa992f"}
+[2026-06-19T02:04:31.664Z] [failed] Cardano transaction failed: Intent for ARB/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for ARB/USD superseded on chain; not submitted.","batchSize":7,"batchMembers":[{"intentHash":"0x1db9a087648c82cda05f0b78efca4207f2b185c5f8d0e9570e5f1617415b243a","symbol":"NEIRO/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","action":"update"},{"intentHash":"0x5bb43e8f7dae14bd2cf95bab1d9fd738bdec211ed121f4bf91e816c2cecdeeab","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0x00c17dfe3a5c206c382af58bd98d57b5f35c44c4019a4388d0bbb2c5842e7dbc","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0x15c9f448ee0a2e60c8064ec099a7c6e29e6739b5fe84a8f028d417bbd36bac04","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0x4c498a1e0b4a5dda6d6d46b7df3a94a0fde63dd6ecef5fee4fe915e6457970fe","symbol":"LTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90201f8ca4f564d04963a1ffccbb3f49da8bf09c0373f278d84047413cf09399650","action":"update"},{"intentHash":"0x3d729ecbab01434a9a8d23d2abaf5c2504d038a4efdedfc50a984cccf7a0a8e4","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"},{"intentHash":"0x17c2cdb9cea550ad15b46f8bfe9f5887eb0643fb72c7d1f3ea9cc56a04587f09","symbol":"SHIB/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902406a90956881e5fbe476ff634fd41235fb114c833053daebd4af3b30c0bde839","action":"update"}]}

@@ -1,0 +1,22 @@
+[2026-06-18T23:32:27.466Z] [enriched] Intent enriched: BTC/USD @ 62769310508371190743040
+  meta: {"price":"62769310508371190743040","timestamp":"1781825545","expiry":"1781829145","blockNumber":13669483}
+[2026-06-18T23:32:27.466Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T23:32:27.467Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T23:32:41.787Z] [connecting] connecting
+[2026-06-18T23:32:55.704Z] [building] building
+[2026-06-18T23:32:59.123Z] [signing] signing
+  meta: {"txHash":"a9711eef2bd205d07db97f6b0fec27f59e18e8b489e478b1c1ee5fd31010a7a5"}
+[2026-06-18T23:33:00.611Z] [submitting] submitting
+  meta: {"txHash":"a9711eef2bd205d07db97f6b0fec27f59e18e8b489e478b1c1ee5fd31010a7a5"}
+[2026-06-18T23:33:00.877Z] [submitted] submitted
+  meta: {"txHash":"a9711eef2bd205d07db97f6b0fec27f59e18e8b489e478b1c1ee5fd31010a7a5"}
+[2026-06-18T23:33:00.923Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"a9711eef2bd205d07db97f6b0fec27f59e18e8b489e478b1c1ee5fd31010a7a5"}
+[2026-06-18T23:33:31.994Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"a9711eef2bd205d07db97f6b0fec27f59e18e8b489e478b1c1ee5fd31010a7a5"}
+[2026-06-18T23:33:40.293Z] [writing_state] writing_state
+  meta: {"txHash":"a9711eef2bd205d07db97f6b0fec27f59e18e8b489e478b1c1ee5fd31010a7a5"}
+[2026-06-18T23:33:43.449Z] [failed] Cardano transaction failed: Intent for BTC/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for BTC/USD superseded on chain; not submitted.","batchSize":6,"batchMembers":[{"intentHash":"0x863be914fe394884392bd30a61b889800f36f82ec3c59d8941df0d6b2a21d6fe","symbol":"LTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90201f8ca4f564d04963a1ffccbb3f49da8bf09c0373f278d84047413cf09399650","action":"update"},{"intentHash":"0x6d66c58da0cd80b62729332e1b34ccc74e6a71bbf303a269780148305aaf5f2e","symbol":"SHIB/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902406a90956881e5fbe476ff634fd41235fb114c833053daebd4af3b30c0bde839","action":"update"},{"intentHash":"0x4651ca6582cd3e0d89fbcb16e18ea9e103de8138e37f1ebdc617ac9b18564444","symbol":"NEIRO/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902a8c0b97b231afaebc42d067a57b139abb4a8631e36c7f81cee6a30173e22b6b2","action":"update"},{"intentHash":"0x2b1f071dd14e33f2c71d6a6b742c67206af8a526b4ce635eb332d7b425c68762","symbol":"USDT/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9025ec9fa6a8337c83985882517e4865a68763912f37490cffe992a26abfd29d315","action":"update"},{"intentHash":"0x99fecd50d2ce90e7608ae8c22ee9f8f939796dce45da37cc219310f22f84cc93","symbol":"ARB/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902dfafb09cf4921baf2478651f0d7072b3a0df58b6c434443d32511927fa7919fb","action":"update"},{"intentHash":"0xe7754255f3cdb0fd7b4247ea67e89002dbc2dd95f0e9f074f6a9bb29a2144cc0","symbol":"XVG/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902e6643031cebf937d080904cd1e6dd3d5aebcac06fc08dc15de991ade67363588","action":"update"}]}

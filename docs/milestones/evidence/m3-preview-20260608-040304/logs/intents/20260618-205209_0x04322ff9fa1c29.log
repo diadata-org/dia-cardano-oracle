@@ -1,0 +1,30 @@
+[2026-06-18T20:52:09.329Z] [enriched] Intent enriched: BTC/USD @ 63053219711409484464128
+  meta: {"price":"63053219711409484464128","timestamp":"1781815918","expiry":"1781819518","blockNumber":13643061}
+[2026-06-18T20:52:09.329Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0}
+[2026-06-18T20:52:09.511Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-02.json"}
+[2026-06-18T20:52:40.661Z] [connecting] connecting
+[2026-06-18T20:52:46.085Z] [building] building
+[2026-06-18T20:52:51.457Z] [signing] signing
+  meta: {"txHash":"8d3051fade36611c6db96a814b7cce5b17f86be5152616b822b36b37e2de36a1"}
+[2026-06-18T20:52:52.916Z] [submitting] submitting
+  meta: {"txHash":"8d3051fade36611c6db96a814b7cce5b17f86be5152616b822b36b37e2de36a1"}
+[2026-06-18T20:52:54.013Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0x2559e8d0959e2c2eb7598bd7cf9e1fefa8f84f2de4928207c8794af445fe60d1"}
+[2026-06-18T20:52:58.062Z] [connecting] connecting
+[2026-06-18T20:53:03.463Z] [building] building
+[2026-06-18T20:53:08.736Z] [signing] signing
+  meta: {"txHash":"905618f8432646679547d85e4ccc636cacc2473f39fad4fefedbb79d7b53f4f6"}
+[2026-06-18T20:53:10.244Z] [submitting] submitting
+  meta: {"txHash":"905618f8432646679547d85e4ccc636cacc2473f39fad4fefedbb79d7b53f4f6"}
+[2026-06-18T20:53:10.518Z] [submitted] submitted
+  meta: {"txHash":"905618f8432646679547d85e4ccc636cacc2473f39fad4fefedbb79d7b53f4f6"}
+[2026-06-18T20:53:10.518Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"905618f8432646679547d85e4ccc636cacc2473f39fad4fefedbb79d7b53f4f6"}
+[2026-06-18T20:53:23.768Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"905618f8432646679547d85e4ccc636cacc2473f39fad4fefedbb79d7b53f4f6"}
+[2026-06-18T20:53:28.579Z] [writing_state] writing_state
+  meta: {"txHash":"905618f8432646679547d85e4ccc636cacc2473f39fad4fefedbb79d7b53f4f6"}
+[2026-06-18T20:53:31.941Z] [confirm] Cardano transaction confirmed
+  meta: {"cardanoTxHash":"905618f8432646679547d85e4ccc636cacc2473f39fad4fefedbb79d7b53f4f6","pairUnit":"02435906b5bf2ebac57a72d8d5609aa7f642b5e0e4d79666e0b1a2938a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","pairAction":"update","batchSize":1}

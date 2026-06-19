@@ -13,12 +13,18 @@ Mostrá el dashboard overview y señalá estos panels (nombres exactos):
 
 ## 2. Logs mainnet en vivo (terminal) — ~30s
 
+`docker logs` solo trae eventos de alto nivel (arranque, cron, submit, confirm) — son
+raros, así que casi no se mueve. La actividad en tiempo real (el scanner leyendo la
+cadena de DIA cada pocos segundos) va al **archivo de log**, que es el que se mueve:
+
 ```bash
-docker logs -f --tail 30 dia-feeder-mainnet-feeder-sqlite-1 2>&1 \
-  | grep --line-buffered -iE 'ARS/USDT|submit:|Confirmed by Blockfrost|cron-service'
+tail -f offchain/state/mainnet_run_20260616-074413/logs/feeder.log \
+  | grep --line-buffered -iE 'scanner-http|scanner-ws|ARS/USDT|submit:|Confirmed by Blockfrost|cron-service'
 ```
 
-Se ve el ciclo real: `cron-service: resubmitting ARS/USDT` → `submit: … ARS/USDT` → `Confirmed by Blockfrost … ARS/USDT`. (Prueba que procesa feeds en vivo.)
+Se ven las líneas de `scanner-http`/`scanner-ws` fluyendo (el feeder escaneando la
+fuente DIA en vivo) y, cuando toca, el ciclo de ARS/USDT: `submit: … ARS/USDT` →
+`Confirmed by Blockfrost … ARS/USDT`. (Prueba que procesa feeds en tiempo real.)
 
 ## 3. Feed health / accuracy (terminal) — ~30s
 

@@ -1,0 +1,10 @@
+[2026-06-18T21:11:35.237Z] [enriched] Intent enriched: BTC/USD @ 63038084163000000839680
+  meta: {"price":"63038084163000000839680","timestamp":"1781817093","expiry":"1781820693","blockNumber":13646198}
+[2026-06-18T21:11:35.237Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0}
+[2026-06-18T21:11:35.238Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-02.json"}
+[2026-06-18T21:11:57.933Z] [connecting] connecting
+[2026-06-18T21:12:03.392Z] [building] building
+[2026-06-18T21:12:03.409Z] [failed] Cardano transaction failed: Oracle intent nonce must be greater than the current on-chain nonce; intent superseded, not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Oracle intent nonce must be greater than the current on-chain nonce; intent superseded, not submitted.","batchSize":1}

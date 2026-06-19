@@ -1,0 +1,50 @@
+[2026-06-18T23:41:55.702Z] [enriched] Intent enriched: BTC/USD @ 62797131761500005859328
+  meta: {"price":"62797131761500005859328","timestamp":"1781826109","expiry":"1781829709","blockNumber":13671072}
+[2026-06-18T23:41:55.702Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0}
+[2026-06-18T23:41:55.758Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_02_router_default","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-02.json"}
+[2026-06-18T23:41:56.427Z] [connecting] connecting
+[2026-06-18T23:42:01.798Z] [building] building
+[2026-06-18T23:42:06.265Z] [signing] signing
+  meta: {"txHash":"ecfadf3055e536b29905920dbc4747ebc79ebaca46a3c991ddc15eab263e4296"}
+[2026-06-18T23:42:07.776Z] [submitting] submitting
+  meta: {"txHash":"ecfadf3055e536b29905920dbc4747ebc79ebaca46a3c991ddc15eab263e4296"}
+[2026-06-18T23:42:13.027Z] [connecting] connecting
+[2026-06-18T23:42:18.489Z] [building] building
+[2026-06-18T23:42:23.458Z] [signing] signing
+  meta: {"txHash":"ecfadf3055e536b29905920dbc4747ebc79ebaca46a3c991ddc15eab263e4296"}
+[2026-06-18T23:42:24.929Z] [submitting] submitting
+  meta: {"txHash":"ecfadf3055e536b29905920dbc4747ebc79ebaca46a3c991ddc15eab263e4296"}
+[2026-06-18T23:42:30.183Z] [connecting] connecting
+[2026-06-18T23:42:34.976Z] [building] building
+[2026-06-18T23:42:40.033Z] [signing] signing
+  meta: {"txHash":"ecfadf3055e536b29905920dbc4747ebc79ebaca46a3c991ddc15eab263e4296"}
+[2026-06-18T23:42:41.502Z] [submitting] submitting
+  meta: {"txHash":"ecfadf3055e536b29905920dbc4747ebc79ebaca46a3c991ddc15eab263e4296"}
+[2026-06-18T23:42:46.774Z] [connecting] connecting
+[2026-06-18T23:42:52.170Z] [building] building
+[2026-06-18T23:42:57.243Z] [signing] signing
+  meta: {"txHash":"ecfadf3055e536b29905920dbc4747ebc79ebaca46a3c991ddc15eab263e4296"}
+[2026-06-18T23:42:58.721Z] [submitting] submitting
+  meta: {"txHash":"ecfadf3055e536b29905920dbc4747ebc79ebaca46a3c991ddc15eab263e4296"}
+[2026-06-18T23:42:58.996Z] [failed] Cardano transaction failed: Error: {"contents":{"contents":{"contents":{"era":"ShelleyBasedEraConway","error":["ConwayUtxowFailure (UtxoFailure (InsufficientCollateral (DeltaCoin (-167469620)) (Coin 1318182)))","ConwayUtxowFailure (UtxoFailure (IncorrectTotalCollateralField (DeltaCoin (-167469620)) (Coin 5000000)))","ConwayUtxowFailure (UtxoFailure NoCollateralInputs)","ConwayUtxowFailure (UtxoFailure (BadInputsUTxO (NonEmptySet (fromList [TxIn (TxId {unTxId = SafeHash \"633691b9f0c98e2f6fb5d6a8699bb43561f9451a7617dad3507d07c0349ca0f8\"}) (TxIx {unTxIx = 2})]))))","ConwayUtxowFailure (UtxoFailure (ValueNotConservedUTxO Mismatch (RelEQ) {supplied: MaryValue (Coin 9978800000) (MultiAsset (fromList [(PolicyID {policyID = ScriptHash \"02435906b5bf2ebac57a72d8d5609aa7f642b5e0e4d79666e0b1a293\"},fromList [(\"8a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497\",1)]),(PolicyID {policyID = ScriptHash \"8621de3a416050365e18f7a200b99add3544491eb7d471cfad83913c\"},fromList [(\"4449415f52454345495645525f434c49454e545f544553545f3032\",1)])])), expected: MaryValue (Coin 10151269620) (MultiAsset (fromList [(PolicyID {policyID = ScriptHash \"02435906b5bf2ebac57a72d8d5609aa7f642b5e0e4d79666e0b1a293\"},fromList [(\"8a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497\",1)]),(PolicyID {policyID = ScriptHash \"8621de3a416050365e18f7a200b99add3544491eb7d471cfad83913c\"},fromList [(\"4449415f52454345495645525f434c49454e545f544553545f3032\",1)])]))}))","ConwayUtxowFailure (UtxoFailure (UtxosFailure (CollectErrors (BadTranslation (BabbageContextError (AlonzoContextError (TranslationLogicMissingInput (TxIn (TxId {unTxId = SafeHash \"633691b9f0c98e2f6fb5d6a8699bb43561f9451a7617dad3507d07c0349ca0f8\"}) (TxIx {unTxIx = 2}))))) :| []))))"],"kind":"ShelleyTxValidationError"},"tag":"TxValidationErrorInCardanoMode"},"tag":"TxCmdTxSubmitValidationError"},"tag":"TxSubmitFail"}
+  meta: {"code":"UtxoNotFound","remediation":"A required script UTxO could not be found on-chain. The chain state may need reconciliation — run the feeder's reconcile step.","error":"Error: {\"contents\":{\"contents\":{\"contents\":{\"era\":\"ShelleyBasedEraConway\",\"error\":[\"ConwayUtxowFailure (UtxoFailure (InsufficientCollateral (DeltaCoin (-167469620)) (Coin 1318182)))\",\"ConwayUtxowFailure (UtxoFailure (IncorrectTotalCollateralField (DeltaCoin (-167469620)) (Coin 5000000)))\",\"ConwayUtxowFailure (UtxoFailure NoCollateralInputs)\",\"ConwayUtxowFailure (UtxoFailure (BadInputsUTxO (NonEmptySet (fromList [TxIn (TxId {unTxId = SafeHash \\\"633691b9f0c98e2f6fb5d6a8699bb43561f9451a7617dad3507d07c0349ca0f8\\\"}) (TxIx {unTxIx = 2})]))))\",\"ConwayUtxowFailure (UtxoFailure (ValueNotConservedUTxO Mismatch (RelEQ) {supplied: MaryValue (Coin 9978800000) (MultiAsset (fromList [(PolicyID {policyID = ScriptHash \\\"02435906b5bf2ebac57a72d8d5609aa7f642b5e0e4d79666e0b1a293\\\"},fromList [(\\\"8a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497\\\",1)]),(PolicyID {policyID = ScriptHash \\\"8621de3a416050365e18f7a200b99add3544491eb7d471cfad83913c\\\"},fromList [(\\\"4449415f52454345495645525f434c49454e545f544553545f3032\\\",1)])])), expected: MaryValue (Coin 10151269620) (MultiAsset (fromList [(PolicyID {policyID = ScriptHash \\\"02435906b5bf2ebac57a72d8d5609aa7f642b5e0e4d79666e0b1a293\\\"},fromList [(\\\"8a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497\\\",1)]),(PolicyID {policyID = ScriptHash \\\"8621de3a416050365e18f7a200b99add3544491eb7d471cfad83913c\\\"},fromList [(\\\"4449415f52454345495645525f434c49454e545f544553545f3032\\\",1)])]))}))\",\"ConwayUtxowFailure (UtxoFailure (UtxosFailure (CollectErrors (BadTranslation (BabbageContextError (AlonzoContextError (TranslationLogicMissingInput (TxIn (TxId {unTxId = SafeHash \\\"633691b9f0c98e2f6fb5d6a8699bb43561f9451a7617dad3507d07c0349ca0f8\\\"}) (TxIx {unTxIx = 2}))))) :| []))))\"],\"kind\":\"ShelleyTxValidationError\"},\"tag\":\"TxValidationErrorInCardanoMode\"},\"tag\":\"TxCmdTxSubmitValidationError\"},\"tag\":\"TxSubmitFail\"}","batchSize":1}
+[2026-06-18T23:43:20.059Z] [connecting] connecting
+[2026-06-18T23:43:28.057Z] [building] building
+[2026-06-18T23:43:37.563Z] [signing] signing
+  meta: {"txHash":"a7ca9e534ecbfafc360bcb41249514b2a0bf2a6a3da3f9ff51a12b78ec0bd1ee"}
+[2026-06-18T23:43:39.374Z] [submitting] submitting
+  meta: {"txHash":"a7ca9e534ecbfafc360bcb41249514b2a0bf2a6a3da3f9ff51a12b78ec0bd1ee"}
+[2026-06-18T23:43:39.853Z] [submitted] submitted
+  meta: {"txHash":"a7ca9e534ecbfafc360bcb41249514b2a0bf2a6a3da3f9ff51a12b78ec0bd1ee"}
+[2026-06-18T23:43:39.874Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"a7ca9e534ecbfafc360bcb41249514b2a0bf2a6a3da3f9ff51a12b78ec0bd1ee"}
+[2026-06-18T23:44:28.472Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"a7ca9e534ecbfafc360bcb41249514b2a0bf2a6a3da3f9ff51a12b78ec0bd1ee"}
+[2026-06-18T23:44:35.788Z] [writing_state] writing_state
+  meta: {"txHash":"a7ca9e534ecbfafc360bcb41249514b2a0bf2a6a3da3f9ff51a12b78ec0bd1ee"}
+[2026-06-18T23:44:39.182Z] [batched] Intent confirmed inside a batch of 4 intents
+  meta: {"cardanoTxHash":"a7ca9e534ecbfafc360bcb41249514b2a0bf2a6a3da3f9ff51a12b78ec0bd1ee","batchSize":4,"batchMembers":[{"intentHash":"0x5ee75066e0c280ce967b92ae70d1bb89e5a16ac7d86a928461539d7265c838a0","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0x6fc2d00b97d3c0fb6bfbda2863f0f285f050f63d784875460dcfe4fcf660329b","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0x0e7c15ad2df463ed92cf91fb74af7afd698f6bf764e8a448c4c78f430f88202f","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0xc54a8eeb2d702a938c715b720b2eaf309809cf33f9649e31fd9e373399be86d7","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"}],"pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","pairAction":"update"}
+[2026-06-18T23:44:39.182Z] [confirm] Cardano batch transaction confirmed
+  meta: {"cardanoTxHash":"a7ca9e534ecbfafc360bcb41249514b2a0bf2a6a3da3f9ff51a12b78ec0bd1ee","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","pairAction":"update","batchSize":4}

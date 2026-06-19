@@ -1,0 +1,28 @@
+[2026-06-18T20:11:43.096Z] [enriched] Intent enriched: ETH/USD @ 1700413953212500017152
+  meta: {"price":"1700413953212500017152","timestamp":"1781813501","expiry":"1781817101","blockNumber":13636630}
+[2026-06-18T20:11:43.096Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T20:11:43.097Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T20:11:43.566Z] [connecting] connecting
+[2026-06-18T20:11:50.962Z] [building] building
+[2026-06-18T20:11:54.170Z] [signing] signing
+  meta: {"txHash":"6fe053112af2d3c838f62db1279d492305bea8630b3a3e3e8d6e5f782f2a0a72"}
+[2026-06-18T20:11:55.632Z] [submitting] submitting
+  meta: {"txHash":"6fe053112af2d3c838f62db1279d492305bea8630b3a3e3e8d6e5f782f2a0a72"}
+[2026-06-18T20:12:00.919Z] [connecting] connecting
+[2026-06-18T20:12:08.022Z] [building] building
+[2026-06-18T20:12:11.198Z] [signing] signing
+  meta: {"txHash":"de143d300b9a44ea53d2333993b020ab092479231c70d4312f4cf72a387797d1"}
+[2026-06-18T20:12:12.666Z] [submitting] submitting
+  meta: {"txHash":"de143d300b9a44ea53d2333993b020ab092479231c70d4312f4cf72a387797d1"}
+[2026-06-18T20:12:13.023Z] [submitted] submitted
+  meta: {"txHash":"de143d300b9a44ea53d2333993b020ab092479231c70d4312f4cf72a387797d1"}
+[2026-06-18T20:12:13.023Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"de143d300b9a44ea53d2333993b020ab092479231c70d4312f4cf72a387797d1"}
+[2026-06-18T20:12:29.376Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"de143d300b9a44ea53d2333993b020ab092479231c70d4312f4cf72a387797d1"}
+[2026-06-18T20:12:37.344Z] [writing_state] writing_state
+  meta: {"txHash":"de143d300b9a44ea53d2333993b020ab092479231c70d4312f4cf72a387797d1"}
+[2026-06-18T20:12:40.724Z] [failed] Cardano transaction failed: Intent for ETH/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for ETH/USD superseded on chain; not submitted.","batchSize":1,"batchMembers":[{"intentHash":"0xeb1a76eb10d4da0010dc904f24bc6810492784a1c58ce99af494af8685097051","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"}]}

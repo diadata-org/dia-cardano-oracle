@@ -1,0 +1,22 @@
+[2026-06-18T23:03:34.370Z] [enriched] Intent enriched: USDC/USD @ 999739036800000128
+  meta: {"price":"999739036800000128","timestamp":"1781823812","expiry":"1781827412","blockNumber":13664522}
+[2026-06-18T23:03:34.370Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-18T23:03:34.371Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-18T23:04:07.301Z] [connecting] connecting
+[2026-06-18T23:04:12.716Z] [building] building
+[2026-06-18T23:04:15.799Z] [signing] signing
+  meta: {"txHash":"091ee7cfeef07e29859e1610d11c7f6d7499c8fa9976ca32cbc86745e6e3d4f2"}
+[2026-06-18T23:04:17.255Z] [submitting] submitting
+  meta: {"txHash":"091ee7cfeef07e29859e1610d11c7f6d7499c8fa9976ca32cbc86745e6e3d4f2"}
+[2026-06-18T23:04:17.525Z] [submitted] submitted
+  meta: {"txHash":"091ee7cfeef07e29859e1610d11c7f6d7499c8fa9976ca32cbc86745e6e3d4f2"}
+[2026-06-18T23:04:17.525Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"091ee7cfeef07e29859e1610d11c7f6d7499c8fa9976ca32cbc86745e6e3d4f2"}
+[2026-06-18T23:05:12.437Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"091ee7cfeef07e29859e1610d11c7f6d7499c8fa9976ca32cbc86745e6e3d4f2"}
+[2026-06-18T23:05:20.343Z] [writing_state] writing_state
+  meta: {"txHash":"091ee7cfeef07e29859e1610d11c7f6d7499c8fa9976ca32cbc86745e6e3d4f2"}
+[2026-06-18T23:05:23.533Z] [confirm] Cardano transaction confirmed
+  meta: {"cardanoTxHash":"091ee7cfeef07e29859e1610d11c7f6d7499c8fa9976ca32cbc86745e6e3d4f2","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","pairAction":"update","batchSize":1}

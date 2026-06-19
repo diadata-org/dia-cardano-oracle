@@ -1,0 +1,9 @@
+[2026-06-19T01:02:58.107Z] [enriched] Intent enriched: XVG/USD @ 2548117370000000
+  meta: {"price":"2548117370000000","timestamp":"1781830976","expiry":"1781834576","blockNumber":13684816}
+[2026-06-19T01:02:58.107Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0}
+[2026-06-19T01:02:58.108Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_b_alts","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-19T01:03:34.197Z] [connecting] connecting
+[2026-06-19T01:03:39.498Z] [failed] Cardano transaction failed: Intent for XVG/USD superseded on chain; not submitted.
+  meta: {"code":"NonMonotonicNonce","remediation":"A newer intent for this pair is already on-chain. The stale intent was discarded; no operator action is needed.","error":"Intent for XVG/USD superseded on chain; not submitted.","batchSize":1}

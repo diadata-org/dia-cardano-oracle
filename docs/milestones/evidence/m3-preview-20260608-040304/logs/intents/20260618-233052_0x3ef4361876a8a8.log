@@ -1,0 +1,32 @@
+[2026-06-18T23:30:52.569Z] [connecting] connecting
+[2026-06-18T23:31:03.695Z] [building] building
+[2026-06-18T23:31:07.073Z] [signing] signing
+  meta: {"txHash":"7eee38009d725d53e53a0a974ba713a0fa2a0672655cd9dc4b81388cb36ef4f5"}
+[2026-06-18T23:31:08.527Z] [submitting] submitting
+  meta: {"txHash":"7eee38009d725d53e53a0a974ba713a0fa2a0672655cd9dc4b81388cb36ef4f5"}
+[2026-06-18T23:31:13.613Z] [connecting] connecting
+[2026-06-18T23:31:24.448Z] [building] building
+[2026-06-18T23:31:27.784Z] [signing] signing
+  meta: {"txHash":"7eee38009d725d53e53a0a974ba713a0fa2a0672655cd9dc4b81388cb36ef4f5"}
+[2026-06-18T23:31:29.252Z] [submitting] submitting
+  meta: {"txHash":"7eee38009d725d53e53a0a974ba713a0fa2a0672655cd9dc4b81388cb36ef4f5"}
+[2026-06-18T23:31:34.504Z] [connecting] connecting
+[2026-06-18T23:31:45.209Z] [building] building
+[2026-06-18T23:31:48.569Z] [signing] signing
+  meta: {"txHash":"adc9b269c45596e26ab1701ac15594e2f25ae6b924c1a7b1f6bcf37357e07318"}
+[2026-06-18T23:31:50.016Z] [submitting] submitting
+  meta: {"txHash":"adc9b269c45596e26ab1701ac15594e2f25ae6b924c1a7b1f6bcf37357e07318"}
+[2026-06-18T23:31:50.322Z] [submitted] submitted
+  meta: {"txHash":"adc9b269c45596e26ab1701ac15594e2f25ae6b924c1a7b1f6bcf37357e07318"}
+[2026-06-18T23:31:50.341Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"adc9b269c45596e26ab1701ac15594e2f25ae6b924c1a7b1f6bcf37357e07318"}
+[2026-06-18T23:31:52.350Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0xe37de8b5c149613ba62091ba1fbcec2410d7ef82619f495cfacbfa66253d4977"}
+[2026-06-18T23:32:33.398Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"adc9b269c45596e26ab1701ac15594e2f25ae6b924c1a7b1f6bcf37357e07318"}
+[2026-06-18T23:32:38.381Z] [writing_state] writing_state
+  meta: {"txHash":"adc9b269c45596e26ab1701ac15594e2f25ae6b924c1a7b1f6bcf37357e07318"}
+[2026-06-18T23:32:41.743Z] [batched] Intent confirmed inside a batch of 7 intents
+  meta: {"cardanoTxHash":"adc9b269c45596e26ab1701ac15594e2f25ae6b924c1a7b1f6bcf37357e07318","batchSize":7,"batchMembers":[{"intentHash":"0x1c4c5ceca5b4f0d2bbabf3a87983585e0e4e8c863d74e70451d856cafb18c9e9","symbol":"BTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9028a3859b168b77160150b13c200392328254c3758f082050fd7ec5c340ac2a497","action":"update"},{"intentHash":"0x2476c00dc1da8870f4606c05ec9b6ed514526417136bf53079b72f505e49685a","symbol":"ETH/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9023d7739c2406edbe3bb594b8f762cf67a2c889a162f2234dc17841f61d33849f4","action":"update"},{"intentHash":"0x3ef4361876a8a8e56ee5d35369aed8e448df776625a8f4f7e15e4d19f20fd7bb","symbol":"USDC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","action":"update"},{"intentHash":"0xb8f9cad0cf7044bd493b9b983857b565f7cbad174c005593b1a3e231af13eaa2","symbol":"DOGE/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90219434a5bb684f659378f19bc8c3748046e646c079e79c10e484e2d29445ee02d","action":"update"},{"intentHash":"0xcbbf064781334a71cf3b5c29615d51310ce6624bf82964035327d5896c4ce70f","symbol":"LTC/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd90201f8ca4f564d04963a1ffccbb3f49da8bf09c0373f278d84047413cf09399650","action":"update"},{"intentHash":"0x43b6a49f93c36f2deb0fe24d8c063c3c9b66a0cba017a322a890206112e93e3c","symbol":"ARB/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902dfafb09cf4921baf2478651f0d7072b3a0df58b6c434443d32511927fa7919fb","action":"update"},{"intentHash":"0x835163850dbdabf62f4f2f088f90866ebc68589b91bd2b4e84d1a43b7cdb999e","symbol":"SHIB/USD","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902406a90956881e5fbe476ff634fd41235fb114c833053daebd4af3b30c0bde839","action":"update"}],"pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","pairAction":"update"}
+[2026-06-18T23:32:41.743Z] [confirm] Cardano batch transaction confirmed
+  meta: {"cardanoTxHash":"adc9b269c45596e26ab1701ac15594e2f25ae6b924c1a7b1f6bcf37357e07318","pairUnit":"def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd9020156dbaa55902bb40ff6c461c8b2b59c70ebbe3786e51e5e75a8bc1cbad4c1ac","pairAction":"update","batchSize":7}

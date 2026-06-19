@@ -1,0 +1,8 @@
+[2026-06-19T01:35:47.645Z] [enriched] Intent enriched: BTC/USD @ 62944080429325454671872
+  meta: {"price":"62944080429325454671872","timestamp":"1781832945","expiry":"1781836545","blockNumber":13690451}
+[2026-06-19T01:35:47.645Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0}
+[2026-06-19T01:35:47.646Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_a_majors","destinationIndex":0,"clientStatePath":"../state/preview_run_20260608-040304/clients/client-test-01.json"}
+[2026-06-19T01:36:28.835Z] [superseded] Superseded by newer intent
+  meta: {"supersededByHash":"0x07ed6071d98d2c447310c892ad072bb5fcd27494d1f1316c6252758d361cb839"}
