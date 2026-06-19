@@ -1,30 +1,35 @@
-# Guion del video demo — Milestone 3 (~3-4 min)
+# Demo video script — Milestone 3 (~3-4 min)
 
-**Antes de grabar:** abrí Grafana en `http://localhost:3000` (admin / tu pass), dashboard **"DIA Cardano Oracle Feeder"**. Tené una terminal lista.
+**Before recording:** open Grafana at `http://localhost:3000` (admin / your pass),
+dashboard **"DIA Cardano Oracle Feeder"**. Have a terminal ready.
 
-## 1. Dashboards en vivo (Grafana) — ~60s
+## 1. Live dashboards (Grafana) — ~60s
 
-Mostrá el dashboard overview y señalá estos panels (nombres exactos):
+Show the overview dashboard and point at these panels (exact titles):
 
-- **"Confirmed oracle updates (selected range, per pair)"** → ARS/USDT con el número **subiendo** = el oráculo está vivo confirmando en mainnet (liveness).
-- **"Cardano provider health — primary vs secondary"** → blockfrost + koios en **verde/UP**.
-- **"Pair staleness (per symbol)"** → ARS/USDT con staleness **baja** (el valor on-chain está fresco).
-- **"Symbol-update latency (p50/p95/p99)"** → **eso es "latencia"**: el tiempo desde que el feeder recibe el precio de DIA hasta que se confirma en Cardano (mediana / p95 / p99, en segundos). Es la velocidad del oráculo.
+- **"Confirmed oracle updates (selected range, per pair)"** → ARS/USDT with the count
+  **climbing** = the oracle is live, confirming on mainnet (liveness).
+- **"Cardano provider health — primary vs secondary"** → blockfrost + koios **green/UP**.
+- **"Pair staleness (per symbol)"** → ARS/USDT with **low** staleness (the on-chain value
+  is fresh).
+- **"Symbol-update latency (p50/p95/p99)"** → this is "latency": the time from when the
+  feeder receives the DIA price to when it is confirmed on Cardano (median / p95 / p99, in
+  seconds). It is the oracle's speed.
 
-## 2. Logs mainnet en vivo (terminal) — ~30s
+## 2. Live mainnet logs (terminal) — ~30s
 
-`docker logs` solo trae eventos de alto nivel (arranque, cron, submit, confirm) — son
-raros, así que casi no se mueve. La actividad en tiempo real (el scanner leyendo la
-cadena de DIA cada pocos segundos) va al **archivo de log**, que es el que se mueve:
+`docker logs` only carries high-level events (startup, cron, submit, confirm) — these are
+rare, so it barely moves. The real-time activity (the scanner reading the DIA chain every
+few seconds) goes to the **log file**, which is the one that moves:
 
 ```bash
 tail -f offchain/state/mainnet_run_20260616-074413/logs/feeder.log \
   | grep --line-buffered -iE 'scanner-http|scanner-ws|ARS/USDT|submit:|Confirmed by Blockfrost|cron-service'
 ```
 
-Se ven las líneas de `scanner-http`/`scanner-ws` fluyendo (el feeder escaneando la
-fuente DIA en vivo) y, cuando toca, el ciclo de ARS/USDT: `submit: … ARS/USDT` →
-`Confirmed by Blockfrost … ARS/USDT`. (Prueba que procesa feeds en tiempo real.)
+You see the `scanner-http`/`scanner-ws` lines streaming (the feeder scanning the DIA source
+live) and, when due, the ARS/USDT cycle: `submit: … ARS/USDT` →
+`Confirmed by Blockfrost … ARS/USDT`. (Proves it processes feeds in real time.)
 
 ## 3. Feed health / accuracy (terminal) — ~30s
 
@@ -32,22 +37,25 @@ fuente DIA en vivo) y, cuando toca, el ciclo de ARS/USDT: `submit: … ARS/USDT`
 cd offchain/feeder && CARDANO_NETWORK=Mainnet npm run sanity:feeds
 ```
 
-El `CARDANO_NETWORK=Mainnet` es obligatorio (si no, default Preview). Muestra ARS/USDT: valor on-chain vs fuente DIA, deviation %, staleness → **PASS**. (Prueba accuracy.)
+The `CARDANO_NETWORK=Mainnet` is required (otherwise it defaults to Preview). Shows
+ARS/USDT: on-chain value vs DIA source, deviation %, staleness → **PASS**. (Proves accuracy.)
 
-## 4. Alerta firing→resolving (terminal + Grafana) — ~60s
+## 4. Alert firing → resolving (terminal + Grafana) — ~60s
 
 ```bash
 cd offchain/feeder && scripts/monitoring/trigger-alert-demo.sh OraclePairStale
 ```
 
-(OraclePairStale es la más rápida.) En Grafana/Alertmanager se ve la alerta ponerse en **firing (rojo)** → el script la **resuelve** → vuelve a verde. El script captura la entrada en el `alert_log` del feeder. (Prueba "anomalies trigger automatic alerts".)
+(OraclePairStale is the fastest.) In Grafana/Alertmanager you see the alert go to
+**firing (red)** → the script **resolves** it → it goes back to green. The script captures
+the entry in the feeder's `alert_log`. (Proves "anomalies trigger automatic alerts".)
 
-## 5. Prueba on-chain real (browser) — ~20s
+## 5. Real on-chain proof (browser) — ~20s
 
-Abrí en Cardanoscan **mainnet** una tx confirmada de ARS/USDT:
+Open a confirmed ARS/USDT transaction on Cardanoscan **mainnet**:
 
 ```
 https://cardanoscan.io/transaction/31dc1efb2789b6502cfe8c1312a56562e6522a8b97525c5ad53977f0532cd78e
 ```
 
-Muestra que es una tx real en Cardano mainnet (no test).
+Shows it is a real transaction on Cardano mainnet (not test).
