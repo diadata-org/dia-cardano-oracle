@@ -131,6 +131,18 @@ exist today.
   refresh the tracked UTxO set before building, and auto-reconcile + rebuild on a
   `BadInputsUTxO` rejection instead of failing the batch. Downstream of the scan-pipeline item
   above — the restarts are what cause the drift.
+- [ ] **Crash-recovery must verify "submitted" txs against the chain, not blind-fail them.**
+  This is SEPARATE from the build-time UTxO reconcile above. On restart, any tx left in
+  `submitted` status (broadcast, awaiting confirmation) is marked `failed / CrashRecovery`
+  unconditionally — the recovery never asks the chain whether that tx actually confirmed. So a tx
+  that DID land on-chain is recorded as a failure and never increments
+  `transactions_confirmed_total`, which makes the confirmed-count and uptime metrics under-report
+  real liveness. Observed on the mainnet ARS/USDT bring-up: the pair-create confirmed on-chain
+  (the Pair NFT exists; the startup reconcile even created `ars-usdt.json`), yet its
+  transaction_log row is `failed / CrashRecovery` and Grafana shows 0 confirmed. Fix: on
+  recovery, look up each `submitted` tx hash on-chain and mark it `confirmed` (counting it) when
+  it landed, marking `failed` only when it genuinely did not. (Build-time reconcile stops
+  spending stale UTxOs; this stops a restart from corrupting the confirmation count.)
 - [ ] **Provider consumption metrics + quota alerts (Blockfrost & Koios).** Today only
   `dia_bridge_component_health` (up/down) and `dia_bridge_provider_last_ok_timestamp_seconds`
   exist — there is no visibility into how many calls each provider makes or how close it is to its
