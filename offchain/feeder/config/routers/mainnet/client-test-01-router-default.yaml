@@ -19,16 +19,7 @@ routers:
         - field: ${enrichment.fullIntent.Symbol}
           operator: in
           value:
-            - SPYM
-            - CRCL
-            - TSLA
-            - NVDA
-            - IAU
-            - PPLT
-            - MSTR
-            - AMZN
-            - SIVR
-            - COIN
+            - ARS/USDT
 
     processing:
       datasource: enrichment
@@ -40,15 +31,13 @@ routers:
           network: Mainnet
           client_state_path: ../state/mainnet_run_20260616-074413/clients/client-test-01.json
           protocol_state_path: ../state/mainnet_run_20260616-074413/config-bootstrap.json
-        # Push an update as soon as the price moves at least this much. Raised
-        # from 0.1% to 0.5% so sporadic small moves stop desyncing the per-pair
-        # heartbeats - pairs cluster on the 10m cadence and batch together,
-        # lowering fee per pair. Trade-off: on-chain price tracks the source a
-        # little less tightly between heartbeats.
+        # Push an update as soon as the price moves at least this much. With a
+        # single pair the 0.5% gate keeps small moves from adding extra
+        # transactions; the cron heartbeat below bounds staleness when flat.
         price_deviation: "0.5%"
         # The cron heartbeat guarantees an update at least this often (the max
-        # staleness per pair), even when the price is flat. Needs cron: true below.
-        time_threshold: 10m
+        # staleness for the pair), even when the price is flat. Needs cron: true below.
+        time_threshold: 30m
         # Enable the cron liveness heartbeat for this destination (Spectra parity);
         # without it, a flat pair would only update on price deviation and could
         # stay stale past time_threshold.
