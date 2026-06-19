@@ -225,6 +225,65 @@ describe("runOneTick", () => {
     assert.equal(cronCalls[0]!.outcome, "submitted");
   });
 
+  it("does not re-dispatch a pair while its previous heartbeat is still in flight", async () => {
+    const router = makeRouter("BTC/USD", true, "30s");
+    const now = 1_700_000_000_000;
+    const priceCache = createPriceCache({ now: () => now - 60_000 });
+    priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, intentHash: "0xold", cardanoTxHash: "tx", updatedAtMs: now - 60_000 },
+    );
+    const latestIntents = createLatestIntentCache({ now: () => now });
+    latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew" },
+    );
+
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      now: () => now,
+    });
+    const inFlight = new Map<string, number>();
+
+    await runOneTick(options, inFlight); // tick 1 — dispatches once
+    await runOneTick(options, inFlight); // tick 2 — previous one still awaiting confirmation
+
+    assert.equal(submits.length, 1);
+    assert.ok(cronCalls.some((c) => c.outcome === "skipped_in_flight"));
+  });
+
+  it("re-dispatches once the in-flight entry times out (a submission that never confirmed)", async () => {
+    const router = makeRouter("BTC/USD", true, "30s"); // ceiling = 30s
+    const base = 1_700_000_000_000;
+    let clock = base;
+    const priceCache = createPriceCache({ now: () => base - 60_000 });
+    priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, intentHash: "0xold", cardanoTxHash: "tx", updatedAtMs: base - 60_000 },
+    );
+    const latestIntents = createLatestIntentCache({ now: () => base });
+    latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew" },
+    );
+
+    const { options, submits } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      now: () => clock,
+    });
+    const inFlight = new Map<string, number>();
+
+    await runOneTick(options, inFlight); // dispatch at base
+    clock = base + 31_000;               // past dispatch + ceiling (30s), still unconfirmed
+    await runOneTick(options, inFlight); // in-flight timed out → retry
+
+    assert.equal(submits.length, 2);
+  });
+
   it("does NOT submit when within the time_threshold window", async () => {
     const router = makeRouter("BTC/USD", true, "5m");
     const now = 1_700_000_000_000;

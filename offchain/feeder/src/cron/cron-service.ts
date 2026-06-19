@@ -125,10 +125,16 @@ export function startCronService(options: CronServiceOptions): CronServiceHandle
     }
   }
 
+  // Per-pair in-flight guard, persistent across ticks: maps a (routerId, destIdx,
+  // symbol) key to the wall-clock time its last cron heartbeat was dispatched.
+  // While an entry is present the cron will not re-dispatch that pair, so a
+  // submission that has not yet confirmed is never piled on tick-after-tick.
+  const inFlight = new Map<string, number>();
+
   const done = (async () => {
     while (!options.signal?.aborted) {
       try {
-        await runOneTick(options);
+        await runOneTick(options, inFlight);
       } catch (error) {
         options.log(`cron-service: tick failed — ${(error as Error).message}`);
       }
@@ -144,7 +150,10 @@ export function startCronService(options: CronServiceOptions): CronServiceHandle
 // Tick
 // ---------------------------------------------------------------------------
 
-export async function runOneTick(options: CronServiceOptions): Promise<void> {
+export async function runOneTick(
+  options: CronServiceOptions,
+  inFlight: Map<string, number> = new Map(),
+): Promise<void> {
   const now = (options.now ?? Date.now)();
 
   for (const router of Object.values(options.routers)) {
@@ -195,6 +204,19 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
           continue;
         }
 
+        // In-flight reconcile: clear the guard entry once a confirmation has
+        // landed since we dispatched (priceCache advanced to/after the dispatch
+        // time) or once a full ceiling has elapsed (the prior submission never
+        // confirmed — allow a retry). Until then the entry suppresses re-dispatch.
+        const inFlightKey = `${router.id} ${destIdx} ${symbol}`;
+        const dispatchedAtMs = inFlight.get(inFlightKey);
+        if (
+          dispatchedAtMs !== undefined &&
+          (confirmed.updatedAtMs >= dispatchedAtMs || now - dispatchedAtMs >= ceilingMs)
+        ) {
+          inFlight.delete(inFlightKey);
+        }
+
         // Freshness gate. Aligned mode: due once the shared period boundary is
         // newer than this pair's last confirm, so every pair becomes due in the
         // same tick and batches together. Per-pair mode: due once this pair's
@@ -241,6 +263,15 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
           continue;
         }
 
+        // Still due, with a newer intent to push — but a previous heartbeat for
+        // this pair is already in flight (dispatched, not yet confirmed). Skip so
+        // the cron does not stack duplicate submissions every tick while it waits
+        // for the first to land.
+        if (inFlight.has(inFlightKey)) {
+          options.metrics.cronResubmissions.inc({ ...labels, outcome: "skipped_in_flight" });
+          continue;
+        }
+
         const request: SubmitRequest = {
           intentHash: latest.intentHash,
           enriched: latest.enriched,
@@ -256,6 +287,7 @@ export async function runOneTick(options: CronServiceOptions): Promise<void> {
             `intentHash=${latest.intentHash}).`,
         );
         options.metrics.cronResubmissions.inc({ ...labels, outcome: "submitted" });
+        inFlight.set(inFlightKey, now);
         // Fire-and-forget: the coalescer/queue records the result in metrics
         // and DB via the daemon's onResult callback the same way an
         // event-driven submission would.
