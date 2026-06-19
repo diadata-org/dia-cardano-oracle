@@ -9,7 +9,7 @@ Primary evidence:
 
 - **QA demo video** (live mainnet dashboards, feed health checks, the alerting pipeline —
   Alertmanager + the alert-log API — and an alert firing and clearing):
-  `<PENDIENTE: URL del video — a subir>`
+  <https://youtu.be/W-vfgsoeXp4>
 - **Mainnet monitoring evidence pack** (live mainnet run + a manual alert fired through the
   full pipeline):
   [`evidence/m3-mainnet-20260616-074413/`](evidence/m3-mainnet-20260616-074413/) —
@@ -165,7 +165,7 @@ Cardano Mainnet.
 
 ### 4.2. Watch the QA demo video
 
-`<PENDIENTE: URL>` — the real-time Grafana dashboards on the live mainnet run, the per-feed
+<https://youtu.be/W-vfgsoeXp4> — the real-time Grafana dashboards on the live mainnet run, the per-feed
 accuracy check, the alerting pipeline (Alertmanager UI + the `GET /api/v1/alerts` log), and
 an alert firing and clearing. (Recording guide:
 [`docs/plans/m3-demo-video-script.md`](../plans/m3-demo-video-script.md).)
@@ -208,7 +208,7 @@ hand-edited numbers.
 
 ## 5. Pointers (one-stop links)
 
-- QA demo video: `<PENDIENTE: URL>`
+- QA demo video: <https://youtu.be/W-vfgsoeXp4>
 - Mainnet evidence pack: [`evidence/m3-mainnet-20260616-074413/milestone-3-mainnet-evidence.md`](evidence/m3-mainnet-20260616-074413/milestone-3-mainnet-evidence.md)
 - Preview evidence pack: [`evidence/m3-preview-20260608-040304/milestone-3-preview-evidence.md`](evidence/m3-preview-20260608-040304/milestone-3-preview-evidence.md)
 - Monitoring source: [`offchain/feeder/monitoring/`](../../offchain/feeder/monitoring/)
