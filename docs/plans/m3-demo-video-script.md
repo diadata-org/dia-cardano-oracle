@@ -1,4 +1,4 @@
-# Demo video script — Milestone 3 (~3-4 min)
+# Demo video script — Milestone 3 (~5 min)
 
 **Before recording:** open Grafana at `http://localhost:3000` (admin / your pass),
 dashboard **"DIA Cardano Oracle Feeder"**. Have a terminal ready.
@@ -43,14 +43,30 @@ ARS/USDT: on-chain value vs DIA source, deviation %, staleness → **PASS**. (Pr
 ## 4. Alert firing → resolving (terminal + Grafana) — ~60s
 
 ```bash
-cd offchain/feeder && scripts/monitoring/trigger-alert-demo.sh OraclePairStale
+cd offchain/feeder && CARDANO_NETWORK=Mainnet scripts/monitoring/trigger-alert-demo.sh OraclePairStale
 ```
 
-(OraclePairStale is the fastest.) In Grafana/Alertmanager you see the alert go to
-**firing (red)** → the script **resolves** it → it goes back to green. The script captures
-the entry in the feeder's `alert_log`. (Proves "anomalies trigger automatic alerts".)
+(OraclePairStale is the fastest. `CARDANO_NETWORK=Mainnet` makes the bundle land under
+`docs/milestones/evidence/alert-trigger-mainnet-<stamp>/`.) In Grafana/Alertmanager you see
+the alert go to **firing (red)** → the script **resolves** it → it goes back to green. The
+script captures the entry in the feeder's `alert_log`. (Proves "anomalies trigger automatic
+alerts".)
 
-## 5. Real on-chain proof (browser) — ~20s
+## 5. Generate the evidence pack (terminal) — ~2-3 min
+
+This bundles everything just shown — dashboards, per-feed sanity, integration tests, and the
+alert-trigger run from step 4 — into the mainnet evidence pack. (It renders ~45 panels, so
+fast-forward this part of the recording.)
+
+```bash
+cd offchain && ALERT_TRIGGER_DIR=$(ls -dt ../docs/milestones/evidence/alert-trigger-mainnet-*/ | head -1) make evidence3
+```
+
+Writes `docs/milestones/evidence/m3-mainnet-<stamp>/` with `milestone-3-mainnet-evidence.md`
+and `SUMMARY.json` — the QA validation + uptime/accuracy evidence, assembled only from the
+feeder's DB, logs, live API, and Grafana (no hand-edited numbers).
+
+## 6. Real on-chain proof (browser) — ~20s
 
 Open a confirmed ARS/USDT transaction on Cardanoscan **mainnet**:
 
