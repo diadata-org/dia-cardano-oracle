@@ -1,0 +1,14 @@
+Feed sanity check — Mainnet
+Router   : client_test_01_router_default (1 feeds)
+Registry : 0x5612599CF48032d7428399d5Fcb99eDcc75c06A7
+Window   : last 5000 blocks
+
+# Feed sanity check — Mainnet
+
+1 feeds: 1 PASS · 0 WARN · 0 FAIL.
+
+| Symbol | Status | Deviation % | Staleness (s) | Reasons |
+|--------|--------|-------------|---------------|---------|
+| ARS/USDT | PASS | 0 | 1200 | — |
+
+[sanity] report written: docs/milestones/evidence/m3-mainnet-20260616-074413/sanity/

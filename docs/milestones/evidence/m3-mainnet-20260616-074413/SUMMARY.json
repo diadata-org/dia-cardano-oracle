@@ -1,0 +1,24 @@
+{
+  "pack_stamp": "20260616-074413",
+  "window": {
+    "first_event_iso": "2026-06-19T05:35:20.017Z",
+    "last_event_iso": "2026-06-19T08:01:32.370Z"
+  },
+  "totals": {
+    "tx_confirmed": 7,
+    "tx_failed": 0,
+    "tx_condemned": 0,
+    "reorgs": 0
+  },
+  "tests": {
+    "feeder": {
+      "result": "PASS",
+      "total": 665,
+      "pass": 665,
+      "fail": 0
+    },
+    "cli": {
+      "result": "PASS"
+    }
+  }
+}

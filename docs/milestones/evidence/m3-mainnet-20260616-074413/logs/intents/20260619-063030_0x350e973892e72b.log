@@ -1,0 +1,16 @@
+[2026-06-19T06:30:30.491Z] [connecting] connecting
+[2026-06-19T06:30:36.341Z] [building] building
+[2026-06-19T06:30:38.723Z] [signing] signing
+  meta: {"txHash":"2274ecafe50b1f5267a19ad85636d9ceabce7384f12d7e28814af24015db5fdf"}
+[2026-06-19T06:30:40.662Z] [submitting] submitting
+  meta: {"txHash":"2274ecafe50b1f5267a19ad85636d9ceabce7384f12d7e28814af24015db5fdf"}
+[2026-06-19T06:30:41.187Z] [submitted] submitted
+  meta: {"txHash":"2274ecafe50b1f5267a19ad85636d9ceabce7384f12d7e28814af24015db5fdf"}
+[2026-06-19T06:30:41.188Z] [waiting_confirm] waiting_confirm
+  meta: {"txHash":"2274ecafe50b1f5267a19ad85636d9ceabce7384f12d7e28814af24015db5fdf"}
+[2026-06-19T06:31:51.904Z] [waiting_utxo] waiting_utxo
+  meta: {"txHash":"2274ecafe50b1f5267a19ad85636d9ceabce7384f12d7e28814af24015db5fdf"}
+[2026-06-19T06:31:58.374Z] [writing_state] writing_state
+  meta: {"txHash":"2274ecafe50b1f5267a19ad85636d9ceabce7384f12d7e28814af24015db5fdf"}
+[2026-06-19T06:32:02.198Z] [confirm] Cardano transaction confirmed
+  meta: {"cardanoTxHash":"2274ecafe50b1f5267a19ad85636d9ceabce7384f12d7e28814af24015db5fdf","pairUnit":"b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052f69728686f2680dec49caf0068f9dac8968af42e4fd4a0df188d32e941544f36a","pairAction":"update","batchSize":1}

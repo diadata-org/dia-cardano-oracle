@@ -1,0 +1,6 @@
+[2026-06-19T05:35:51.662Z] [enriched] Intent enriched: ARS/USDT @ 664893617021276
+  meta: {"price":"664893617021276","timestamp":"1781847347","expiry":"1781850947","blockNumber":29555620}
+[2026-06-19T05:35:51.662Z] [routed] Intent passed all filters
+  meta: {"routerId":"client_test_01_router_default","destinationIndex":0}
+[2026-06-19T05:35:51.664Z] [queued] Intent accepted by coalescer
+  meta: {"routerId":"client_test_01_router_default","destinationIndex":0,"clientStatePath":"../state/mainnet_run_20260616-074413/clients/client-test-01.json"}
