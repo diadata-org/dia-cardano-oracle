@@ -131,6 +131,18 @@ exist today.
   refresh the tracked UTxO set before building, and auto-reconcile + rebuild on a
   `BadInputsUTxO` rejection instead of failing the batch. Downstream of the scan-pipeline item
   above — the restarts are what cause the drift.
+- [ ] **Provider consumption metrics + quota alerts (Blockfrost & Koios).** Today only
+  `dia_bridge_component_health` (up/down) and `dia_bridge_provider_last_ok_timestamp_seconds`
+  exist — there is no visibility into how many calls each provider makes or how close it is to its
+  quota, so the Blockfrost 402 ("Payment Required" — quota wall) that froze the Preview run hit
+  with no warning. Add per-provider request counters + rate (Blockfrost, Koios), surface quota
+  usage/remaining where the API exposes it, and add alerts on elevated provider error rate and on
+  approaching the quota, so the operator can rotate/upgrade the key before it walls.
+- [ ] **Retry/backoff on one-shot CLI admin commands.** `pair:burn` / `receiver:settle` /
+  `payment-hook:withdraw` have no retry, so a transient `fetch failed` (a network blip to the
+  provider) aborts the command mid-run and the operator must re-run by hand. Re-running is safe
+  (each command re-checks its preconditions), but a small retry/backoff around the provider calls
+  in the CLI transaction helpers would make admin operations robust to transient blips.
 
 ### 3 · Sustained mainnet run + 99.99% uptime/accuracy evidence
 
