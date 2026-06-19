@@ -114,7 +114,7 @@ groups:
             {{ $value | printf "%.2f" }} ADA of spendable balance (alert fires
             below 2 ADA).
 
-            Client Receiver address (on Preview, view on a testnet explorer):
+            Client Receiver address (on {{ $labels.network }}, view on a block explorer):
               {{ $labels.receiver_address }}
             Client deposit address to fund:
               {{ $labels.deposit_address }}
@@ -242,9 +242,9 @@ groups:
                PaymentHook and all Receivers are near zero) and the wallet is
                genuinely empty, fund it from outside. Find its address:
                  grep -A2 '"wallet"' offchain/state/{{ $labels.run_dir }}/config-bootstrap.json
-               then on Preview request test ADA from the Cardano faucet
-               (https://docs.cardano.org/cardano-testnets/tools/faucet); on
-               Mainnet send ADA from the treasury.
+               then fund it: {{ if eq $labels.network "Mainnet" }}send ADA from
+               the treasury{{ else }}request test ADA from the Cardano faucet
+               (https://docs.cardano.org/cardano-testnets/tools/faucet){{ end }}.
 
             NOTE: right after a restart this metric can briefly read 0 before the
             feeder reads the real on-chain balance. If you JUST restarted, give it
@@ -413,7 +413,7 @@ groups:
             Nothing is broken — this is the client's prepaid funding waiting to
             be applied.
 
-            Client deposit address (on Preview, view on a testnet explorer):
+            Client deposit address (on {{ $labels.network }}, view on a block explorer):
               {{ $labels.deposit_address }}
 
             WHY: clients add prepaid funds by sending ADA to their per-client

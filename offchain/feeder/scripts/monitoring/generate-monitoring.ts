@@ -377,30 +377,12 @@ function writeIfChanged(file: string, next: string, label: string): boolean {
   return true;
 }
 
-// Inject the ACTIVE network into the alert remediation prose. The explorer kind
-// is network-specific ("testnet" on Preview, "mainnet" on Mainnet), so a message
-// hand-written for one network is wrong on the other. Round-trips by matching
-// whichever network is currently written and rewriting it to the active one —
-// idempotent for the same network. (The network is NOT a number in the YAML; it
-// comes from CARDANO_NETWORK, so it is injected here rather than drift-tested.)
-function patchNetworkText(text: string, network: string): string {
-  const label = network === "mainnet" ? "Mainnet" : "Preview";
-  const explorer = network === "mainnet" ? "mainnet" : "testnet";
-  return text.replace(
-    /on (?:Preview|Mainnet), view on a (?:testnet|mainnet) explorer/g,
-    `on ${label}, view on a ${explorer} explorer`,
-  );
-}
-
 function main(): void {
   const network = resolveNetwork();
   const alerting = loadAlerting(network);
   process.stdout.write(`[generate-monitoring] network=${network} (config/infrastructure.${network}.yaml)\n`);
 
-  const alertsNext = patchNetworkText(
-    patchAlertsYaml(fs.readFileSync(ALERTS_FILE, "utf8"), alerting),
-    network,
-  );
+  const alertsNext = patchAlertsYaml(fs.readFileSync(ALERTS_FILE, "utf8"), alerting);
   writeIfChanged(ALERTS_FILE, alertsNext, "monitoring/alerts.yml");
 
   const dashNext = patchDashboard(fs.readFileSync(DASHBOARD_FILE, "utf8"), alerting);
