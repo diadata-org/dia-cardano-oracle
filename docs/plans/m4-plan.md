@@ -27,6 +27,7 @@ done · `[ ]` open · `[~]` partial.
     - [7 · milestone-4-poa.md](#7--milestone-4-poamd)
     - [8 · Heavier verification drills](#8--heavier-verification-drills)
   - [Dependencies and ordering](#dependencies-and-ordering)
+  - [Annex A — Indexer design](#annex-a--indexer-design)
 
 ## What M4 asks for
 
@@ -98,14 +99,28 @@ price/timestamp), and the M3 sanity check already decodes pairs against the DIA 
 The indexer reuses that decoder but as a **consumer-facing query service**, which does not
 exist today.
 
-- [ ] **Per-pair query surface** — latest price, timestamp, nonce, signer, and intent
-  hash from live Pair UTxOs.
-- [ ] **Client-level query surface** — Receiver balance, subscribed pairs, accrued fees
-  per Hook.
-- [ ] **Integration examples** for Cardano dApp developers.
-- [ ] **On-chain consumption example** (minor) — a small consumer script/validator
-  reading a Pair UTxO as a reference input, to ship with the integration examples. No
-  first-party example exists today (only Spectra reference material).
+**Task list** (build order; full design in [Annex A](#annex-a--indexer-design)):
+
+- [ ] **A1 · Shared datum decoders** — extract the pure `decodePairDatum` /
+  `decodeReceiverDatum` / hook decoder (today in
+  [`cli/src/core/chain-helpers.ts`](../../offchain/cli/src/core/chain-helpers.ts)) into a
+  small dependency-free module that both the CLI and the indexer import. No behaviour change.
+- [ ] **A2 · Chain-reader port + standalone provider** — a `ChainReader` interface
+  (`utxosAt(address)`, `tip()`) with a Blockfrost/Koios implementation that needs **only a
+  provider key**, not the feeder daemon. Mirrors the sanity-check's injectable `utxosAt`
+  ([`feed-sanity.ts`](../../offchain/feeder/src/sanity-check/feed-sanity.ts)).
+- [ ] **A3 · Index service** (TDD with a fake reader) — `listPairs()`, `getPair(symbol)`,
+  `getClient(clientId)` combining the protocol registry + reader + decoders. Source of truth
+  = the live Pair / Receiver / Hook UTxOs.
+- [ ] **A4 · HTTP API** (`node:http`, same as the feeder) — `GET /v1/pairs`,
+  `/v1/pairs/{symbol}`, `/v1/pairs/{symbol}/utxo`, `/v1/clients/{clientId}`, `/v1/health`.
+- [ ] **A5 · Registry config + README** — the published contract addresses / policy IDs the
+  indexer reads (doubles as the §4 "contract addresses" deliverable).
+- [ ] **A6 · Integration example (off-chain)** — a Lucid example that reads a Pair UTxO as a
+  **reference input** and uses its price, for Cardano dApp developers.
+- [ ] **A7 · On-chain consumption example** — a small Aiken validator that consumes a Pair
+  UTxO as a reference input (a "price-gated" demo), shipped with the examples. No first-party
+  example exists today (only Spectra reference material).
 
 ### 2 · Feeder stability hardening
 
@@ -232,4 +247,106 @@ exist today.
    "request any feed" developer instructions and the integration examples.
 4. **Documentation publication on DIA's site** and the **closeout report/video** land
    last, against the final stable surface.
+
+## Annex A — Indexer design
+
+The detailed design for [§1 · Indexer](#1--indexer-the-largest-net-new-code-deliverable).
+It is grounded in code that already exists and is tested; the indexer is mostly a new
+**consumer-facing query layer** over those primitives.
+
+### A.1 Purpose and non-goals
+
+**Purpose.** A read-only service whose **source of truth is the live on-chain Pair /
+Receiver / PaymentHook UTxOs** — it answers "what does Cardano say right now" for any
+published pair, **independent of whether our feeder is running**. This is the layer a
+Cardano dApp developer consumes (the feeder API is producer/operator-facing; see the table
+in §1).
+
+**Non-goals.** It never builds or submits transactions, never manages clients, and never
+depends on the feeder daemon. Anyone can run it with only a chain-provider key and the
+published contract addresses.
+
+### A.2 Architecture (layers, top → bottom)
+
+| Layer | Responsibility | New / reuse |
+| --- | --- | --- |
+| **HTTP API** | Thin request handlers (`node:http`, same as the feeder — no new framework) | new |
+| **Index service** | `listPairs()` / `getPair(symbol)` / `getClient(clientId)` — aggregate + shape | new |
+| **Registry** | The protocol script identifiers (pair policy + validator addresses) for the network | reuse (from the deploy artifacts) |
+| **Decode core** | `decodePairDatum`, `decodeReceiverDatum`, hook decoder, `pairId ↔ symbol` | **reuse** (pure fns) |
+| **Chain-reader port** | `ChainReader { utxosAt(address), tip() }` over Blockfrost/Koios; **standalone** (no feeder) | new impl over an existing pattern |
+
+The `ChainReader` is an interface so the index service is **unit-tested with a fake reader**
+(no live chain) — exactly how [`feed-sanity.ts`](../../offchain/feeder/src/sanity-check/feed-sanity.ts)
+already injects `utxosAt` + `decodePairDatum`.
+
+### A.3 Data model (decoded, served)
+
+- **Pair** — `{ symbol, pairId, price, timestamp, nonce, signer, intentHash, minUtxoLovelace,
+  utxoRef: { txHash, outputIndex }, ageSeconds }`. All fields except `utxoRef`/`ageSeconds`
+  come straight from `decodePairDatum`; `symbol` is `hex→utf8(pairId)`.
+- **Client** — `{ clientId, receiverBalanceLovelace, accruedToHookLovelace, subscribedPairs }`
+  from `decodeReceiverDatum` (+ the pairs published under that client).
+
+### A.4 API surface (consumer-facing)
+
+| Method · Path | Returns | Source |
+| --- | --- | --- |
+| `GET /v1/pairs` | every published pair: latest value + `utxoRef` | UTxOs at the pair validator address, filtered by the pair policy NFT |
+| `GET /v1/pairs/{symbol}` | one pair's latest on-chain value + metadata | one Pair UTxO |
+| `GET /v1/pairs/{symbol}/utxo` | the exact `TxIn` (txHash#ix) to use as a **reference input** | the Pair UTxO ref |
+| `GET /v1/clients/{clientId}` | receiver balance, accrued-to-hook, subscribed pairs | Receiver + Hook UTxOs |
+| `GET /v1/health` | provider reachable, chain tip, pair count | `tip()` |
+
+### A.5 Reuse map
+
+| Reuse (exists, tested) | Net-new (this milestone) |
+| --- | --- |
+| `decodePairDatum`, `decodeReceiverDatum`, hook decoder | `ChainReader` standalone provider (no feeder/daemon) |
+| `pairId ↔ symbol` (hex⇆utf8) | index aggregation (`listPairs`/`getPair`/`getClient`) |
+| injectable `utxosAt` pattern (sanity-check) | the `node:http` consumer API |
+| contract addresses / policy IDs (deploy artifacts) | integration + on-chain consumption examples |
+
+### A.6 Package layout
+
+New package `offchain/indexer/` (parallel to `cli/` and `feeder/`):
+
+```
+offchain/indexer/
+  src/
+    chain-reader.ts        # ChainReader port + Blockfrost/Koios impl
+    registry.ts            # network → { pairPolicyId, pairValidatorAddress, receiver/hook addrs }
+    index-service.ts       # listPairs / getPair / getClient  (pure, fake-reader testable)
+    http.ts                # node:http handlers
+    __tests__/             # fake-reader unit tests + a live mainnet smoke test
+  examples/
+    read-pair-offchain.ts  # Lucid: reference-input read of a Pair UTxO (A6)
+  README.md                # run instructions + the published contract addresses
+```
+
+The pure decoders move to a shared module (task **A1**) so the indexer imports them without
+pulling in the whole CLI.
+
+### A.7 On-chain consumption example (task A7)
+
+A small Aiken validator under the contracts repo that takes a Pair UTxO as a **reference
+input**, reads its `price`/`timestamp` from the inline datum, and gates its own spend on it
+(e.g. "allow only if price ≥ X and timestamp is fresh"). It demonstrates the canonical
+Cardano oracle-consumption pattern (reference inputs, no value moved from the oracle) and
+ships next to the off-chain example (A6).
+
+### A.8 How this satisfies "any of DIA's 2,500+ / 10,000+ feeds"
+
+The indexer serves **whatever pairs exist on-chain** — it needs no change when a new feed is
+added. Requesting a new feed is: a developer asks DIA to publish it → the feeder mints the
+Pair UTxO → the indexer serves it immediately. So the indexer (consume) **plus** the
+§5 "how to request a feed" instructions (the request/timeline procedure) together close the
+M4 "request and consume any feed" requirement.
+
+### A.9 Testing
+
+Decode core + index service are unit-tested against a **fake `ChainReader`** (deterministic,
+no live chain), mirroring the sanity-check test. HTTP handlers test against the fake service.
+A single live smoke test hits the mainnet pair validator address to prove the standalone
+provider decodes real UTxOs end-to-end.
 </content>
