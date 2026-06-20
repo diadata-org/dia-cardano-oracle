@@ -44,6 +44,7 @@
 import type { EnrichedIntent } from "../source/types.js";
 import type { QueueManager } from "./queue-manager.js";
 import type { SubmitRequest, SubmitResult } from "./types.js";
+import type { SymbolInflightTracker } from "./symbol-inflight.js";
 import { laneKey } from "./lane-key.js";
 import { DEFAULT_COALESCE_WINDOW_MS } from "../config/constants.js";
 
@@ -75,6 +76,14 @@ export type CoalescerOptions = {
    * Receives both the result AND the originating SubmitRequest.
    */
   onResult?: (result: SubmitResult, req: SubmitRequest) => void | Promise<void>;
+  /**
+   * Shared per-(router, destination, symbol) in-flight tracker. Each request is
+   * marked when its batch flushes toward the chain and cleared once its result
+   * resolves (after `onResult`). Lets the cron skip a pair whose event-driven
+   * submission is still in flight. Optional — omitted in unit tests that do not
+   * exercise the cron interaction.
+   */
+  symbolInflight?: SymbolInflightTracker;
   /**
    * Called when an incoming intent supersedes a buffered one for the same symbol.
    * `superseded` is the old request being dropped; `by` is the newer one.
@@ -138,6 +147,7 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
     maxBatchSize,
     sizeFallbackEnabled = false,
     onResult,
+    symbolInflight,
     onSupersede,
     onLaneEvent,
   } = options;
@@ -313,6 +323,14 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
         await reportAgedOutRequests(agedOut);
       }
 
+      // Mark every eligible request in-flight before it goes to the queue, so
+      // the cron sees an event-driven (or prior cron) submission in progress and
+      // does not stack a duplicate. Cleared once each result resolves below; the
+      // tracker's TTL is the safeguard if a result never arrives.
+      for (const req of eligible) {
+        symbolInflight?.mark(req.routerId, req.destinationIndex, req.enriched.fullIntent.symbol);
+      }
+
       const batchLimit = normalizeBatchSize(maxBatchSize);
       const batches = chunkRequests(eligible, batchLimit);
 
@@ -324,6 +342,7 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
             continue;
           }
           await onResult?.(result, req);
+          symbolInflight?.clear(req.routerId, req.destinationIndex, req.enriched.fullIntent.symbol);
         }
       }
 

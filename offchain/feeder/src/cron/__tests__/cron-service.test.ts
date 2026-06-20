@@ -254,6 +254,41 @@ describe("runOneTick", () => {
     assert.ok(cronCalls.some((c) => c.outcome === "skipped_in_flight"));
   });
 
+  it("skips a pair whose event-flow submission is already in flight (consults the shared tracker)", async () => {
+    const router = makeRouter("BTC/USD", true, "30s");
+    const now = 1_700_000_000_000;
+    const priceCache = createPriceCache({ now: () => now - 60_000 });
+    priceCache.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { symbol: "BTC/USD", price: 100n, timestamp: 1n, intentHash: "0xold", cardanoTxHash: "tx", updatedAtMs: now - 60_000 },
+    );
+    const latestIntents = createLatestIntentCache({ now: () => now });
+    latestIntents.set(
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD" },
+      { routerId: "router-a", destinationIndex: 0, symbol: "BTC/USD", enriched: FAKE_ENRICHED, intentHash: "0xnew" },
+    );
+
+    const consulted: Array<[string, number, string]> = [];
+    const { options, submits, cronCalls } = makeOptions({
+      routers: { "router-a": router },
+      priceCache,
+      latestIntents,
+      now: () => now,
+      // The pair is due with a newer intent, but the event-driven flow already
+      // flushed a submission for it that has not confirmed yet.
+      isInFlight: (routerId, destinationIndex, symbol) => {
+        consulted.push([routerId, destinationIndex, symbol]);
+        return true;
+      },
+    });
+
+    await runOneTick(options);
+
+    assert.equal(submits.length, 0, "must not re-submit a pair already in flight from the event flow");
+    assert.ok(cronCalls.some((c) => c.outcome === "skipped_in_flight"));
+    assert.deepEqual(consulted.at(-1), ["router-a", 0, "BTC/USD"]);
+  });
+
   it("re-dispatches once the in-flight entry times out (a submission that never confirmed)", async () => {
     const router = makeRouter("BTC/USD", true, "30s"); // ceiling = 30s
     const base = 1_700_000_000_000;

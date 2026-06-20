@@ -25,6 +25,12 @@ export {
   type InflightTableOptions,
 } from "./inflight.js";
 
+export {
+  createSymbolInflightTracker,
+  type SymbolInflightTracker,
+  type SymbolInflightOptions,
+} from "./symbol-inflight.js";
+
 export type {
   CardanoWriteClient,
   SubmitRequest,

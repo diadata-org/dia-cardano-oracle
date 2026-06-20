@@ -79,6 +79,12 @@ export type CronServiceOptions = {
   priceCache: PriceCache;
   /** Submission entry point shared with the event-driven flow. */
   submit: (request: SubmitRequest) => void | Promise<unknown>;
+  /** Shared in-flight check covering the event-driven flow too: returns true
+   *  while a submission for this (routerId, destinationIndex, symbol) is flushed
+   *  from the coalescer but not yet resolved. The cron skips a due pair that is
+   *  already in flight from any source, avoiding a duplicate the chain rejects
+   *  as NonMonotonicNonce. Backed by the shared symbol-inflight tracker. */
+  isInFlight?: (routerId: string, destinationIndex: number, symbol: string) => boolean;
   /** Metrics emitter. */
   metrics: FeederMetrics;
   /** Structured log sink. */
@@ -263,11 +269,13 @@ export async function runOneTick(
           continue;
         }
 
-        // Still due, with a newer intent to push — but a previous heartbeat for
-        // this pair is already in flight (dispatched, not yet confirmed). Skip so
-        // the cron does not stack duplicate submissions every tick while it waits
-        // for the first to land.
-        if (inFlight.has(inFlightKey)) {
+        // Still due, with a newer intent to push — but a submission for this pair
+        // is already in flight and not yet confirmed. Two sources are checked:
+        // the cron's own per-pair map (a prior heartbeat this cron dispatched),
+        // and the shared symbol-inflight tracker (a submission the event-driven
+        // flow flushed). Skip either way so the cron does not stack a duplicate
+        // the chain would reject as NonMonotonicNonce while the first lands.
+        if (inFlight.has(inFlightKey) || options.isInFlight?.(router.id, destIdx, symbol)) {
           options.metrics.cronResubmissions.inc({ ...labels, outcome: "skipped_in_flight" });
           continue;
         }

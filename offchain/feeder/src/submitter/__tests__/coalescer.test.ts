@@ -76,6 +76,68 @@ function waitForFlush(ms = 20): Promise<void> {
 }
 
 describe("createCoalescerManager", () => {
+  it("marks a symbol in-flight at flush and clears it after the result resolves", async () => {
+    const events: string[] = [];
+    const live = new Set<string>();
+    const keyOf = (r: string, d: number, s: string) => `${r}|${d}|${s}`;
+    const symbolInflight = {
+      mark(r: string, d: number, s: string) {
+        live.add(keyOf(r, d, s));
+        events.push(`mark ${s}`);
+      },
+      clear(r: string, d: number, s: string) {
+        live.delete(keyOf(r, d, s));
+        events.push(`clear ${s}`);
+      },
+      has(r: string, d: number, s: string) {
+        return live.has(keyOf(r, d, s));
+      },
+    };
+
+    let inFlightAtSubmit: boolean | undefined;
+    const queueManager: QueueManager = {
+      async submit(request) {
+        return okResult(request, "single-tx");
+      },
+      async submitBatch(requests) {
+        inFlightAtSubmit = symbolInflight.has("router-a", 0, "BTC/USD");
+        return requests.map((request) => okResult(request));
+      },
+      async enqueueLaneTask(_dest, run) {
+        await run();
+      },
+      queueKeys() {
+        return [];
+      },
+      totalPending() {
+        return 0;
+      },
+      pendingByLane() {
+        return {};
+      },
+    };
+
+    const coalescer = createCoalescerManager({
+      queueManager,
+      coalesceWindowMs: 0,
+      symbolInflight,
+      onResult: async () => {
+        events.push("onResult");
+      },
+    });
+
+    coalescer.accept(makeRequest("h1", "BTC/USD"));
+    await waitForFlush();
+
+    assert.equal(inFlightAtSubmit, true, "symbol must be in-flight while the batch is submitted");
+    assert.equal(
+      symbolInflight.has("router-a", 0, "BTC/USD"),
+      false,
+      "symbol must be cleared once the result resolves",
+    );
+    assert.deepEqual(events, ["mark BTC/USD", "onResult", "clear BTC/USD"]);
+  });
+
   it("flushes multiple buffered symbols through one queueManager.submitBatch call", async () => {
     const batchCalls: string[][] = [];
     const results: string[] = [];
