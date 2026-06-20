@@ -72,7 +72,12 @@ import type {
 } from "@diadata-org/dia-cardano-oracle-cli/core/state";
 import type { EnrichedIntent } from "../source/types.js";
 import type { RouterSigner } from "../submitter/types.js";
-import { DEFAULT_CONFIRMATION_DEPTH } from "../config/constants.js";
+import {
+  DEFAULT_CONFIRMATION_DEPTH,
+  STALE_INPUT_RECONCILE_ATTEMPTS,
+  STALE_INPUT_RECONCILE_DELAY_MS,
+} from "../config/constants.js";
+import { withStaleInputReconcile } from "./reconcile-retry.js";
 
 // The Lucid `UTxO` shape, derived from a CLI helper so the feeder does not
 // import `@lucid-evolution/lucid` directly.
@@ -1138,48 +1143,75 @@ export function createRealOracleIntentBridge(
         throw new Error("Bridge: batch submission requires at least one prepared entry.");
       }
 
-      const currentConfigUtxo = await findSingleUtxoAtUnit(
-        lucid,
-        firstEntry.state.scripts.configValidatorAddress,
-        firstEntry.state.scripts.configUnit,
-        "config",
-      );
-      const currentReceiverUtxo = await findSingleUtxoAtUnit(
-        lucid,
-        firstEntry.state.receiver.receiverValidatorAddress,
-        firstEntry.state.receiver.receiverUnit,
-        "receiver",
-      );
-      const currentPairUtxoByUnit = new Map<string, UTxO>();
-      for (const entry of preparedEntries) {
-        if (!entry.isCreate && entry.currentPairUtxo) {
-          currentPairUtxoByUnit.set(entry.pairUnit, entry.currentPairUtxo);
-        }
-      }
+      // Build → sign → submit with stale-input reconcile: every attempt
+      // re-fetches the script UTxO set fresh (config, receiver, pairs) and
+      // rebuilds, so a UTxO the provider's indexer still reported as live but
+      // the previous batch already spent (BadInputsUTxO after a restart / RPC
+      // turbulence) is reconciled away instead of failing the batch. Wallet
+      // inputs self-heal — lucid re-selects from a fresh provider view on each
+      // rebuild. Non-stale errors rethrow immediately. The happy path runs the
+      // closure exactly once.
+      const submitted = await withStaleInputReconcile(
+        async () => {
+          const currentConfigUtxo = await findSingleUtxoAtUnit(
+            lucid,
+            firstEntry.state.scripts.configValidatorAddress,
+            firstEntry.state.scripts.configUnit,
+            "config",
+          );
+          const currentReceiverUtxo = await findSingleUtxoAtUnit(
+            lucid,
+            firstEntry.state.receiver.receiverValidatorAddress,
+            firstEntry.state.receiver.receiverUnit,
+            "receiver",
+          );
+          const currentPairUtxoByUnit = new Map<string, UTxO>();
+          for (const entry of preparedEntries) {
+            if (entry.isCreate) continue;
+            const fresh = (
+              await lucid.utxosAtWithUnit(entry.state.pair.pairValidatorAddress, entry.pairUnit)
+            )[0];
+            if (fresh) currentPairUtxoByUnit.set(entry.pairUnit, fresh);
+          }
 
-      emitBatchStep(updates, "building");
-      const { txSignBuilder, updatedPairStates } = await buildBatchOracleUpdateTx(lucid, {
-        entries: preparedEntries.map((entry) => ({
-          intent: entry.intent,
-          witness: entry.witness,
-          pairArtifact: entry.state,
-          isCreate: entry.isCreate,
-        })),
-        networkNow,
-        currentConfigUtxo,
-        currentReceiverUtxo,
-        currentPairUtxoByUnit,
-        walletPaymentKeyHash: walletDefaults.paymentKeyHash,
-        protocolState: protocol,
-        clientState: client,
-      });
+          emitBatchStep(updates, "building");
+          const built = await buildBatchOracleUpdateTx(lucid, {
+            entries: preparedEntries.map((entry) => ({
+              intent: entry.intent,
+              witness: entry.witness,
+              pairArtifact: entry.state,
+              isCreate: entry.isCreate,
+            })),
+            networkNow,
+            currentConfigUtxo,
+            currentReceiverUtxo,
+            currentPairUtxoByUnit,
+            walletPaymentKeyHash: walletDefaults.paymentKeyHash,
+            protocolState: protocol,
+            clientState: client,
+          });
 
-      const txHash = txSignBuilder.toHash();
-      emitBatchStep(updates, "signing", { txHash });
-      const signedTx = await txSignBuilder.sign.withWallet().complete();
-      emitBatchStep(updates, "submitting", { txHash });
-      await signedTx.submit();
-      emitBatchStep(updates, "submitted", { txHash });
+          const builtHash = built.txSignBuilder.toHash();
+          emitBatchStep(updates, "signing", { txHash: builtHash });
+          const signedTx = await built.txSignBuilder.sign.withWallet().complete();
+          emitBatchStep(updates, "submitting", { txHash: builtHash });
+          await signedTx.submit();
+          emitBatchStep(updates, "submitted", { txHash: builtHash });
+          return {
+            txSignBuilder: built.txSignBuilder,
+            updatedPairStates: built.updatedPairStates,
+            txHash: builtHash,
+            currentReceiverUtxo,
+          };
+        },
+        async () => {},
+        {
+          maxAttempts: STALE_INPUT_RECONCILE_ATTEMPTS,
+          reconcileDelayMs: STALE_INPUT_RECONCILE_DELAY_MS,
+          log,
+        },
+      );
+      const { txSignBuilder, updatedPairStates, txHash, currentReceiverUtxo } = submitted;
 
       emitBatchStep(updates, "waiting_confirm", { txHash });
       const confirmed = await awaitTxConfirmation({
