@@ -130,65 +130,78 @@ exist today.
   per-(router, dest, symbol) in-flight map now suppresses re-dispatch until the prior heartbeat
   confirms (priceCache advances) or a ceiling elapses. TDD'd; verified live: 1 push/boundary,
   `cron_resubmissions_total{outcome="skipped_in_flight"}`.
-- [ ] **Extend the in-flight guard to event↔cron collisions** (optics + fewer wasted build
-  cycles; **not** a correctness bug). The shipped guard stops the cron piling on *itself*; it
-  does not stop the cron re-submitting a pair whose **event-flow** submission is still in flight
-  (priceCache not yet advanced) → `NonMonotonicNonce` rejections (~58 % of attempts in the
-  10-pair Preview run — benign: caught at build, no fees, no on-chain churn, but it inflates the
-  Transactions success-ratio dashboard). Per the recorded analysis: mark a symbol in-flight when
-  its batch **flushes from the coalescer** (covering BOTH event and cron submissions), clear it
-  in `onResult` on every exit path (reusing the TTL safeguard the shipped cron guard already
-  has), and have the cron consult that set. See
+- [x] **Extend the in-flight guard to event↔cron collisions — DONE.** A shared
+  `SymbolInflightTracker` (`src/submitter/symbol-inflight.ts`) keyed by
+  (routerId, destinationIndex, symbol): the coalescer marks a pair when its batch **flushes**
+  (covering BOTH event and cron submissions) and clears it after `onResult`, with a TTL safeguard
+  (= `worker_pool.inflight_timeout_ms`) for the crash case. The cron consults it (`isInFlight`)
+  and skips a due pair whose event-flow submission is still pending → `skipped_in_flight`, no
+  duplicate the chain would reject as `NonMonotonicNonce`. TDD'd (tracker, coalescer mark/clear,
+  cron skip). See
   [`_archived/20260614-190648-cron-event-flow-race-inflight-guard.md`](_archived/20260614-190648-cron-event-flow-race-inflight-guard.md).
-- [ ] Drive down the daemon crash-recovery / WASM self-exit loop (hundreds of restarts in
-  the Preview pack window). The self-exit guard exists
-  ([`src/submitter/wasm-failure-guard.ts`](../../offchain/feeder/src/submitter/wasm-failure-guard.ts)),
-  but the root cause of the recurrent WASM build failures must be diagnosed and fixed so a
-  long mainnet window can hit the 99.99% uptime bar. This is feeder code, not ops, and it
-  is the **prerequisite** for any credible sustained-uptime number.
-- [ ] **Scan pipeline must survive a transient RPC rate-limit instead of exiting.** In the
-  Preview pack window the recurrent restarts were not the WASM guard — the last line before
-  every restart (21:31, 00:03, 02:32 UTC) was `daemon: scan pipeline failed — RPC Request
-  failed … Rate Limit Exceeded` from the DIA testnet RPC (`testnet-rpc.diadata.org`, a keyless
-  conduit.xyz node). A transient upstream rate-limit is treated as fatal, so the daemon exits
-  and Docker restarts it (~every 2.5 h). Fix: retry the scan read with backoff so a transient
-  RPC error never terminates the daemon. Parallel ops mitigation: provision an API key for the
-  DIA RPC.
-- [ ] **Reconcile the local UTxO view before building (stale-input failures).** The
-  `UtxoNotFound` failures in the pack are a single coalesced batch tx per lane (e.g. at
-  22:03:15: `batch submit failed: intents=10`), built against a UTxO already spent on-chain —
-  `BadInputsUTxO` / `TranslationLogicMissingInput` for a coin the local view still believed
-  existed (value short by the missing input). The lane serialization is correct (one batch per
-  lane); the gap is that after a restart / RPC turbulence the local chain-state tracking drifts,
-  so the next build selects a consumed UTxO. The daemon already logs the remedy ("chain state
-  may need reconciliation — run the feeder's reconcile step") but does not act on it. Fix:
-  refresh the tracked UTxO set before building, and auto-reconcile + rebuild on a
-  `BadInputsUTxO` rejection instead of failing the batch. Downstream of the scan-pipeline item
-  above — the restarts are what cause the drift.
-- [ ] **Crash-recovery must verify "submitted" txs against the chain, not blind-fail them.**
-  This is SEPARATE from the build-time UTxO reconcile above. On restart, any tx left in
-  `submitted` status (broadcast, awaiting confirmation) is marked `failed / CrashRecovery`
-  unconditionally — the recovery never asks the chain whether that tx actually confirmed. So a tx
-  that DID land on-chain is recorded as a failure and never increments
-  `transactions_confirmed_total`, which makes the confirmed-count and uptime metrics under-report
-  real liveness. Observed on the mainnet ARS/USDT bring-up: the pair-create confirmed on-chain
-  (the Pair NFT exists; the startup reconcile even created `ars-usdt.json`), yet its
-  transaction_log row is `failed / CrashRecovery` and Grafana shows 0 confirmed. Fix: on
-  recovery, look up each `submitted` tx hash on-chain and mark it `confirmed` (counting it) when
-  it landed, marking `failed` only when it genuinely did not. (Build-time reconcile stops
-  spending stale UTxOs; this stops a restart from corrupting the confirmation count.)
-- [ ] **Provider consumption metrics + quota alerts (Blockfrost & Koios).** Today only
-  `dia_bridge_component_health` (up/down) and `dia_bridge_provider_last_ok_timestamp_seconds`
-  exist — there is no visibility into how many calls each provider makes or how close it is to its
-  quota, so the Blockfrost 402 ("Payment Required" — quota wall) that froze the Preview run hit
-  with no warning. Add per-provider request counters + rate (Blockfrost, Koios), surface quota
-  usage/remaining where the API exposes it, and add alerts on elevated provider error rate and on
-  approaching the quota, so the operator can rotate/upgrade the key before it walls.
-- [ ] **Retry/backoff on one-shot CLI admin commands.** `pair:burn` / `receiver:settle` /
-  `payment-hook:withdraw` have no retry, so a transient `fetch failed` (a network blip to the
-  provider) aborts the command mid-run and the operator must re-run by hand. Re-running is safe
-  (each command re-checks its preconditions), but a small retry/backoff around the provider calls
-  in the CLI transaction helpers would make admin operations robust to transient blips.
+- [~] Drive down the daemon crash-recovery / WASM self-exit loop (hundreds of restarts in
+  the Preview pack window). **Restart driver diagnosed and fixed:** the recurrent restarts in
+  that window were NOT the WASM guard — they were the scan pipeline exiting on a transient RPC
+  rate-limit (next item, DONE), which is what produced the restart churn. The transient WASM
+  build error itself is already mitigated by `completeWithRetry` (rebuild-on-detached-ArrayBuffer)
+  and bounded by the self-exit guard
+  ([`src/submitter/wasm-failure-guard.ts`](../../offchain/feeder/src/submitter/wasm-failure-guard.ts));
+  its true root cause is an upstream `@lucid-evolution` WASM memory bug, not feeder logic, so
+  there is no feeder-side root-cause fix beyond the existing retry. **Remaining:** confirm over a
+  long mainnet window that restarts have flat-lined now that the scan pipeline no longer exits
+  (tracked under §3, the sustained-run evidence).
+- [x] **Scan pipeline must survive a transient RPC rate-limit instead of exiting — DONE.** The
+  last line before every restart (21:31, 00:03, 02:32 UTC) was `daemon: scan pipeline failed —
+  RPC Request failed … Rate Limit Exceeded` from the DIA testnet RPC (`testnet-rpc.diadata.org`,
+  a keyless conduit.xyz node): a transient upstream rate-limit was treated as fatal, so the daemon
+  exited and Docker restarted it (~every 2.5 h). `runHttpScanner` now classifies the error,
+  counts it (`incRpcError`), and retries with exponential backoff (capped at
+  `SCANNER_RPC_RETRY_MAX_MS`) instead of throwing — only a real abort breaks the loop. The daemon
+  stays up across a transient RPC blip. TDD'd. Parallel ops mitigation: provision an API key for
+  the DIA RPC.
+- [x] **Reconcile the local UTxO view before building (stale-input failures) — DONE.** The
+  `UtxoNotFound` failures in the pack were a single coalesced batch tx per lane built against a
+  UTxO already spent on-chain (`BadInputsUTxO` / `TranslationLogicMissingInput`): after a restart
+  / RPC turbulence the provider's indexer lagged the real chain and reported a UTxO the previous
+  batch had already spent. The batch build+sign+submit is now wrapped in `withStaleInputReconcile`
+  (`src/lib-bridge/reconcile-retry.ts`): on a stale-input rejection it waits
+  `STALE_INPUT_RECONCILE_DELAY_MS` (indexer catch-up), re-fetches the script UTxO set fresh
+  (config, receiver, pairs) and rebuilds — wallet inputs self-heal via lucid's fresh coin
+  selection — up to `STALE_INPUT_RECONCILE_ATTEMPTS`, instead of failing the batch. Non-stale
+  errors rethrow immediately; the happy path runs the closure once. TDD'd (classifier + retry
+  helper). Downstream of the scan-pipeline fix above — eliminating the restart loop removes the
+  main source of the drift; this is the defense-in-depth for residual RPC turbulence.
+- [x] **Crash-recovery must verify "submitted" txs against the chain, not blind-fail them — DONE.**
+  On restart, a tx left in `submitted` status was marked `failed / CrashRecovery` unconditionally,
+  so a tx that DID land on-chain was recorded as a failure and never counted — under-reporting
+  confirmed-count and uptime. The startup sweep now calls `recoverSubmittedTx`
+  (`src/submitter/recover-submitted-tx.js`) which asks the chain via `isTxOnChain` (Koios +
+  Blockfrost REST, in `cli/src/core/tx-onchain-check.ts`): a tx still on-chain → `confirmed`
+  (counted); only one genuinely absent (or unverifiable) → `failed`, so the event flow
+  re-processes it (idempotent on-chain). TDD'd. (Build-time reconcile stops spending stale UTxOs;
+  this stops a restart from corrupting the confirmation count.)
+- [x] **Provider consumption metrics + quota alerts (Blockfrost & Koios) — DONE.** New counter
+  `dia_bridge_provider_requests_total{provider,method,outcome}` counts every Cardano API request
+  (each retry attempt = one request = real quota consumption), `outcome ∈ {ok, rate_limited,
+  quota_exceeded, error}`. It is fed by an observer on the same provider wrapper the CLI retry
+  uses (`setProviderCallObserver`, registered by the daemon), so it covers the whole build/submit
+  path with no per-call-site instrumentation. Two alerts added to `monitoring/alerts.yml`:
+  **ProviderQuotaWall** (critical, fires the moment a `quota_exceeded`/402 appears — the leading
+  signal that froze the Preview run, instead of waiting ~10 min for `PrimaryProviderDown`) and
+  **ProviderErrorRateHigh** (warning, >20% error/throttle share over 10 m — the early warning a
+  key is nearing its ceiling). Exact remaining-quota is not surfaced because the provider APIs do
+  not expose it per response; the 402 signal is the actionable equivalent. TDD'd (classifiers +
+  observer outcomes).
+- [x] **Retry/backoff on one-shot CLI admin commands — DONE.** Instead of touching each of the
+  ~16 `.submit()` call sites, the Lucid **provider itself** is wrapped (`createRetryingProvider`,
+  `cli/src/core/provider-retry.ts`) at the single chokepoint where both factories build it
+  (`makeRealConfiguredProvider` / `makeProviderWithConfig`). Every provider call — UTxO/wallet
+  fetches during `.complete()`, `submitTx`, protocol-parameter lookups — retries transient
+  transport errors (`fetch failed`, ECONNRESET, 503, 429, …) with exponential backoff
+  (`PROVIDER_RETRY_ATTEMPTS` / `PROVIDER_RETRY_DELAY_MS`). Real ledger/validation errors and the
+  402 quota wall rethrow immediately. `submitTx` retry is safe (resubmitting the identical signed
+  tx is idempotent on its hash). The emulator factory is left unwrapped so tests never sleep.
+  Covers every admin command AND the feeder's CLI-backed path. TDD'd.
 
 ### 3 · Sustained mainnet run + 99.99% uptime/accuracy evidence
 
