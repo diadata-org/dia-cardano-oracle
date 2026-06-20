@@ -1,5 +1,13 @@
 # Idea: cut the cron↔event-flow submission race (in-flight guard)
 
+> **STATUS — SUPERSEDED (2026-06-19).** The core proposal (a cron in-flight guard with the
+> TTL safeguard + `cron_resubmissions_total{outcome="skipped_in_flight"}`) was implemented for
+> the **cron↔cron** case in commit `e9a468e` (the aligned-heartbeat burst on the mainnet
+> ARS/USDT run). The **residual** — extending the guard to **event↔cron** collisions by
+> marking in-flight at the coalescer flush — is tracked in
+> [`m4-plan.md` §2 · Feeder stability hardening](../m4-plan.md#2--feeder-stability-hardening).
+> Kept for the analysis below (the ~58 % NonMonotonicNonce breakdown and the TTL risk).
+
 - **Recorded:** 2026-06-14 19:06 (-08 / local)
 - **Status:** IDEA ONLY — not scheduled, not approved for implementation.
 - **Origin:** Preview evidence run `preview_run_20260608-040304`, ~5 h in. Operator

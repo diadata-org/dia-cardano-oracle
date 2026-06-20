@@ -130,6 +130,16 @@ exist today.
   per-(router, dest, symbol) in-flight map now suppresses re-dispatch until the prior heartbeat
   confirms (priceCache advances) or a ceiling elapses. TDD'd; verified live: 1 push/boundary,
   `cron_resubmissions_total{outcome="skipped_in_flight"}`.
+- [ ] **Extend the in-flight guard to event↔cron collisions** (optics + fewer wasted build
+  cycles; **not** a correctness bug). The shipped guard stops the cron piling on *itself*; it
+  does not stop the cron re-submitting a pair whose **event-flow** submission is still in flight
+  (priceCache not yet advanced) → `NonMonotonicNonce` rejections (~58 % of attempts in the
+  10-pair Preview run — benign: caught at build, no fees, no on-chain churn, but it inflates the
+  Transactions success-ratio dashboard). Per the recorded analysis: mark a symbol in-flight when
+  its batch **flushes from the coalescer** (covering BOTH event and cron submissions), clear it
+  in `onResult` on every exit path (reusing the TTL safeguard the shipped cron guard already
+  has), and have the cron consult that set. See
+  [`_archived/20260614-190648-cron-event-flow-race-inflight-guard.md`](_archived/20260614-190648-cron-event-flow-race-inflight-guard.md).
 - [ ] Drive down the daemon crash-recovery / WASM self-exit loop (hundreds of restarts in
   the Preview pack window). The self-exit guard exists
   ([`src/submitter/wasm-failure-guard.ts`](../../offchain/feeder/src/submitter/wasm-failure-guard.ts)),
