@@ -132,7 +132,7 @@ import { makeConfiguredLucidWithConfig, setProviderCallObserver } from "@diadata
 import { isTxOnChain } from "@diadata-org/dia-cardano-oracle-cli/core/tx-onchain-check";
 import { recoverSubmittedTx } from "../../src/submitter/recover-submitted-tx.js";
 import { readClientContext } from "@diadata-org/dia-cardano-oracle-cli/core/artifact-context";
-import { decodePairDatum } from "@diadata-org/dia-cardano-oracle-cli/core/chain-helpers";
+import { decodePairDatum } from "@diadata-org/dia-cardano-oracle-cli/core/datum-decoders";
 import {
   deriveFeedThresholds,
   runFeedSanityChecks,

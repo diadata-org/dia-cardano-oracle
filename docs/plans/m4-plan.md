@@ -101,10 +101,15 @@ exist today.
 
 **Task list** (build order; full design in [Annex A](#annex-a--indexer-design)):
 
-- [ ] **A1 · Shared datum decoders** — extract the pure `decodePairDatum` /
-  `decodeReceiverDatum` / hook decoder (today in
-  [`cli/src/core/chain-helpers.ts`](../../offchain/cli/src/core/chain-helpers.ts)) into a
-  small dependency-free module that both the CLI and the indexer import. No behaviour change.
+- [x] **A1 · Shared datum decoders — DONE.** The pure `decodePairDatum` /
+  `decodeReceiverDatum` / `decodePaymentHookDatum` now live in
+  [`cli/src/core/datum-decoders.ts`](../../offchain/cli/src/core/datum-decoders.ts) — it
+  imports only `@lucid-evolution/plutus` (the CBOR codec, not the full lucid/provider stack),
+  the hex normaliser, and type-only shapes, so the indexer can decode chain datums without
+  pulling in tx-building/wallets. `chain-helpers.ts` re-exports them for its existing call
+  sites (one canonical impl); exposed via the CLI `./core/datum-decoders` export. The feeder
+  switched to the lightweight path. No behaviour change (existing round-trip tests still pass;
+  added a direct-module equivalence test).
 - [ ] **A2 · Chain-reader port + standalone provider** — a `ChainReader` interface
   (`utxosAt(address)`, `tip()`) with a Blockfrost/Koios implementation that needs **only a
   provider key**, not the feeder daemon. Mirrors the sanity-check's injectable `utxosAt`

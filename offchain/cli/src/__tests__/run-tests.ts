@@ -86,6 +86,10 @@ import {
   type ProviderCallEvent,
 } from "../core/provider-retry.js";
 import type { Provider } from "@lucid-evolution/core-types";
+import {
+  decodePairDatum as decodePairDatumDirect,
+  decodeReceiverDatum as decodeReceiverDatumDirect,
+} from "../core/datum-decoders.js";
 import { resolveRunStateDir, latestRunDir } from "../core/run-state.js";
 
 // Verbose runner: each test logs [pass] <name> as it completes, and the final
@@ -134,6 +138,7 @@ await run("testPaymentHookDatumWithdrawAddressRoundTrip", testPaymentHookDatumWi
 await run("testConfigDatumRoundTrip", testConfigDatumRoundTrip);
 await run("testConfigDatumFieldOrderAndArity", testConfigDatumFieldOrderAndArity);
 await run("testPairDatumRoundTrip", testPairDatumRoundTrip);
+await run("testDatumDecodersModuleMatchesReExport", testDatumDecodersModuleMatchesReExport);
 await run("testAddressToPlutusDataKeyAndStake", testAddressToPlutusDataKeyAndStake);
 
 // --- Pure invariant tests (withdraw, settle, batch guards) -----------------
@@ -1268,6 +1273,24 @@ function testPairDatumRoundTrip(): void {
     signer: state.signer,
     minUtxoLovelace: state.minUtxoLovelace,
   });
+}
+
+// A1: the dependency-free datum-decoders module is the canonical home; the
+// chain-helpers exports are re-exports of it. Decoding through the direct module
+// path must produce byte-identical results — one implementation, two import sites.
+function testDatumDecodersModuleMatchesReExport(): void {
+  const pairCbor = buildPairDatumCbor(samplePairLiveState());
+  assert.deepEqual(
+    decodePairDatumDirect(pairCbor),
+    decodePairDatum(pairCbor),
+    "datum-decoders.decodePairDatum must equal the chain-helpers re-export",
+  );
+  const receiverCbor = buildReceiverDatumCbor(sampleReceiverState());
+  assert.deepEqual(
+    decodeReceiverDatumDirect(receiverCbor),
+    decodeReceiverDatum(receiverCbor),
+    "datum-decoders.decodeReceiverDatum must equal the chain-helpers re-export",
+  );
 }
 
 function testAddressToPlutusDataKeyAndStake(): void {

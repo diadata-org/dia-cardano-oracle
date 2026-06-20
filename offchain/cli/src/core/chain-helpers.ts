@@ -49,6 +49,11 @@ export { splitUnit, toBigInt } from "./primitives.js";
 // import everything they need from this one module.
 export { TxDroppedFromChainError } from "./tx-onchain-check.js";
 
+// Re-export the inline-datum decoders for the CLI's existing call sites.
+// Canonical home is core/datum-decoders.ts (dependency-free, shared with the
+// indexer); these are re-exports, not duplicates.
+export { decodePairDatum, decodeReceiverDatum, decodePaymentHookDatum } from "./datum-decoders.js";
+
 // Defined in core/constants.ts; re-exported here so existing importers of the
 // chain-helpers surface keep working.
 export { BOOTSTRAP_REF_MIN_LOVELACE };
@@ -620,34 +625,6 @@ export function buildReceiverDatumCbor(state: ReceiverState): string {
   );
 }
 
-export function decodeReceiverDatum(raw: string): ReceiverState {
-  const datum = Data.from(raw) as Constr<PlutusData>;
-  const [balanceLovelace, accruedToHookLovelace, minUtxoLovelace] = datum.fields;
-
-  return {
-    balanceLovelace: BigInt(balanceLovelace as bigint).toString(),
-    accruedToHookLovelace: BigInt(accruedToHookLovelace as bigint).toString(),
-    minUtxoLovelace: BigInt(minUtxoLovelace as bigint).toString(),
-  };
-}
-
-export function decodePaymentHookDatum(
-  raw: string,
-  withdrawAddress: string,
-): PaymentHookState {
-  const datum = Data.from(raw) as Constr<PlutusData>;
-  const [, accruedFeesLovelace, lifetimeCollectedLovelace, lifetimeWithdrawnLovelace, minUtxoLovelace] =
-    datum.fields;
-
-  return {
-    withdrawAddress,
-    accruedFeesLovelace: BigInt(accruedFeesLovelace as bigint).toString(),
-    lifetimeCollectedLovelace: BigInt(lifetimeCollectedLovelace as bigint).toString(),
-    lifetimeWithdrawnLovelace: BigInt(lifetimeWithdrawnLovelace as bigint).toString(),
-    minUtxoLovelace: BigInt(minUtxoLovelace as bigint).toString(),
-  };
-}
-
 export function buildPairDatumCbor(state: Omit<PairLiveState, "intent">): string {
   return Data.to(
     new Constr<PlutusData>(0, [
@@ -660,22 +637,6 @@ export function buildPairDatumCbor(state: Omit<PairLiveState, "intent">): string
       BigInt(state.minUtxoLovelace),
     ]),
   );
-}
-
-export function decodePairDatum(raw: string): Omit<PairLiveState, "intent"> {
-  const datum = Data.from(raw) as Constr<PlutusData>;
-  const [pairId, price, timestamp, nonce, intentHash, signer, minUtxoLovelace] =
-    datum.fields;
-
-  return {
-    pairId: normalizeHex(pairId as string, "pairId"),
-    price: BigInt(price as bigint).toString(),
-    timestamp: BigInt(timestamp as bigint).toString(),
-    nonce: BigInt(nonce as bigint).toString(),
-    intentHash: normalizeHex(intentHash as string, "intentHash"),
-    signer: normalizeHex(signer as string, "signer"),
-    minUtxoLovelace: BigInt(minUtxoLovelace as bigint).toString(),
-  };
 }
 
 function outRefKey(outRef: OutRefLike): string {

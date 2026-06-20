@@ -21,6 +21,10 @@
       "types": "./dist/core/contracts.d.ts",
       "default": "./dist/core/contracts.js"
     },
+    "./core/datum-decoders": {
+      "types": "./dist/core/datum-decoders.d.ts",
+      "default": "./dist/core/datum-decoders.js"
+    },
     "./core/dia-intent": {
       "types": "./dist/core/dia-intent.d.ts",
       "default": "./dist/core/dia-intent.js"
