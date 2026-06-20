@@ -27,14 +27,10 @@
 //   It is the manual recovery tool and the primitive the daemon's
 //   auto-consolidate uses.
 
-/** Default dedicated collateral UTxO size (5 ADA). The on-chain collateral a
- *  script tx must cover is `collateral_percent` × fee (≈ 1.5 × fee); 5 ADA
- *  comfortably covers it and matches lucid's default `setCollateral`. */
-export const DEFAULT_COLLATERAL_LOVELACE = 5_000_000n;
-
 import type { UTxO } from "@lucid-evolution/lucid";
 
 import { getCliConfig } from "../core/config.js";
+import { DEFAULT_COLLATERAL_LOVELACE } from "../core/constants.js";
 import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import { completeWithRetry } from "../core/tx-build.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";

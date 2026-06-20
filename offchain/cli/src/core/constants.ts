@@ -72,6 +72,20 @@ export const DEFAULT_TX_BUILD_ATTEMPTS = 3;
 export const DEFAULT_TX_BUILD_RETRY_DELAY_MS = 300;
 
 // ===========================================================================
+// Provider retry — transient-network wrapper around the Lucid Provider
+// ===========================================================================
+// Every provider call (UTxO/wallet fetches during `.complete()`, `submitTx`,
+// protocol-parameter lookups) retries transient transport errors ("fetch
+// failed", ECONNRESET, 503, …) with exponential backoff so a network blip does
+// not abort a one-shot admin command. Ledger/validation errors and the 402
+// quota wall are not retried. See core/provider-retry.ts.
+//
+//   PROVIDER_RETRY_ATTEMPTS    (default 4)    total attempts per provider call
+//   PROVIDER_RETRY_DELAY_MS    (default 500)  base backoff, doubles each attempt
+export const DEFAULT_PROVIDER_RETRY_ATTEMPTS = 4;
+export const DEFAULT_PROVIDER_RETRY_DELAY_MS = 500;
+
+// ===========================================================================
 // Tx confirmation — multi-provider confirmation pipeline
 // ===========================================================================
 // Each stage can be independently overridden when the network is congested.
@@ -101,6 +115,9 @@ export const BOOTSTRAP_REF_MIN_LOVELACE = 1_000_000n;
 // detection runs every ROLLBACK_CHECK_INTERVAL attempts (~90 s at the default
 // 1.5 s per-attempt delay).
 export const ROLLBACK_CHECK_INTERVAL = 60;
+/** Slots subtracted from `now` for a tx's validity-start, to tolerate slot/clock
+ *  skew between the builder and the node. */
+export const TX_VALIDITY_START_BACK_SLOTS = 60;
 
 // ===========================================================================
 // protocol:init seed defaults
@@ -112,6 +129,10 @@ export const DEFAULT_BASE_FEE_LOVELACE = "600000"; // 0.6 ADA base fee
 export const DEFAULT_PER_PAIR_FEE_LOVELACE = "400000"; // 0.40 ADA per pair
 export const DEFAULT_MAX_BOOTSTRAP_DRIFT_SECONDS = "300"; // 5 minutes
 export const DEFAULT_MIN_UTXO_LOVELACE = "5000000";
+/** Default dedicated collateral UTxO size (5 ADA). The on-chain collateral a
+ *  script tx must cover is `collateral_percent` × fee (≈ 1.5 × fee); 5 ADA
+ *  comfortably covers it and matches lucid's default `setCollateral`. */
+export const DEFAULT_COLLATERAL_LOVELACE = 5_000_000n;
 export const DEFAULT_CONFIG_ASSET_LABEL = "DIA_CONFIG";
 export const DEFAULT_PAYMENT_HOOK_ASSET_LABEL = "DIA_PAYMENT_HOOK";
 

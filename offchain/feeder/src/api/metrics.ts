@@ -5,7 +5,15 @@
 // labels injected at registry creation time so dashboards can separate
 // Cardano-destination feeders from other bridge deployments.
 
-import { METRICS_NAMESPACE, METRICS_WARN_THROTTLE_MS } from "../config/constants.js";
+import {
+  METRICS_NAMESPACE,
+  METRICS_WARN_THROTTLE_MS,
+  LATENCY_SECONDS_BUCKETS,
+  HTTP_LATENCY_SECONDS_BUCKETS,
+  PRICE_AGE_SECONDS_BUCKETS,
+  PRICE_DEVIATION_PERCENT_BUCKETS,
+  PAIRS_PER_TX_BUCKETS,
+} from "../config/constants.js";
 
 export type FeedCounter = {
   inc(labels?: Record<string, string>, value?: number): void;
@@ -187,6 +195,11 @@ export type FeederMetrics = {
   bridgeProviderLastOkTimestampSeconds: FeedGauge;
   /** bridge_recovery_attempts_total — number of recovery attempts after transient errors. */
   bridgeRecoveryAttempts: FeedCounter;
+  /** bridge_provider_requests_total{provider,method,outcome} — every Cardano API
+   *  request the build/submit path makes, by outcome. Each retry attempt counts
+   *  as one request (the provider's real quota consumption). outcome ∈
+   *  {ok, rate_limited, quota_exceeded, error}; quota_exceeded is the 402 wall. */
+  bridgeProviderRequests: FeedCounter;
   getMetricsText(): Promise<string>;
 };
 
@@ -269,6 +282,7 @@ export const noopMetrics: FeederMetrics = {
   bridgeComponentHealth: noopGauge,
   bridgeProviderLastOkTimestampSeconds: noopGauge,
   bridgeRecoveryAttempts: noopCounter,
+  bridgeProviderRequests: noopCounter,
   getMetricsText: async () => "",
 };
 
@@ -276,12 +290,6 @@ export type MetricsOptions = {
   namespace?: string;
   defaultLabels?: Record<string, string>;
 };
-
-const LATENCY_BUCKETS = [0.5, 1, 5, 15, 30, 60, 120, 300, 600];
-const BATCH_SIZE_BUCKETS = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20];
-const PRICE_DEVIATION_BUCKETS = [0.01, 0.1, 0.5, 1, 5, 10];
-const PRICE_AGE_BUCKETS = [1, 5, 30, 60, 300, 1800];
-const HTTP_LATENCY_BUCKETS = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5];
 
 export async function createMetrics(options: MetricsOptions = {}): Promise<FeederMetrics> {
   const specifier = "prom-client";
@@ -416,7 +424,7 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "transaction_pairs",
       "Pairs per Cardano transaction (batch size), one observation per tx",
       ["client_id", "customer_id", "outcome"],
-      BATCH_SIZE_BUCKETS,
+      PAIRS_PER_TX_BUCKETS,
     ),
     txPairMembership: counter(
       "tx_pair_membership_total",
@@ -432,67 +440,67 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "tx_processing_to_submission_seconds",
       "Tx-level seconds from processing start to submission, one observation per confirmed tx",
       ["client_id", "customer_id"],
-      LATENCY_BUCKETS,
+      LATENCY_SECONDS_BUCKETS,
     ),
     txSubmissionToConfirmationSeconds: histogram(
       "tx_submission_to_confirmation_seconds",
       "Tx-level seconds from submission to confirmation, one observation per confirmed tx",
       ["client_id", "customer_id"],
-      LATENCY_BUCKETS,
+      LATENCY_SECONDS_BUCKETS,
     ),
     txEndToEndSeconds: histogram(
       "tx_end_to_end_seconds",
       "Tx-level end-to-end seconds (processing start to confirmation), one observation per confirmed tx",
       ["client_id", "customer_id"],
-      LATENCY_BUCKETS,
+      LATENCY_SECONDS_BUCKETS,
     ),
     intentToRegistrationSeconds: histogram(
       "intent_to_registration_seconds",
       "Seconds from oracle intent creation (price timestamp) to on-chain registration (block timestamp) — Spectra latency phase 1",
       ["symbol"],
-      LATENCY_BUCKETS,
+      LATENCY_SECONDS_BUCKETS,
     ),
     registrationToScanSeconds: histogram(
       "registration_to_scan_seconds",
       "Seconds from on-chain registration (block timestamp) to scanner delivery — Spectra latency phase 2",
       ["symbol"],
-      LATENCY_BUCKETS,
+      LATENCY_SECONDS_BUCKETS,
     ),
     scanToProcessingSeconds: histogram(
       "scan_to_processing_seconds",
       "Seconds from scanner delivery to per-intent processing start — Spectra latency phase 3",
       ["symbol"],
-      LATENCY_BUCKETS,
+      LATENCY_SECONDS_BUCKETS,
     ),
     processingToSubmissionSeconds: histogram(
       "processing_to_submission_seconds",
       "Seconds from per-intent processing start to Cardano submission",
       ["symbol", "client_id", "customer_id", "router_id"],
-      LATENCY_BUCKETS,
+      LATENCY_SECONDS_BUCKETS,
     ),
     submissionToConfirmationSeconds: histogram(
       "submission_to_confirmation_seconds",
       "Seconds from Cardano submission to confirmation",
       ["symbol", "client_id", "customer_id", "router_id"],
-      LATENCY_BUCKETS,
+      LATENCY_SECONDS_BUCKETS,
     ),
     endToEndLatencySeconds: histogram(
       "end_to_end_latency_seconds",
       "Seconds from feeder processing start to Cardano confirmation",
       ["symbol", "client_id", "customer_id", "router_id"],
-      LATENCY_BUCKETS,
+      LATENCY_SECONDS_BUCKETS,
     ),
     priceDeviationPercent: histogram(
       "price_deviation_percent",
       "Observed price deviation at policy-gating time",
       ["symbol", "router_id"],
-      PRICE_DEVIATION_BUCKETS,
+      PRICE_DEVIATION_PERCENT_BUCKETS,
     ),
     priceAgeSeconds: histogram(
       "price_age_seconds",
       "Age of the incoming intent price at processing time, recorded ONLY for symbols this feeder routes (matched a router) — not every symbol the source feed carries. Drives the PriceAgeHigh alert.",
       ["symbol", "router_id"],
-      PRICE_AGE_BUCKETS,
+      PRICE_AGE_SECONDS_BUCKETS,
     ),
     scannerLastBlock: gauge(
       "scanner_last_block",
@@ -586,7 +594,7 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "http_request_duration_seconds",
       "HTTP request latency for the feeder API",
       ["method", "endpoint"],
-      HTTP_LATENCY_BUCKETS,
+      HTTP_LATENCY_SECONDS_BUCKETS,
     ),
     activeWorkers: gauge(
       "active_workers",
@@ -699,6 +707,11 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "recovery_attempts_total",
       "Number of recovery attempts after transient errors",
       ["component", "reason"],
+    ),
+    bridgeProviderRequests: counter(
+      "provider_requests_total",
+      "Cardano API provider requests by provider, method, and outcome. Each retry attempt is one request — this tracks the provider's actual quota consumption. outcome: ok | rate_limited (429 throttle) | quota_exceeded (Blockfrost 402 daily-quota wall) | error.",
+      ["provider", "method", "outcome"],
     ),
     getMetricsText: () => registry.metrics(),
   };

@@ -23,6 +23,11 @@ import type {
 } from "./types.js";
 import { IssueCollector, type ValidationIssue } from "./issues.js";
 import { extractRouterSymbols } from "../router/symbols.js";
+import {
+  VALID_DATABASE_DRIVERS,
+  VALID_CARDANO_NETWORKS,
+  ROUTER_ALLOWED_FIELDS,
+} from "./constants.js";
 
 export { type ValidationIssue } from "./issues.js";
 
@@ -38,20 +43,6 @@ const VALID_OPERATORS: readonly TriggerConditionOperator[] = [
   "contains",
 ];
 
-const VALID_DATABASE_DRIVERS = ["sqlite", "postgres"] as const;
-const VALID_CARDANO_NETWORKS = ["Preview", "Mainnet"] as const;
-const ROUTER_ALLOWED_FIELDS = new Set([
-  "id",
-  "name",
-  "customer_id",
-  "type",
-  "enabled",
-  "private_key",
-  "private_key_env",
-  "triggers",
-  "processing",
-  "destinations",
-]);
 
 /**
  * Validate the whole `ModularConfig`. Returns every issue found across

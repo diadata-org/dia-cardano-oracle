@@ -1,9 +1,8 @@
 import { slotToUnixTime, type LucidEvolution } from "@lucid-evolution/lucid";
 
 import { getCliConfig } from "./config.js";
+import { TX_VALIDITY_START_BACK_SLOTS } from "./constants.js";
 import { isEmulatorModeActive } from "./lucid.js";
-
-const TX_VALIDITY_START_BACK_SLOTS = 60;
 
 export type NetworkNow = {
   slot: number;

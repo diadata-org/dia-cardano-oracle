@@ -11,20 +11,11 @@
 //                        idle -> accumulating -> in-flight.
 // These translate the coalescer/write-client callbacks that already fire into a phase code.
 
-/** Submit-pipeline phase codes, in order. Driven by onStep (+ lane idle/flush). */
-export const SUBMISSION_STATE = {
-  idle: 0,
-  building: 1,
-  submitting: 2,
-  awaiting: 3,
-} as const;
+import { SUBMISSION_STATE, COALESCER_STATE } from "../config/constants.js";
 
-/** Coalescer lane lifecycle codes, in order. Driven by onLaneEvent. */
-export const COALESCER_STATE = {
-  idle: 0,
-  accumulating: 1,
-  in_flight: 2,
-} as const;
+// The phase-code enums live in config/constants.ts; re-exported here so this
+// module's public API (and its tests) still expose them alongside the mappers.
+export { SUBMISSION_STATE, COALESCER_STATE };
 
 /** Cardano pipeline step (`onStep`) -> submit phase, or null when the step does
  *  not move the phase. Steps come from `cardano-write-client` in order:

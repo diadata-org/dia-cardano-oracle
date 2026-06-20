@@ -44,6 +44,9 @@ export const DEFAULT_CONFIRMATIONS = 6n;
 export const DEFAULT_MAX_BLOCK_GAP = 5000n;
 /** Chunk size used by the gap-recovery loop (Spectra parity: block_scanner_enhanced.go uses 5000). */
 export const BACKFILL_CHUNK_BLOCKS = 5000n;
+/** Cap on the scanner's per-error retry backoff (exponential from the scan
+ *  interval). A transient RPC error is retried, never fatal — see scanner-http. */
+export const SCANNER_RPC_RETRY_MAX_MS = 60_000;
 
 // ---------------------------------------------------------------------------
 // Event processor / dedup-cache defaults
@@ -103,6 +106,22 @@ export const WS_MAX_RECONNECT_MS = 300_000;
  *  Depth 1 = confirmed once observed in any block. YAML fallback:
  *  `cardano.confirmation_depth`; also the lib-bridge and API defaults. */
 export const DEFAULT_CONFIRMATION_DEPTH = 1;
+
+// ---------------------------------------------------------------------------
+// Stale-input reconcile (auto re-fetch + rebuild on BadInputsUTxO)
+//
+// After a restart / RPC turbulence the provider's indexer can lag the real
+// chain and report a UTxO the previous batch already spent. Building against it
+// makes the node reject the tx with BadInputsUTxO / TranslationLogicMissingInput.
+// The submit path then re-fetches the UTxO view and rebuilds, up to ATTEMPTS
+// times, waiting DELAY_MS between tries for the indexer to catch up. See
+// lib-bridge/reconcile-retry.ts.
+// ---------------------------------------------------------------------------
+
+/** Total build attempts (initial + reconcile retries) on a stale-input rejection. */
+export const STALE_INPUT_RECONCILE_ATTEMPTS = 3;
+/** Wait before each reconcile rebuild (ms) so the provider's indexer catches up. */
+export const STALE_INPUT_RECONCILE_DELAY_MS = 5_000;
 
 // ---------------------------------------------------------------------------
 // Cron service / health check
@@ -239,3 +258,68 @@ export const CARDANO_NETWORK_MAGIC: Record<"Preview" | "Mainnet", number> = {
   Preview: 2,
   Mainnet: 764824073,
 };
+
+// ---------------------------------------------------------------------------
+// Metrics histogram buckets
+//
+// Per-metric Prometheus histogram bucket boundaries (used by api/metrics.ts).
+// The unit is in each name so a reader knows what the boundaries mean.
+// ---------------------------------------------------------------------------
+
+/** End-to-end / per-stage latency histogram, in seconds. */
+export const LATENCY_SECONDS_BUCKETS = [0.5, 1, 5, 15, 30, 60, 120, 300, 600];
+/** HTTP request latency histogram, in seconds. */
+export const HTTP_LATENCY_SECONDS_BUCKETS = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5];
+/** Price-data-age histogram, in seconds. */
+export const PRICE_AGE_SECONDS_BUCKETS = [1, 5, 30, 60, 300, 1800];
+/** Price-deviation histogram, in percent. */
+export const PRICE_DEVIATION_PERCENT_BUCKETS = [0.01, 0.1, 0.5, 1, 5, 10];
+/** Pairs-per-transaction (batch size) histogram. */
+export const PAIRS_PER_TX_BUCKETS = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20];
+
+// ---------------------------------------------------------------------------
+// Submission / coalescer state codes
+//
+// Numeric phase codes published by the per-client `submission_state` and
+// `coalescer_state` gauges. Kept separate because both can be active at once
+// (a lane accumulates the next batch while the current one is on-chain). The
+// event→code mapping lives in metrics/submission-state.ts.
+// ---------------------------------------------------------------------------
+
+/** Submit-pipeline phase codes, in order. Driven by onStep (+ lane idle/flush). */
+export const SUBMISSION_STATE = {
+  idle: 0,
+  building: 1,
+  submitting: 2,
+  awaiting: 3,
+} as const;
+/** Coalescer lane lifecycle codes, in order. Driven by onLaneEvent. */
+export const COALESCER_STATE = {
+  idle: 0,
+  accumulating: 1,
+  in_flight: 2,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Config validation allow-lists
+//
+// Fixed value sets the config validator (config/validate.ts) checks against.
+// ---------------------------------------------------------------------------
+
+/** Database drivers the feeder supports. YAML: `infrastructure.database.driver`. */
+export const VALID_DATABASE_DRIVERS = ["sqlite", "postgres"] as const;
+/** Cardano networks the feeder supports. Env: `CARDANO_NETWORK`. */
+export const VALID_CARDANO_NETWORKS = ["Preview", "Mainnet"] as const;
+/** Keys allowed on a router object in a `config/routers/<net>/*.yaml`. */
+export const ROUTER_ALLOWED_FIELDS = new Set([
+  "id",
+  "name",
+  "customer_id",
+  "type",
+  "enabled",
+  "private_key",
+  "private_key_env",
+  "triggers",
+  "processing",
+  "destinations",
+]);
