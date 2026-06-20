@@ -487,3 +487,58 @@ groups:
                BLOCKFROST_PROJECT_ID_<NET>), then restart:
                  cd offchain && make restart
             No price updates are at risk while only the secondary is down.
+
+      # ---------------------------------------------------------------------
+      - alert: ProviderQuotaWall
+        expr: >
+          increase(dia_bridge_provider_requests_total{outcome="quota_exceeded"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Provider {{ $labels.provider }} hit its quota wall (402 Payment Required)"
+          description: >
+            The Cardano API provider {{ $labels.provider }} returned a
+            `402 Payment Required` on at least one call in the last 5 minutes —
+            its request quota is exhausted. This is the LEADING signal for the
+            outage that froze a previous run: it fires the moment the key walls,
+            instead of waiting the ~10 min for PrimaryProviderDown to trip. Every
+            build/submit through this provider will fail until the key is rotated
+            or upgraded.
+
+            WHAT TO DO:
+            1. Rotate the key: set BLOCKFROST_PROJECT_ID_<NET> (or
+               KOIOS_API_URL_<NET>) in offchain/feeder/.env to a fresh
+               project/key with remaining quota, then restart:
+                 cd offchain && make restart
+            2. Or upgrade the provider plan, or switch CARDANO_PROVIDER
+               (Blockfrost <-> Koios) in offchain/feeder/.env and restart.
+
+      # ---------------------------------------------------------------------
+      - alert: ProviderErrorRateHigh
+        expr: >
+          sum by (provider) (
+            rate(dia_bridge_provider_requests_total{outcome=~"error|rate_limited"}[10m])
+          )
+          /
+          sum by (provider) (rate(dia_bridge_provider_requests_total[10m]))
+          > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Provider {{ $labels.provider }} error/throttle rate is high ({{ $value | humanizePercentage }})"
+          description: >
+            Over the last 10 minutes more than 20% of requests to
+            {{ $labels.provider }} failed or were throttled (429 rate-limit). A
+            rising 429 share is the early warning that the key is nearing its
+            rate/quota ceiling — act before it walls (see ProviderQuotaWall). A
+            high `error` share usually means the provider is flaky or the network
+            path is degraded.
+
+            WHAT TO DO:
+            1. Inspect the breakdown in Grafana / Prometheus:
+                 sum by (outcome) (rate(dia_bridge_provider_requests_total{provider="{{ $labels.provider }}"}[10m]))
+            2. If 429-dominated: upgrade the plan or rotate to a higher-quota key.
+            3. If error-dominated: check the provider status page and the feeder
+               logs (cd offchain && make logs); consider switching CARDANO_PROVIDER.

@@ -78,6 +78,14 @@ import { depositFund, isCleanAdaDeposit } from "../transactions/deposit.js";
 import { selectConsolidationUtxos } from "../wallet/wallet-consolidate.js";
 import { resolveClientUtxoRefs } from "../transactions/reclaim-reference-script.js";
 import { completeWithRetry } from "../core/tx-build.js";
+import {
+  createRetryingProvider,
+  isTransientProviderError,
+  isQuotaError,
+  isRateLimitError,
+  type ProviderCallEvent,
+} from "../core/provider-retry.js";
+import type { Provider } from "@lucid-evolution/core-types";
 import { resolveRunStateDir, latestRunDir } from "../core/run-state.js";
 
 // Verbose runner: each test logs [pass] <name> as it completes, and the final
@@ -153,6 +161,17 @@ await run("testOracleUpdatePreflightPureGuards", testOracleUpdatePreflightPureGu
 // rethrow-real-errors path.
 await run("testCompleteWithRetryRebuildsFreshBuilderOnRetry", testCompleteWithRetryRebuildsFreshBuilderOnRetry);
 await run("testCompleteWithRetryRethrowsRealErrorImmediately", testCompleteWithRetryRethrowsRealErrorImmediately);
+
+// --- Provider retry wrapper (transient-network resilience + consumption metrics)
+// A single transient `fetch failed` must not abort an admin command; the wrapper
+// retries transient transport errors with backoff, rethrows real ledger errors
+// immediately, and reports every request to the metrics observer (by outcome).
+await run("testProviderRetryClassifiers", testProviderRetryClassifiers);
+await run("testProviderRetryRetriesTransientThenSucceeds", testProviderRetryRetriesTransientThenSucceeds);
+await run("testProviderRetryRethrowsNonTransientImmediately", testProviderRetryRethrowsNonTransientImmediately);
+await run("testProviderRetryExhaustsThenRethrows", testProviderRetryExhaustsThenRethrows);
+await run("testProviderRetryReportsOutcomesToObserver", testProviderRetryReportsOutcomesToObserver);
+await run("testProviderRetryPreservesThisAndNonFunctionProps", testProviderRetryPreservesThisAndNonFunctionProps);
 
 // --- Wallet settlement wait (provider lag / stale-UTxO regression) ----------
 await run("testWalletSettlementWaitsForSpentInputs", testWalletSettlementWaitsForSpentInputs);
@@ -236,6 +255,156 @@ async function testCompleteWithRetryRethrowsRealErrorImmediately(): Promise<void
     1,
     "real errors must not retry — the factory is called exactly once",
   );
+}
+
+// --- Provider retry wrapper -------------------------------------------------
+// No-op sleep so the retry tests never wait on real wall-clock backoff.
+// A hoisted function declaration (not a const) so it is available when the
+// top-level `await run(...)` calls above execute it.
+async function noopSleep(_ms: number): Promise<void> {}
+
+function testProviderRetryClassifiers(): void {
+  for (const message of [
+    "fetch failed",
+    "ECONNRESET",
+    "socket hang up",
+    "ETIMEDOUT",
+    "503 Service Unavailable",
+    "getaddrinfo ENOTFOUND blockfrost.io",
+    "429 Too Many Requests",
+  ]) {
+    assert.equal(isTransientProviderError(new Error(message)), true, `transient: ${message}`);
+  }
+  for (const message of ["BadInputsUTxO", "ValueNotConservedUTxO", "402 Payment Required"]) {
+    assert.equal(isTransientProviderError(new Error(message)), false, `not transient: ${message}`);
+  }
+  assert.equal(isQuotaError(new Error("402 Payment Required")), true, "402 is a quota wall");
+  assert.equal(isQuotaError(new Error("fetch failed")), false, "network blip is not a quota wall");
+  assert.equal(isRateLimitError(new Error("429 Too Many Requests")), true, "429 is a rate limit");
+  assert.equal(isRateLimitError(new Error("BadInputsUTxO")), false, "ledger error is not a rate limit");
+
+  // Nested cause (fetch wraps the socket error) is inspected.
+  const wrapped = new Error("request to https://blockfrost failed");
+  (wrapped as Error & { cause?: unknown }).cause = new Error("ECONNRESET");
+  assert.equal(isTransientProviderError(wrapped), true, "nested cause is classified");
+}
+
+async function testProviderRetryRetriesTransientThenSucceeds(): Promise<void> {
+  let calls = 0;
+  const base = {
+    getUtxos: async () => {
+      calls += 1;
+      if (calls < 3) throw new Error("fetch failed");
+      return [];
+    },
+  } as unknown as Provider;
+  const p = createRetryingProvider(base, { attempts: 5, delayMs: 1, sleep: noopSleep });
+
+  assert.deepEqual(await p.getUtxos("addr" as never), [], "recovers after transient errors");
+  assert.equal(calls, 3, "two failures then success = three attempts");
+}
+
+async function testProviderRetryRethrowsNonTransientImmediately(): Promise<void> {
+  let calls = 0;
+  const base = {
+    submitTx: async () => {
+      calls += 1;
+      throw new Error("BadInputsUTxO");
+    },
+  } as unknown as Provider;
+  const p = createRetryingProvider(base, { attempts: 5, delayMs: 1, sleep: noopSleep });
+
+  await assert.rejects(p.submitTx("cbor"), /BadInputsUTxO/, "real ledger errors must surface");
+  assert.equal(calls, 1, "non-transient errors must not retry");
+}
+
+async function testProviderRetryExhaustsThenRethrows(): Promise<void> {
+  let calls = 0;
+  const base = {
+    getProtocolParameters: async () => {
+      calls += 1;
+      throw new Error("fetch failed");
+    },
+  } as unknown as Provider;
+  const p = createRetryingProvider(base, { attempts: 3, delayMs: 1, sleep: noopSleep });
+
+  await assert.rejects(p.getProtocolParameters(), /fetch failed/, "rethrows after exhausting attempts");
+  assert.equal(calls, 3, "exactly `attempts` tries");
+}
+
+async function testProviderRetryReportsOutcomesToObserver(): Promise<void> {
+  const events: ProviderCallEvent[] = [];
+  const onCall = (event: ProviderCallEvent): void => {
+    events.push(event);
+  };
+
+  // ok: a successful call reports once.
+  events.length = 0;
+  const okProvider = createRetryingProvider({ getUtxos: async () => [] } as unknown as Provider, {
+    attempts: 3,
+    delayMs: 1,
+    sleep: noopSleep,
+    providerName: "Blockfrost",
+    onCall,
+  });
+  await okProvider.getUtxos("addr" as never);
+  assert.deepEqual(
+    events.map((e) => e.outcome),
+    ["ok"],
+    "success reports a single ok",
+  );
+  assert.equal(events[0]!.provider, "Blockfrost");
+  assert.equal(events[0]!.method, "getUtxos");
+
+  // quota_exceeded: a 402 reports quota_exceeded and is NOT retried.
+  events.length = 0;
+  let quotaCalls = 0;
+  const quotaProvider = createRetryingProvider(
+    {
+      submitTx: async () => {
+        quotaCalls += 1;
+        throw new Error("402 Payment Required");
+      },
+    } as unknown as Provider,
+    { attempts: 4, delayMs: 1, sleep: noopSleep, providerName: "Blockfrost", onCall },
+  );
+  await assert.rejects(quotaProvider.submitTx("cbor"));
+  assert.equal(quotaCalls, 1, "402 quota wall is not retried");
+  assert.deepEqual(events.map((e) => e.outcome), ["quota_exceeded"]);
+
+  // rate_limited: a 429 reports rate_limited and IS retried (transient).
+  events.length = 0;
+  let rlCalls = 0;
+  const rlProvider = createRetryingProvider(
+    {
+      getDatum: async () => {
+        rlCalls += 1;
+        if (rlCalls < 2) throw new Error("429 Too Many Requests");
+        return "datum";
+      },
+    } as unknown as Provider,
+    { attempts: 4, delayMs: 1, sleep: noopSleep, providerName: "Koios", onCall },
+  );
+  assert.equal(await rlProvider.getDatum("h" as never), "datum");
+  assert.deepEqual(events.map((e) => e.outcome), ["rate_limited", "ok"]);
+  assert.equal(events[0]!.provider, "Koios");
+}
+
+async function testProviderRetryPreservesThisAndNonFunctionProps(): Promise<void> {
+  class FakeProvider {
+    label = "blockfrost";
+    private token = "abc";
+    async getDatum(): Promise<string> {
+      return this.token;
+    }
+  }
+  const base = new FakeProvider() as unknown as Provider & { label: string };
+  const p = createRetryingProvider(base, { attempts: 2, delayMs: 1, sleep: noopSleep }) as Provider & {
+    label: string;
+  };
+
+  assert.equal(p.label, "blockfrost", "non-function properties pass through");
+  assert.equal(await p.getDatum("h" as never), "abc", "method `this` is preserved through the proxy");
 }
 
 async function testWalletSettlementWaitsForSpentInputs(): Promise<void> {

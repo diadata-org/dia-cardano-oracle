@@ -3,6 +3,39 @@ import { Blockfrost, Koios } from "@lucid-evolution/provider";
 import type { Provider } from "@lucid-evolution/core-types";
 
 import { getCliConfig, type CliConfig } from "./config.js";
+import { createRetryingProvider, type ProviderCallEvent } from "./provider-retry.js";
+import {
+  DEFAULT_PROVIDER_RETRY_ATTEMPTS,
+  DEFAULT_PROVIDER_RETRY_DELAY_MS,
+  envNumber,
+} from "./constants.js";
+
+// Optional observer for per-provider request/error/quota metrics. The CLI core
+// stays Prometheus-agnostic; the feeder installs an observer at startup that
+// feeds the events into its prom counters. Unset in the CLI one-shot commands
+// (no metrics registry) — calls are simply not counted there.
+export type ProviderCallObserver = (event: ProviderCallEvent) => void;
+let providerCallObserver: ProviderCallObserver | undefined;
+
+/** Register (or clear with `undefined`) the provider-call metrics observer. */
+export function setProviderCallObserver(observer: ProviderCallObserver | undefined): void {
+  providerCallObserver = observer;
+}
+
+// Wrap a freshly-built real provider so every network call retries transient
+// transport errors with backoff and reports each request to the metrics
+// observer. Applied to the production Blockfrost/Koios providers only — the
+// emulator factory (installed via setProviderFactory) is left untouched so
+// in-memory tests never sleep/retry.
+function withProviderRetry(provider: Provider, providerName: string): Provider {
+  return createRetryingProvider(provider, {
+    attempts: envNumber("PROVIDER_RETRY_ATTEMPTS", DEFAULT_PROVIDER_RETRY_ATTEMPTS),
+    delayMs: envNumber("PROVIDER_RETRY_DELAY_MS", DEFAULT_PROVIDER_RETRY_DELAY_MS),
+    providerName,
+    log: (message) => console.error(message),
+    onCall: (event) => providerCallObserver?.(event),
+  });
+}
 
 type ProtocolParameters = Awaited<
   ReturnType<Blockfrost["getProtocolParameters"]>
@@ -38,11 +71,11 @@ type BlockfrostProtocolParametersResponse = {
 // `@lucid-evolution/core-types`.
 export type ConfiguredProvider = Provider;
 
-async function makeRealConfiguredProvider(): Promise<Blockfrost | Koios> {
+async function makeRealConfiguredProvider(): Promise<ConfiguredProvider> {
   const config = getCliConfig();
 
   if (config.cardanoProvider === "Koios") {
-    return new Koios(config.koiosApiUrl);
+    return withProviderRetry(new Koios(config.koiosApiUrl), "Koios");
   }
 
   const provider = new Blockfrost(
@@ -55,7 +88,7 @@ async function makeRealConfiguredProvider(): Promise<Blockfrost | Koios> {
       config.blockfrostProjectId,
     );
 
-  return provider;
+  return withProviderRetry(provider, "Blockfrost");
 }
 
 export type ProviderFactory = () => Promise<ConfiguredProvider>;
@@ -159,7 +192,7 @@ export async function selectConfiguredWalletWithConfig(
 
 async function makeProviderWithConfig(config: CliConfig): Promise<ConfiguredProvider> {
   if (config.cardanoProvider === "Koios") {
-    return new Koios(config.koiosApiUrl);
+    return withProviderRetry(new Koios(config.koiosApiUrl), "Koios");
   }
   const provider = new Blockfrost(
     config.blockfrostApiUrl,
@@ -170,7 +203,7 @@ async function makeProviderWithConfig(config: CliConfig): Promise<ConfiguredProv
       config.blockfrostApiUrl,
       config.blockfrostProjectId,
     );
-  return provider;
+  return withProviderRetry(provider, "Blockfrost");
 }
 
 // Override the Lucid factory. Subsequent calls to `makeConfiguredLucid()`
