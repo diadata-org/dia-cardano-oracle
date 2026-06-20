@@ -185,13 +185,17 @@ exist today.
   (each retry attempt = one request = real quota consumption), `outcome ∈ {ok, rate_limited,
   quota_exceeded, error}`. It is fed by an observer on the same provider wrapper the CLI retry
   uses (`setProviderCallObserver`, registered by the daemon), so it covers the whole build/submit
-  path with no per-call-site instrumentation. Two alerts added to `monitoring/alerts.yml`:
-  **ProviderQuotaWall** (critical, fires the moment a `quota_exceeded`/402 appears — the leading
-  signal that froze the Preview run, instead of waiting ~10 min for `PrimaryProviderDown`) and
-  **ProviderErrorRateHigh** (warning, >20% error/throttle share over 10 m — the early warning a
-  key is nearing its ceiling). Exact remaining-quota is not surfaced because the provider APIs do
-  not expose it per response; the 402 signal is the actionable equivalent. TDD'd (classifiers +
-  observer outcomes).
+  path with no per-call-site instrumentation. Four alerts in `monitoring/alerts.yml`, all with
+  thresholds config-driven from `infrastructure.<network>.yaml::alerting.*` (single source of
+  truth, generator-injected, threshold-drift-test-guarded — same machinery as every other alert):
+  **ProviderRequestQuotaHighBlockfrost** / **ProviderRequestQuotaHighKoios** (warning, proactive —
+  fire when 24 h requests cross `provider_request_quota_per_day_<provider>` ×
+  `provider_request_quota_warn_ratio`, i.e. *before* the wall; this is the KPI/headroom signal),
+  **ProviderQuotaWall** (critical, the hard 402 backstop), and **ProviderErrorRateHigh** (warning,
+  error/429 share over `provider_error_rate_warn_ratio`). Per-provider daily limits are set to the
+  plan's quota in YAML; exact remaining-quota is not exposed by the provider APIs, so the
+  request-rate-vs-configured-quota projection is the actionable equivalent. TDD'd (classifiers +
+  observer outcomes + threshold-drift guard extended for the per-provider product thresholds).
 - [x] **Retry/backoff on one-shot CLI admin commands — DONE.** Instead of touching each of the
   ~16 `.submit()` call sites, the Lucid **provider itself** is wrapped (`createRetryingProvider`,
   `cli/src/core/provider-retry.ts`) at the single chokepoint where both factories build it

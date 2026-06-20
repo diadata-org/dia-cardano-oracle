@@ -529,9 +529,10 @@ groups:
         annotations:
           summary: "Provider {{ $labels.provider }} error/throttle rate is high ({{ $value | humanizePercentage }})"
           description: >
-            Over the last 10 minutes more than 20% of requests to
-            {{ $labels.provider }} failed or were throttled (429 rate-limit). A
-            rising 429 share is the early warning that the key is nearing its
+            Over the last 10 minutes the share of requests to
+            {{ $labels.provider }} that failed or were throttled (429 rate-limit)
+            exceeded the configured threshold (`alerting.provider_error_rate_warn_ratio`).
+            A rising 429 share is the early warning that the key is nearing its
             rate/quota ceiling — act before it walls (see ProviderQuotaWall). A
             high `error` share usually means the provider is flaky or the network
             path is degraded.
@@ -542,3 +543,55 @@ groups:
             2. If 429-dominated: upgrade the plan or rotate to a higher-quota key.
             3. If error-dominated: check the provider status page and the feeder
                logs (cd offchain && make logs); consider switching CARDANO_PROVIDER.
+
+      # ---------------------------------------------------------------------
+      - alert: ProviderRequestQuotaHighBlockfrost
+        expr: >
+          increase(dia_bridge_provider_requests_total{provider="Blockfrost"}[24h]) > 40000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Blockfrost daily request usage is approaching its quota"
+          description: >
+            Blockfrost requests over the last 24 h crossed
+            `alerting.provider_request_quota_warn_ratio` × the configured daily
+            quota (`alerting.provider_request_quota_per_day_blockfrost`). This is
+            the PROACTIVE headroom warning — it fires before the 402 quota wall
+            (ProviderQuotaWall) so the key can be rotated/upgraded while builds
+            still work. Each retry attempt counts as one request.
+
+            WHAT TO DO:
+            1. See where the requests go:
+                 sum by (method) (increase(dia_bridge_provider_requests_total{provider="Blockfrost"}[24h]))
+            2. Rotate to a fresh/higher-quota BLOCKFROST_PROJECT_ID_<NET> in
+               offchain/feeder/.env and restart (cd offchain && make restart),
+               or upgrade the plan, or switch CARDANO_PROVIDER.
+            3. If usage is legitimately high, raise
+               `alerting.provider_request_quota_per_day_blockfrost` to your plan's
+               real quota and re-run `make generate-monitoring`.
+
+      # ---------------------------------------------------------------------
+      - alert: ProviderRequestQuotaHighKoios
+        expr: >
+          increase(dia_bridge_provider_requests_total{provider="Koios"}[24h]) > 40000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Koios daily request usage is approaching its quota"
+          description: >
+            Koios requests over the last 24 h crossed
+            `alerting.provider_request_quota_warn_ratio` × the configured daily
+            quota (`alerting.provider_request_quota_per_day_koios`). Koios is the
+            secondary (confirmation/reorg) provider, so this is a headroom warning
+            before the hard wall. Each retry attempt counts as one request.
+
+            WHAT TO DO:
+            1. See where the requests go:
+                 sum by (method) (increase(dia_bridge_provider_requests_total{provider="Koios"}[24h]))
+            2. Point KOIOS_API_URL_<NET> at a higher-quota endpoint/plan in
+               offchain/feeder/.env and restart (cd offchain && make restart).
+            3. If usage is legitimately high, raise
+               `alerting.provider_request_quota_per_day_koios` to your plan's real
+               quota and re-run `make generate-monitoring`.

@@ -207,6 +207,16 @@ infrastructure:
     # redundancy. Measured via `dia_bridge_provider_last_ok_timestamp_seconds{role}`.
     provider_primary_unhealthy_seconds: 600            # 10 min → PrimaryProviderDown (critical)
     provider_secondary_unhealthy_seconds: 900          # 15 min → SecondaryProviderDown (warning)
+    # Provider request-quota headroom (proactive, before the 402 wall). Set each
+    # per-provider daily request limit to YOUR plan's quota; the warning fires at
+    # warn_ratio × that limit over a rolling 24 h (ProviderRequestQuotaHigh*).
+    # The 402 wall (ProviderQuotaWall) remains the hard backstop. Measured via
+    # `dia_bridge_provider_requests_total{provider}` (every request, incl. retries).
+    provider_request_quota_per_day_blockfrost: 50000   # Blockfrost plan daily request quota
+    provider_request_quota_per_day_koios: 50000        # Koios plan daily request quota
+    provider_request_quota_warn_ratio: 0.8             # warn at 80 % of the daily quota
+    # Share of provider requests failing/throttled over 10 min → ProviderErrorRateHigh.
+    provider_error_rate_warn_ratio: 0.2                # 20 % error/429 share
     # Automatic remediation — feeder acts itself (lane task). Each MUST sit beyond
     # its paired alert (threshold-drift test enforces): alert fires first, auto follows.
     auto_settle_lovelace: 30000000                     # 30 ADA accrued → auto `settle` (alert at 10)

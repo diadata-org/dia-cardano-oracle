@@ -31,7 +31,13 @@ function loadAlerting(networkFile: string): Alerting {
 
 // alert name -> { yamlKey, divisor }. divisor 1e6 = the expr divides lovelace
 // by 1_000_000 and compares in ADA; divisor 1 = the value is used verbatim.
-const ALERT_TO_YAML: Record<string, { yamlKey: string; divisor: number }> = {
+// A threshold operand is either one YAML key (÷ divisor) or the PRODUCT of two
+// keys (a per-provider daily quota × a warn ratio). Mirror of the generator map.
+type ThresholdSpec =
+  | { yamlKey: string; divisor: number }
+  | { product: [string, string]; divisor: number };
+
+const ALERT_TO_YAML: Record<string, ThresholdSpec> = {
   OraclePairStale: { yamlKey: "oracle_pair_stale_seconds", divisor: 1 },
   ReceiverBalanceLow: { yamlKey: "receiver_balance_low_lovelace", divisor: 1_000_000 },
   SettleOverdue: { yamlKey: "settle_overdue_lovelace", divisor: 1_000_000 },
@@ -44,7 +50,27 @@ const ALERT_TO_YAML: Record<string, { yamlKey: string; divisor: number }> = {
   ReceiverDepositsPending: { yamlKey: "deposit_pending_merge_lovelace", divisor: 1_000_000 },
   PrimaryProviderDown: { yamlKey: "provider_primary_unhealthy_seconds", divisor: 1 },
   SecondaryProviderDown: { yamlKey: "provider_secondary_unhealthy_seconds", divisor: 1 },
+  ProviderErrorRateHigh: { yamlKey: "provider_error_rate_warn_ratio", divisor: 1 },
+  ProviderRequestQuotaHighBlockfrost: {
+    product: ["provider_request_quota_per_day_blockfrost", "provider_request_quota_warn_ratio"],
+    divisor: 1,
+  },
+  ProviderRequestQuotaHighKoios: {
+    product: ["provider_request_quota_per_day_koios", "provider_request_quota_warn_ratio"],
+    divisor: 1,
+  },
 };
+
+/** The YAML keys a spec reads (one, or the two product factors). */
+function specKeys(spec: ThresholdSpec): string[] {
+  return "yamlKey" in spec ? [spec.yamlKey] : spec.product;
+}
+
+/** Resolve a spec to its numeric operand from the alerting block. */
+function resolveSpec(spec: ThresholdSpec, alerting: Alerting): number {
+  if ("yamlKey" in spec) return alerting[spec.yamlKey]! / spec.divisor;
+  return (alerting[spec.product[0]]! * alerting[spec.product[1]]!) / spec.divisor;
+}
 
 // Automatic-remediation thresholds. These drive FEEDER BEHAVIOUR (auto settle /
 // withdraw / consolidate), not a Prometheus rule, so they have no alert mapping.
@@ -125,7 +151,7 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
 
   it("every alerting key is consumed by an alert mapping or an auto-remediation threshold (no orphan keys)", () => {
     const yaml = loadAlerting("infrastructure.preview.yaml");
-    const mapped = new Set(Object.values(ALERT_TO_YAML).map((m) => m.yamlKey));
+    const mapped = new Set(Object.values(ALERT_TO_YAML).flatMap(specKeys));
     for (const key of Object.keys(yaml)) {
       assert.ok(
         mapped.has(key) || AUTO_REMEDIATION_KEYS.has(key),
@@ -158,14 +184,14 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
   it("monitoring/alerts.yml expr thresholds match the YAML", () => {
     const yaml = loadAlerting("infrastructure.preview.yaml");
     const rules = loadAlertRules();
-    for (const [alert, { yamlKey, divisor }] of Object.entries(ALERT_TO_YAML)) {
+    for (const [alert, spec] of Object.entries(ALERT_TO_YAML)) {
       const rule = rules.get(alert);
       assert.ok(rule, `alerts.yml missing alert: ${alert}`);
-      const expected = yaml[yamlKey]! / divisor;
+      const expected = resolveSpec(spec, yaml);
       assert.equal(
         thresholdFromExpr(rule.expr),
         expected,
-        `${alert} expr threshold drifted from alerting.${yamlKey} (${yaml[yamlKey]}${divisor > 1 ? ` / ${divisor}` : ""})`,
+        `${alert} expr threshold drifted from alerting.${specKeys(spec).join(" × ")}`,
       );
     }
   });
@@ -179,7 +205,7 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     };
     // ADA-denominated alerts must mention "<N> ADA" in their text.
     for (const alert of ["ReceiverBalanceLow", "SettleOverdue", "PaymentHookWithdrawReady", "AdminWalletLow", "AdminWalletFragmented", "ReceiverDepositsPending"]) {
-      const { yamlKey } = ALERT_TO_YAML[alert]!;
+      const yamlKey = specKeys(ALERT_TO_YAML[alert]!)[0]!;
       const ada = yaml[yamlKey]! / 1_000_000;
       assert.match(prose(alert), new RegExp(`\\b${ada}\\s*ADA\\b`), `${alert} prose missing "${ada} ADA"`);
     }

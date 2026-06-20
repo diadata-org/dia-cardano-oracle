@@ -158,7 +158,13 @@ function buildAlertmanagerYaml(n: NotificationsCfg): string {
 // 1 means the value is used verbatim (seconds / percent / count). This MUST
 // stay in lockstep with the drift test's ALERT_TO_YAML.
 // ---------------------------------------------------------------------------
-const ALERT_TO_YAML: Record<string, { yamlKey: string; divisor: number }> = {
+// A threshold operand is either one YAML key (divided by `divisor`) or the
+// PRODUCT of two keys (e.g. a per-provider daily quota × a warn ratio).
+type ThresholdSpec =
+  | { yamlKey: string; divisor: number }
+  | { product: [string, string]; divisor: number };
+
+const ALERT_TO_YAML: Record<string, ThresholdSpec> = {
   OraclePairStale: { yamlKey: "oracle_pair_stale_seconds", divisor: 1 },
   ReceiverBalanceLow: { yamlKey: "receiver_balance_low_lovelace", divisor: 1_000_000 },
   SettleOverdue: { yamlKey: "settle_overdue_lovelace", divisor: 1_000_000 },
@@ -171,7 +177,27 @@ const ALERT_TO_YAML: Record<string, { yamlKey: string; divisor: number }> = {
   ReceiverDepositsPending: { yamlKey: "deposit_pending_merge_lovelace", divisor: 1_000_000 },
   PrimaryProviderDown: { yamlKey: "provider_primary_unhealthy_seconds", divisor: 1 },
   SecondaryProviderDown: { yamlKey: "provider_secondary_unhealthy_seconds", divisor: 1 },
+  ProviderErrorRateHigh: { yamlKey: "provider_error_rate_warn_ratio", divisor: 1 },
+  ProviderRequestQuotaHighBlockfrost: {
+    product: ["provider_request_quota_per_day_blockfrost", "provider_request_quota_warn_ratio"],
+    divisor: 1,
+  },
+  ProviderRequestQuotaHighKoios: {
+    product: ["provider_request_quota_per_day_koios", "provider_request_quota_warn_ratio"],
+    divisor: 1,
+  },
 };
+
+/** The YAML keys a spec reads (one, or the two product factors). */
+function specKeys(spec: ThresholdSpec): string[] {
+  return "yamlKey" in spec ? [spec.yamlKey] : spec.product;
+}
+
+/** Resolve a spec to its numeric operand from the alerting block. */
+function resolveSpec(spec: ThresholdSpec, alerting: Alerting): number {
+  if ("yamlKey" in spec) return alerting[spec.yamlKey]! / spec.divisor;
+  return (alerting[spec.product[0]]! * alerting[spec.product[1]]!) / spec.divisor;
+}
 
 // Alerts whose summary/description prose names the threshold as "<N> ADA".
 // (Lovelace-denominated alerts only; verbatim alerts state the raw number.)
@@ -211,13 +237,14 @@ function reEscape(s: string): string {
  */
 function patchAlertsYaml(text: string, alerting: Alerting): string {
   let out = text;
-  for (const [alert, { yamlKey, divisor }] of Object.entries(ALERT_TO_YAML)) {
-    const raw = alerting[yamlKey];
-    if (raw === undefined) {
-      process.stderr.write(`[generate-monitoring] error: alerting.${yamlKey} missing (alert ${alert})\n`);
-      process.exit(1);
+  for (const [alert, spec] of Object.entries(ALERT_TO_YAML)) {
+    for (const key of specKeys(spec)) {
+      if (alerting[key] === undefined) {
+        process.stderr.write(`[generate-monitoring] error: alerting.${key} missing (alert ${alert})\n`);
+        process.exit(1);
+      }
     }
-    const value = raw / divisor;
+    const value = resolveSpec(spec, alerting);
     const valueStr = fmt(value);
 
     // Isolate this alert's block so substitutions stay local.
@@ -248,7 +275,7 @@ function patchAlertsYaml(text: string, alerting: Alerting): string {
       );
     }
     // 3) percent prose (PriceDeviationHigh: "more than 5%", "above 5%").
-    if (yamlKey === "price_deviation_high_percent") {
+    if (alert === "PriceDeviationHigh") {
       block = block.replace(/\b[0-9]+(?:\.[0-9]+)?%/g, `${valueStr}%`);
     }
 
