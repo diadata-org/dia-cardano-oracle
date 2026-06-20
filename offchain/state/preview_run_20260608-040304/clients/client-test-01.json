@@ -45,7 +45,7 @@
     }
   },
   "datum": {
-    "receiverCbor": "d8799f1b0000000240e3b740001a004c4b40ff"
+    "receiverCbor": "d8799f1b0000000217ae8d50001a004c4b40ff"
   },
   "wallet": {
     "source": "seed",
@@ -65,7 +65,7 @@
     "depositValidatorHash": "f8a600c189f5e0fd2e88e15deefbfb0c064c5fb67e51cadcc44620bc",
     "depositValidatorAddress": "addr_test1wru2vqxp3867plfw3rs4mmhmlvxqvnzlkel9rjkuc3rzp0qrstq95",
     "receiverState": {
-      "balanceLovelace": "9678600000",
+      "balanceLovelace": "8987250000",
       "accruedToHookLovelace": "0",
       "minUtxoLovelace": "5000000"
     }
@@ -219,6 +219,111 @@
     {
       "step": "preview:settle",
       "submittedTxHash": "c513983a65ea51553a40397b2df4968ff15cae6033a0138b6989e3489aecd088",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "13b5569422aec5cc914bf10e2e89cc3f49633a4994c716e93c425aa1a46f6a78",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "836db66c0cd667f4126547a26097b102046c5d0341be3dc99ddcdb9ff49b7312",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "0b0ef42322a69a0137cad221b314a1d0e8eaf77bd6d9000b46800bf209a51c8a",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "daa1284dfc9ca6166e36ba19a8d1dec039872c66c808f9aeaee48ae100d0bc1e",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "eba2ee2d6e94aedbe920b8b225a18d83ccbfd45e3321086e2a9d52917496d11a",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "77b6cc3a58f0b6f6e9b164f22f28a851921c01965770c6a514b3f51819e8cb76",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "252d7b797e055aa1f8c5dae8611c43db99c29b27c3399e06651fc45d7fc650cd",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "64242b42459df1e3733363331e2cd11a0b75e730fca1e9fe31cb07f42758f85e",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "bfe263322072199eacac17e77a81c2dc2a8ae066676972cccc40e2188534883a",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "355018724b689c7e897b6dcf2bc25dcf1b7e34ad6c635ac2e6336e94fbae8677",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "3545f37e02a66abb3687033768a5b83540398bd167ba48de45813b7ac8d5ac3b",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "5df56352a9264e305108a062120b0bb431c55c3ada99877984177b78f644e170",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "0e57f159323109940e7b36817eb5d4d6c22787d46d8d13e23ebc41445e4ffe86",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "ef8cf1670b782402a07079bb93a56d50da8b9918d5fb8ab6ee4315ef1232c40c",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "dc22ed41bbf3ac211bf06e2e6aedb52a35bd557eb20b7145eb027c91cdf27d16",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "92d8d82d4cdecc1b477b2f810f1aeb6eeb95fa01fbb92e6b6a99a1cffdfb97ef",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "ccb42c49c458609bbc6e7f2d0cd2c68b2e0c1740cfafdfbf142f54ee88a3f811",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "09637780682c70b2740f1ed8d7e8edf52eb4ddb632c176e1064b94321c3f1a50",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "c66eb418b6f52d75a61cf27e38acd617b934a45877a09cddf2106a9c55c3b22f",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "155d1bf7e14f3ec891f8998ca489d4e176d677e12ae3a4d460bc2fc92a8c6c28",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "8ac9eea40843e7c691d3a7a5d80fe99663e81d9634477490149564c7bcdaff0c",
       "confirmed": true
     }
   ]

@@ -61,9 +61,9 @@
   },
   "paymentHookState": {
     "withdrawAddress": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
-    "accruedFeesLovelace": "31500000",
-    "lifetimeCollectedLovelace": "2391400000",
-    "lifetimeWithdrawnLovelace": "2359900000",
+    "accruedFeesLovelace": "61300000",
+    "lifetimeCollectedLovelace": "3174550000",
+    "lifetimeWithdrawnLovelace": "3113250000",
     "minUtxoLovelace": "5000000"
   },
   "compiledScripts": {
@@ -107,7 +107,7 @@
   },
   "datum": {
     "configCbor": "d8799f9f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dff9f582102d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531582103aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807582103c7d448ea95104a628945f43745f177f1e9895c6d4c8e43614d7b1c0395469b2dffd8799f4a444941204f7261636c6543312e3019274254f8c614a483a0427a13512f52ac72a576678be317ff1a000927c01a0003d090d8799fd8799f581c70bf934df3daefb7c19d20d06641528765bd02b761bb1e818f633bf6504449415f5041594d454e545f484f4f4bffffd8799fd87a9f581c583b9e5278b1bf6af1ab6da98f2ab123e3a402526f5087fee46970eeffff19012c1a004c4b40ff",
-    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a01e0a6e01a8e89de401a8ca937601a004c4b40ff"
+    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a03a75d201abd37c9f01ab9906cd01a004c4b40ff"
   },
   "transactions": [
     {
@@ -273,6 +273,121 @@
     {
       "step": "preview:settle",
       "submittedTxHash": "c513983a65ea51553a40397b2df4968ff15cae6033a0138b6989e3489aecd088",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "13b5569422aec5cc914bf10e2e89cc3f49633a4994c716e93c425aa1a46f6a78",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "836db66c0cd667f4126547a26097b102046c5d0341be3dc99ddcdb9ff49b7312",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "0b0ef42322a69a0137cad221b314a1d0e8eaf77bd6d9000b46800bf209a51c8a",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "daa1284dfc9ca6166e36ba19a8d1dec039872c66c808f9aeaee48ae100d0bc1e",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "eba2ee2d6e94aedbe920b8b225a18d83ccbfd45e3321086e2a9d52917496d11a",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "77b6cc3a58f0b6f6e9b164f22f28a851921c01965770c6a514b3f51819e8cb76",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "252d7b797e055aa1f8c5dae8611c43db99c29b27c3399e06651fc45d7fc650cd",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "64242b42459df1e3733363331e2cd11a0b75e730fca1e9fe31cb07f42758f85e",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "bfe263322072199eacac17e77a81c2dc2a8ae066676972cccc40e2188534883a",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "355018724b689c7e897b6dcf2bc25dcf1b7e34ad6c635ac2e6336e94fbae8677",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "3545f37e02a66abb3687033768a5b83540398bd167ba48de45813b7ac8d5ac3b",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "5df56352a9264e305108a062120b0bb431c55c3ada99877984177b78f644e170",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "0e57f159323109940e7b36817eb5d4d6c22787d46d8d13e23ebc41445e4ffe86",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "268cb8d493e9e84ca74c9501643f2df2cd868209cd82ecced44929762107f5f3",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "ef8cf1670b782402a07079bb93a56d50da8b9918d5fb8ab6ee4315ef1232c40c",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "dc22ed41bbf3ac211bf06e2e6aedb52a35bd557eb20b7145eb027c91cdf27d16",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "92d8d82d4cdecc1b477b2f810f1aeb6eeb95fa01fbb92e6b6a99a1cffdfb97ef",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "ccb42c49c458609bbc6e7f2d0cd2c68b2e0c1740cfafdfbf142f54ee88a3f811",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "09637780682c70b2740f1ed8d7e8edf52eb4ddb632c176e1064b94321c3f1a50",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "c66eb418b6f52d75a61cf27e38acd617b934a45877a09cddf2106a9c55c3b22f",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "155d1bf7e14f3ec891f8998ca489d4e176d677e12ae3a4d460bc2fc92a8c6c28",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "6638673bed341341e1426e59f056ace4e9b5e95cbfd3a07153c626e66525557b",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "8ac9eea40843e7c691d3a7a5d80fe99663e81d9634477490149564c7bcdaff0c",
       "confirmed": true
     }
   ]

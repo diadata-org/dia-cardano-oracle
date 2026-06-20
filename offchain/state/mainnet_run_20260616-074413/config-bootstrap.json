@@ -63,8 +63,8 @@
   },
   "paymentHookState": {
     "withdrawAddress": "addr1qxp3wp7xa70jddcj95luvrud8p587fm7dsktwz8s5ts28hv8n5a536xf3tq74m47tnr8afr68v8wyhdst8c7aeanxvlqulrq72",
-    "accruedFeesLovelace": "2450000",
-    "lifetimeCollectedLovelace": "12450000",
+    "accruedFeesLovelace": "33950000",
+    "lifetimeCollectedLovelace": "43950000",
     "lifetimeWithdrawnLovelace": "10000000",
     "minUtxoLovelace": "5000000"
   },
@@ -109,7 +109,7 @@
   },
   "datum": {
     "configCbor": "d8799f9f581c831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3ddff9f582102d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531582102fa12f4143fca6652fa5a365fd1ada14495aab0dd3c1e568755e2230b38a4706d582102571284d2657052e68dc506c879f710d997a9801a5502339ff22f26bf85b958bd582103819af891aef2535d268e9eb6b7316665c323e247ad14576fd8fbbcabff104b05582102ec5fc3316818a55087c315f37ac83e86649d9a9222e28b76e75bd98cfbfd439cffd8799f4a444941204f7261636c6543312e3019041a545612599cf48032d7428399d5fcb99edcc75c06a7ff1a000927c01a0003d090d8799fd8799f581cb1b08f07c9085b0fd8ab1e030ca1896ffe408536797a68580f3f4769504449415f5041594d454e545f484f4f4bffffd8799fd87a9f581c8cb366f15b3d258e1ba0855f199a0b65fa325ee38a414fbd83d9a3faffff19012c1a004c4b40ff",
-    "paymentHookCbor": "d8799fd8799fd8799f581c831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3ddffd8799fd8799fd8799f581c879d3b48e8c98ac1eaeebe5cc67ea47a3b0ee25db059f1eee7b3333effffffff1a002562501a00bdf8d01a009896801a004c4b40ff"
+    "paymentHookCbor": "d8799fd8799fd8799f581c831707c6ef9f26b7122d3fc60f8d38687f277e6c2cb708f0a2e0a3ddffd8799fd8799fd8799f581c879d3b48e8c98ac1eaeebe5cc67ea47a3b0ee25db059f1eee7b3333effffffff1a020609301a029e9fb01a009896801a004c4b40ff"
   },
   "transactions": [
     {
@@ -155,6 +155,11 @@
     {
       "step": "mainnet:config:update",
       "submittedTxHash": "86ecd2870c5d1f9f26bbe295b7ebe254e47341c269e0fd0cfefef8336943b7e2",
+      "confirmed": true
+    },
+    {
+      "step": "mainnet:settle",
+      "submittedTxHash": "b30948173b1714fd20656162a7460cd82711a202f0f8c992703774562c1c600d",
       "confirmed": true
     }
   ]
