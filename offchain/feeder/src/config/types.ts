@@ -292,6 +292,30 @@ export type AlertingConfig = {
    *  via `dia_bridge_provider_last_ok_timestamp_seconds{role="secondary"}`.
    *  Prometheus-only; same single-source rationale as the primary key. */
   provider_secondary_unhealthy_seconds?: number;
+  /** Blockfrost daily request quota (this provider's plan limit). The
+   *  ProviderRequestQuotaHighBlockfrost alert (warning) fires when 24 h requests
+   *  cross this × `provider_request_quota_warn_ratio` — the PROACTIVE headroom
+   *  signal before the 402 wall (ProviderQuotaWall). Measured from
+   *  `dia_bridge_provider_requests_total{provider="Blockfrost"}` (every request,
+   *  incl. retries). Prometheus-only (the feeder emits the counter, the rule owns
+   *  the threshold); kept here so every alert threshold has one canonical home and
+   *  the threshold-drift test can enforce it against `monitoring/`. */
+  provider_request_quota_per_day_blockfrost?: number;
+  /** Koios daily request quota (this provider's plan limit). Drives
+   *  ProviderRequestQuotaHighKoios, same as the Blockfrost key above. Koios is the
+   *  secondary (confirmation/reorg) provider. Prometheus-only; same single-source
+   *  rationale. */
+  provider_request_quota_per_day_koios?: number;
+  /** Fraction of a provider's daily quota at which the ProviderRequestQuotaHigh*
+   *  warnings fire (e.g. 0.8 = warn at 80 %). Shared by both providers; multiplied
+   *  by each provider's per-day quota to form the alert operand. Prometheus-only;
+   *  same single-source rationale. */
+  provider_request_quota_warn_ratio?: number;
+  /** Fraction of provider requests failing/throttled (error + 429) over 10 min
+   *  above which ProviderErrorRateHigh (warning) fires (e.g. 0.2 = 20 %). A rising
+   *  429 share is the early warning a key is nearing its ceiling. Prometheus-only;
+   *  same single-source rationale. */
+  provider_error_rate_warn_ratio?: number;
 
   // --- Automatic remediation thresholds -------------------------------------
   // The feeder ACTS on these itself, on the balance-refresh tick, as a lane task

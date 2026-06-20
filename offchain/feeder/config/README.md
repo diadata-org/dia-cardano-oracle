@@ -126,8 +126,15 @@ call/probe before its alert fires:
 | --- | --- |
 | `provider_primary_unhealthy_seconds` | Seconds without a successful primary call → `PrimaryProviderDown` (critical). A primary outage (e.g. a Blockfrost `402` quota wall) freezes every build. Measured passively from the balance-refresh calls. |
 | `provider_secondary_unhealthy_seconds` | Seconds without a successful secondary liveness probe → `SecondaryProviderDown` (warning). Losing it drops confirmation/reorg redundancy only. Measured by an active probe. |
+| `provider_request_quota_per_day_blockfrost` | Blockfrost plan daily request limit. `ProviderRequestQuotaHighBlockfrost` (warning) fires when 24 h requests cross this × `provider_request_quota_warn_ratio` — the proactive headroom signal **before** the `402` wall. Set to your plan's quota. |
+| `provider_request_quota_per_day_koios` | Same, for Koios → `ProviderRequestQuotaHighKoios`. |
+| `provider_request_quota_warn_ratio` | Fraction of the daily quota at which the headroom warnings fire (e.g. `0.8` = 80 %). Shared by both providers. |
+| `provider_error_rate_warn_ratio` | Fraction of requests failing/throttled (error + `429`) over 10 min → `ProviderErrorRateHigh` (warning). e.g. `0.2` = 20 %. |
 
-Backed by `dia_bridge_provider_last_ok_timestamp_seconds{provider,role}` and
+The four request-quota / error-rate keys are backed by
+`dia_bridge_provider_requests_total{provider,method,outcome}` (every request,
+including retries). Backed (provider health) by
+`dia_bridge_provider_last_ok_timestamp_seconds{provider,role}` and
 `dia_bridge_component_health{component,role}`. The alerts key off **role**, so the
 critical one always tracks whichever provider `CARDANO_PROVIDER` selects to build.
 Full rationale:
