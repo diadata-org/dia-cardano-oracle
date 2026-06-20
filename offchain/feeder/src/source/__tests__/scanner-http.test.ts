@@ -163,6 +163,67 @@ describe("runHttpScanner — reorg recovery (R10.B.2)", () => {
   });
 });
 
+describe("runHttpScanner — transient RPC error retry", () => {
+  it("retries on a transient RPC error instead of throwing (does not exit the daemon)", async () => {
+    const controller = new AbortController();
+    const rpcErrors: Array<{ chain_id: string; error_type: string }> = [];
+    let headCalls = 0;
+    let scanned = false;
+
+    const client: RegistryClient = {
+      chainId: 10050,
+      registryAddress: ("0x" + "11".repeat(20)) as Address,
+      transport: "http",
+      async getHeadBlockNumber() {
+        headCalls++;
+        // First call: a transient upstream rate-limit (the real restart cause).
+        if (headCalls === 1) throw new Error("RPC Request failed … Rate Limit Exceeded (429)");
+        return 2000n;
+      },
+      async getBlockTimestamp() { return 0n; },
+      async getIntentRegisteredLogs() {
+        // Recovered and scanned — that is all we need to observe.
+        scanned = true;
+        controller.abort();
+        return [] as RegistryLog[];
+      },
+      async getIntent() { throw new Error("not used"); },
+      async close() {},
+    };
+
+    const checkpoint = makeMemoryCheckpoint(994n);
+    const { handler } = makeScannedBatchSink();
+    const safety = setTimeout(() => controller.abort(), 5_000);
+
+    // Must NOT reject: the 429 is transient, retried with backoff, never fatal.
+    await runHttpScanner({
+      client,
+      eventAbi: FAKE_EVENT_ABI,
+      checkpoint,
+      startBlock: 995n,
+      blockRange: 500n,
+      scanIntervalMs: 1,
+      confirmations: 10n,
+      onBatch: handler,
+      signal: controller.signal,
+      chainId: 10050,
+      metrics: {
+        setLastBlock() {}, setBlockLag() {}, setTransportUp() {},
+        incBackfillBlocks() {}, incBackfillChunks() {},
+        incRpcError(labels) { rpcErrors.push(labels); },
+      },
+    });
+    clearTimeout(safety);
+
+    assert.ok(scanned, "scanner recovered and scanned after the transient error");
+    assert.ok(headCalls >= 2, "head fetch was retried after the transient error");
+    assert.ok(
+      rpcErrors.some((e) => e.error_type === "protocol"),
+      "the 429 was counted as a transient (protocol) rpc error",
+    );
+  });
+});
+
 describe("runHttpScanner — gap recovery (backward_sync catch-up)", () => {
   it("uses BACKFILL_CHUNK_BLOCKS while gap > maxBlockGap, then switches to blockRange chunks", async () => {
     // Gap setup: cursor=0, head=11_000 → finalizedHead=11_000.
@@ -252,7 +313,7 @@ describe("runHttpScanner — gap recovery (backward_sync catch-up)", () => {
     assert.equal(backfillChunks.length, 0);
   });
 
-  it("classifies head-fetch RPC errors and increments scannerRpcErrors", async () => {
+  it("retries head-fetch RPC errors (counts them, does not throw)", async () => {
     const checkpoint = makeMemoryCheckpoint(null);
     const { handler } = makeScannedBatchSink();
     const { sink, rpcErrors } = makeMetricsSink();
@@ -279,23 +340,23 @@ describe("runHttpScanner — gap recovery (backward_sync catch-up)", () => {
       async close() {},
     };
 
-    await assert.rejects(
-      runHttpScanner({
-        client: erroringClient,
-        eventAbi: FAKE_EVENT_ABI,
-        checkpoint,
-        startBlock: 0n,
-        blockRange: 500n,
-        scanIntervalMs: 5,
-        confirmations: 0n,
-        onBatch: handler,
-        signal: controller.signal,
-        metrics: sink,
-        chainId: 10050,
-      }),
-    );
+    // The transient network error is retried with backoff, not thrown — the
+    // daemon stays up. runHttpScanner returns gracefully once the signal aborts.
+    await runHttpScanner({
+      client: erroringClient,
+      eventAbi: FAKE_EVENT_ABI,
+      checkpoint,
+      startBlock: 0n,
+      blockRange: 500n,
+      scanIntervalMs: 5,
+      confirmations: 0n,
+      onBatch: handler,
+      signal: controller.signal,
+      metrics: sink,
+      chainId: 10050,
+    });
 
-    assert.equal(rpcErrors.length, 1);
+    assert.ok(rpcErrors.length >= 1, "head-fetch RPC errors are counted");
     assert.equal(rpcErrors[0]!.error_type, "network");
     assert.equal(rpcErrors[0]!.chain_id, "10050");
   });
@@ -340,11 +401,13 @@ describe("runHttpScanner — backfillChunkBlocks option", () => {
   });
 });
 
-describe("runHttpScanner — health: error → is_healthy=false", () => {
-  it("increments rpcErrors counter when the head fetch fails", async () => {
+describe("runHttpScanner — health: a head-fetch error is counted (drives is_healthy=false), not thrown", () => {
+  it("increments the rpcErrors counter on a head-fetch failure and keeps retrying instead of exiting", async () => {
     const checkpoint = makeMemoryCheckpoint(null);
     const { handler } = makeScannedBatchSink();
     const { sink, rpcErrors } = makeMetricsSink();
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 50);
 
     const erroringClient: RegistryClient = {
       chainId: 10050,
@@ -365,23 +428,25 @@ describe("runHttpScanner — health: error → is_healthy=false", () => {
       async close() {},
     };
 
-    await assert.rejects(
-      runHttpScanner({
-        client: erroringClient,
-        eventAbi: FAKE_EVENT_ABI,
-        checkpoint,
-        startBlock: 0n,
-        blockRange: 500n,
-        scanIntervalMs: 5,
-        confirmations: 0n,
-        onBatch: handler,
-        metrics: sink,
-        chainId: 10050,
-      }),
-    );
+    // The transient timeout is counted and retried with backoff, never thrown —
+    // the daemon stays up. runHttpScanner returns once the signal aborts.
+    await runHttpScanner({
+      client: erroringClient,
+      eventAbi: FAKE_EVENT_ABI,
+      checkpoint,
+      startBlock: 0n,
+      blockRange: 500n,
+      scanIntervalMs: 5,
+      confirmations: 0n,
+      onBatch: handler,
+      signal: controller.signal,
+      metrics: sink,
+      chainId: 10050,
+    });
 
-    assert.equal(rpcErrors.length, 1, "one RPC error emitted");
+    assert.ok(rpcErrors.length >= 1, "head-fetch error is counted (drives is_healthy=false)");
     assert.equal(rpcErrors[0]!.error_type, "timeout");
+    assert.equal(rpcErrors[0]!.chain_id, "10050");
   });
 });
 

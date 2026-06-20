@@ -17,7 +17,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { AbiEvent } from "viem";
 
 import type { Checkpoint } from "./checkpoint.js";
-import { BACKFILL_CHUNK_BLOCKS } from "../config/constants.js";
+import { BACKFILL_CHUNK_BLOCKS, SCANNER_RPC_RETRY_MAX_MS } from "../config/constants.js";
 import type { RegistryClient } from "./registry-client.js";
 import { processLogBatch, type ScanHandler } from "./scan-handler.js";
 
@@ -99,9 +99,10 @@ export type HttpScannerOptions = {
 
 /**
  * Run the polling loop until the abort signal fires (or forever).
- * Returns gracefully on abort; throws on unrecoverable RPC errors so
- * the caller can decide whether to fall back to a different transport
- * or exit.
+ * Returns gracefully on abort. Transient RPC errors (rate-limit, timeout,
+ * network, protocol) are retried with capped exponential backoff rather than
+ * thrown, so an upstream hiccup never terminates the daemon — a sustained
+ * outage instead surfaces through the scanner-lag / OraclePairStale alerts.
  */
 export async function runHttpScanner(options: HttpScannerOptions): Promise<void> {
   const {
@@ -131,6 +132,10 @@ export async function runHttpScanner(options: HttpScannerOptions): Promise<void>
   // blocks at/under our cursor; we rewind the cursor so the reorged range is
   // re-scanned instead of permanently skipped. `0n` means "no head seen yet".
   let highWaterHead = 0n;
+
+  // Consecutive transient RPC errors, for exponential backoff. Reset on any
+  // fully successful poll (caught-up or a completed scan).
+  let rpcErrorStreak = 0;
 
   // Separate head-tracker loop — keeps block-lag gauges fresh at its own
   // cadence without coupling to the main scan tick.
@@ -166,8 +171,14 @@ export async function runHttpScanner(options: HttpScannerOptions): Promise<void>
     try {
       head = await client.getHeadBlockNumber();
     } catch (error) {
-      metrics?.incRpcError({ chain_id: chainIdLabel, error_type: classifyRpcError(error) });
-      throw error;
+      const kind = classifyRpcError(error);
+      metrics?.incRpcError({ chain_id: chainIdLabel, error_type: kind });
+      if (kind === "abort" || signal?.aborted) break;
+      const backoffMs = Math.min(scanIntervalMs * 2 ** rpcErrorStreak, SCANNER_RPC_RETRY_MAX_MS);
+      rpcErrorStreak++;
+      log(`scanner-http: head fetch failed (${kind}) — retrying in ${backoffMs}ms: ${(error as Error).message}`);
+      await waitOrAbort(backoffMs, signal);
+      continue;
     }
     const finalizedHead = head > confirmations ? head - confirmations : 0n;
 
@@ -201,6 +212,7 @@ export async function runHttpScanner(options: HttpScannerOptions): Promise<void>
     if (cursor > finalizedHead) {
       // We're caught up. Wait for HEAD to advance past the
       // confirmations window before doing another round-trip.
+      rpcErrorStreak = 0;
       await waitOrAbort(scanIntervalMs, signal);
       continue;
     }
@@ -224,9 +236,16 @@ export async function runHttpScanner(options: HttpScannerOptions): Promise<void>
         toBlock: rangeEnd,
       });
     } catch (error) {
-      metrics?.incRpcError({ chain_id: chainIdLabel, error_type: classifyRpcError(error) });
-      throw error;
+      const kind = classifyRpcError(error);
+      metrics?.incRpcError({ chain_id: chainIdLabel, error_type: kind });
+      if (kind === "abort" || signal?.aborted) break;
+      const backoffMs = Math.min(scanIntervalMs * 2 ** rpcErrorStreak, SCANNER_RPC_RETRY_MAX_MS);
+      rpcErrorStreak++;
+      log(`scanner-http: getLogs ${cursor}..${rangeEnd} failed (${kind}) — retrying in ${backoffMs}ms: ${(error as Error).message}`);
+      await waitOrAbort(backoffMs, signal);
+      continue;
     }
+    rpcErrorStreak = 0;
 
     await processLogBatch({
       logs,
