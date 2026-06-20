@@ -1,5 +1,10 @@
 # Plan — Milestone 3 (Monitoring Library)
 
+> **STATUS — Milestone 3 COMPLETE (delivered).** Every "what remains" item below was
+> delivered: the live mainnet monitoring run (ARS/USDT), the demo video, the uptime/accuracy
+> + QA validation evidence, and the PoA. See [`milestone-3-poa.md`](../../milestones/milestone-3-poa.md)
+> (submission commit `7749df66fa8953818d75945126dd2e4cb705a0f5`). Archived for history.
+
 What is left for **Milestone 3 — Implement Monitoring Library for DIA Oracles on
 Cardano**, grounded in the official Catalyst wording
 ([`final-cardano-milestones.md`](../milestones/final-cardano-milestones.md)) and the

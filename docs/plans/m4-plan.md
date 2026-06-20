@@ -55,8 +55,11 @@ monitoring working together; documentation published on DIA's site.
   (`client-test-02`) with single-transaction multi-receiver settle
   ([`settle-manifest.ts`](../../offchain/cli/src/preflight/settle-manifest.ts)). Covered by
   the feeder test suite (531 cases).
-- [x] **Monitoring stack** (M3 machinery): 3 dashboards, 13 alerts, Alertmanager →
-  webhook → `alert_log` pipeline, per-feed sanity check. See [`m3-plan.md`](./m3-plan.md).
+- [x] **Monitoring stack — Milestone 3 DELIVERED** ([`milestone-3-poa.md`](../milestones/milestone-3-poa.md),
+  submission commit `7749df6`): 3 dashboards, 13 alerts, Alertmanager → webhook → `alert_log`
+  pipeline (API-exposed via `GET /api/v1/alerts`), per-feed sanity check; validated live on
+  **Mainnet** (ARS/USDT — 7 confirmed, 0 reorgs, accuracy PASS, alert fired→resolved) and
+  Preview. See [`_archived/m3-plan.md`](_archived/m3-plan.md).
 
 ## What remains
 
@@ -106,6 +109,12 @@ exist today.
 
 ### 2 · Feeder stability hardening
 
+- [x] **Cron in-flight guard — DONE** (commit `e9a468e`). The aligned-heartbeat cron re-fired a
+  due pair on every ~30 s tick until a confirmation crossed the boundary, producing a burst of
+  2-3 duplicate submissions per boundary (seen live on the mainnet ARS/USDT run). A persistent
+  per-(router, dest, symbol) in-flight map now suppresses re-dispatch until the prior heartbeat
+  confirms (priceCache advances) or a ceiling elapses. TDD'd; verified live: 1 push/boundary,
+  `cron_resubmissions_total{outcome="skipped_in_flight"}`.
 - [ ] Drive down the daemon crash-recovery / WASM self-exit loop (hundreds of restarts in
   the Preview pack window). The self-exit guard exists
   ([`src/submitter/wasm-failure-guard.ts`](../../offchain/feeder/src/submitter/wasm-failure-guard.ts)),
@@ -158,20 +167,19 @@ exist today.
 
 ### 3 · Sustained mainnet run + 99.99% uptime/accuracy evidence
 
-- [ ] A long production-style window meeting the **99.99%** uptime/accuracy bar (the
-  headline M4 acceptance number), with confirmed-tx logs and monitoring attached. M2
-  already proved a short live mainnet feeder run; this is the long clean window, only
-  credible after the stability work above. Run details:
-  - **Same contracts as M2 — no redeploy.** Reuse the mainnet deployment from
-    `m2-mainnet-20260616-074413`.
-  - **One feed, long heartbeat.** Configure the router to track a **single price feed**
-    and publish on a long cadence (every 30–60 minutes), so a multi-day window produces
-    **few, cheap transactions** while still demonstrating sustained liveness and accuracy.
-- [ ] **Retire the unused on-chain pairs.** Mainnet currently holds ~20 Pair NFTs — 10
-  synthetic ones from the `run-all` bootstrap plus 10 real ones the feeder published. Burn
-  19 of them (`pair:burn`, recovering each NFT's min-ADA) and keep **one** active feed —
-  one DIA updates frequently — for the sustained run. *(Which feed: to be defined — a pair
-  DIA updates frequently.)*
+- [~] A long production-style window meeting the **99.99%** uptime/accuracy bar (the headline
+  M4 acceptance number), with confirmed-tx logs and monitoring attached. The run is already
+  **set up and live**: same contracts as M2 (no redeploy, `m2-mainnet-20260616-074413`), a
+  single feed (**ARS/USDT**) on a 30-min heartbeat. A short ~2.4 h clean bring-up is already
+  captured (M3 mainnet pack: 7 confirmed, 0 failed, 0 reorgs, accuracy PASS). **What remains:**
+  sustain it over a multi-day window once the stability fixes below land, then compute the
+  uptime/accuracy number over that window.
+- [x] **Retired the unused on-chain pairs — DONE.** All 20 mainnet Pair NFTs were burned
+  (`pair:burn`, min-ADA recovered) and the feeder minted a single fresh feed, **ARS/USDT** —
+  the symbol DIA publishes continuously on its mainnet registry. (BTC/USD and the crypto majors
+  are **not** emitted on DIA mainnet; confirmed by `scan-dia-intents.ts` — see
+  [`pair-selection-mainnet-20260616-074413`](../milestones/evidence/pair-selection-mainnet-20260616-074413/).)
+  The mainnet router now tracks only ARS/USDT on a 30-min heartbeat.
 
 ### 4 · Sample live feeds + contract addresses
 
