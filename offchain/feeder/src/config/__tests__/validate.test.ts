@@ -71,6 +71,12 @@ function makeConfig(includeTxMode = false): ModularConfig {
         price_age_high_seconds: 600,
         reorg_rate_high_per_hour: 3,
         deposit_pending_merge_lovelace: 5000000,
+        provider_primary_unhealthy_seconds: 600,
+        provider_secondary_unhealthy_seconds: 900,
+        provider_request_quota_per_day_blockfrost: 50000,
+        provider_request_quota_per_day_koios: 50000,
+        provider_request_quota_warn_ratio: 0.8,
+        provider_error_rate_warn_ratio: 0.2,
       },
     },
     chains: {
@@ -122,6 +128,50 @@ describe("validateModularConfig", () => {
   it("accepts cardano destinations without tx_mode", () => {
     const issues = validateModularConfig(makeConfig(false));
     assert.deepEqual(issues, []);
+  });
+
+  it("requires every provider alerting threshold (no silent defaults)", () => {
+    for (const key of [
+      "provider_primary_unhealthy_seconds",
+      "provider_secondary_unhealthy_seconds",
+      "provider_request_quota_per_day_blockfrost",
+      "provider_request_quota_per_day_koios",
+      "provider_request_quota_warn_ratio",
+      "provider_error_rate_warn_ratio",
+    ]) {
+      const config = makeConfig(false);
+      delete (config.infrastructure!.alerting as Record<string, unknown>)[key];
+      const issues = validateModularConfig(config);
+      assert.ok(
+        issues.some((i) => i.severity === "error" && i.path.endsWith(key) && /Required/.test(i.message)),
+        `expected missing alerting.${key} to be rejected; got ${JSON.stringify(issues)}`,
+      );
+    }
+  });
+
+  it("rejects a provider warn ratio outside (0, 1]", () => {
+    for (const [key, bad] of [
+      ["provider_request_quota_warn_ratio", 1.5],
+      ["provider_error_rate_warn_ratio", 0],
+    ] as const) {
+      const config = makeConfig(false);
+      config.infrastructure!.alerting![key] = bad;
+      const issues = validateModularConfig(config);
+      assert.ok(
+        issues.some((i) => i.severity === "error" && i.path.endsWith(key)),
+        `expected alerting.${key}=${bad} to be rejected; got ${JSON.stringify(issues)}`,
+      );
+    }
+  });
+
+  it("rejects a non-integer provider daily quota", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.alerting!.provider_request_quota_per_day_blockfrost = 50000.5;
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some((i) => i.severity === "error" && i.path.endsWith("provider_request_quota_per_day_blockfrost")),
+      `expected a non-integer quota to be rejected; got ${JSON.stringify(issues)}`,
+    );
   });
 
   it("accepts multiple routers that share one Cardano client/protocol destination", () => {

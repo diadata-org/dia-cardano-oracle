@@ -195,7 +195,10 @@ function validateAlerting(
         "receiver_balance_low_lovelace, settle_overdue_lovelace, " +
         "payment_hook_withdraw_ready_lovelace, admin_wallet_low_lovelace, " +
         "oracle_pair_stale_seconds, price_deviation_high_percent, price_age_high_seconds, " +
-        "reorg_rate_high_per_hour, deposit_pending_merge_lovelace.",
+        "reorg_rate_high_per_hour, deposit_pending_merge_lovelace, " +
+        "provider_primary_unhealthy_seconds, provider_secondary_unhealthy_seconds, " +
+        "provider_request_quota_per_day_blockfrost, provider_request_quota_per_day_koios, " +
+        "provider_request_quota_warn_ratio (0-1), provider_error_rate_warn_ratio (0-1).",
     );
     return;
   }
@@ -208,6 +211,12 @@ function validateAlerting(
   validatePositiveInteger("price_age_high_seconds", alerting.price_age_high_seconds, c);
   validatePositiveInteger("reorg_rate_high_per_hour", alerting.reorg_rate_high_per_hour, c);
   validatePositiveInteger("deposit_pending_merge_lovelace", alerting.deposit_pending_merge_lovelace, c);
+  validatePositiveInteger("provider_primary_unhealthy_seconds", alerting.provider_primary_unhealthy_seconds, c);
+  validatePositiveInteger("provider_secondary_unhealthy_seconds", alerting.provider_secondary_unhealthy_seconds, c);
+  validatePositiveInteger("provider_request_quota_per_day_blockfrost", alerting.provider_request_quota_per_day_blockfrost, c);
+  validatePositiveInteger("provider_request_quota_per_day_koios", alerting.provider_request_quota_per_day_koios, c);
+  validateRatio("provider_request_quota_warn_ratio", alerting.provider_request_quota_warn_ratio, c);
+  validateRatio("provider_error_rate_warn_ratio", alerting.provider_error_rate_warn_ratio, c);
 
   const required: Array<[string, unknown]> = [
     ["receiver_balance_low_lovelace", alerting.receiver_balance_low_lovelace],
@@ -219,6 +228,12 @@ function validateAlerting(
     ["price_age_high_seconds", alerting.price_age_high_seconds],
     ["reorg_rate_high_per_hour", alerting.reorg_rate_high_per_hour],
     ["deposit_pending_merge_lovelace", alerting.deposit_pending_merge_lovelace],
+    ["provider_primary_unhealthy_seconds", alerting.provider_primary_unhealthy_seconds],
+    ["provider_secondary_unhealthy_seconds", alerting.provider_secondary_unhealthy_seconds],
+    ["provider_request_quota_per_day_blockfrost", alerting.provider_request_quota_per_day_blockfrost],
+    ["provider_request_quota_per_day_koios", alerting.provider_request_quota_per_day_koios],
+    ["provider_request_quota_warn_ratio", alerting.provider_request_quota_warn_ratio],
+    ["provider_error_rate_warn_ratio", alerting.provider_error_rate_warn_ratio],
   ];
   for (const [field, value] of required) {
     if (value === undefined) {
@@ -246,6 +261,18 @@ function validatePositiveInteger(
   if (value === undefined) return;
   if (!Number.isInteger(value) || value <= 0) {
     c.error(field, "Expected a positive integer.");
+  }
+}
+
+/** A ratio/fraction: a finite number in the half-open range (0, 1]. */
+function validateRatio(
+  field: string,
+  value: number | undefined,
+  c: IssueCollector,
+): void {
+  if (value === undefined) return;
+  if (!Number.isFinite(value) || value <= 0 || value > 1) {
+    c.error(field, "Expected a ratio in (0, 1] (e.g. 0.8 for 80%).");
   }
 }
 
