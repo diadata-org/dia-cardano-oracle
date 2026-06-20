@@ -81,6 +81,7 @@ import {
   createQueueManager,
   createCoalescerManager,
   createInflightTable,
+  createSymbolInflightTracker,
   laneKey,
   nextWasmFailureCount,
   shouldExitOnWasmFailures,
@@ -127,7 +128,9 @@ import {
   type HealthState,
 } from "../../src/api/index.js";
 import { getCliConfig } from "@diadata-org/dia-cardano-oracle-cli/core/config";
-import { makeConfiguredLucidWithConfig } from "@diadata-org/dia-cardano-oracle-cli/core/lucid";
+import { makeConfiguredLucidWithConfig, setProviderCallObserver } from "@diadata-org/dia-cardano-oracle-cli/core/lucid";
+import { isTxOnChain } from "@diadata-org/dia-cardano-oracle-cli/core/tx-onchain-check";
+import { recoverSubmittedTx } from "../../src/submitter/recover-submitted-tx.js";
 import { readClientContext } from "@diadata-org/dia-cardano-oracle-cli/core/artifact-context";
 import { decodePairDatum } from "@diadata-org/dia-cardano-oracle-cli/core/chain-helpers";
 import {
@@ -747,18 +750,37 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       failedAtMs: Date.now(),
     });
   }
+  // A `submitted` tx was broadcast but unconfirmed when the previous process
+  // died. Ask the chain before judging it: one that actually landed is recorded
+  // as confirmed (so the count/uptime reflect reality); one the chain does not
+  // show is failed so the event flow re-processes it (an already-on-chain
+  // re-submit is cleanly dropped as NonMonotonicNonce).
+  let crashConfirmed = 0;
   for (const row of crashSubmitted) {
-    report(`daemon: crash recovery: marking submitted tx ${row.intentHash} as failed`);
-    await db.updateTransactionLog(row.intentHash, {
-      status: "failed",
-      errorCode: "CrashRecovery",
-      errorMessage: "daemon restarted with submitted transaction awaiting confirmation",
-      failedAtMs: Date.now(),
-    });
+    const confirmed = await recoverSubmittedTx(row.cardanoTxHash, (txHash) =>
+      isTxOnChain({ txHash }),
+    );
+    if (confirmed) {
+      crashConfirmed++;
+      report(`daemon: crash recovery: submitted tx ${row.intentHash} is on-chain — recording as confirmed`);
+      await db.updateTransactionLog(row.intentHash, {
+        status: "confirmed",
+        confirmedAtMs: Date.now(),
+      });
+    } else {
+      report(`daemon: crash recovery: submitted tx ${row.intentHash} not found on-chain — marking failed`);
+      await db.updateTransactionLog(row.intentHash, {
+        status: "failed",
+        errorCode: "CrashRecovery",
+        errorMessage: "daemon restarted; submitted tx not found on-chain at recovery",
+        failedAtMs: Date.now(),
+      });
+    }
   }
   if (crashPending.length + crashSubmitted.length > 0) {
     report(
-      `daemon: crash recovery complete — marked failed: pending=${crashPending.length} submitted=${crashSubmitted.length}`,
+      `daemon: crash recovery complete — pending→failed=${crashPending.length} ` +
+      `submitted: confirmed=${crashConfirmed} failed=${crashSubmitted.length - crashConfirmed}`,
     );
   }
 
@@ -806,6 +828,17 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // Persistence failures are throttled-logged (R10.B.9), never fatal. Skipped
   // for noopMetrics (metrics disabled) — nothing to persist.
   const metrics = metricsEnabled ? wrapWithPersistence(db, baseMetrics, report) : baseMetrics;
+  // Per-provider request accounting: the CLI provider wrapper reports every
+  // Cardano API request (each retry attempt) here, so provider_requests_total
+  // reflects real quota consumption and the quota_exceeded outcome surfaces the
+  // Blockfrost 402 wall before it freezes the run.
+  setProviderCallObserver((event) =>
+    metrics.bridgeProviderRequests.inc({
+      provider: event.provider,
+      method: event.method,
+      outcome: event.outcome,
+    }),
+  );
   // Count + time every data operation from here on (db_operations_total /
   // db_operation_duration_seconds). The few startup ops above (crash recovery)
   // run once and stay un-instrumented, which is fine for a steady-state load metric.
@@ -1032,6 +1065,14 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // tick for how the lock is honoured.
   const inflightTable: InflightTable = createInflightTable();
 
+  // Shared per-(router, destination, symbol) in-flight tracker — distinct from
+  // the receiverUnit lock above. The coalescer marks a pair when its batch
+  // flushes and clears it once the result resolves; the cron consults it so it
+  // never re-submits a pair whose event-driven submission is still pending
+  // (which the chain would reject as NonMonotonicNonce). TTL = inflight_timeout_ms,
+  // the same safeguard window the receiver locks use.
+  const symbolInflight = createSymbolInflightTracker({ ttlMs: inflightTimeoutMs });
+
   // One serial submission lane per client deployment (Receiver). Map each lane
   // key to its client/customer so the per-client queue-depth and submission-state
   // gauges can be labelled with the identities users already see in the filters.
@@ -1167,6 +1208,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     maxIntentAgeMs,
     maxBatchSize,
     sizeFallbackEnabled,
+    symbolInflight,
     onResult: async (result: SubmitResult, req: SubmitRequest) => {
       const nowMs = Date.now();
       const clientId = clientIdFromStatePath(req.destination.client_state_path);
@@ -1675,6 +1717,8 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       }
       return coalescerManager.accept(req);
     },
+    isInFlight: (routerId, destinationIndex, symbol) =>
+      symbolInflight.has(routerId, destinationIndex, symbol),
     metrics,
     log: report,
     signal,

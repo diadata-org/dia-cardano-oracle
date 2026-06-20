@@ -106,6 +106,45 @@ export async function assertTxStillOnChain(args: {
   // let the caller's wait loop continue. The indexer may simply be lagging.
 }
 
+/**
+ * Non-throwing presence check. Resolves `true` ONLY when Koios or Blockfrost
+ * REST confidently reports the transaction as present; resolves `false` on a
+ * definitive "not found" AND on a transient provider error (conservative — the
+ * caller should read `false` as "not confirmed", not "definitely gone"). Reuses
+ * the same two-provider config/credentials as {@link assertTxStillOnChain}.
+ *
+ * Used by the daemon's crash-recovery to tell a `submitted` tx that actually
+ * landed (→ confirmed) from one that did not (→ failed, re-process).
+ */
+export async function isTxOnChain(args: {
+  txHash: string;
+  koiosApiUrl?: string;
+  blockfrostApiUrl?: string;
+  blockfrostProjectId?: string;
+  fetchImpl?: FetchLike;
+}): Promise<boolean> {
+  const fetchImpl = args.fetchImpl ?? fetch;
+  const config = getCliConfig();
+  const koiosApiUrl = args.koiosApiUrl ?? config.koiosApiUrl;
+  const blockfrostApiUrl = args.blockfrostApiUrl ?? config.blockfrostApiUrl;
+  const blockfrostProjectId = args.blockfrostProjectId ?? config.blockfrostProjectId;
+
+  const [koios, blockfrost] = await Promise.allSettled([
+    fetchKoiosTxExists({ koiosApiUrl, txHash: args.txHash, fetchImpl }),
+    fetchBlockfrostTxExists({
+      blockfrostApiUrl,
+      blockfrostProjectId,
+      txHash: args.txHash,
+      fetchImpl,
+    }),
+  ]);
+
+  return (
+    (koios.status === "fulfilled" && koios.value) ||
+    (blockfrost.status === "fulfilled" && blockfrost.value)
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
