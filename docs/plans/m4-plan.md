@@ -110,10 +110,14 @@ exist today.
   sites (one canonical impl); exposed via the CLI `./core/datum-decoders` export. The feeder
   switched to the lightweight path. No behaviour change (existing round-trip tests still pass;
   added a direct-module equivalence test).
-- [ ] **A2 · Chain-reader port + standalone provider** — a `ChainReader` interface
-  (`utxosAt(address)`, `tip()`) with a Blockfrost/Koios implementation that needs **only a
-  provider key**, not the feeder daemon. Mirrors the sanity-check's injectable `utxosAt`
-  ([`feed-sanity.ts`](../../offchain/feeder/src/sanity-check/feed-sanity.ts)).
+- [x] **A2 · Chain-reader port + standalone provider — DONE.** New `offchain/indexer/`
+  package (mirrors cli/feeder: NodeNext ESM, `file:../cli` dep for the A1 decoders). The
+  `ChainReader` interface (`utxosAt(address)`, `tip()`) in
+  [`chain-reader.ts`](../../offchain/indexer/src/chain-reader.ts) is pure + fake-testable
+  (no provider import); `createProviderChainReader` wires any Lucid provider + a tip fetcher.
+  Concrete Blockfrost / Koios readers (needing only a provider URL/key, no daemon) live in
+  [`chain-reader-providers.ts`](../../offchain/indexer/src/chain-reader-providers.ts). TDD'd
+  (UTxO mapping, datum→null, tip delegation, Blockfrost/Koios tip parsers) — 7 tests.
 - [ ] **A3 · Index service** (TDD with a fake reader) — `listPairs()`, `getPair(symbol)`,
   `getClient(clientId)` combining the protocol registry + reader + decoders. Source of truth
   = the live Pair / Receiver / Hook UTxOs.

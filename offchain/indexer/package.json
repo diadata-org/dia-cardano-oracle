@@ -1,0 +1,22 @@
+{
+  "name": "@diadata-org/dia-cardano-oracle-indexer",
+  "version": "0.1.0",
+  "description": "Read-only, consumer-facing query service over the live on-chain DIA oracle Pair/Receiver/PaymentHook UTxOs. Independent of the feeder daemon.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx/esm --test $(find src -path '*/__tests__/*.test.ts' | tr '\\n' ' ')",
+    "indexer:dev": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@diadata-org/dia-cardano-oracle-cli": "file:../cli",
+    "@lucid-evolution/provider": "^0.1.90"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
