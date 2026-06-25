@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { apiRoutes } from "../routes.js";
-import { buildOpenApiDocument } from "../openapi.js";
+import { buildOpenApiDocument } from "@diadata-org/dia-cardano-oracle-shared/openapi";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SERVER_SRC = readFileSync(join(HERE, "..", "server.ts"), "utf8");

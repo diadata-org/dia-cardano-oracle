@@ -1,0 +1,34 @@
+{
+  "name": "@diadata-org/dia-cardano-oracle-shared",
+  "version": "0.1.0",
+  "description": "Shared, dependency-light building blocks used by more than one offchain service: the OpenAPI 3.0 document generator (route-table → spec) and the Swagger UI docs page + vendored assets.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./openapi": {
+      "types": "./dist/openapi.d.ts",
+      "default": "./dist/openapi.js"
+    },
+    "./docs": {
+      "types": "./dist/docs.d.ts",
+      "default": "./dist/docs.js"
+    }
+  },
+  "files": [
+    "dist",
+    "public"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx/esm --test $(find src -path '*/__tests__/*.test.ts' | tr '\\n' ' ')"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.49"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

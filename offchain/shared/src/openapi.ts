@@ -1,9 +1,10 @@
-// OpenAPI 3.0 document generator.
+// OpenAPI 3.0 document generator — shared by every offchain HTTP service.
 //
-// `buildOpenApiDocument(routes, opts)` turns the metadata route table
-// (`routes.ts`) into a plain OpenAPI 3.0.3 document object. It is a pure
-// function — no I/O, no globals — so it is trivially unit-testable and cannot
-// drift from the routes it is handed.
+// `buildOpenApiDocument(routes, opts)` turns a metadata route table into a plain
+// OpenAPI 3.0.3 document object. It is a pure function — no I/O, no globals — so
+// it is trivially unit-testable and cannot drift from the routes it is handed.
+// Each service owns its own route table and passes its own `baseConfig`
+// (title / version / servers); this module stays neutral.
 //
 // TypeBox schemas are themselves valid JSON Schema, so each route's
 // `params`/`query`/`responseSchema` is embedded directly. OpenAPI 3.0 uses a
@@ -11,10 +12,34 @@
 // strings, integers, arrays, enums) are within the shared subset, so no
 // translation layer is needed.
 
-import type { TSchema } from "@sinclair/typebox";
+import { Type, type TSchema } from "@sinclair/typebox";
 
-import type { RouteDescriptor } from "./routes.js";
-import { errorResponseSchema } from "./routes.js";
+// ---------------------------------------------------------------------------
+// Route descriptor — the metadata each service describes its routes with.
+// ---------------------------------------------------------------------------
+
+export type RouteDescriptor = {
+  /** HTTP method. */
+  method: "GET" | "POST";
+  /** OpenAPI path template, e.g. `/api/v1/prices/{symbol}`. */
+  path: string;
+  /** Dispatch discriminant — must match a `case` in the service's router. */
+  kind: string;
+  /** One-line human summary for the docs. */
+  summary: string;
+  /** Path-parameter schema (object whose properties are the `{param}`s). */
+  params?: TSchema;
+  /** Query-parameter schema (object whose properties are query keys). */
+  query?: TSchema;
+  /** Success (2xx) response body schema. */
+  responseSchema?: TSchema;
+};
+
+/** Generic `{ error: string }` body used by every 4xx/5xx response. */
+export const errorResponseSchema = Type.Object(
+  { error: Type.String() },
+  { additionalProperties: false },
+);
 
 export type OpenApiBaseConfig = {
   /** API title shown in the docs. */
@@ -62,9 +87,8 @@ function paramsFromSchema(
 
 /** Build the standard responses block for one operation. */
 function responsesFor(route: RouteDescriptor): Record<string, unknown> {
-  const successStatus = route.method === "POST" ? "200" : "200";
   const responses: Record<string, unknown> = {
-    [successStatus]: {
+    "200": {
       description: "Successful response.",
       ...(route.responseSchema
         ? { content: { "application/json": { schema: route.responseSchema } } }
@@ -94,7 +118,7 @@ function responsesFor(route: RouteDescriptor): Record<string, unknown> {
 /**
  * Build an OpenAPI 3.0.3 document from the route table.
  *
- * @param routes  The metadata route descriptors (see `routes.ts`).
+ * @param routes  The metadata route descriptors.
  * @param options `baseConfig` overrides title/version/description/servers.
  */
 export function buildOpenApiDocument(
@@ -125,11 +149,11 @@ export function buildOpenApiDocument(
   return {
     openapi: "3.0.3",
     info: {
-      title: base.title ?? "DIA Cardano Oracle Feeder API",
+      title: base.title ?? "DIA Cardano Oracle API",
       version: base.version ?? "0.1.0",
       description:
         base.description ??
-        "HTTP API of the DIA Cardano Oracle feeder daemon. Generated from the in-code route table; cannot drift from the implementation.",
+        "HTTP API generated from the in-code route table; cannot drift from the implementation.",
     },
     ...(base.servers && base.servers.length > 0 ? { servers: base.servers } : {}),
     paths,

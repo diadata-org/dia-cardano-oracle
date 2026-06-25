@@ -39,12 +39,15 @@ import {
 import { buildPerformanceResponse } from "./performance.js";
 import { sanitizeLogLine } from "../utils/sanitize.js";
 import { apiRoutes } from "./routes.js";
-import { buildOpenApiDocument } from "./openapi.js";
+import { buildOpenApiDocument } from "@diadata-org/dia-cardano-oracle-shared/openapi";
 import {
   loadSwaggerAssets,
   renderDocsHtml,
   PUBLIC_ASSET_PREFIX,
-} from "./docs.js";
+} from "@diadata-org/dia-cardano-oracle-shared/docs";
+
+/** Title shown on the feeder's `/docs` page and in its OpenAPI document. */
+const FEEDER_API_TITLE = "DIA Cardano Oracle Feeder API";
 
 export type ApiServerOptions = {
   host?: string;
@@ -162,9 +165,17 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
   // vendored Swagger UI assets, loaded once and held in memory (reading them
   // per-request would be wasteful). When an asset is missing /docs serves a
   // minimal fallback that links to the raw spec (see docs.ts).
-  const openApiDocument = JSON.stringify(buildOpenApiDocument(apiRoutes));
+  const openApiDocument = JSON.stringify(
+    buildOpenApiDocument(apiRoutes, {
+      baseConfig: {
+        title: FEEDER_API_TITLE,
+        description:
+          "HTTP API of the DIA Cardano Oracle feeder daemon. Generated from the in-code route table; cannot drift from the implementation.",
+      },
+    }),
+  );
   const swaggerAssets = loadSwaggerAssets();
-  const docsHtml = renderDocsHtml("/api/v1/openapi.json", swaggerAssets !== null);
+  const docsHtml = renderDocsHtml("/api/v1/openapi.json", swaggerAssets !== null, FEEDER_API_TITLE);
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const startedAtNs = process.hrtime.bigint();

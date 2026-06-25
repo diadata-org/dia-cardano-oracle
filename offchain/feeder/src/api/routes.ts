@@ -16,7 +16,9 @@
 // `server.ts`; keeping them identical is what makes the consistency test
 // meaningful.
 
-import { Type, type TSchema } from "@sinclair/typebox";
+import { Type } from "@sinclair/typebox";
+
+import type { RouteDescriptor } from "@diadata-org/dia-cardano-oracle-shared/openapi";
 
 // ---------------------------------------------------------------------------
 // Reusable schema fragments
@@ -26,12 +28,6 @@ import { Type, type TSchema } from "@sinclair/typebox";
  *  pinning it down in TypeBox would add maintenance cost without payoff. It
  *  still documents "this returns a JSON object" in the spec. */
 const AnyObject = Type.Object({}, { additionalProperties: true });
-
-/** Generic `{ error: string }` body used by every 4xx/5xx response. */
-const ErrorResponse = Type.Object(
-  { error: Type.String() },
-  { additionalProperties: false },
-);
 
 const PriceEntry = Type.Object(
   {
@@ -156,27 +152,6 @@ const LimitQuery = Type.Object({
     }),
   ),
 });
-
-// ---------------------------------------------------------------------------
-// Route descriptor type
-// ---------------------------------------------------------------------------
-
-export type RouteDescriptor = {
-  /** HTTP method. */
-  method: "GET" | "POST";
-  /** OpenAPI path template, e.g. `/api/v1/prices/{symbol}`. */
-  path: string;
-  /** Dispatch discriminant — must match a `case` in server.ts's switch. */
-  kind: string;
-  /** One-line human summary for the docs. */
-  summary: string;
-  /** Path-parameter schema (object whose properties are the `{param}`s). */
-  params?: TSchema;
-  /** Query-parameter schema (object whose properties are query keys). */
-  query?: TSchema;
-  /** Success (2xx) response body schema. */
-  responseSchema?: TSchema;
-};
 
 // ---------------------------------------------------------------------------
 // The table — one entry per route, mirroring matchRoute() + the switch.
@@ -406,7 +381,3 @@ export const apiRoutes: readonly RouteDescriptor[] = [
     responseSchema: PoolTasksResponse,
   },
 ] as const;
-
-/** Standard error body schema, exported so the OpenAPI builder can attach it
- *  as the default 4xx/5xx response on every operation. */
-export const errorResponseSchema = ErrorResponse;

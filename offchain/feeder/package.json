@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@diadata-org/dia-cardano-oracle-cli": "file:../cli",
+    "@diadata-org/dia-cardano-oracle-shared": "file:../shared",
     "@sinclair/typebox": "^0.34.49",
     "dotenv": "^16.6.1",
     "viem": "^2.50.4",

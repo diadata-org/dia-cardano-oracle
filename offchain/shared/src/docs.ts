@@ -1,17 +1,16 @@
-// Interactive API documentation page (Swagger UI).
+// Interactive API documentation page (Swagger UI) — shared by every offchain
+// HTTP service.
 //
-// `/docs` serves an HTML page that loads the vendored Swagger UI assets from
-// `/public/` (served by this same server) and points them at
-// `/api/v1/openapi.json`. Every endpoint is interactive: fill parameters and
-// fire the request straight from the browser against this server.
+// A service serves `/docs` as an HTML page that loads the vendored Swagger UI
+// assets from `/public/` (served by the same server) and points them at the
+// service's own OpenAPI JSON. Every endpoint is interactive: fill parameters and
+// fire the request straight from the browser.
 //
-// The Swagger UI bundle (`swagger-ui-bundle.js` + `swagger-ui.css`) is committed
-// under `offchain/feeder/public/` (obtained via `npm pack swagger-ui-dist`). The
-// Dockerfile copies `public/` into the runtime image next to `dist/`.
-//
-// `locatePublicDir()` walks up from this module to find the `public/` dir so the
-// same code works whether running compiled (`dist/src/api/docs.js`) or via tsx
-// in the source tree (`src/api/docs.ts`).
+// The Swagger UI bundle (`swagger-ui-bundle.js` + `swagger-ui.css`) is vendored
+// ONCE under this package's `public/` (obtained via `npm pack swagger-ui-dist`),
+// so both the feeder and the indexer serve identical assets. `locatePublicDir()`
+// walks up from this module to find that `public/` dir, so the same code works
+// whether running compiled (`dist/docs.js`) or via tsx in the source tree.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -38,7 +37,7 @@ export function publicAssetPath(file: string): string {
  */
 export function locatePublicDir(startDir?: string): string | null {
   let dir = startDir ?? dirname(fileURLToPath(import.meta.url));
-  // Bound the walk; the feeder root is at most ~4 levels above this module.
+  // Bound the walk; the package root is at most a few levels above this module.
   for (let i = 0; i < 8; i++) {
     const candidate = join(dir, "public");
     if (existsSync(join(candidate, "swagger-ui-bundle.js"))) {
@@ -82,31 +81,36 @@ export function loadSwaggerAssets(): Map<string, LoadedAsset> | null {
  * @param assetsAvailable Whether the Swagger UI assets could be located. When
  *   false we render a minimal fallback page that links to the raw spec instead
  *   of failing — so `/docs` always returns 200.
+ * @param title          Page + heading title (defaults to a neutral name).
  */
-export function renderDocsHtml(specUrl: string, assetsAvailable: boolean): string {
+export function renderDocsHtml(
+  specUrl: string,
+  assetsAvailable: boolean,
+  title = "DIA Cardano Oracle API",
+): string {
   if (!assetsAvailable) {
     return [
       "<!DOCTYPE html>",
       '<html lang="en"><head><meta charset="utf-8" />',
-      "<title>DIA Cardano Oracle Feeder API</title>",
+      `<title>${title}</title>`,
       '<meta name="viewport" content="width=device-width, initial-scale=1" />',
       "</head><body>",
-      "<h1>DIA Cardano Oracle Feeder API</h1>",
+      `<h1>${title}</h1>`,
       "<p>The bundled API reference UI is unavailable in this build. ",
       `The machine-readable spec is at <a href="${specUrl}">${specUrl}</a>.</p>`,
       "</body></html>",
     ].join("\n");
   }
 
-  // Swagger UI mounts into #swagger-ui from the vendored bundle and renders our
-  // own /api/v1/openapi.json. `tryItOutEnabled` opens the request console on
+  // Swagger UI mounts into #swagger-ui from the vendored bundle and renders the
+  // service's own OpenAPI JSON. `tryItOutEnabled` opens the request console on
   // every operation so endpoints can be exercised straight from the page.
   return [
     "<!DOCTYPE html>",
     '<html lang="en">',
     "<head>",
     '<meta charset="utf-8" />',
-    "<title>DIA Cardano Oracle Feeder API</title>",
+    `<title>${title}</title>`,
     '<meta name="viewport" content="width=device-width, initial-scale=1" />',
     `<link rel="stylesheet" href="${publicAssetPath("swagger-ui.css")}" />`,
     "<style>body { margin: 0; padding: 0; }</style>",
