@@ -680,7 +680,14 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "transaction_fee_lovelace",
       "Lovelace paid per Cardano oracle update transaction (Cardano equivalent of EVM gas cost)",
       ["symbol", "client_id", "customer_id", "router_id"],
-      [10_000, 50_000, 100_000, 200_000, 500_000, 1_000_000, 2_000_000],
+      // A single oracle-update script tx settles around 0.88 ADA, so the buckets
+      // step by 100_000 across the 100k–1M band to resolve a real fee instead of
+      // collapsing every sample into one 500k–1M bucket; the 1.5M–3M tail covers
+      // multi-intent batch txs.
+      [
+        100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000,
+        900_000, 1_000_000, 1_500_000, 2_000_000, 3_000_000,
+      ],
     ),
     bridgeDbOperations: counter(
       "db_operations_total",

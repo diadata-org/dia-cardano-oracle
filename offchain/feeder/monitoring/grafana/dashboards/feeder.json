@@ -1143,7 +1143,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Median Cardano transaction fee (lovelace) paid per oracle update over a 5-minute window, broken out by customer. Filter with $client, $symbol, and $customer.",
+      "description": "Average Cardano transaction fee (lovelace) paid per oracle update, by customer — total fees paid divided by the number of confirmed updates. A true mean, so it is unaffected by histogram-bucket resolution. Filter with $client, $symbol, and $customer.",
       "fieldConfig": {
         "defaults": {
           "unit": "none",
@@ -1168,12 +1168,12 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, customer_id) (rate(dia_bridge_transaction_fee_lovelace_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\", router_id=~\"$router\"}[5m])))",
+          "expr": "sum by (customer_id) (dia_bridge_transaction_fee_lovelace_sum{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\", router_id=~\"$router\"}) / sum by (customer_id) (dia_bridge_transaction_fee_lovelace_count{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\", router_id=~\"$router\"})",
           "legendFormat": "{{customer_id}}",
           "refId": "A"
         }
       ],
-      "title": "Tx fee p50 — lovelace (per customer)",
+      "title": "Tx fee avg — lovelace (per customer)",
       "type": "timeseries"
     },
     {

@@ -23,6 +23,32 @@ describe("createMetrics", () => {
     assert.match(text, /scanner_type="http"/);
   });
 
+  // A real oracle-update tx fee on Cardano sits around 0.88 ADA (~880_000
+  // lovelace). With coarse buckets jumping 500_000 → 1_000_000, every real fee
+  // lands in that single bucket and `histogram_quantile` can only interpolate to
+  // its midpoint (750_000) — a flat, false reading. The buckets must therefore
+  // resolve inside the 500_000–1_000_000 band.
+  it("transaction-fee histogram resolves inside the 500k–1M band", async () => {
+    const metrics = await createMetrics({ namespace: "dia_bridge" });
+    metrics.bridgeTransactionFeeLovelace.observe(
+      { symbol: "ARS/USDT", client_id: "c1", customer_id: "acme", router_id: "r" },
+      880_000,
+    );
+
+    const text = await metrics.getMetricsText();
+    const boundaries = text
+      .split("\n")
+      .filter((line) => line.startsWith("dia_bridge_transaction_fee_lovelace_bucket"))
+      .map((line) => Number(line.match(/le="([^"]+)"/)?.[1]))
+      .filter((le) => Number.isFinite(le));
+    const insideBand = boundaries.filter((le) => le > 500_000 && le < 1_000_000);
+    assert.ok(
+      insideBand.length > 0,
+      `histogram needs a bucket boundary strictly between 500k and 1M so a real ` +
+        `~0.88 ADA fee does not collapse to the 750k midpoint; got ${boundaries.join(",")}`,
+    );
+  });
+
   it("honours a custom namespace override", async () => {
     const metrics = await createMetrics({ namespace: "custom_bridge" });
     metrics.eventsDuplicate.inc();

@@ -114,7 +114,7 @@ what changes:
 | Symbol-update failures | – | ✓ | ✓ | ✓ | ✓ |
 | Receiver balance · Deposit pending | – | ✓ | – | – | – |
 | **Admin / PaymentHook / Receiver-accrued (sum) · Scanner block lag · Provider health** | – | – | – | – | – |
-| Tx fee p50 · Tx involving router | ✓ | ✓ | ✓ | (fee only) | – |
+| Tx fee avg · Tx involving router | ✓ | ✓ | ✓ | (fee only) | – |
 | All Transactions-dashboard panels | ✓ | ✓ | (membership) | (membership) | – |
 
 > The **global** panels never change with filters: *Admin / PaymentHook / Receiver-accrued
@@ -366,17 +366,21 @@ higher = more amortized fees per pair.
 
 ### Row 5 — Billing (per client / customer)
 
-**Tx fee p50 — lovelace (per customer)** · `timeseries` · legend `{{customer_id}}`
+**Tx fee avg — lovelace (per customer)** · `timeseries` · legend `{{customer_id}}`
 
-![Tx fee p50 — lovelace (per customer)](img/overview-panel-14.png)
-`histogram_quantile(0.50, sum by (le, customer_id) (rate(dia_bridge_transaction_fee_lovelace_bucket{…}[5m])))`
+![Tx fee avg — lovelace (per customer)](img/overview-panel-14.png)
+`sum by (customer_id) (dia_bridge_transaction_fee_lovelace_sum{…}) / sum by (customer_id) (dia_bridge_transaction_fee_lovelace_count{…})`
 
-- **What it shows** — the **median Cardano network fee** (lovelace; 1 ADA = 1,000,000) paid per
-  oracle-update tx, grouped by customer — the basis for per-customer cost attribution.
+- **What it shows** — the **average Cardano network fee** (lovelace; 1 ADA = 1,000,000) paid per
+  oracle-update tx, grouped by customer — the basis for per-customer cost attribution. It is the
+  true mean (total fees ÷ confirmed updates), so it reports the real fee rather than a histogram
+  bucket midpoint.
 - **How to read it** — a batch of N pairs is one tx and one fee observation, so batching lowers the
   per-pair cost. One line per customer.
-- **When to worry** — a sustained climb in the median (Cardano fee-market pressure, or batches
-  shrinking so each pair carries more fixed cost).
+- **When to worry** — a sustained climb in the average (Cardano fee-market pressure, or batches
+  shrinking so each pair carries more fixed cost). For the spread/tail of fees, the
+  `dia_bridge_transaction_fee_lovelace` histogram now carries 100k-lovelace buckets across the
+  100k–1M band, so a p95 query resolves a real value.
 
 **Tx involving router (5m, by router & outcome)** · `timeseries` · legend `{{router_id}} · {{outcome}}`
 
