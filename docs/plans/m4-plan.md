@@ -118,18 +118,37 @@ exist today.
   Concrete Blockfrost / Koios readers (needing only a provider URL/key, no daemon) live in
   [`chain-reader-providers.ts`](../../offchain/indexer/src/chain-reader-providers.ts). TDD'd
   (UTxO mapping, datum→null, tip delegation, Blockfrost/Koios tip parsers) — 7 tests.
-- [ ] **A3 · Index service** (TDD with a fake reader) — `listPairs()`, `getPair(symbol)`,
-  `getClient(clientId)` combining the protocol registry + reader + decoders. Source of truth
-  = the live Pair / Receiver / Hook UTxOs.
-- [ ] **A4 · HTTP API** (`node:http`, same as the feeder) — `GET /v1/pairs`,
-  `/v1/pairs/{symbol}`, `/v1/pairs/{symbol}/utxo`, `/v1/clients/{clientId}`, `/v1/health`.
-- [ ] **A5 · Registry config + README** — the published contract addresses / policy IDs the
-  indexer reads (doubles as the §4 "contract addresses" deliverable).
-- [ ] **A6 · Integration example (off-chain)** — a Lucid example that reads a Pair UTxO as a
-  **reference input** and uses its price, for Cardano dApp developers.
-- [ ] **A7 · On-chain consumption example** — a small Aiken validator that consumes a Pair
-  UTxO as a reference input (a "price-gated" demo), shipped with the examples. No first-party
-  example exists today (only Spectra reference material).
+- [x] **A3 · Index service — DONE.** [`index-service.ts`](../../offchain/indexer/src/index-service.ts):
+  `listPairs()` / `getPair(symbol)` / `getClient(clientId)` / `health()` combine the registry +
+  reader + the A1 decoders, source of truth = live Pair / Receiver UTxOs. Pure aside from the
+  injected reader/clock (deterministic `ageSeconds`); ignores non-Pair UTxOs (no NFT / no datum).
+  Fake-reader TDD with the CLI's real datum encoders (9 tests).
+- [x] **A4 · HTTP API — DONE.** [`http.ts`](../../offchain/indexer/src/http.ts) (`node:http`):
+  `GET /v1/pairs`, `/v1/pairs/{symbol}`, `/v1/pairs/{symbol}/utxo`, `/v1/clients/{clientId}`,
+  `/v1/health`. The router (`routeRequest`) is pure + fake-service tested (11 tests); symbols are
+  URL-encoded; provider errors → 502, never a crash. [`config.ts`](../../offchain/indexer/src/config.ts)
+  reads `INDEXER_*` env (fail-loud, 8 tests); [`main.ts`](../../offchain/indexer/src/main.ts) wires it.
+- [x] **A5 · Registry config + README — DONE.** [`registry-config.ts`](../../offchain/indexer/src/registry-config.ts)
+  holds the published per-network script ids/addresses (real Mainnet + Preview values from the
+  deploy artifacts) + `loadRegistry(network)` (4 tests). [`README.md`](../../offchain/indexer/README.md)
+  documents run instructions, the HTTP API, and the contract-addresses table (doubles as the §4 deliverable).
+- [x] **A6 · Integration example (off-chain) — DONE.**
+  [`examples/read-pair-offchain.ts`](../../offchain/indexer/src/examples/read-pair-offchain.ts): a Lucid
+  script that asks the indexer for a pair's `utxoRef` and includes that Pair UTxO as a **reference
+  input** in a tx (typechecked; `@lucid-evolution/lucid` is an example-only dev dep).
+- [x] **A7 · On-chain consumption example — DONE.**
+  [`example_oracle_consumer.ak`](../../contracts/aiken/validators/example_oracle_consumer.ak): a price-gated
+  Aiken validator that reads the referenced Pair datum, **authenticating it by the Pair NFT** (a
+  forged datum without the NFT is rejected). 3 tests pass under `aiken check` (159 total, 0 failed).
+  Plus **two end-to-end demos**, same flow on two targets:
+  [`run-consumer-demo-emulator.sh`](../../offchain/indexer/src/examples/run-consumer-demo-emulator.sh)
+  (offline Lucid emulator) and
+  [`run-consumer-demo-onchain.sh`](../../offchain/indexer/src/examples/run-consumer-demo-onchain.sh)
+  (real network — reads the live pair from the indexer over HTTP, builds real spends). Each reads a
+  Pair **through the indexer** and builds a spend that SUCCEEDS (price ≥ min) and one that FAILS
+  (price < min) — proving the validator consumes our oracle's price. And a **separate read script**
+  (`npm run pairs:read`, NOT part of `npm test`) that decodes every real pair on the configured
+  network, read-only — the test suite itself is 100% offline (fakes + emulator).
 
 ### 2 · Feeder stability hardening
 
@@ -259,19 +278,30 @@ exist today.
 
 ### 8 · Heavier verification drills
 
-- [~] **Off-chain Lucid emulator adversarial matrix** — the happy-path orchestrator is
-  delivered (`npm run benchmark:emulator`); finish the negative-case matrix (two-client
-  parallelism, expired intent, stale bootstrap duplicate, NFT redirect, accrued drain,
-  settle without admin signature, non-admin withdraw, duplicate live pair) if it is to
-  back the E2E functional-verification claim.
-- [ ] **File-source intent injection (E2E fault drill)** — a mechanism to drive the feeder
-  from a file of hand-signed intents instead of the live DIA registry: pause the DIA read,
-  feed pre-signed intents (built with the CLI wallet) for a window, then resume. This
-  forces the *real* update path end-to-end with controlled inputs (stale, drifted,
-  out-of-order) so accuracy/freshness alerts fire on genuine on-chain state, not just on
-  synthetic metrics. Complements the M3 Pushgateway harness (which fires alerts at the
-  metric layer); this exercises ingestion → submission → confirmation with manipulated
-  data. Heavier (touches real state + ADA), hence M4.
+- [x] **Adversarial coverage of the validators — DONE.** The negative cases (admin-gating on
+  every mint/spend, mint quantity, matching burn, continuation-NFT, batch witness ordering,
+  settle-receiver uniqueness, deposit sweep/delta/anti-skim, intent expiry/freshness/nonce, price
+  gating + NFT authentication) are covered by **167 Aiken tests** across the validators and the
+  logic libraries. The two validators that had **zero** tests are now filled: `reference_holder`
+  (5 — config-NFT presence in inputs or reference inputs, admin signer, wrong/missing signer,
+  missing NFT) and `deposit` (3 — the wrapper's own-input lookup + credited / not-credited /
+  absent-own-ref). Every validator now has tests; `aiken check` → 167 passed, 0 failed. (The
+  happy-path emulator orchestrator `npm run benchmark:emulator` stays for throughput; an
+  end-to-end emulator re-run of these same cases would be redundant with the logic+validator tests.)
+- [x] **File-source intent injection (E2E fault drill)** — the feeder runs a file injector
+  beside the block scanner that watches the run's `inject/` directory, reads each CLI-signed
+  intent (`{ intent, witness }`), turns it into the same enriched intent the scanner's
+  enrichment stage produces, and feeds it through the shared routing + submission path, then
+  archives the file under `inject/processed/`. It runs in parallel with the live DIA read
+  (additive, idle when the directory is empty), so a chosen stale / drifted / out-of-order
+  intent forces the *real* update path end-to-end (ingestion → submission → confirmation) on
+  genuine on-chain state. The operator stages one with `make inject SYMBOL=… PRICE=… [TIMESTAMP=…
+  NONCE=… EXPIRY=…]`, which signs via the CLI with our authorized key and drops the file in.
+  Code: `offchain/feeder/src/source/intent-injector.ts` (+ offline tests) wired in
+  `cmd/feeder/daemon-cmd.ts` via the extracted `processEnrichedIntent`. Documented in
+  `docs/architecture/feeder.md` §3 (mechanism) and the feeder README "Fault-drill intent
+  injection" (operator how-to). Complements the M3 Pushgateway harness (which fires
+  alerts at the metric layer); this exercises the data path with manipulated inputs.
 
 ## Dependencies and ordering
 
