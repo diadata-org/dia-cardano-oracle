@@ -721,6 +721,33 @@ worry:** primary crossing **600 s** / secondary **900 s**.
 API request counts by HTTP status (pairs with the latency panel: how many, not just how long). A
 rising 5xx rate is the worry.
 
+### Provider request volume (shared key)
+
+The feeder and the indexer share one Blockfrost/Koios key, so they share its daily
+quota. Both expose the **same** `dia_bridge_provider_requests_total` series
+(Prometheus tags each by its scrape `job`), so these two panels — and the
+`ProviderRequestQuotaHigh*` alerts, which `sum` across both jobs — show the
+**combined** draw on the key. A `Job` filter on this dashboard isolates feeder vs
+indexer (only the provider panels split by it; every other metric here is
+feeder-only).
+
+**Requests in last 24h vs daily quota (per provider)** · `timeseries` · count — `sum by (provider) (increase(dia_bridge_provider_requests_total[24h]))`
+
+- **What it shows** — the exact quantity the `ProviderRequestQuotaHigh*` alert compares to the
+  daily quota: requests to each provider over the trailing 24 h, summed across feeder + indexer.
+- **How to read it** — the **red line** is the warn threshold (daily quota × warn ratio, generated
+  from `infrastructure.<network>.yaml::alerting.*`); when a provider's line crosses it the alert
+  fires. This is the "how much of the budget have I used" view.
+- **When to worry** — a line climbing toward the red → rotate/upgrade the key before it reaches the
+  full quota (`ProviderQuotaWall`).
+
+**Provider request rate (by provider + service)** · `timeseries` · req/s — `sum by (provider, job) (rate(dia_bridge_provider_requests_total{job=~"$job"}[5m]))`
+
+- **What it shows** — the live request rate, split by **provider** and **service** (`job="feeder"`
+  = build/submit; `job="indexer"` = `getUtxos` + chain-tip reads) — who is hitting the key right now.
+- **When to worry** — a sustained indexer climb (it scales with consumer query traffic) is the usual
+  reason the 24h total above approaches the quota.
+
 ## 7. How alerts surface visually
 
 An alert condition shows up in three places, all from one pipeline (feeder metrics → Prometheus

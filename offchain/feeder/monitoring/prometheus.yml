@@ -7,6 +7,15 @@ scrape_configs:
       - targets: ["feeder-sqlite:8080"]
     metrics_path: /metrics
 
+  # Indexer (indexer profile, up with `make up`). Exposes the SAME
+  # `dia_bridge_provider_requests_total` series the feeder does, tagged by this
+  # job, so a `sum by (provider)` query (and the provider-quota alerts) cover the
+  # indexer's Blockfrost/Koios usage on the shared key — not just the feeder's.
+  - job_name: indexer
+    static_configs:
+      - targets: ["indexer:3001"]
+    metrics_path: /metrics
+
   # Alert-trigger Pushgateway (monitoring profile). Empty by default; the
   # `scripts/monitoring/trigger-alert.sh` harness pushes synthetic metric values
   # here to fire an alert on demand — the real rules + pipeline take it from there.

@@ -238,6 +238,17 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     );
   });
 
+  it("internals provider-quota panel red line matches the ProviderRequestQuotaHigh* warn level", () => {
+    const yaml = loadAlerting("infrastructure.preview.yaml");
+    const { panels } = loadDashboard("feeder-internals.json");
+    const warn = yaml.provider_request_quota_per_day_blockfrost * yaml.provider_request_quota_warn_ratio;
+    assert.equal(
+      step(panelByTitle(panels, "Requests in last 24h vs daily quota (per provider)"), "red"),
+      warn,
+      "the 24h-vs-quota panel's red line must equal daily quota × warn ratio (= the alert threshold)",
+    );
+  });
+
   it("feed-sanity panel verdict colours match the FeedAccuracyFail boundary", () => {
     // The verdict codes (0 ok / 1 suspect / 2 broken) are fixed, not a YAML threshold,
     // but the panel's red step MUST equal the status the FeedAccuracyFail rule fires on
@@ -294,14 +305,16 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     };
     assert.deepEqual(
       dashboard.templating.list.map((v) => v.name),
-      ["datasource", "network"],
+      ["datasource", "network", "job"],
       "feeder-internals.json: remove unused template vars or wire them to a panel",
     );
     const exprs = dashboard.panels.flatMap((p) => (p.targets ?? []).map((t) => t.expr ?? ""));
-    assert.ok(
-      exprs.some((e) => e.includes("$network")),
-      "feeder-internals.json: template var $network is not referenced by any panel target expr",
-    );
+    for (const v of ["$network", "$job"]) {
+      assert.ok(
+        exprs.some((e) => e.includes(v)),
+        `feeder-internals.json: template var ${v} is not referenced by any panel target expr`,
+      );
+    }
   });
 
   it("count panels show counts (increase), not per-second rates, grouped by the right label", () => {

@@ -707,6 +707,104 @@
       ],
       "title": "HTTP requests (5m, by status)",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
+      "id": 700,
+      "title": "Provider request volume (shared key)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Live request rate to Blockfrost / Koios, split by service (feeder = build/submit, indexer = getUtxos + tip). Shows who is hitting the shared API key right now.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 55
+      },
+      "id": 701,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (provider, job) (rate(dia_bridge_provider_requests_total{job=~\"$job\"}[5m]))",
+          "legendFormat": "{{provider}} / {{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Provider request rate (by provider + service)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Requests to each provider over the trailing 24 h — the exact quantity the ProviderRequestQuotaHigh* alert compares to the daily quota. Sums the feeder + indexer (they share the key). The red line is the warn threshold (daily quota × warn ratio); when a provider's line crosses it the alert fires. Rotate/upgrade the key before it reaches the full quota.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 40000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 55
+      },
+      "id": 702,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (provider) (increase(dia_bridge_provider_requests_total[24h]))",
+          "legendFormat": "{{provider}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Requests in last 24h vs daily quota (per provider)",
+      "type": "timeseries"
     }
   ],
   "templating": {
@@ -738,6 +836,27 @@
         "query": {
           "query": "label_values(dia_bridge_db_operations_total, network)",
           "refId": "network"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Job",
+        "name": "job",
+        "description": "Prometheus scrape job — feeder vs indexer. Only the provider-request panels split by it; every other metric here is feeder-only.",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_provider_requests_total, job)",
+          "refId": "job"
         },
         "refresh": 2,
         "type": "query"

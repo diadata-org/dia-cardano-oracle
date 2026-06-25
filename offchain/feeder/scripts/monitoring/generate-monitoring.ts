@@ -48,6 +48,7 @@ const FEEDER_ROOT = path.resolve(SCRIPT_DIR, "..", "..");
 
 const ALERTS_FILE = path.join(FEEDER_ROOT, "monitoring", "alerts.yml");
 const DASHBOARD_FILE = path.join(FEEDER_ROOT, "monitoring", "grafana", "dashboards", "feeder.json");
+const INTERNALS_DASHBOARD_FILE = path.join(FEEDER_ROOT, "monitoring", "grafana", "dashboards", "feeder-internals.json");
 const ALERTMANAGER_FILE = path.join(FEEDER_ROOT, "monitoring", "alertmanager.yml");
 
 // ---------------------------------------------------------------------------
@@ -293,10 +294,29 @@ function patchAlertsYaml(text: string, alerting: Alerting): string {
 type PanelStepTarget = {
   panelTitle: string;
   color: string;
-  yamlKey: string;
   divisor: number;
   override?: string;
+  /** A single alerting key (÷ divisor)... */
+  yamlKey?: string;
+  /** ...or the PRODUCT of two keys (e.g. a daily quota × a warn ratio). */
+  product?: [string, string];
 };
+
+/** Resolve a panel-step target to its numeric value, failing loud on a missing
+ *  YAML key — mirrors how the alert thresholds resolve. */
+function resolvePanelValue(target: PanelStepTarget, alerting: Alerting): number {
+  const keys = target.product ?? [target.yamlKey!];
+  for (const key of keys) {
+    if (alerting[key] === undefined) {
+      process.stderr.write(`[generate-monitoring] error: alerting.${key} missing (panel "${target.panelTitle}")\n`);
+      process.exit(1);
+    }
+  }
+  const raw = target.product
+    ? alerting[target.product[0]]! * alerting[target.product[1]]!
+    : alerting[target.yamlKey!]!;
+  return raw / target.divisor;
+}
 
 const PANEL_STEPS: PanelStepTarget[] = [
   { panelTitle: "Pair staleness (per symbol)", color: "red", yamlKey: "oracle_pair_stale_seconds", divisor: 1 },
@@ -309,6 +329,18 @@ const PANEL_STEPS: PanelStepTarget[] = [
   { panelTitle: "Admin wallet • PaymentHook • Receiver accrued — ADA", color: "yellow", yamlKey: "payment_hook_withdraw_ready_lovelace", divisor: 1_000_000, override: "PaymentHook accrued" },
   { panelTitle: "Admin wallet • PaymentHook • Receiver accrued — ADA", color: "yellow", yamlKey: "settle_overdue_lovelace", divisor: 1_000_000, override: "Receiver accrued (sum)" },
   { panelTitle: "Admin wallet — largest UTxO — ADA (collateral floor)", color: "green", yamlKey: "admin_wallet_min_collateral_lovelace", divisor: 1_000_000 },
+];
+
+// Internals dashboard threshold steps. The provider-quota panel's red line is the
+// SAME warn level the ProviderRequestQuotaHigh* alert uses (daily quota × warn
+// ratio); both providers share one quota, so one threshold covers both lines.
+const INTERNALS_PANEL_STEPS: PanelStepTarget[] = [
+  {
+    panelTitle: "Requests in last 24h vs daily quota (per provider)",
+    color: "red",
+    product: ["provider_request_quota_per_day_blockfrost", "provider_request_quota_warn_ratio"],
+    divisor: 1,
+  },
 ];
 
 /**
@@ -377,15 +409,10 @@ function patchDashboardStep(text: string, target: PanelStepTarget, value: number
   return text.slice(0, searchStart) + patchedRegion + text.slice(searchEnd);
 }
 
-function patchDashboard(text: string, alerting: Alerting): string {
+function patchDashboard(text: string, alerting: Alerting, steps: PanelStepTarget[]): string {
   let out = text;
-  for (const target of PANEL_STEPS) {
-    const raw = alerting[target.yamlKey];
-    if (raw === undefined) {
-      process.stderr.write(`[generate-monitoring] error: alerting.${target.yamlKey} missing (panel "${target.panelTitle}")\n`);
-      process.exit(1);
-    }
-    out = patchDashboardStep(out, target, raw / target.divisor);
+  for (const target of steps) {
+    out = patchDashboardStep(out, target, resolvePanelValue(target, alerting));
   }
   return out;
 }
@@ -412,15 +439,20 @@ function main(): void {
   const alertsNext = patchAlertsYaml(fs.readFileSync(ALERTS_FILE, "utf8"), alerting);
   writeIfChanged(ALERTS_FILE, alertsNext, "monitoring/alerts.yml");
 
-  const dashNext = patchDashboard(fs.readFileSync(DASHBOARD_FILE, "utf8"), alerting);
-  // Guard: the result must still be valid JSON (catches a bad substitution).
-  try {
-    JSON.parse(dashNext);
-  } catch (e) {
-    process.stderr.write(`[generate-monitoring] error: patched dashboard is not valid JSON: ${(e as Error).message}\n`);
-    process.exit(1);
+  for (const [file, steps, label] of [
+    [DASHBOARD_FILE, PANEL_STEPS, "monitoring/grafana/dashboards/feeder.json"],
+    [INTERNALS_DASHBOARD_FILE, INTERNALS_PANEL_STEPS, "monitoring/grafana/dashboards/feeder-internals.json"],
+  ] as const) {
+    const dashNext = patchDashboard(fs.readFileSync(file, "utf8"), alerting, steps);
+    // Guard: the result must still be valid JSON (catches a bad substitution).
+    try {
+      JSON.parse(dashNext);
+    } catch (e) {
+      process.stderr.write(`[generate-monitoring] error: patched ${label} is not valid JSON: ${(e as Error).message}\n`);
+      process.exit(1);
+    }
+    writeIfChanged(file, dashNext, label);
   }
-  writeIfChanged(DASHBOARD_FILE, dashNext, "monitoring/grafana/dashboards/feeder.json");
 
   const amNext = buildAlertmanagerYaml(loadNotifications(network));
   writeIfChanged(ALERTMANAGER_FILE, amNext, "monitoring/alertmanager.yml");
