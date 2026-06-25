@@ -44,5 +44,11 @@ export {
 } from "./scanner-http.js";
 export { runWsScanner, type WsScannerOptions } from "./scanner-ws.js";
 export { processLogBatch, type ScanHandler, type ScannedBatch } from "./scan-handler.js";
+export {
+  injectPendingIntents,
+  parseSignedIntent,
+  runIntentInjector,
+  type InjectedIntentHandler,
+} from "./intent-injector.js";
 
 export type { ExtractedEvent, EnrichedIntent, OracleIntent } from "./types.js";

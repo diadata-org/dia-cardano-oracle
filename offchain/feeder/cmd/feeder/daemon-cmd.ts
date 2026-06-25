@@ -62,6 +62,7 @@ import {
   createHttpRegistryClient,
   resolveSourceFromConfig,
   runHttpScanner,
+  runIntentInjector,
   runWsScanner,
   type CardanoNetwork,
   type Checkpoint,
@@ -178,6 +179,8 @@ import {
   DEFAULT_WASM_FATAL_CONSECUTIVE_FAILURES,
   WASM_FATAL_EXIT_CODE,
   CARDANO_NETWORK_MAGIC,
+  INTENT_INJECT_DIRNAME,
+  DEFAULT_INTENT_INJECT_POLL_MS,
 } from "../../src/config/constants.js";
 
 // ---------------------------------------------------------------------------
@@ -2431,6 +2434,42 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     }
 
     scannerMetrics.setTransportUp({ chain_id: String(source.chainId), transport: "http" }, 1);
+
+    // File injector — drains signed intent files dropped into the run's inject
+    // directory through the same routing + submission path, alongside the live
+    // scanner. Idle while the directory is empty; see intent-injector.ts and
+    // docs/architecture/feeder.md §3.
+    const injectDir = path.join(resolveRunStateDir(network), INTENT_INJECT_DIRNAME);
+    const injectPollMs = Number(process.env.INTENT_INJECT_POLL_MS) || DEFAULT_INTENT_INJECT_POLL_MS;
+    transportPromises.push(
+      runIntentInjector({
+        injectDir,
+        intervalMs: injectPollMs,
+        signal,
+        report,
+        onEnriched: (enriched) => processEnrichedIntent({
+          enriched,
+          observedAtMs: Date.now(),
+          scannerType: "inject",
+          routerRegistry,
+          routerSigners,
+          routerCustomers,
+          priceCache,
+          latestIntents,
+          coalescerManager,
+          updatePoolManager,
+          fileLogger,
+          db,
+          intentRuntime,
+          dryRun,
+          report,
+          metrics,
+        }),
+      }).catch((err) => {
+        report(`daemon: intent injector stopped — ${(err as Error).message}`);
+      }),
+    );
+
     await Promise.all(transportPromises);
     report("daemon: scan pipeline exited cleanly.");
     return 0;
@@ -2492,10 +2531,7 @@ type ProcessOneEventInputs = {
 };
 
 async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
-  const {
-    event, observedAtMs, scannerType, dedupCache, enricher, routerRegistry, routerSigners, routerCustomers,
-    priceCache, latestIntents, coalescerManager, updatePoolManager, fileLogger, db, intentRuntime, dryRun, report, metrics,
-  } = inputs;
+  const { event, dedupCache, enricher, report, metrics } = inputs;
 
   if (!dedupCache.add(event.intentHash)) {
     metrics.eventsDuplicate.inc();
@@ -2510,6 +2546,47 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     report(`daemon: enrichment failed for ${sanitizeLogLine(event.intentHash)}: ${sanitizeLogLine((err as Error).message)}`);
     return;
   }
+
+  await processEnrichedIntent({
+    enriched,
+    observedAtMs: inputs.observedAtMs,
+    scannerType: inputs.scannerType,
+    routerRegistry: inputs.routerRegistry,
+    routerSigners: inputs.routerSigners,
+    routerCustomers: inputs.routerCustomers,
+    priceCache: inputs.priceCache,
+    latestIntents: inputs.latestIntents,
+    coalescerManager: inputs.coalescerManager,
+    updatePoolManager: inputs.updatePoolManager,
+    fileLogger: inputs.fileLogger,
+    db: inputs.db,
+    intentRuntime: inputs.intentRuntime,
+    dryRun: inputs.dryRun,
+    report: inputs.report,
+    metrics: inputs.metrics,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Post-enrichment processing — metrics, routing, policy, and dispatch for one
+// enriched intent. Shared by the scanner path (`processOneEvent`, after dedup +
+// view-call enrichment) and the file injector (which builds the enriched intent
+// straight from a signed file). The intent's source-chain coordinates live on
+// `enriched.event`; the injector zeroes the block fields, which keeps the
+// block-timestamp latency phases skipped.
+// ---------------------------------------------------------------------------
+
+type ProcessEnrichedIntentInputs = Omit<
+  ProcessOneEventInputs,
+  "event" | "dedupCache" | "enricher" | "network" | "scannerType"
+> & { enriched: EnrichedIntent; scannerType: "http" | "ws" | "inject" };
+
+async function processEnrichedIntent(inputs: ProcessEnrichedIntentInputs): Promise<void> {
+  const {
+    enriched, observedAtMs, scannerType, routerRegistry, routerSigners, routerCustomers,
+    priceCache, latestIntents, coalescerManager, updatePoolManager, fileLogger, db, intentRuntime, dryRun, report, metrics,
+  } = inputs;
+  const event = enriched.event;
 
   metrics.intentsScanned.inc({ symbol: enriched.fullIntent.symbol, scanner_type: scannerType });
   metrics.bridgeIntentsScanned.inc({ symbol: enriched.fullIntent.symbol, scanner_type: scannerType });

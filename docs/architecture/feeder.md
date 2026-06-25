@@ -14,7 +14,7 @@
 - [Client funding: side-deposit address + merge](#client-funding-side-deposit-address--merge)
 - [1. What the feeder is (high level)](#1-what-the-feeder-is-high-level)
 - [2. End-to-end flow (from an intent to a Cardano tx)](#2-end-to-end-flow-from-an-intent-to-a-cardano-tx)
-- [3. Ingestion: HTTP and WebSocket in parallel](#3-ingestion-http-and-websocket-in-parallel)
+- [3. Ingestion: HTTP, WebSocket, and the file source](#3-ingestion-http-websocket-and-the-file-source)
 - [4. The update decision: two filter stages](#4-the-update-decision-two-filter-stages)
 - [5. Batching & submission: Coalescer vs Queue Manager](#5-batching--submission-coalescer-vs-queue-manager)
 - [6. Latency: the 6 phases](#6-latency-the-6-phases)
@@ -243,7 +243,7 @@ Result Handler ── writes DB + pair-state files + priceCache + metrics
 
 ---
 
-## 3. Ingestion: HTTP and WebSocket in parallel
+## 3. Ingestion: HTTP, WebSocket, and the file source
 
 **These are NOT two processes.** The feeder is **one Node.js process** (one thread,
 one event loop). Inside it, two async tasks run **concurrently** via
@@ -263,6 +263,18 @@ both paths is processed **exactly once**.
 > WebSocket that receives events in real time. If the WebSocket drops, HTTP still
 > guarantees we lose nothing; and if an event arrives on both, dedup processes it
 > once."*
+
+### The file source (fault-drill injection)
+
+A **drill tool**, idle in normal operation: a third task can join the same
+`Promise.all([...])` — a **file injector** that watches `state/<network>_run_<id>/inject/`.
+A CLI-signed intent dropped there is read, turned into the same `EnrichedIntent`
+the scanner produces, and handed to the shared `processEnrichedIntent` path — so
+it routes, filters, and submits exactly like a scanned intent (and clears the
+bridge's signature check the same way). It forces a stale / drifted /
+out-of-order update on demand. Operator how-to: feeder README →
+[Fault-drill intent injection](../../offchain/feeder/README.md#fault-drill-intent-injection);
+code in [`src/source/intent-injector.ts`](../../offchain/feeder/src/source/intent-injector.ts).
 
 ---
 

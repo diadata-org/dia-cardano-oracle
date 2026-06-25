@@ -27,6 +27,7 @@ For how it works internally and how it diverges from its EVM ancestor, see
   - [Admin commands (CLI)](#admin-commands-cli)
   - [Operator setup — pick your scenario](#operator-setup--pick-your-scenario)
   - [Day-2 operations (Docker)](#day-2-operations-docker)
+  - [Fault-drill intent injection](#fault-drill-intent-injection)
   - [Deploy, contracts & teardown (Docker)](#deploy-contracts--teardown-docker)
   - [Volume layout](#volume-layout)
 - [Running locally (npm)](#running-locally-npm)
@@ -127,9 +128,9 @@ leaves the process stopped). Deep detail →
 
 ## Service URLs — where to look (once it's running)
 
-Start with `make up MONITORING=1` (feeder + Grafana + Prometheus + Alertmanager +
-Pushgateway) or `make up` (feeder only), then open these in a browser. All are
-published on `localhost`.
+Start with `make up MONITORING=1` (feeder + indexer + Grafana + Prometheus +
+Alertmanager + Pushgateway) or `make up` (feeder + indexer), then open these in a
+browser. All are published on `localhost`.
 
 | What | URL | Up with |
 | --- | --- | --- |
@@ -142,6 +143,8 @@ published on `localhost`.
 | Feeder **liveness** | <http://localhost:8080/health/live> | `make up` |
 | Feeder **readiness** | <http://localhost:8080/health/ready> | `make up` |
 | Feeder **metrics** (Prometheus scrape) | <http://localhost:8080/metrics> | `make up` |
+| **Indexer** (consumer-facing on-chain queries) | <http://localhost:3001/v1/health>, `/v1/pairs` | `make up` |
+| **Indexer** API reference (Swagger UI) + metrics | <http://localhost:3001/docs>, `/v1/openapi.json`, `/metrics` | `make up` |
 
 Feeder HTTP API (all under `http://localhost:8080`):
 
@@ -324,7 +327,7 @@ make up MONITORING=1   # feeder-sqlite + Prometheus + Alertmanager + Grafana + r
 make up                # feeder only (monitoring untouched)
 make down              # stops everything (DB + volumes kept)
 make down VOLUMES=1    # stops + DELETES the Prometheus + Grafana + Alertmanager volumes (fresh metrics; ../state/contracts untouched)
-make fresh             # code changed? rebuild image + wipe volumes/DB/logs + reseed + start (keeps on-chain deploy)
+make fresh             # code changed? rebuild image + wipe volumes/DB/logs + reseed + start feeder + indexer (keeps on-chain deploy)
 ```
 
 - Prometheus: `http://localhost:9090` — raw metrics and alert state
@@ -455,7 +458,7 @@ one with `RUN_ID=<id>` only when you keep several deployments of the same networ
 The CLI state and router YAML already exist; you only want a fresh runtime:
 
 ```sh
-make reset-restart   # stop → wipe DB+logs+pairs → reseed checkpoint → start
+make reset-restart   # stop → wipe DB+logs+pairs → reseed checkpoint → start feeder + indexer
 make logs            # follow the daemon
 ```
 
@@ -475,12 +478,29 @@ These targets run the **feeder** binary as one-off containers (not `dia-cli`):
 | `make checkpoint-get` | Print the current scanner checkpoint |
 | `make checkpoint-latest` | Seed the checkpoint to the current chain tip (only new intents) |
 | `make restart` | Restart the daemon with **no** data changes |
-| `make restart-latest` | Restart skipping the backlog: reseed checkpoint to tip, **keep** DB + logs |
+| `make restart-latest` | Restart feeder + indexer skipping the backlog: reseed checkpoint to tip, **keep** DB + logs |
 | `make reset` | Delete runtime state (DB + logs + pairs) and exit; keeps CLI bootstrap files |
-| `make reset-restart` | Stop → `reset` → reseed checkpoint → start the daemon (no rebuild — config-only changes) |
-| `make fresh` | After **code** changes: rebuild image → wipe Prometheus/Grafana volumes + DB/logs/pairs → reseed → start. Keeps on-chain deploy. (`MONITORING=1` opt) |
+| `make reset-restart` | Stop → `reset` → reseed checkpoint → start feeder + indexer (no rebuild — config-only changes) |
+| `make fresh` | After **code** changes: rebuild image → wipe Prometheus/Grafana volumes + DB/logs/pairs → reseed → start feeder + indexer. Keeps on-chain deploy. (`MONITORING=1` opt) |
 | `make down VOLUMES=1` | Stop the stack **and** delete the Prometheus + Grafana + Alertmanager volumes (fresh metrics; `../state`/contracts untouched) |
 | `make prune` | Prune only **old** rows/logs (keeps DB). `make prune MAX_AGE=30m` |
+
+### Fault-drill intent injection
+
+A workaround for end-to-end drills: `make inject` signs an intent with our
+authorized key (via the CLI) and drops it into the run's `inject/` directory,
+which the daemon's file injector pushes on-chain like any scanned intent — to
+force a stale / drifted / out-of-order update on demand.
+
+```sh
+make inject SYMBOL=BTC/USD PRICE=6500000000000                       # normal
+make inject SYMBOL=BTC/USD PRICE=6500000000000 TIMESTAMP=1700000000  # stale
+make inject SYMBOL=BTC/USD PRICE=1                                   # drifted
+make inject SYMBOL=BTC/USD PRICE=6500000000000 NONCE=1               # out-of-order
+```
+
+Watch it with `make logs | grep "intent injector"`. Mechanism:
+[architecture §3](../../docs/architecture/feeder.md#3-ingestion-http-websocket-and-the-file-source).
 
 ### Deploy, contracts & teardown (Docker)
 
@@ -737,7 +757,8 @@ The feeder's `.env` carries:
 - **DIA-side secret** — `DIA_WS_CREDENTIAL_*` (WebSocket transport only)
 - **Feeder daemon ops** — `API_LISTEN_ADDR`, `METRICS_ENABLED`,
   `METRICS_NAMESPACE`, `DATABASE_DRIVER`, `DATABASE_PATH_*`,
-  `DATABASE_DSN_*`, `FEEDER_LOG_DIR`
+  `DATABASE_DSN_*`, `FEEDER_LOG_DIR`, `INTENT_INJECT_POLL_MS` (drop-dir poll
+  cadence for [intent injection](#fault-drill-intent-injection); default 2000 ms)
 
 Variables that live in YAML (not in `.env`):
 

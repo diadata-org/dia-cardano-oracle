@@ -99,6 +99,25 @@ export const WS_BASE_RECONNECT_MS = 1_000;
 export const WS_MAX_RECONNECT_MS = 300_000;
 
 // ---------------------------------------------------------------------------
+// Intent injection (file-source fault drill)
+//
+// The daemon watches a drop directory inside the active run-state tree and
+// feeds any CLI-signed intent file dropped there through the same routing and
+// submission path the scanner uses, then archives the file. This lets an
+// operator stage a stale / drifted / out-of-order intent on demand while the
+// live DIA feed keeps flowing. See `src/source/intent-injector.ts`, the feeder
+// README ("Fault-drill intent injection"), and docs/architecture/feeder.md §3.
+// ---------------------------------------------------------------------------
+
+/** Drop directory for signed intent files, relative to the active run-state
+ *  dir (`state/<network>_run_<id>/<dirname>`). */
+export const INTENT_INJECT_DIRNAME = "inject";
+/** Archive subdirectory under the drop directory where processed files land. */
+export const INTENT_INJECT_PROCESSED_DIRNAME = "processed";
+/** Poll cadence for the drop directory (ms). Env override: `INTENT_INJECT_POLL_MS`. */
+export const DEFAULT_INTENT_INJECT_POLL_MS = 2_000;
+
+// ---------------------------------------------------------------------------
 // Confirmation / finality
 // ---------------------------------------------------------------------------
 
