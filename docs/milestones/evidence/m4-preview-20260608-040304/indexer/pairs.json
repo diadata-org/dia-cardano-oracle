@@ -1,0 +1,293 @@
+{
+  "pairs": [
+    {
+      "symbol": "ADA/USD",
+      "pairId": "4144412f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "751000000",
+      "timestamp": "1780895736",
+      "nonce": "1780895736000",
+      "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+      "intentHash": "016c2f4a6c1767cbc205729d2f6b702d30a65266643a8372e72ebef277de07a9",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee",
+        "outputIndex": 0
+      },
+      "ageSeconds": 1481061,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "BNB/USD",
+      "pairId": "424e422f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "61510000000",
+      "timestamp": "1780895745",
+      "nonce": "1780895745000",
+      "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+      "intentHash": "6ae1987bb3037e17608c13826693f206c2714799137064f0438de238f2e72dda",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee",
+        "outputIndex": 1
+      },
+      "ageSeconds": 1481052,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "DAI/USD",
+      "pairId": "4441492f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "100100345",
+      "timestamp": "1780895745",
+      "nonce": "1780895745000",
+      "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+      "intentHash": "05dad13fdd13607c88c23571db99d7f002712ac31ad265dea5d9867e73124582",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee",
+        "outputIndex": 2
+      },
+      "ageSeconds": 1481052,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "SOL/USD",
+      "pairId": "534f4c2f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "18510000000",
+      "timestamp": "1780895745",
+      "nonce": "1780895745000",
+      "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+      "intentHash": "7d77d48f30604112d726a2d81d0d92dbc2c2e9b0c1765647fed0b879266f1114",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee",
+        "outputIndex": 3
+      },
+      "ageSeconds": 1481052,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "XRP/USD",
+      "pairId": "5852502f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "521000000",
+      "timestamp": "1780895745",
+      "nonce": "1780895745000",
+      "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+      "intentHash": "23f2a29c209086136c4251096964a8952b44ac7126536746e81d8cb9a0b139a6",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee",
+        "outputIndex": 7
+      },
+      "ageSeconds": 1481052,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "MATIC/USD",
+      "pairId": "4d415449432f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "981000000",
+      "timestamp": "1780895745",
+      "nonce": "1780895745000",
+      "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+      "intentHash": "ff713dc6f9800184f65bf9180ce5d7162ceb046b41eae7ab10297f9473ef9814",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee",
+        "outputIndex": 8
+      },
+      "ageSeconds": 1481052,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "LTC/USD",
+      "pairId": "4c54432f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "41635365000000004096",
+      "timestamp": "1782376144",
+      "nonce": "1782375907967072082",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "26f44195ed6435d4ae52cfc5aa157ed1336f5b1e41e59ca2934bdcc9c6f9090d",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "720d4f1bcd7f44438dfe1d0da2f497019707e586b303a637f30334ab9ee3c5e7",
+        "outputIndex": 1
+      },
+      "ageSeconds": 653,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "SHIB/USD",
+      "pairId": "534849422f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "4420041965393",
+      "timestamp": "1782376156",
+      "nonce": "1782375907967072093",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "89680eee4d459f3e9e9a86fe53f7a52e9561ae8d143e5a33d8d814b2433c10f2",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "720d4f1bcd7f44438dfe1d0da2f497019707e586b303a637f30334ab9ee3c5e7",
+        "outputIndex": 4
+      },
+      "ageSeconds": 641,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "NEIRO/USD",
+      "pairId": "4e4549524f2f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "61105140000000",
+      "timestamp": "1782376177",
+      "nonce": "1782375907967072113",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "8272e0db08321af355eefc4f04cd8039d00b81a673a472ee9c3de6ced71b98b0",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "720d4f1bcd7f44438dfe1d0da2f497019707e586b303a637f30334ab9ee3c5e7",
+        "outputIndex": 7
+      },
+      "ageSeconds": 620,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "ARB/USD",
+      "pairId": "4152422f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "77030004296226968",
+      "timestamp": "1782376208",
+      "nonce": "1782375907967072142",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "9e0570fa975470a7e3984dddea7ca06bffa6280200dd3c6baccb9341b338a2a5",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "720d4f1bcd7f44438dfe1d0da2f497019707e586b303a637f30334ab9ee3c5e7",
+        "outputIndex": 8
+      },
+      "ageSeconds": 589,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "XVG/USD",
+      "pairId": "5856472f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "2351325861881437",
+      "timestamp": "1782376186",
+      "nonce": "1782375907967072121",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "681883dc3d4fc835bd8abc2a953147f902933298d4ab277289ac6224e89fee80",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "720d4f1bcd7f44438dfe1d0da2f497019707e586b303a637f30334ab9ee3c5e7",
+        "outputIndex": 9
+      },
+      "ageSeconds": 611,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "USDC/USD",
+      "pairId": "555344432f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "999638155500000000",
+      "timestamp": "1782376459",
+      "nonce": "1782375907967072381",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "8ffa3f86c7932f47839a4b1c96d7c35a84169370be5aae4e3e40152b706f09d4",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "43c4d28d37d53dbe9133c9d459602ca981efe618cb31526cdfb1256eb6dbb855",
+        "outputIndex": 0
+      },
+      "ageSeconds": 338,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "DOGE/USD",
+      "pairId": "444f47452f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "77121133553489040",
+      "timestamp": "1782376463",
+      "nonce": "1782375907967072384",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "d8b524338cd57305fb955f8192a4d7b68e80b5db63ddc7a9e9bbf4a6c71247d1",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "43c4d28d37d53dbe9133c9d459602ca981efe618cb31526cdfb1256eb6dbb855",
+        "outputIndex": 1
+      },
+      "ageSeconds": 334,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "ETH/USD",
+      "pairId": "4554482f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "1653045256557150076928",
+      "timestamp": "1782376454",
+      "nonce": "1782375907967072376",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "222ca59336253065971a462f98ebb656fd0b4fa4ead56b02eb0c462edee12099",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "43c4d28d37d53dbe9133c9d459602ca981efe618cb31526cdfb1256eb6dbb855",
+        "outputIndex": 2
+      },
+      "ageSeconds": 343,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "USDT/USD",
+      "pairId": "555344542f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "998459999999999936",
+      "timestamp": "1782376496",
+      "nonce": "1782375907967072415",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "a78fb14ea31fe0161911fb63b4c9d4f45673acd79a7a076b38feec23ba057df0",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "43c4d28d37d53dbe9133c9d459602ca981efe618cb31526cdfb1256eb6dbb855",
+        "outputIndex": 3
+      },
+      "ageSeconds": 301,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "BTC/USD",
+      "pairId": "4254432f555344",
+      "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+      "price": "61703925235468256411648",
+      "timestamp": "1782376453",
+      "nonce": "1782375907967072375",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "ddddadd6d6b2c42d9eb3e7ec75c12a2a1e67f3aeca2ff806feeccfa8d4af9222",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "43c4d28d37d53dbe9133c9d459602ca981efe618cb31526cdfb1256eb6dbb855",
+        "outputIndex": 4
+      },
+      "ageSeconds": 344,
+      "clientId": "client-test-01"
+    },
+    {
+      "symbol": "BTC/USD",
+      "pairId": "4254432f555344",
+      "pairPolicyId": "02435906b5bf2ebac57a72d8d5609aa7f642b5e0e4d79666e0b1a293",
+      "price": "61745721050668237586432",
+      "timestamp": "1782376145",
+      "nonce": "1782375907967072083",
+      "signer": "f64d333c19b007519c7b9316680ed26578f98c08",
+      "intentHash": "7a152f4556217b225c155ae5e404507d2481b236c6bc14aede9690625b599660",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "a4516fbcd5b2a209700181bd15cf0e8d7dd5d052ee387c18f48471609de5490c",
+        "outputIndex": 0
+      },
+      "ageSeconds": 652,
+      "clientId": "client-test-02"
+    }
+  ]
+}
