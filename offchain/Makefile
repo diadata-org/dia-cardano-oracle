@@ -29,6 +29,16 @@ export RUN_ID
 #   make run-all ARGS="--from-step 28 --run-id 20260608-040304"
 ARGS ?=
 
+# Fault-drill intent fields for `make inject`. SYMBOL is required; the rest
+# override the CLI's network-derived defaults to stage a specific scenario
+# (stale TIMESTAMP, drifted PRICE, out-of-order NONCE). See the feeder README
+# "Fault-drill intent injection".
+SYMBOL ?=
+PRICE ?=
+TIMESTAMP ?=
+NONCE ?=
+EXPIRY ?=
+
 # Monitoring toggle. Set MONITORING=1 on any "start" target to ALSO bring up
 # Prometheus + Grafana + the renderer sidecar. Without it, only the feeder
 # starts. One flag, consistent across up / up-postgres / restart-latest /
@@ -74,23 +84,39 @@ generate-monitoring: ## Write monitoring thresholds from infrastructure.<network
 	cd feeder && node --import tsx/esm scripts/monitoring/generate-monitoring.ts --network $(NET_TAG)
 
 .PHONY: up
-up: generate-monitoring ## Start the feeder daemon (add MONITORING=1 for Prometheus + Grafana)
-	$(COMPOSE) --profile sqlite $(MON_PROFILE) up -d
+up: generate-monitoring ## Start the feeder daemon + indexer (add MONITORING=1 for Prometheus + Grafana)
+	$(COMPOSE) --profile sqlite --profile indexer $(MON_PROFILE) up -d
 
 .PHONY: up-postgres
-up-postgres: generate-monitoring ## Start the feeder daemon, Postgres backend (add MONITORING=1 for Prometheus + Grafana)
-	$(COMPOSE) --profile postgres $(MON_PROFILE) up -d
+up-postgres: generate-monitoring ## Start the feeder daemon (Postgres) + indexer (add MONITORING=1 for Prometheus + Grafana)
+	$(COMPOSE) --profile postgres --profile indexer $(MON_PROFILE) up -d
+
+# Indexer-only / feeder-pause helpers — used to run the on-chain consumer demo
+# without the feeder competing for the operator wallet + the Pair UTxOs. The
+# indexer reads the chain directly, so it serves the already-published pairs
+# fine while the feeder is paused.
+.PHONY: up-indexer
+up-indexer: ## Start ONLY the indexer (no feeder). For consuming/demoing the live pairs.
+	$(COMPOSE) --profile indexer up -d indexer
+
+.PHONY: stop-feeder
+stop-feeder: ## Pause ONLY the feeder daemon, leaving the indexer running (e.g. for the on-chain consumer demo).
+	-$(COMPOSE) --profile sqlite stop feeder-sqlite
+
+.PHONY: start-feeder
+start-feeder: ## Resume the feeder daemon after `stop-feeder`.
+	$(COMPOSE) --profile sqlite start feeder-sqlite
 
 # Every service is gated behind a profile, and `docker compose down` only
 # touches services whose profile is active. Without listing them all here,
 # `down` matches nothing and leaves the feeder + monitoring stack running.
 .PHONY: down
 down: ## Stop everything for the CURRENT network (all profiles incl. monitoring: Alertmanager + Pushgateway; other network untouched). Add VOLUMES=1 to ALSO delete the Prometheus + Grafana + Alertmanager volumes (fresh metrics; ../state/contracts untouched).
-	$(COMPOSE) --profile sqlite --profile postgres --profile cli --profile monitoring down $(VOL_FLAG) --remove-orphans
+	$(COMPOSE) --profile sqlite --profile postgres --profile cli --profile indexer --profile monitoring down $(VOL_FLAG) --remove-orphans
 
 # Stops BOTH network stacks regardless of feeder/.env — use it when you are not
 # sure which network is up, or to tear everything down before maintenance.
-ALL_PROFILES := --profile sqlite --profile postgres --profile cli --profile monitoring
+ALL_PROFILES := --profile sqlite --profile postgres --profile cli --profile indexer --profile monitoring
 .PHONY: down-all
 down-all: ## Stop EVERY network's stack (dia-feeder-preview AND dia-feeder-mainnet)
 	-docker compose -f feeder/docker-compose.yml --project-directory feeder -p dia-feeder-preview $(ALL_PROFILES) down --remove-orphans
@@ -100,6 +126,10 @@ down-all: ## Stop EVERY network's stack (dia-feeder-preview AND dia-feeder-mainn
 logs: ## Tail feeder logs
 	$(COMPOSE) logs -f feeder-sqlite
 
+.PHONY: logs-indexer
+logs-indexer: ## Tail indexer logs
+	$(COMPOSE) logs -f indexer
+
 .PHONY: cli
 cli: ## Run a CLI command. Usage: make cli CMD="protocol"
 	$(COMPOSE) --profile cli run --rm cli $(CMD)
@@ -107,6 +137,31 @@ cli: ## Run a CLI command. Usage: make cli CMD="protocol"
 .PHONY: wallet
 wallet: ## Create the operator wallet
 	$(COMPOSE) --profile cli run --rm cli wallet:create
+
+# Stage a fault-drill intent: the CLI signs it with our authorized key and drops
+# it into the run's inject/ dir, where the daemon's file injector picks it up and
+# pushes a real on-chain update — alongside the live DIA feed. RUN_ID selects the
+# run dir (newest when empty). The signed file is archived under inject/processed/
+# after it is processed. See the feeder README "Fault-drill intent injection".
+.PHONY: inject
+inject: ## Stage a fault-drill intent into the run's inject/ dir. Usage: make inject SYMBOL=BTC/USD PRICE=6500000000000 [TIMESTAMP=… NONCE=… EXPIRY=…]
+	@test -n "$(SYMBOL)" || { echo "SYMBOL is required, e.g. make inject SYMBOL=BTC/USD PRICE=6500000000000"; exit 1; }
+	@runid="$(RUN_ID)"; \
+	 if [ -z "$$runid" ]; then \
+	   latest=$$(ls -d state/$(NET_TAG)_run_* 2>/dev/null | sort | tail -1); \
+	   test -n "$$latest" || { echo "no run dir under state/$(NET_TAG)_run_* — deploy first or pass RUN_ID="; exit 1; }; \
+	   runid=$${latest#state/$(NET_TAG)_run_}; \
+	 fi; \
+	 slug=$$(echo "$(SYMBOL)" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$$//'); \
+	 out="../state/$(NET_TAG)_run_$$runid/inject/$$slug.signed.json"; \
+	 echo "make inject: $(SYMBOL) → state/$(NET_TAG)_run_$$runid/inject/$$slug.signed.json"; \
+	 $(COMPOSE) --profile cli run --rm cli intent:create-and-sign \
+	   --symbol "$(SYMBOL)" \
+	   $(if $(PRICE),--price "$(PRICE)",) \
+	   $(if $(TIMESTAMP),--timestamp "$(TIMESTAMP)",) \
+	   $(if $(NONCE),--nonce "$(NONCE)",) \
+	   $(if $(EXPIRY),--expiry "$(EXPIRY)",) \
+	   --out "$$out"
 
 .PHONY: protocol-init
 protocol-init: ## Initialise protocol: init, parameterize, reference-scripts, bootstrap
@@ -155,33 +210,33 @@ restart: ## Restart the feeder daemon with no data changes
 	$(COMPOSE) --profile sqlite restart feeder-sqlite
 
 .PHONY: restart-latest
-restart-latest: ## Restart skipping the backlog - reseed checkpoint to tip, keep DB + logs (MONITORING=1 opt)
+restart-latest: ## Restart feeder + indexer skipping the backlog - reseed checkpoint to tip, keep DB + logs (MONITORING=1 opt)
 	-$(COMPOSE) --profile sqlite stop feeder-sqlite
 	$(FEEDER_RUN) checkpoint set --from-latest
-	$(COMPOSE) --profile sqlite $(MON_PROFILE) up -d
+	$(COMPOSE) --profile sqlite --profile indexer $(MON_PROFILE) up -d
 
 .PHONY: reset
 reset: ## Delete feeder runtime state (DB + logs + pairs) and exit; keeps CLI bootstrap files
 	$(FEEDER_RUN) reset
 
 .PHONY: reset-restart
-reset-restart: ## Restart clean - wipe DB + logs + pairs, reseed checkpoint, start daemon (MONITORING=1 opt). Does NOT rebuild the image — use `fresh` after CODE changes.
+reset-restart: ## Restart clean - wipe DB + logs + pairs, reseed checkpoint, start feeder + indexer (MONITORING=1 opt). Does NOT rebuild the image — use `fresh` after CODE changes.
 	-$(COMPOSE) --profile sqlite stop feeder-sqlite
 	$(FEEDER_RUN) reset
 	$(FEEDER_RUN) checkpoint set --from-latest
-	$(COMPOSE) --profile sqlite $(MON_PROFILE) up -d
+	$(COMPOSE) --profile sqlite --profile indexer $(MON_PROFILE) up -d
 
 # THE command after changing CODE (TypeScript): rebuilds the image so the new
 # code actually runs, then wipes ALL runtime state for a clean slate. The
 # on-chain deploy in ../state (config-bootstrap.json, clients/<id>.json) is kept.
 # For config-only (YAML) changes, `reset-restart` is enough (no rebuild needed).
 .PHONY: fresh
-fresh: generate-monitoring ## FULL clean restart on CURRENT code — stop + wipe Prometheus/Grafana volumes, REBUILD image, wipe feeder DB+logs+pairs, reseed checkpoint, start. Keeps on-chain deploy. (MONITORING=1 for Prom+Grafana)
-	$(COMPOSE) --profile sqlite --profile postgres --profile cli --profile monitoring down --volumes --remove-orphans
+fresh: generate-monitoring ## FULL clean restart on CURRENT code — stop + wipe Prometheus/Grafana volumes, REBUILD image, wipe feeder DB+logs+pairs, reseed checkpoint, start feeder + indexer. Keeps on-chain deploy. (MONITORING=1 for Prom+Grafana)
+	$(COMPOSE) --profile sqlite --profile postgres --profile cli --profile indexer --profile monitoring down --volumes --remove-orphans
 	$(COMPOSE) --profile sqlite build
 	$(FEEDER_RUN) reset
 	$(FEEDER_RUN) checkpoint set --from-latest
-	$(COMPOSE) --profile sqlite $(MON_PROFILE) up -d
+	$(COMPOSE) --profile sqlite --profile indexer $(MON_PROFILE) up -d
 
 .PHONY: prune
 prune: ## Prune only OLD feeder rows/logs, keeps DB (e.g. make prune MAX_AGE=30m)
@@ -239,3 +294,18 @@ evidence3: ## Build the COMPLETE M3 evidence pack into ONE dir (network from fee
 	  EVIDENCE_STAMP=$$stamp CARDANO_NETWORK=$(EVIDENCE_NETWORK) node --import tsx/esm scripts/m3-evidence/build-stats.ts $$db && \
 	  EVIDENCE_STAMP=$$stamp CARDANO_NETWORK=$(EVIDENCE_NETWORK) node --import tsx/esm scripts/m3-evidence/build-error-counts.ts $$db; \
 	echo "Complete M3 evidence pack: $$out/"
+
+.PHONY: evidence4
+evidence4: ## Build the M4 evidence pack (indexer + consumer demo). Needs the indexer up (make up). Pass EVIDENCE_ONCHAIN_LOG=path to embed an on-chain demo run.
+	@if [ -z "$(EVIDENCE_NETWORK)" ]; then \
+	  echo "ERROR: CARDANO_NETWORK not set in feeder/.env — cannot pick evidence network." >&2; exit 1; \
+	fi; \
+	net=$$(echo "$(EVIDENCE_NETWORK)" | tr '[:upper:]' '[:lower:]'); \
+	if [ -n "$(RUN_ID)" ]; then sdir=state/$${net}_run_$(RUN_ID); \
+	else sdir=$$(ls -d state/$${net}_run_*/ 2>/dev/null | sort | tail -1); sdir=$${sdir%/}; sdir=$${sdir:-state/$$net}; fi; \
+	runid=$${sdir##*_run_}; [ "$$runid" = "$$sdir" ] && runid=$$(date -u +%Y%m%d-%H%M%S); \
+	echo "Building $(EVIDENCE_NETWORK) M4 evidence pack — stamp=$$runid indexer=$${INDEXER_URL:-http://localhost:3001}"; \
+	EVIDENCE_STAMP=$$runid EVIDENCE_NETWORK=$$net \
+	  INDEXER_URL=$${INDEXER_URL:-http://localhost:3001} \
+	  EVIDENCE_ONCHAIN_LOG=$${EVIDENCE_ONCHAIN_LOG:-} RUN_ID=$(RUN_ID) \
+	  feeder/scripts/m4-evidence/package-m4-evidence.sh
