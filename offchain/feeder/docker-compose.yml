@@ -129,6 +129,37 @@ services:
     stdin_open: true
     tty: true
 
+  # Consumer-facing read-only query service over the live on-chain pairs.
+  # Shares the unified image + the shared state tree (reads the registry from
+  # state/<run>/clients/*.json, the same files the feeder/CLI write). Needs only
+  # the provider key + network from .env — no DB, no wallet, no own volume.
+  indexer:
+    profiles: ["indexer"]
+    init: true
+    build:
+      context: ../..
+      dockerfile: offchain/feeder/Dockerfile
+    image: dia-cardano-feeder:local
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app/offchain/indexer
+    command: ["node", "/app/offchain/indexer/dist/main.js"]
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ../state:/app/offchain/state
+    env_file: [.env]
+    environment:
+      # Same RUN_ID as the feeder so both read the same active run dir.
+      RUN_ID: ${RUN_ID:-}
+      INDEXER_PORT: "3001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3001/v1/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
   prometheus:
     profiles: ["monitoring"]
     image: prom/prometheus:v2.51.0

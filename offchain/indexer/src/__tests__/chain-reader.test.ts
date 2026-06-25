@@ -1,7 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import type { ProviderCallEvent } from "@diadata-org/dia-cardano-oracle-cli/core/provider-retry";
+
 import {
+  countedTip,
   createProviderChainReader,
   parseBlockfrostTip,
   parseKoiosTip,
@@ -81,5 +84,48 @@ describe("parseKoiosTip", () => {
   it("throws on an empty array or bad shape", () => {
     assert.throws(() => parseKoiosTip([]), /unexpected response shape/);
     assert.throws(() => parseKoiosTip({ abs_slot: 1 }), /unexpected response shape/);
+  });
+});
+
+describe("countedTip", () => {
+  const TIP: ChainTip = { slot: 1, height: 2, hash: "abc" };
+
+  it("records an ok call and returns the tip", async () => {
+    const calls: ProviderCallEvent[] = [];
+    const fetchTip = countedTip("Blockfrost", async () => TIP, (e) => calls.push(e));
+
+    const tip = await fetchTip();
+
+    assert.deepEqual(tip, TIP);
+    assert.deepEqual(calls, [{ provider: "Blockfrost", method: "tip", outcome: "ok" }]);
+  });
+
+  it("records error and rethrows on a generic failure", async () => {
+    const calls: ProviderCallEvent[] = [];
+    const fetchTip = countedTip("Koios", async () => { throw new Error("socket hang up"); }, (e) => calls.push(e));
+
+    await assert.rejects(fetchTip(), /socket hang up/);
+    assert.deepEqual(calls, [{ provider: "Koios", method: "tip", outcome: "error" }]);
+  });
+
+  it("classifies a 402 quota wall as quota_exceeded", async () => {
+    const calls: ProviderCallEvent[] = [];
+    const fetchTip = countedTip("Blockfrost", async () => { throw new Error("402 Payment Required"); }, (e) => calls.push(e));
+
+    await assert.rejects(fetchTip());
+    assert.equal(calls[0]!.outcome, "quota_exceeded");
+  });
+
+  it("classifies a 429 throttle as rate_limited", async () => {
+    const calls: ProviderCallEvent[] = [];
+    const fetchTip = countedTip("Blockfrost", async () => { throw new Error("429 Too Many Requests"); }, (e) => calls.push(e));
+
+    await assert.rejects(fetchTip());
+    assert.equal(calls[0]!.outcome, "rate_limited");
+  });
+
+  it("passes through unchanged when no observer is supplied", async () => {
+    const fetchTip = countedTip("Blockfrost", async () => TIP, undefined);
+    assert.deepEqual(await fetchTip(), TIP);
   });
 });

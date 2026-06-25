@@ -47,6 +47,7 @@ This document is the single architecture reference for the Cardano port of DIA's
   - [9.4 Alert pipeline and `alert_log`](#94-alert-pipeline-and-alert_log)
   - [9.5 API endpoint → table map](#95-api-endpoint--table-map)
   - [9.6 Spectra parity](#96-spectra-parity)
+- [10. Indexer (consumer query layer)](#10-indexer-consumer-query-layer)
 
 Reference inputs to this document:
 
@@ -1524,5 +1525,25 @@ config keys, and DB columns are matched 1:1 versus adapted for Cardano, plus the
 typed-but-not-yet-wired keys — lives in the feeder architecture guide:
 [`docs/architecture/feeder.md` §15](./feeder.md#spectra-parity-and-cardano-divergences-full-table)
 and [§17](./feeder.md#17-state-implemented--m2--deferred-to-m3).
+
+## 10. Indexer (consumer query layer)
+
+The feeder is **producer-facing** ("what did I push, am I healthy"); the indexer
+is **consumer-facing** ("what does the chain say now"). It is a separate,
+read-only service (`offchain/indexer/`) whose source of truth is the live Pair /
+Receiver UTxOs — independent of the feeder daemon, runnable by anyone with a
+provider key and the published contract addresses.
+
+It reuses the on-chain reading primitives (the shared datum decoders, the
+injectable `utxosAt` pattern) and adds a `ChainReader` port (Blockfrost/Koios),
+an index service (`listPairs` / `getPair` / `getClient` / `health`), and a
+`node:http` API (`/v1/pairs`, `/v1/pairs/{symbol}`, `/v1/pairs/{symbol}/utxo`,
+`/v1/clients/{id}`, `/v1/health`). A dApp consumes a feed by reading a pair's
+`utxoRef` and including that Pair UTxO as a **reference input**, then gating on
+the inline-datum price — authenticated by the Pair NFT (see the off-chain + Aiken
+examples, and the consumer demos: `run-consumer-demo-emulator.sh` offline and
+`run-consumer-demo-onchain.sh` against the real deployed pair).
+
+Run + API + addresses: [`offchain/indexer/README.md`](../../offchain/indexer/README.md).
 
 ---

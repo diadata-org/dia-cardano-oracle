@@ -8,15 +8,22 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx/esm --test $(find src -path '*/__tests__/*.test.ts' | tr '\\n' ' ')",
-    "indexer:dev": "tsx src/main.ts"
+    "indexer:dev": "node --env-file-if-exists=.env --import tsx/esm src/main.ts",
+    "pairs:read": "node --env-file-if-exists=.env --import tsx/esm src/examples/read-pairs.ts"
   },
   "dependencies": {
     "@diadata-org/dia-cardano-oracle-cli": "file:../cli",
-    "@lucid-evolution/provider": "^0.1.90"
+    "@diadata-org/dia-cardano-oracle-shared": "file:../shared",
+    "@lucid-evolution/provider": "^0.1.90",
+    "@sinclair/typebox": "^0.34.49"
   },
   "devDependencies": {
+    "@lucid-evolution/lucid": "^0.4.29",
     "@types/node": "^24.6.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
+  },
+  "optionalDependencies": {
+    "prom-client": "^15.1.3"
   }
 }
