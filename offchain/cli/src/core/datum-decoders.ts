@@ -47,6 +47,26 @@ export function decodePaymentHookDatum(
   };
 }
 
+/**
+ * Decode the protocol fee parameters out of a Config inline datum. The Config
+ * datum carries the whole protocol configuration; a consumer only needs the fee
+ * formula inputs to know what an update costs, so this returns just those two
+ * fields (datum field 3 = base, field 4 = per-pair). Fee for an N-pair update
+ * is `baseFeeLovelace + N × perPairFeeLovelace`.
+ */
+export function decodeConfigFees(raw: string): {
+  baseFeeLovelace: string;
+  perPairFeeLovelace: string;
+} {
+  const datum = Data.from(raw) as Constr<PlutusData>;
+  const [, , , baseFeeLovelace, perPairFeeLovelace] = datum.fields;
+
+  return {
+    baseFeeLovelace: BigInt(baseFeeLovelace as bigint).toString(),
+    perPairFeeLovelace: BigInt(perPairFeeLovelace as bigint).toString(),
+  };
+}
+
 /** Decode a Pair inline datum (the published oracle value + metadata). */
 export function decodePairDatum(raw: string): Omit<PairLiveState, "intent"> {
   const datum = Data.from(raw) as Constr<PlutusData>;

@@ -52,7 +52,7 @@ export { TxDroppedFromChainError } from "./tx-onchain-check.js";
 // Re-export the inline-datum decoders for the CLI's existing call sites.
 // Canonical home is core/datum-decoders.ts (dependency-free, shared with the
 // indexer); these are re-exports, not duplicates.
-export { decodePairDatum, decodeReceiverDatum, decodePaymentHookDatum } from "./datum-decoders.js";
+export { decodePairDatum, decodeReceiverDatum, decodePaymentHookDatum, decodeConfigFees } from "./datum-decoders.js";
 
 // Defined in core/constants.ts; re-exported here so existing importers of the
 // chain-helpers surface keep working.

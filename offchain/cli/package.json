@@ -17,6 +17,10 @@
       "types": "./dist/core/config.d.ts",
       "default": "./dist/core/config.js"
     },
+    "./core/constants": {
+      "types": "./dist/core/constants.d.ts",
+      "default": "./dist/core/constants.js"
+    },
     "./core/contracts": {
       "types": "./dist/core/contracts.d.ts",
       "default": "./dist/core/contracts.js"
@@ -40,6 +44,10 @@
     "./core/network-time": {
       "types": "./dist/core/network-time.d.ts",
       "default": "./dist/core/network-time.js"
+    },
+    "./core/provider-retry": {
+      "types": "./dist/core/provider-retry.d.ts",
+      "default": "./dist/core/provider-retry.js"
     },
     "./core/run-state": {
       "types": "./dist/core/run-state.d.ts",
