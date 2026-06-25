@@ -61,9 +61,9 @@
   },
   "paymentHookState": {
     "withdrawAddress": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
-    "accruedFeesLovelace": "127950000",
-    "lifetimeCollectedLovelace": "3363500000",
-    "lifetimeWithdrawnLovelace": "3235550000",
+    "accruedFeesLovelace": "31050000",
+    "lifetimeCollectedLovelace": "3394550000",
+    "lifetimeWithdrawnLovelace": "3363500000",
     "minUtxoLovelace": "5000000"
   },
   "compiledScripts": {
@@ -107,7 +107,7 @@
   },
   "datum": {
     "configCbor": "d8799f9f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dff9f582102d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531582103aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807582103c7d448ea95104a628945f43745f177f1e9895c6d4c8e43614d7b1c0395469b2dffd8799f4a444941204f7261636c6543312e3019274254f8c614a483a0427a13512f52ac72a576678be317ff1a000927c01a0003d090d8799fd8799f581c70bf934df3daefb7c19d20d06641528765bd02b761bb1e818f633bf6504449415f5041594d454e545f484f4f4bffffd8799fd87a9f581c583b9e5278b1bf6af1ab6da98f2ab123e3a402526f5087fee46970eeffff19012c1a004c4b40ff",
-    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a07a05cb01ac87aefe01ac0da93301a004c4b40ff"
+    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a01d9c9101aca54b8f01ac87aefe01a004c4b40ff"
   },
   "transactions": [
     {
@@ -418,6 +418,11 @@
     {
       "step": "preview:settle",
       "submittedTxHash": "c7c09b0717d2827e8bde2b4e2cf10b7145bb7c94ea9148e4dc344e411d9a8b15",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "2568bfc9732d54ccb19a70c1d1552a618b1374235d58b1757bf3cdafe9e92d73",
       "confirmed": true
     }
   ]
