@@ -447,3 +447,75 @@ describe("validateModularConfig", () => {
     assert.deepEqual(validateModularConfig(config), []);
   });
 });
+
+describe("validateModularConfig — wallet pool", () => {
+  it("accepts a valid wallets block plus funding band", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.wallets = [
+      { id: "main", role: "main", private_key_env: "CARDANO_WALLET_SEED_TESTNET" },
+      { id: "pool-1", role: "pool", private_key_env: "CARDANO_WALLET_SEED_TESTNET_POOL_1" },
+    ];
+    config.infrastructure!.wallet_pool = {
+      pool_wallet_low_lovelace: 50_000_000,
+      pool_wallet_target_lovelace: 200_000_000,
+      main_wallet_reserve_lovelace: 100_000_000,
+      pool_fund_min_interval_ms: 300_000,
+    };
+    assert.deepEqual(validateModularConfig(config), []);
+  });
+
+  it("rejects a pool without exactly one main and with duplicate ids", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.wallets = [
+      { id: "w", role: "pool", private_key_env: "CARDANO_WALLET_SEED_TESTNET" },
+      { id: "w", role: "pool", private_key_env: "CARDANO_WALLET_SEED_TESTNET_POOL_1" },
+    ];
+    const issues = validateModularConfig(config);
+    assert.ok(issues.some((i) => i.severity === "error" && /exactly one `role: main`/.test(i.message)));
+    assert.ok(issues.some((i) => i.severity === "error" && /Duplicate wallet id/.test(i.message)));
+  });
+
+  it("rejects an unknown role", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.wallets = [
+      { id: "main", role: "main", private_key_env: "CARDANO_WALLET_SEED_TESTNET" },
+      { id: "bad", role: "treasury" as unknown as "pool", private_key_env: "X_SEED" },
+    ];
+    const issues = validateModularConfig(config);
+    assert.ok(issues.some((i) => i.severity === "error" && i.path.endsWith("role")));
+  });
+
+  it("rejects an empty wallets list", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.wallets = [];
+    const issues = validateModularConfig(config);
+    assert.ok(issues.some((i) => i.severity === "error" && /Empty `wallets` list/.test(i.message)));
+  });
+
+  it("warns on a non-conventional private_key_env name", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.wallets = [
+      { id: "main", role: "main", private_key_env: "lower_case_seed" },
+    ];
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some(
+        (i) => i.severity === "warning" && /does not look like a conventional env var name/.test(i.message),
+      ),
+    );
+  });
+
+  it("rejects a funding band where low is not below target", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.wallet_pool = {
+      pool_wallet_low_lovelace: 200_000_000,
+      pool_wallet_target_lovelace: 200_000_000,
+    };
+    const issues = validateModularConfig(config);
+    assert.ok(
+      issues.some(
+        (i) => i.severity === "error" && i.path.endsWith("pool_wallet_target_lovelace"),
+      ),
+    );
+  });
+});

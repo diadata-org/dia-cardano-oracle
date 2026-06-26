@@ -753,7 +753,13 @@ The feeder's `.env` carries:
 - **Selectors** — `CARDANO_NETWORK`, `CARDANO_PROVIDER`, `DRY_RUN`
 - **Cardano-side secrets** — `BLOCKFROST_PROJECT_ID_*`,
   `BLOCKFROST_API_URL_*`, `KOIOS_API_URL_*`, `CARDANO_WALLET_SEED_*`,
-  `CARDANO_PRIVATE_KEY_*`
+  `CARDANO_PRIVATE_KEY_*`. By default the feeder signs with the single wallet in
+  `CARDANO_WALLET_SEED_<NETWORK>`. To run a **pool** of signer wallets — so
+  parallel lanes never contend for the same fee/collateral UTxO — add a
+  `wallets:` block in `infrastructure.<network>.yaml` (one entry per wallet, each
+  with a unique `id`, a `role` of `main` or `pool`, and a `private_key_env`) plus
+  one env var per wallet here (e.g. `CARDANO_WALLET_SEED_MAINNET_POOL_1`). Exactly
+  one `main` wallet — the on-chain PaymentHook withdraw target — funds the rest.
 - **DIA-side secret** — `DIA_WS_CREDENTIAL_*` (WebSocket transport only)
 - **Feeder daemon ops** — `API_LISTEN_ADDR`, `METRICS_ENABLED`,
   `METRICS_NAMESPACE`, `DATABASE_DRIVER`, `DATABASE_PATH_*`,

@@ -79,6 +79,38 @@ export type InfrastructureConfig = {
   /** Alertmanager delivery channels (Telegram / email). Off by default; the
    *  monitoring generator writes these into `monitoring/alertmanager.yml`. */
   notifications?: NotificationsConfig;
+  /** Signer-wallet pool. Each entry references a seed/key env var. Omit for the
+   *  single-wallet default (the wallet from `CARDANO_WALLET_SEED_<NETWORK>`). */
+  wallets?: WalletConfigEntry[];
+  /** Main→pool funding band. Omit to use the `DEFAULT_*` constants. */
+  wallet_pool?: WalletPoolFundingConfig;
+};
+
+/** One signer wallet in `infrastructure.<network>.yaml::wallets[]`. */
+export type WalletConfigEntry = {
+  /** Stable identifier, unique within the pool. */
+  id: string;
+  /** `main` is the on-chain PaymentHook withdraw target (exactly one);
+   *  `pool` wallets pay tx fees alongside the main. */
+  role: "main" | "pool";
+  /** Name of the env var holding this wallet's seed phrase or private key,
+   *  e.g. `CARDANO_WALLET_SEED_TESTNET` or `CARDANO_WALLET_SEED_MAINNET_POOL_1`.
+   *  The kind is inferred from the name (contains `PRIVATE_KEY` → key, else seed). */
+  private_key_env: string;
+};
+
+/** Main→pool funding band in `infrastructure.<network>.yaml::wallet_pool`. All
+ *  values are lovelace except the `*_ms` cooldown. Each key falls back to a
+ *  `DEFAULT_*` constant in `config/constants.ts`. */
+export type WalletPoolFundingConfig = {
+  /** A pool wallet below this spendable lovelace is topped up from the main. */
+  pool_wallet_low_lovelace?: number;
+  /** Funding fills a pool wallet up to this spendable lovelace. */
+  pool_wallet_target_lovelace?: number;
+  /** The main wallet never funds the pool below this spendable lovelace reserve. */
+  main_wallet_reserve_lovelace?: number;
+  /** Per-wallet cooldown between main→pool funding txs (ms). */
+  pool_fund_min_interval_ms?: number;
 };
 
 /**

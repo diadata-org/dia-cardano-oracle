@@ -26,6 +26,7 @@ import { extractRouterSymbols } from "../router/symbols.js";
 import {
   VALID_DATABASE_DRIVERS,
   VALID_CARDANO_NETWORKS,
+  VALID_WALLET_ROLES,
   ROUTER_ALLOWED_FIELDS,
 } from "./constants.js";
 
@@ -97,6 +98,66 @@ function validateInfrastructure(
   validateDurationsEventMonitor(infra.event_monitor, c.scope("event_monitor"));
   validateDurationsCronService(infra.cron_service, c.scope("cron_service"));
   validateAlerting(infra.alerting, c.scope("alerting"));
+  validateWallets(infra.wallets, c.scope("wallets"));
+  validateWalletPoolFunding(infra.wallet_pool, c.scope("wallet_pool"));
+}
+
+/** The signer-wallet pool: exactly one `main`, unique ids, an env var per entry.
+ *  Absent means the single-wallet default (CARDANO_WALLET_SEED_<NETWORK>). */
+function validateWallets(
+  wallets: InfrastructureConfig["wallets"],
+  c: IssueCollector,
+): void {
+  if (wallets === undefined) return;
+  if (wallets.length === 0) {
+    c.error(
+      "",
+      "Empty `wallets` list. Omit the key for the single-wallet default, or declare at least one wallet.",
+    );
+    return;
+  }
+  const ids = new Set<string>();
+  let mains = 0;
+  for (const [index, w] of wallets.entries()) {
+    const wc = c.scope(String(index));
+    if (wc.required("id", w.id)) {
+      if (ids.has(w.id)) wc.error("id", `Duplicate wallet id "${w.id}".`);
+      ids.add(w.id);
+    }
+    if (wc.required("role", w.role)) {
+      wc.oneOf("role", w.role, VALID_WALLET_ROLES);
+      if (w.role === "main") mains += 1;
+    }
+    if (wc.required("private_key_env", w.private_key_env) &&
+        !/^[A-Z][A-Z0-9_]*$/.test(w.private_key_env)) {
+      wc.warn("private_key_env", `"${w.private_key_env}" does not look like a conventional env var name.`);
+    }
+  }
+  if (mains !== 1) {
+    c.error("", `The wallet pool must declare exactly one \`role: main\`, found ${mains}.`);
+  }
+}
+
+/** The main→pool funding band. Absent means the `DEFAULT_*` constants apply. */
+function validateWalletPoolFunding(
+  wp: InfrastructureConfig["wallet_pool"],
+  c: IssueCollector,
+): void {
+  if (wp === undefined) return;
+  validatePositiveInteger("pool_wallet_low_lovelace", wp.pool_wallet_low_lovelace, c);
+  validatePositiveInteger("pool_wallet_target_lovelace", wp.pool_wallet_target_lovelace, c);
+  validatePositiveInteger("main_wallet_reserve_lovelace", wp.main_wallet_reserve_lovelace, c);
+  validatePositiveInteger("pool_fund_min_interval_ms", wp.pool_fund_min_interval_ms, c);
+  if (
+    wp.pool_wallet_low_lovelace !== undefined &&
+    wp.pool_wallet_target_lovelace !== undefined &&
+    wp.pool_wallet_low_lovelace >= wp.pool_wallet_target_lovelace
+  ) {
+    c.error(
+      "pool_wallet_target_lovelace",
+      "pool_wallet_target_lovelace must be greater than pool_wallet_low_lovelace.",
+    );
+  }
 }
 
 function validateDatabase(db: InfrastructureConfig["database"], c: IssueCollector): void {

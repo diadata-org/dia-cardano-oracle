@@ -166,6 +166,40 @@ infrastructure:
     inflight_timeout_ms: 900000
 
   # --------------------------------------------------------------------------
+  # wallets / wallet_pool — signer-wallet pool (OPTIONAL; commented out = the
+  # single-wallet default below).
+  #
+  # With NEITHER block, the feeder signs with one "main" wallet read from
+  # CARDANO_WALLET_SEED_TESTNET — the same wallet the CLI uses and the on-chain
+  # PaymentHook withdraw target. Nothing to set beyond that env var.
+  #
+  # Declare a `wallets` pool to spread fee + collateral across several wallets so
+  # parallel lanes never contend for the same UTxO. Exactly ONE entry is
+  # role: main (the withdraw target, which funds the rest); the others are
+  # role: pool. Each entry names one env var; the kind is inferred from the name
+  # (contains PRIVATE_KEY → key, else seed). Pool wallets are feeder-only and
+  # additive — add their seeds to .env (e.g. CARDANO_WALLET_SEED_TESTNET_POOL_1).
+  # --------------------------------------------------------------------------
+  # wallets:
+  #   - id: main
+  #     role: main
+  #     private_key_env: CARDANO_WALLET_SEED_TESTNET
+  #   - id: pool-1
+  #     role: pool
+  #     private_key_env: CARDANO_WALLET_SEED_TESTNET_POOL_1
+  #   - id: pool-2
+  #     role: pool
+  #     private_key_env: CARDANO_WALLET_SEED_TESTNET_POOL_2
+  #
+  # wallet_pool — how the main tops up the pool wallets. Each key falls back to a
+  # DEFAULT_* constant in config/constants.ts. Lovelace unless the name says ms.
+  # wallet_pool:
+  #   pool_wallet_low_lovelace: 50000000        # 50 ADA — below this a pool wallet is topped up
+  #   pool_wallet_target_lovelace: 200000000    # 200 ADA — fill the wallet up to this
+  #   main_wallet_reserve_lovelace: 100000000   # 100 ADA — the main never funds below this
+  #   pool_fund_min_interval_ms: 300000         # 5 min — per-wallet funding cooldown
+
+  # --------------------------------------------------------------------------
   # health_check — controls the /health/ready probe behaviour.
   # --------------------------------------------------------------------------
   health_check:
