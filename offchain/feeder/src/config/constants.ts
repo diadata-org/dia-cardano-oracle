@@ -329,6 +329,8 @@ export const COALESCER_STATE = {
 export const VALID_DATABASE_DRIVERS = ["sqlite", "postgres"] as const;
 /** Cardano networks the feeder supports. Env: `CARDANO_NETWORK`. */
 export const VALID_CARDANO_NETWORKS = ["Preview", "Mainnet"] as const;
+/** Roles a `wallets[]` entry may declare. YAML: `infrastructure.<net>.yaml::wallets[].role`. */
+export const VALID_WALLET_ROLES = ["main", "pool"] as const;
 /** Keys allowed on a router object in a `config/routers/<net>/*.yaml`. */
 export const ROUTER_ALLOWED_FIELDS = new Set([
   "id",
@@ -342,3 +344,32 @@ export const ROUTER_ALLOWED_FIELDS = new Set([
   "processing",
   "destinations",
 ]);
+
+// ---------------------------------------------------------------------------
+// Signer-wallet pool
+//
+// Fallbacks for the `infrastructure.<network>.yaml::wallet_pool` knobs (the
+// main→pool funding band) plus structural tunables that stay constant-only to
+// keep the YAML lean. The YAML value is authoritative where a key exists.
+// ---------------------------------------------------------------------------
+
+/** A pool wallet below this spendable lovelace is topped up from the main.
+ *  Number (matches the YAML field); widened to bigint at the funding math.
+ *  YAML: `wallet_pool.pool_wallet_low_lovelace`. */
+export const DEFAULT_POOL_WALLET_LOW_LOVELACE = 50_000_000;
+/** Funding fills a pool wallet up to this spendable lovelace.
+ *  YAML: `wallet_pool.pool_wallet_target_lovelace`. */
+export const DEFAULT_POOL_WALLET_TARGET_LOVELACE = 200_000_000;
+/** The main wallet never funds the pool below this spendable lovelace reserve.
+ *  YAML: `wallet_pool.main_wallet_reserve_lovelace`. */
+export const DEFAULT_MAIN_WALLET_RESERVE_LOVELACE = 100_000_000;
+/** Per-wallet cooldown between main→pool funding txs (ms).
+ *  YAML: `wallet_pool.pool_fund_min_interval_ms`. */
+export const DEFAULT_POOL_FUND_MIN_INTERVAL_MS = 5 * 60_000;
+
+/** Pure-ADA wallet UTxOs the arbiter reserves per build: one fee input plus one
+ *  collateral-capable input. Constant-only — structural, not an operator knob. */
+export const RESERVED_UTXOS_PER_TX = 2;
+/** Smallest pure-ADA UTxO eligible to back a script tx's collateral (lovelace).
+ *  Constant-only — mirrors the protocol collateral floor. */
+export const MIN_COLLATERAL_UTXO_LOVELACE = 5_000_000n;
