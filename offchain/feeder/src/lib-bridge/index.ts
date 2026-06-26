@@ -60,6 +60,7 @@ import {
 import { depositMerge, selectDepositsForUpdateFold } from "@diadata-org/dia-cardano-oracle-cli/transactions/deposit";
 import { settleAccruedFees } from "@diadata-org/dia-cardano-oracle-cli/transactions/settle";
 import { paymentHookWithdraw } from "@diadata-org/dia-cardano-oracle-cli/transactions/payment-hook-withdraw";
+import { fundPoolWallet as fundPoolWalletTx } from "@diadata-org/dia-cardano-oracle-cli/transactions/fund-pool-wallet";
 import { deriveConfiguredWalletDefaults } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet";
 import { consolidateWallet } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet-consolidate";
 import type { DiaOracleIntent } from "@diadata-org/dia-cardano-oracle-cli/core/dia-intent";
@@ -313,6 +314,17 @@ export type OracleIntentBridge = {
     collateralLovelace: bigint;
     maxInputs?: number;
   }): Promise<{ txHash: string | null; confirmed: boolean }>;
+  /**
+   * Top up a pool wallet from the main wallet — the on-chain side of the
+   * main→pool funding loop. Reserves the main's UTxOs through the arbiter (so it
+   * never collides with an oracle update on the main) and pays the target pool
+   * wallet's address. `funded` is false when the main had no free UTxOs this
+   * tick (the daemon retries on the next one).
+   */
+  fundPoolWallet(params: {
+    toWalletId: string;
+    amountLovelace: bigint;
+  }): Promise<{ txHash: string | null; confirmed: boolean; funded: boolean }>;
   /**
    * Refresh the wallet arbiter's UTxO cache for every pool wallet by reading
    * each wallet's current UTxO set from chain. The arbiter reserves fee +
@@ -1617,6 +1629,42 @@ export function createRealOracleIntentBridge(
           `merged=${result.consolidatedUtxoCount}`,
       );
       return { txHash: result.submittedTxHash, confirmed: result.confirmed };
+    },
+
+    async fundPoolWallet(params: {
+      toWalletId: string;
+      amountLovelace: bigint;
+    }): Promise<{ txHash: string | null; confirmed: boolean; funded: boolean }> {
+      const main = walletPool.main();
+      const target = walletPool.get(params.toWalletId);
+      if (!target) {
+        throw new Error(`fundPoolWallet: unknown pool wallet "${params.toWalletId}".`);
+      }
+      log(`fundPoolWallet: ${main.id} → ${target.id} amount=${params.amountLovelace}`);
+      // Reserve the main wallet's UTxOs so this transfer never collides with an
+      // oracle update that also draws on the main; release them on completion.
+      const reservation = arbiter.acquireWallet(main.id);
+      if ("unavailable" in reservation) {
+        log(`fundPoolWallet: main wallet has no free UTxOs this tick; skipping`);
+        return { txHash: null, confirmed: false, funded: false };
+      }
+      let settled: { consumedOutRefs: string[]; producedUtxos: WalletUtxo[] } = {
+        consumedOutRefs: [],
+        producedUtxos: [],
+      };
+      try {
+        const result = await fundPoolWalletTx({
+          signer: main.signer,
+          toAddress: target.address,
+          amountLovelace: params.amountLovelace,
+          reservedOutRefs: reservation.utxos.map((u) => u.outRef),
+        });
+        settled = { consumedOutRefs: result.consumedOutRefs, producedUtxos: result.producedUtxos };
+        log(`fundPoolWallet: confirmed=${result.confirmed} txHash=${result.submittedTxHash ?? "(none)"}`);
+        return { txHash: result.submittedTxHash, confirmed: result.confirmed, funded: true };
+      } finally {
+        arbiter.release(reservation, settled);
+      }
     },
 
     async refreshWalletPoolUtxos(): Promise<void> {

@@ -2971,6 +2971,12 @@ function makeDryRunBridge(report: (line: string) => void): OracleIntentBridge {
       );
       return { txHash: null, confirmed: false };
     },
+    async fundPoolWallet(params) {
+      report(
+        `daemon: [dry-run bridge] fundPoolWallet → ${params.toWalletId} amount=${params.amountLovelace} (no-op)`,
+      );
+      return { txHash: null, confirmed: false, funded: false };
+    },
     async refreshWalletPoolUtxos() {
       // Dry-run never touches chain and has no arbiter; nothing to refresh.
     },

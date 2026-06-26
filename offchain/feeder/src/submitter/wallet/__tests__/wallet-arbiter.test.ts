@@ -218,6 +218,31 @@ describe("createWalletArbiter", () => {
     assert.equal(second.walletId, "main", "a free main beats the now-busy pool wallet");
   });
 
+  it("acquireWallet reserves a specific wallet by id, bypassing the priority", () => {
+    const { lockTable, arbiter } = setup({
+      wallets: [wallet("main", "main"), wallet("p1", "pool")],
+      caches: { main: utxos("main", 4), p1: utxos("p1", 4) },
+    });
+
+    // acquire() would prefer the pool wallet; acquireWallet pins the main.
+    const r = asReservation(arbiter.acquireWallet("main"));
+    assert.equal(r.walletId, "main");
+    for (const u of r.utxos) assert.equal(lockTable.isLocked("main", u.outRef), true);
+  });
+
+  it("acquireWallet returns unavailable for an unknown, exhausted, or consolidating wallet", () => {
+    const { pool, arbiter } = setup({
+      wallets: [wallet("main", "main"), wallet("p1", "pool")],
+      caches: { main: utxos("main", 1), p1: utxos("p1", 4) }, // main has < RESERVED_UTXOS_PER_TX
+    });
+
+    assert.deepEqual(arbiter.acquireWallet("missing"), { unavailable: true }, "unknown id");
+    assert.deepEqual(arbiter.acquireWallet("main"), { unavailable: true }, "too few utxos");
+
+    pool.setConsolidating("p1", true);
+    assert.deepEqual(arbiter.acquireWallet("p1"), { unavailable: true }, "consolidating");
+  });
+
   it("round-robins across free wallets on repeated acquire/release", () => {
     const { arbiter } = setup({
       wallets: [wallet("main", "main"), wallet("p1", "pool"), wallet("p2", "pool")],

@@ -13,12 +13,29 @@ import { makeConfiguredLucid } from "../core/lucid.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
 import { completeWithRetry } from "../core/tx-build.js";
-import { waitForWalletSettlement } from "../core/chain-helpers.js";
+import {
+  computeSpentWalletOutRefs,
+  computeWalletChangeOutputs,
+  waitForWalletSettlement,
+  type WalletChangeUtxo,
+} from "../core/chain-helpers.js";
 
 /** Signing key for the funding source (the main wallet). */
 export type FundPoolWalletSigner = {
   kind: "seed" | "privateKey";
   value: string;
+};
+
+/** Outcome of a funding tx, including the wallet UTxO delta so a caller that
+ *  arbitrates the main wallet can refresh its UTxO cache on release. */
+export type FundPoolWalletResult = {
+  toAddress: string;
+  submittedTxHash: string | null;
+  confirmed: boolean;
+  /** Main-wallet inputs the tx spent (out-refs). */
+  consumedOutRefs: string[];
+  /** Change the tx paid back to the main wallet. */
+  producedUtxos: WalletChangeUtxo[];
 };
 
 function reportProgress(message: string): void {
@@ -34,8 +51,11 @@ export async function fundPoolWallet(args: {
   signer: FundPoolWalletSigner;
   toAddress: string;
   amountLovelace: bigint;
+  /** When set, coin selection is pinned to these main-wallet out-refs so the tx
+   *  never picks a UTxO another lane reserved (the feeder arbitrates the main). */
+  reservedOutRefs?: string[];
   buildOnly?: boolean;
-}): Promise<{ toAddress: string; submittedTxHash: string | null; confirmed: boolean }> {
+}): Promise<FundPoolWalletResult> {
   if (args.amountLovelace <= 0n) {
     throw new Error(`fund-pool-wallet: amountLovelace must be positive, got ${args.amountLovelace}.`);
   }
@@ -48,7 +68,17 @@ export async function fundPoolWallet(args: {
     lucid.selectWallet.fromPrivateKey(args.signer.value);
   }
   const wallet = lucid.wallet();
+  const sourceAddress = await wallet.address();
   const walletUtxos = await wallet.getUtxos();
+
+  if (args.reservedOutRefs) {
+    const reserved = new Set(args.reservedOutRefs);
+    const pinned = walletUtxos.filter((u) => reserved.has(`${u.txHash}#${u.outputIndex}`));
+    if (pinned.length < args.reservedOutRefs.length) {
+      throw new Error("fund-pool-wallet: a reserved main-wallet UTxO is no longer live.");
+    }
+    lucid.overrideUTxOs(pinned);
+  }
 
   reportProgress(`Paying ${args.amountLovelace} lovelace to pool wallet ${args.toAddress}`);
   // A plain ADA output, no datum — an ordinary wallet-to-wallet transfer.
@@ -56,6 +86,13 @@ export async function fundPoolWallet(args: {
     () => lucid.newTx().pay.ToAddress(args.toAddress, { lovelace: args.amountLovelace }),
     reportProgress,
   );
+
+  const txHash = txSignBuilder.toHash();
+  const consumedOutRefs = computeSpentWalletOutRefs(walletUtxos, txSignBuilder);
+  const producedUtxos = computeWalletChangeOutputs(txSignBuilder, txHash, sourceAddress);
+  // Release any pin now the build is done, so the confirmation + settlement
+  // reads below query the live provider rather than the frozen reserved subset.
+  lucid.overrideUTxOs([]);
 
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   let submittedTxHash: string | null = null;
@@ -80,5 +117,5 @@ export async function fundPoolWallet(args: {
       label: "fund pool wallet",
     });
   }
-  return { toAddress: args.toAddress, submittedTxHash, confirmed };
+  return { toAddress: args.toAddress, submittedTxHash, confirmed, consumedOutRefs, producedUtxos };
 }

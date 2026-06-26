@@ -56,6 +56,10 @@ export class WalletUnavailableError extends Error {
 export type WalletArbiter = {
   /** Reserve a wallet + UTxO subset for one build, or report none available. */
   acquire(): AcquireResult;
+  /** Reserve a UTxO subset of a SPECIFIC wallet (e.g. the main wallet for a
+   *  withdraw or a pool-funding tx), or report it unavailable. Bypasses the
+   *  free→busy priority `acquire()` applies. */
+  acquireWallet(walletId: string): AcquireResult;
   /** Release a reservation once its tx confirms or fails. `consumedOutRefs` are
    *  removed from the wallet's cache and `producedUtxos` (the change) added, so
    *  the next acquire sees fresh UTxOs. */
@@ -145,33 +149,42 @@ export function createWalletArbiter(deps: WalletArbiterDeps): WalletArbiter {
     return [collateral, ...rest];
   }
 
+  /** Lock a fresh UTxO subset of `w` and return the reservation. */
+  function reserveFrom(w: PoolWallet): WalletReservation {
+    const reservationId = `res-${(seq += 1)}`;
+    const reserved = pickUtxos(spendable(w.id));
+    for (const u of reserved) {
+      lockTable.lock(
+        makeUtxoLockEntry(w.id, u.outRef, reservationId, {
+          timeoutMs: deps.lockTtlMs,
+          now: clock,
+        }),
+      );
+    }
+    activeReservations.set(w.id, (activeReservations.get(w.id) ?? 0) + 1);
+    liveReservations.add(reservationId);
+    lastUsedSeq.set(w.id, seq);
+    return {
+      reservationId,
+      walletId: w.id,
+      role: w.role,
+      signer: w.signer,
+      address: w.address,
+      utxos: reserved,
+    };
+  }
+
   return {
     acquire() {
       const w = chooseWallet();
       if (!w) return { unavailable: true };
+      return reserveFrom(w);
+    },
 
-      const reservationId = `res-${(seq += 1)}`;
-      const reserved = pickUtxos(spendable(w.id));
-      for (const u of reserved) {
-        lockTable.lock(
-          makeUtxoLockEntry(w.id, u.outRef, reservationId, {
-            timeoutMs: deps.lockTtlMs,
-            now: clock,
-          }),
-        );
-      }
-      activeReservations.set(w.id, (activeReservations.get(w.id) ?? 0) + 1);
-      liveReservations.add(reservationId);
-      lastUsedSeq.set(w.id, seq);
-
-      return {
-        reservationId,
-        walletId: w.id,
-        role: w.role,
-        signer: w.signer,
-        address: w.address,
-        utxos: reserved,
-      };
+    acquireWallet(walletId) {
+      const w = pool.get(walletId);
+      if (!w || !isUsable(w)) return { unavailable: true };
+      return reserveFrom(w);
     },
 
     release(reservation, settled) {

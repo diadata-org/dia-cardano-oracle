@@ -93,6 +93,10 @@
       "types": "./dist/transactions/payment-hook-withdraw.d.ts",
       "default": "./dist/transactions/payment-hook-withdraw.js"
     },
+    "./transactions/fund-pool-wallet": {
+      "types": "./dist/transactions/fund-pool-wallet.d.ts",
+      "default": "./dist/transactions/fund-pool-wallet.js"
+    },
     "./wallet/wallet": {
       "types": "./dist/wallet/wallet.d.ts",
       "default": "./dist/wallet/wallet.js"
