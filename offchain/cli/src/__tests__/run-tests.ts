@@ -33,6 +33,8 @@ import {
   decodeReceiverDatum,
   addressToPlutusData,
   waitForWalletSettlement,
+  computeSpentWalletOutRefs,
+  computeWalletChangeOutputs,
 } from "../core/chain-helpers.js";
 import {
   normalizeHex,
@@ -75,6 +77,7 @@ import { collectTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { buildPairApplyUpdateRedeemer } from "../core/redeemers.js";
 import { writeStateJsonFile } from "../core/state.js";
 import { depositFund, isCleanAdaDeposit } from "../transactions/deposit.js";
+import { fundPoolWallet } from "../transactions/fund-pool-wallet.js";
 import { selectConsolidationUtxos } from "../wallet/wallet-consolidate.js";
 import { resolveClientUtxoRefs } from "../transactions/reclaim-reference-script.js";
 import { completeWithRetry } from "../core/tx-build.js";
@@ -180,6 +183,9 @@ await run("testProviderRetryPreservesThisAndNonFunctionProps", testProviderRetry
 
 // --- Wallet settlement wait (provider lag / stale-UTxO regression) ----------
 await run("testWalletSettlementWaitsForSpentInputs", testWalletSettlementWaitsForSpentInputs);
+await run("testComputeSpentWalletOutRefs", testComputeSpentWalletOutRefs);
+await run("testComputeWalletChangeOutputs", testComputeWalletChangeOutputs);
+await run("testFundPoolWalletRejectsNonPositiveAmount", testFundPoolWalletRejectsNonPositiveAmount);
 
 // --- Lucid emulator harness (smoke: pay + reference script genesis) ---------
 await run("runLucidEmulatorHarnessSmokeTests", runLucidEmulatorHarnessSmokeTests);
@@ -471,6 +477,95 @@ async function testWalletSettlementWaitsForSpentInputs(): Promise<void> {
     !settled.some((u) => u.txHash === spentTxHash && u.outputIndex === 0),
     "must only return once the spent wallet input is gone from the provider",
   );
+}
+
+function testComputeSpentWalletOutRefs(): void {
+  const walletTxHash = "ab".repeat(32);
+  const scriptTxHash = "cd".repeat(32);
+
+  // Wallet before the tx: one UTxO the tx will spend + one it leaves alone.
+  const previousUtxos: UTxO[] = [
+    { txHash: walletTxHash, outputIndex: 0, address: "addr_test1qwallet", assets: { lovelace: 98_000_000n } },
+    { txHash: "11".repeat(32), outputIndex: 0, address: "addr_test1qwallet", assets: { lovelace: 97_000_000n } },
+  ];
+
+  // Built tx: the wallet input (index 0) + a script input the wallet never lists.
+  const fakeTransaction = {
+    toTransaction: () => ({
+      body: () => ({
+        inputs: () => ({
+          len: () => 2,
+          get: (index: number) =>
+            index === 0
+              ? { transaction_id: () => ({ to_hex: () => walletTxHash }), index: () => 0n }
+              : { transaction_id: () => ({ to_hex: () => scriptTxHash }), index: () => 4n },
+        }),
+      }),
+    }),
+  } as unknown as TxSignBuilder;
+
+  const spent = computeSpentWalletOutRefs(previousUtxos, fakeTransaction);
+  assert.deepEqual(spent, [`${walletTxHash}#0`], "only the wallet input is reported; script inputs are dropped");
+}
+
+function testComputeWalletChangeOutputs(): void {
+  const txHash = "ef".repeat(32);
+  const walletAddress = "addr_test1qwallet";
+  const receiverAddress = "addr_test1wreceiver";
+
+  // Built tx outputs: a script output (receiver), a pure-ADA change output back
+  // to the wallet, and a wallet output that also carries a native asset.
+  const fakeTransaction = {
+    toTransaction: () => ({
+      body: () => ({
+        outputs: () => ({
+          len: () => 3,
+          get: (index: number) => {
+            const rows = [
+              { addr: receiverAddress, coin: 9_900_000_000n, policies: 1 },
+              { addr: walletAddress, coin: 95_000_000n, policies: 0 },
+              { addr: walletAddress, coin: 2_000_000n, policies: 2 },
+            ];
+            const row = rows[index]!;
+            return {
+              address: () => ({ to_bech32: () => row.addr }),
+              amount: () => ({
+                coin: () => row.coin,
+                multi_asset: () => ({ policy_count: () => row.policies }),
+              }),
+            };
+          },
+        }),
+      }),
+    }),
+  } as unknown as TxSignBuilder;
+
+  const change = computeWalletChangeOutputs(fakeTransaction, txHash, walletAddress);
+  assert.deepEqual(
+    change,
+    [
+      { outRef: `${txHash}#1`, lovelace: 95_000_000n, hasOnlyAda: true },
+      { outRef: `${txHash}#2`, lovelace: 2_000_000n, hasOnlyAda: false },
+    ],
+    "returns wallet-address outputs with positional index; receiver output excluded; hasOnlyAda reflects native assets",
+  );
+}
+
+async function testFundPoolWalletRejectsNonPositiveAmount(): Promise<void> {
+  // The amount guard runs before any chain work, so a non-positive transfer is
+  // rejected without selecting a wallet or touching a provider.
+  for (const bad of [0n, -1_000_000n]) {
+    await assert.rejects(
+      () =>
+        fundPoolWallet({
+          signer: { kind: "seed", value: "irrelevant" },
+          toAddress: "addr_test1qpool",
+          amountLovelace: bad,
+        }),
+      /amountLovelace must be positive/,
+      `expected amount ${bad} to be rejected`,
+    );
+  }
 }
 
 function testCardanoWalletCreate(): void {

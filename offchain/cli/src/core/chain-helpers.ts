@@ -474,21 +474,7 @@ export async function waitForWalletSettlement(args: {
   maxAttempts?: number;
   delayMs?: number;
 }): Promise<UTxO[]> {
-  // Recover the wallet UTxOs this tx actually spent: its real inputs that
-  // were present in the wallet before the tx. Script and reference inputs
-  // live at other addresses the wallet never lists, so the intersection with
-  // `previousUtxos` naturally drops them.
-  const previousSnapshot = utxoSnapshot(args.previousUtxos);
-  const txBody = args.transaction.toTransaction().body();
-  const txInputs = txBody.inputs();
-  const spentWalletOutRefs: string[] = [];
-  for (let index = 0; index < Number(txInputs.len()); index += 1) {
-    const input = txInputs.get(index);
-    const outRef = `${input.transaction_id().to_hex()}#${Number(input.index())}`;
-    if (previousSnapshot.has(outRef)) {
-      spentWalletOutRefs.push(outRef);
-    }
-  }
+  const spentWalletOutRefs = computeSpentWalletOutRefs(args.previousUtxos, args.transaction);
 
   const maxAttempts = args.maxAttempts ?? 480;
   const delayMs = args.delayMs ?? 1_500;
@@ -518,6 +504,62 @@ export async function waitForWalletSettlement(args: {
   throw new Error(
     `Transaction confirmation was observed, but the provider still lists the wallet inputs spent by ${args.label} after ${maxAttempts} attempts.${detail}`,
   );
+}
+
+/** A minimal wallet UTxO view: out-ref, lovelace, and whether it holds only ADA.
+ *  Structurally matches the feeder's `WalletUtxo`, so the bridge passes these
+ *  straight to the wallet arbiter without re-mapping. */
+export type WalletChangeUtxo = {
+  outRef: string;
+  lovelace: bigint;
+  hasOnlyAda: boolean;
+};
+
+/**
+ * The wallet UTxOs a built tx actually spends: its real inputs that were present
+ * in the wallet before the tx. Script and reference inputs live at other
+ * addresses the wallet never lists, so intersecting the tx inputs with the
+ * pre-build wallet snapshot naturally drops them.
+ */
+export function computeSpentWalletOutRefs(
+  previousUtxos: UTxO[],
+  transaction: TxSignBuilder,
+): string[] {
+  const previousSnapshot = utxoSnapshot(previousUtxos);
+  const txInputs = transaction.toTransaction().body().inputs();
+  const spent: string[] = [];
+  for (let index = 0; index < Number(txInputs.len()); index += 1) {
+    const input = txInputs.get(index);
+    const outRef = `${input.transaction_id().to_hex()}#${Number(input.index())}`;
+    if (previousSnapshot.has(outRef)) spent.push(outRef);
+  }
+  return spent;
+}
+
+/**
+ * The change UTxOs a built tx pays back to the signer wallet — every output at
+ * `walletAddress`. The output index is positional, matching the on-chain output
+ * index, so the out-ref is `${txHash}#${index}`. `hasOnlyAda` is true when the
+ * output carries no native assets (the only kind eligible for collateral).
+ */
+export function computeWalletChangeOutputs(
+  transaction: TxSignBuilder,
+  txHash: string,
+  walletAddress: string,
+): WalletChangeUtxo[] {
+  const outputs = transaction.toTransaction().body().outputs();
+  const change: WalletChangeUtxo[] = [];
+  for (let index = 0; index < Number(outputs.len()); index += 1) {
+    const output = outputs.get(index);
+    if (output.address().to_bech32() !== walletAddress) continue;
+    const value = output.amount();
+    change.push({
+      outRef: `${txHash}#${index}`,
+      lovelace: BigInt(value.coin()),
+      hasOnlyAda: value.multi_asset().policy_count() === 0,
+    });
+  }
+  return change;
 }
 
 function selectablePureLovelaceUtxos(
