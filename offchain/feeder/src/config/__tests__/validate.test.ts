@@ -505,6 +505,38 @@ describe("validateModularConfig — wallet pool", () => {
     );
   });
 
+  it("accepts a valid wallet_shape block", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.wallet_shape = {
+      working_utxo_count: 5,
+      working_utxo_lovelace: 100_000_000,
+      collateral_utxo_count: 5,
+      collateral_utxo_lovelace: 10_000_000,
+      split_above_lovelace: 550_000_000,
+    };
+    assert.deepEqual(validateModularConfig(config), []);
+  });
+
+  it("rejects a wallet_shape where collateral is not below working size", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.wallet_shape = {
+      working_utxo_lovelace: 10_000_000,
+      collateral_utxo_lovelace: 10_000_000,
+    };
+    const issues = validateModularConfig(config);
+    assert.ok(issues.some((i) => i.severity === "error" && i.path.endsWith("working_utxo_lovelace")));
+  });
+
+  it("rejects a wallet_shape where split_above is below working size", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.wallet_shape = {
+      working_utxo_lovelace: 100_000_000,
+      split_above_lovelace: 50_000_000,
+    };
+    const issues = validateModularConfig(config);
+    assert.ok(issues.some((i) => i.severity === "error" && i.path.endsWith("split_above_lovelace")));
+  });
+
   it("rejects a funding band where low is not below target", () => {
     const config = makeConfig(false);
     config.infrastructure!.wallet_pool = {

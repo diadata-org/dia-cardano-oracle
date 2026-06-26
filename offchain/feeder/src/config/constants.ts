@@ -373,3 +373,26 @@ export const RESERVED_UTXOS_PER_TX = 2;
 /** Smallest pure-ADA UTxO eligible to back a script tx's collateral (lovelace).
  *  Constant-only — mirrors the protocol collateral floor. */
 export const MIN_COLLATERAL_UTXO_LOVELACE = 5_000_000n;
+
+// ---------------------------------------------------------------------------
+// Wallet UTxO shape
+//
+// Fallbacks for `infrastructure.<network>.yaml::wallet_shape` — the target UTxO
+// profile each wallet is reshaped toward so even a single wallet can back many
+// parallel lanes (the arbiter hands each lane a disjoint UTxO subset). The YAML
+// value is authoritative where a key exists.
+// ---------------------------------------------------------------------------
+
+/** Working UTxOs to keep per wallet. YAML: `wallet_shape.working_utxo_count`. */
+export const DEFAULT_WORKING_UTXO_COUNT = 5;
+/** Target size of each working UTxO. YAML: `wallet_shape.working_utxo_lovelace`. */
+export const DEFAULT_WORKING_UTXO_LOVELACE = 100_000_000n;
+/** Collateral UTxOs to keep per wallet. YAML: `wallet_shape.collateral_utxo_count`. */
+export const DEFAULT_COLLATERAL_UTXO_COUNT = 5;
+/** Target size of each collateral UTxO. YAML: `wallet_shape.collateral_utxo_lovelace`. */
+export const DEFAULT_COLLATERAL_UTXO_LOVELACE = 10_000_000n;
+/** A pure-ADA UTxO larger than this is split. YAML: `wallet_shape.split_above_lovelace`. */
+export const DEFAULT_SPLIT_ABOVE_LOVELACE = 550_000_000n;
+/** Headroom kept on a reshape tx's consumed inputs for fee + change min-UTxO.
+ *  Constant-only — a structural tx-build margin, not an operator knob. */
+export const RESHAPE_FEE_BUFFER_LOVELACE = 2_000_000n;

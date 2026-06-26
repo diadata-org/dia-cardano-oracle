@@ -136,6 +136,22 @@ infrastructure:
   #   pool_fund_min_interval_ms: 300000         # 5 min — per-wallet funding cooldown
 
   # --------------------------------------------------------------------------
+  # wallet_shape — target UTxO profile each wallet is reshaped toward (OPTIONAL).
+  #
+  # The arbiter hands each parallel lane a disjoint UTxO subset, so even ONE
+  # wallet backs many lanes — but only over the UTxOs it holds. The shaper
+  # periodically splits a large UTxO (and tops up missing pieces) into this
+  # profile so the wallet can back ~working_utxo_count lanes. Omit to use the
+  # DEFAULT_* constants. Lovelace except the counts.
+  # --------------------------------------------------------------------------
+  # wallet_shape:
+  #   working_utxo_count: 5
+  #   working_utxo_lovelace: 100000000      # 100 ADA each
+  #   collateral_utxo_count: 5
+  #   collateral_utxo_lovelace: 10000000    # 10 ADA each
+  #   split_above_lovelace: 550000000       # a pure-ADA UTxO larger than this is split
+
+  # --------------------------------------------------------------------------
   # health_check — /health/ready probe.
   # --------------------------------------------------------------------------
   health_check:

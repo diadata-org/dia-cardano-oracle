@@ -84,6 +84,24 @@ export type InfrastructureConfig = {
   wallets?: WalletConfigEntry[];
   /** Main→pool funding band. Omit to use the `DEFAULT_*` constants. */
   wallet_pool?: WalletPoolFundingConfig;
+  /** Target UTxO shape each wallet is reshaped toward (for single-wallet
+   *  parallelism). Omit to use the `DEFAULT_*` constants. */
+  wallet_shape?: WalletShapeConfig;
+};
+
+/** Target UTxO profile in `infrastructure.<network>.yaml::wallet_shape`. Lovelace
+ *  except the counts; each key falls back to a `DEFAULT_*` constant. */
+export type WalletShapeConfig = {
+  /** How many working UTxOs to keep per wallet. */
+  working_utxo_count?: number;
+  /** Target size of each working UTxO (lovelace). */
+  working_utxo_lovelace?: number;
+  /** How many collateral-sized UTxOs to keep per wallet. */
+  collateral_utxo_count?: number;
+  /** Target size of each collateral UTxO (lovelace). */
+  collateral_utxo_lovelace?: number;
+  /** A pure-ADA UTxO larger than this is split when the wallet is reshaped. */
+  split_above_lovelace?: number;
 };
 
 /** One signer wallet in `infrastructure.<network>.yaml::wallets[]`. */

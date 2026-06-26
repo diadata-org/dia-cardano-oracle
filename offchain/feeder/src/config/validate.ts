@@ -100,6 +100,40 @@ function validateInfrastructure(
   validateAlerting(infra.alerting, c.scope("alerting"));
   validateWallets(infra.wallets, c.scope("wallets"));
   validateWalletPoolFunding(infra.wallet_pool, c.scope("wallet_pool"));
+  validateWalletShape(infra.wallet_shape, c.scope("wallet_shape"));
+}
+
+/** The target UTxO profile. Absent means the `DEFAULT_*` constants apply. */
+function validateWalletShape(
+  shape: InfrastructureConfig["wallet_shape"],
+  c: IssueCollector,
+): void {
+  if (shape === undefined) return;
+  validatePositiveInteger("working_utxo_count", shape.working_utxo_count, c);
+  validatePositiveInteger("working_utxo_lovelace", shape.working_utxo_lovelace, c);
+  validatePositiveInteger("collateral_utxo_count", shape.collateral_utxo_count, c);
+  validatePositiveInteger("collateral_utxo_lovelace", shape.collateral_utxo_lovelace, c);
+  validatePositiveInteger("split_above_lovelace", shape.split_above_lovelace, c);
+  if (
+    shape.collateral_utxo_lovelace !== undefined &&
+    shape.working_utxo_lovelace !== undefined &&
+    shape.collateral_utxo_lovelace >= shape.working_utxo_lovelace
+  ) {
+    c.error(
+      "working_utxo_lovelace",
+      "working_utxo_lovelace must be greater than collateral_utxo_lovelace.",
+    );
+  }
+  if (
+    shape.working_utxo_lovelace !== undefined &&
+    shape.split_above_lovelace !== undefined &&
+    shape.working_utxo_lovelace > shape.split_above_lovelace
+  ) {
+    c.error(
+      "split_above_lovelace",
+      "split_above_lovelace must be at least working_utxo_lovelace, else working UTxOs would be split on sight.",
+    );
+  }
 }
 
 /** The signer-wallet pool: exactly one `main`, unique ids, an env var per entry.
