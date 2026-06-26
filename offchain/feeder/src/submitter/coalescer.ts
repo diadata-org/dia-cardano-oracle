@@ -165,14 +165,18 @@ export function createCoalescerManager(options: CoalescerOptions): CoalescerMana
   }
 
   // Returns true when `incoming` should replace `existing` in the buffer.
-  // Supersession is unconditional on strictly greater (timestamp, nonce) —
-  // mirrors the on-chain monotonicity invariant in oracle_logic.ak.
+  // The on-chain pair_state validator accepts an update only when the new
+  // (timestamp, nonce) beats the current one on BOTH axes, so supersession
+  // requires `incoming` to strictly exceed `existing` on BOTH timestamp AND
+  // nonce — mirroring the on-chain monotonicity invariant in oracle_logic.ak.
+  // Ranking by timestamp alone would let a fresher-timestamp intent whose nonce
+  // is lower evict a higher-nonce one the chain would accept; the lower nonce is
+  // then rejected on submit (NonMonotonicNonce) and the acceptable intent is
+  // lost, stalling a feed whose source emits timestamp and nonce out of lockstep.
   function isNewer(incoming: EnrichedIntent, existing: EnrichedIntent): boolean {
     const { timestamp: newTs, nonce: newNonce } = incoming.fullIntent;
     const { timestamp: oldTs, nonce: oldNonce } = existing.fullIntent;
-    if (newTs > oldTs) return true;
-    if (newTs === oldTs && newNonce > oldNonce) return true;
-    return false;
+    return newTs > oldTs && newNonce > oldNonce;
   }
 
   function normalizeBatchSize(raw: number | undefined): number {

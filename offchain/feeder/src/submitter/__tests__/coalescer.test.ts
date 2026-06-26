@@ -51,6 +51,22 @@ function makeRequest(intentHash: string, symbol: string): SubmitRequest {
   };
 }
 
+function makeRequestTN(
+  intentHash: string,
+  symbol: string,
+  timestamp: bigint,
+  nonce: bigint,
+): SubmitRequest {
+  const base = makeRequest(intentHash, symbol);
+  return {
+    ...base,
+    enriched: {
+      ...base.enriched,
+      fullIntent: { ...base.enriched.fullIntent, timestamp, nonce },
+    },
+  };
+}
+
 function okResult(request: SubmitRequest, txHash = "batch-tx"): SubmitResult {
   return {
     ok: true,
@@ -278,6 +294,84 @@ describe("createCoalescerManager", () => {
       ["h3", "h4"],
       ["h5"],
     ]);
+  });
+
+  it("keeps a buffered higher-nonce intent when a fresher-timestamp but lower-nonce one arrives", async () => {
+    // The on-chain validator accepts an update only when BOTH timestamp AND
+    // nonce strictly increase. A fresher-timestamp intent whose nonce is lower
+    // than the buffered one would be rejected on submit — so it must NOT evict
+    // the buffered higher-nonce intent (which the chain would accept).
+    const flushed: Array<{ intentHash: string; nonce: bigint }> = [];
+    const queueManager: QueueManager = {
+      async submit(request) {
+        return okResult(request, "single-tx");
+      },
+      async submitBatch(requests) {
+        for (const request of requests) {
+          flushed.push({ intentHash: request.intentHash, nonce: request.enriched.fullIntent.nonce });
+        }
+        return requests.map((request) => okResult(request));
+      },
+      async enqueueLaneTask(_dest, run) {
+        await run();
+      },
+      queueKeys() {
+        return [];
+      },
+      totalPending() {
+        return 0;
+      },
+      pendingByLane() {
+        return {};
+      },
+    };
+
+    const coalescer = createCoalescerManager({ queueManager, coalesceWindowMs: 0 });
+
+    coalescer.accept(makeRequestTN("high-nonce", "BTC/USD", 100n, 999n));
+    coalescer.accept(makeRequestTN("low-nonce", "BTC/USD", 200n, 500n));
+
+    await waitForFlush();
+
+    assert.deepEqual(
+      flushed,
+      [{ intentHash: "high-nonce", nonce: 999n }],
+      "the coalescer must keep the higher-nonce intent, not the fresher-timestamp lower-nonce one",
+    );
+  });
+
+  it("supersedes a buffered intent only when the incoming beats it on both timestamp and nonce", async () => {
+    const flushed: string[] = [];
+    const queueManager: QueueManager = {
+      async submit(request) {
+        return okResult(request, "single-tx");
+      },
+      async submitBatch(requests) {
+        for (const request of requests) flushed.push(request.intentHash);
+        return requests.map((request) => okResult(request));
+      },
+      async enqueueLaneTask(_dest, run) {
+        await run();
+      },
+      queueKeys() {
+        return [];
+      },
+      totalPending() {
+        return 0;
+      },
+      pendingByLane() {
+        return {};
+      },
+    };
+
+    const coalescer = createCoalescerManager({ queueManager, coalesceWindowMs: 0 });
+
+    coalescer.accept(makeRequestTN("older", "BTC/USD", 100n, 100n));
+    coalescer.accept(makeRequestTN("newer", "BTC/USD", 200n, 200n));
+
+    await waitForFlush();
+
+    assert.deepEqual(flushed, ["newer"]);
   });
 
   it("includes intent and current timestamps when a buffered intent ages out", async () => {
