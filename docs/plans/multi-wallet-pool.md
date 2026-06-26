@@ -6,8 +6,59 @@ This plan is written to be executed step by step. Each phase lists the exact
 files, function signatures, tests, acceptance criteria, and a QA gate. Follow the
 [norms checklist](#norms-checklist) on every change.
 
+## Progress
+
+- ✅ **Phase 0 — wallet-pool config**: types, validator, signer resolver, the
+  `DEFAULT_*` constants, the `.env.example` + README pointers, and a commented
+  example in both infra yamls. QA gate passed.
+- ✅ **Phase 1 — arbiter core**: `utxo-lock-table`, `wallet-pool`,
+  `wallet-arbiter` (acquire/release with the free→busy→unavailable priority).
+  27 unit tests. QA gate passed.
+- ✅ **Phase 2 — build-seam integration**: the arbiter drives signing in
+  `submitOracleUpdate` + `submitOracleUpdateBatch`; `request.signer`/`applySigner`
+  removed; the daemon builds + primes + refreshes the pool. `WalletUnavailable`
+  is retryable. The CLI `computeSpentWalletOutRefs` / `computeWalletChangeOutputs`
+  helpers are in. QA gate passed (incl. the post-build `overrideUTxOs([])` clear).
+  - ⏳ follow-up: an emulator integration test (two parallel lanes, one-wallet
+    pool, both confirm) — the arbiter's disjoint-UTxO guarantee is already unit
+    tested; the e2e test belongs with Phase 5 verification.
+- 🚧 **Phase 3 — main→pool funding**: DONE — `pool-funding.ts` (the pure
+  when/how-much decision) ✅, the CLI `fund-pool-wallet` tx with UTxO pinning +
+  consumed/produced reporting ✅, `arbiter.acquireWallet(walletId)` ✅, and the
+  bridge `fundPoolWallet` method (arbitrated: reserve the main → pin → pay →
+  release) ✅. **Remaining (wiring):**
+  - **3c-ii** — the daemon funding loop on the balance tick: per pool wallet run
+    `shouldFundPoolWallet` against `arbiter.stats()`, fire `bridge.fundPoolWallet`
+    as a detached guarded task (the arbiter's `unavailable` is the backpressure —
+    NO extra lane), with per-wallet in-progress + `lastFundedAt` tracking and the
+    band resolved from `wallet_pool` ?? defaults.
+  - **3c-iii** — per-wallet selectors on `settle` / `withdrawFromPaymentHook`
+    (withdraw is main-only via `acquireWallet(main)`; settle can use any wallet).
+- 🚧 **Phase 3d — wallet UTxO shaping (single-wallet parallelism, top priority)**:
+  the pure planner `planWalletReshape` ✅ and the full `wallet_shape` config
+  (constants + types + validator + commented infra-yaml example) ✅ are done.
+  **Remaining (wiring):**
+  - **3d-ii** — `arbiter.acquireSpecificUtxos(walletId, outRefs)` (reserve the
+    exact UTxOs the planner chose), the CLI `reshape-wallet` tx (self-payment to
+    the profile, pinned + returning consumed/produced), and the bridge
+    `reshapeWallet({ walletId })` method.
+  - **3d-iii** — the daemon reshape trigger on the balance tick, and **retiring
+    `consolidateWallet`** (delete the CLI op, bridge method, auto-consolidate
+    trigger, and `wallet:consolidate` command — the shaper subsumes it).
+- ⬜ **Phase 4 — per-wallet observability**: a `wallet` label on the admin-wallet
+  gauges + every `.set()` site; `AdminWalletLow` / `AdminWalletFragmented`
+  per-wallet; new `MainWalletCannotFundPool` / `PoolWalletLow` alerts + pool /
+  shape gauges; a `$wallet` dashboard variable; threshold-drift extended.
+- ⬜ **Phase 5 — docs + verification**: architecture doc (pool + arbiter + funding
+  + shaper), feeder README, grafana-dashboards; the emulator integration test
+  (two parallel lanes on a one-wallet pool both confirm; a reshaped single wallet
+  backs N lanes); full CLI + feeder suites green.
+
+**Test counts as of this checkpoint:** feeder 761, CLI 56, all green.
+
 ## Contents
 
+- [Progress](#progress)
 - [Problem](#problem)
 - [Goal and invariants](#goal-and-invariants)
 - [Terminology](#terminology)
@@ -387,6 +438,68 @@ and each call acquires at the connect step and releases in a `finally`.
   per-wallet consolidate loop; selector plumbing.
 - **Acceptance**: a low pool wallet is topped up to target from the main in an
   integration test; main reserve respected; cooldown honoured.
+
+### Phase 3d — Wallet UTxO shaping (single-wallet parallelism)
+
+**This is the highest-value piece for single-wallet operation, arguably more
+important than the multi-wallet pool.** The arbiter already lets one wallet serve
+parallel lanes by handing each a disjoint UTxO subset — but only over the UTxOs
+that exist. A wallet naturally drifts toward few UTxOs (change accumulates; the
+old consolidate merges everything into one collateral UTxO + one working UTxO),
+so in practice a single wallet can back only one lane at a time. With more clients
+than wallets, and key management being the cost of extra wallets, making each
+wallet hold many usable UTxOs is the primary lever; the pool is then optional
+scale-out.
+
+The maintenance op evolves from "consolidate to 1 collateral + 1 working" into
+"**shape the wallet to a target UTxO profile**" — splitting a large UTxO into many
+small ones AND merging dust, both toward the profile. The old `consolidateWallet`
+is subsumed (deleted, not left as an orphan): merging fragmented dust is the
+degenerate case of reshaping toward the profile.
+
+- **Config — a `wallet_shape` block** in `infrastructure.<network>.yaml` (applies
+  to EVERY wallet, pool or not, so single-wallet deployments use it too). Each key
+  falls back to a `DEFAULT_*` constant in `config/constants.ts`; nothing inline.
+  ```yaml
+  wallet_shape:
+    working_utxo_count: 5            # keep ~this many working UTxOs
+    working_utxo_lovelace: 100000000 # 100 ADA each
+    collateral_utxo_count: 5         # keep ~this many collateral UTxOs
+    collateral_utxo_lovelace: 10000000  # 10 ADA each
+    split_above_lovelace: 550000000  # a pure-ADA UTxO larger than this is split
+  ```
+  Defaults: `DEFAULT_WORKING_UTXO_COUNT=5`, `DEFAULT_WORKING_UTXO_LOVELACE=100_000_000n`,
+  `DEFAULT_COLLATERAL_UTXO_COUNT=5`, `DEFAULT_COLLATERAL_UTXO_LOVELACE=10_000_000n`,
+  `DEFAULT_SPLIT_ABOVE_LOVELACE=550_000_000n`. With 5 working + 5 collateral and one
+  working + one collateral reserved per build, a single wallet backs ~5 concurrent
+  lanes.
+- **Pure planner** `wallet-shape.ts` → `planWalletReshape(utxos, profile)`:
+  classifies the wallet's pure-ADA UTxOs into working / collateral / oversized /
+  dust against the profile; decides whether to reshape (a UTxO `> split_above`, or
+  fewer than `working_utxo_count` working / `collateral_utxo_count` collateral
+  UTxOs); and returns the target outputs to create (N working of working size + M
+  collateral of collateral size) plus the inputs to consume to fund them + fee +
+  change. `{ act: false, reason }` when already shaped. Pure (no chain) → fully
+  unit-tested: oversized → split; fragmented dust → merge; partially-shaped →
+  top up the missing pieces; already-shaped → no-op; insufficient balance → no-op.
+- **CLI `reshape-wallet` tx**: a self-payment that consumes the planned inputs and
+  pays the planned outputs back to the wallet (mirrors the old consolidate's
+  structure but produces the profile, not 1+1). Signed by the wallet, pins the
+  reserved UTxOs (arbitrated), returns consumed/produced like `fund-pool-wallet`.
+- **Bridge `reshapeWallet({ walletId })`** + daemon trigger on the balance tick:
+  for each wallet, `acquireWallet(walletId)` → run the reshape if the planner says
+  so; per-wallet in-progress guard; the arbiter's `unavailable` is the natural
+  backpressure (no extra lane — a client lane simply gets `WalletUnavailable` and
+  retries when UTxOs free up).
+- **Retire `consolidateWallet`**: delete the CLI op, the bridge method, the
+  auto-consolidate trigger, and the `wallet:consolidate` command; the
+  `admin_wallet_min_collateral_lovelace` / `auto_consolidate_below_lovelace`
+  thresholds fold into the shape trigger (too few collateral UTxOs).
+- **Tests (many)**: the planner matrix above; the CLI reshape tx build (fixture);
+  the daemon trigger; and an arbiter test confirming that after a reshape the
+  single wallet backs `working_utxo_count` concurrent acquires.
+- **Acceptance**: a single wallet with one fat UTxO is reshaped into the profile
+  and then serves N parallel lanes with disjoint UTxOs (no `UtxoNotFound`).
 
 ### Phase 4 — Per-wallet observability
 
