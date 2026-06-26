@@ -77,6 +77,7 @@ describe("createCardanoWriteClient", () => {
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
       async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async refreshWalletPoolUtxos() {},
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-single");
         return {
@@ -143,6 +144,7 @@ describe("createCardanoWriteClient", () => {
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
       async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async refreshWalletPoolUtxos() {},
       async submitOracleUpdate() {
         throw new Error("unexpected single call");
       },
@@ -209,6 +211,7 @@ describe("createCardanoWriteClient", () => {
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
       async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async refreshWalletPoolUtxos() {},
       async submitOracleUpdate() {
         throw new Error("unexpected single call");
       },
@@ -268,6 +271,7 @@ describe("createCardanoWriteClient", () => {
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
       async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async refreshWalletPoolUtxos() {},
       async submitOracleUpdate() {
         throw new Error("unexpected single call");
       },
@@ -312,6 +316,7 @@ describe("createCardanoWriteClient", () => {
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
       async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async refreshWalletPoolUtxos() {},
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-fee");
         return {
@@ -346,6 +351,7 @@ describe("createCardanoWriteClient", () => {
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
       async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async refreshWalletPoolUtxos() {},
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-nofee");
         return {
@@ -383,6 +389,7 @@ describe("createCardanoWriteClient", () => {
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
       async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async refreshWalletPoolUtxos() {},
       async submitOracleUpdate(params) {
         singleCalls++;
         emitStandardSteps(params.onStep, "tx-singleton");

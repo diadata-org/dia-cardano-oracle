@@ -17,6 +17,8 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { readClientContext } from "@diadata-org/dia-cardano-oracle-cli/core/artifact-context";
 import {
+  computeSpentWalletOutRefs,
+  computeWalletChangeOutputs,
   decodePairDatum,
   decodePaymentHookDatum,
   decodeReceiverDatum,
@@ -60,7 +62,6 @@ import { settleAccruedFees } from "@diadata-org/dia-cardano-oracle-cli/transacti
 import { paymentHookWithdraw } from "@diadata-org/dia-cardano-oracle-cli/transactions/payment-hook-withdraw";
 import { deriveConfiguredWalletDefaults } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet";
 import { consolidateWallet } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet-consolidate";
-import type { CliConfig } from "@diadata-org/dia-cardano-oracle-cli/core/config";
 import type { DiaOracleIntent } from "@diadata-org/dia-cardano-oracle-cli/core/dia-intent";
 import type {
   ClientStateArtifact,
@@ -71,7 +72,12 @@ import type {
   ResolvedDeploymentScripts,
 } from "@diadata-org/dia-cardano-oracle-cli/core/state";
 import type { EnrichedIntent } from "../source/types.js";
-import type { RouterSigner } from "../submitter/types.js";
+import {
+  WalletUnavailableError,
+  type WalletArbiter,
+  type WalletReservation,
+} from "../submitter/wallet/wallet-arbiter.js";
+import type { WalletPool, WalletUtxo } from "../submitter/wallet/wallet-pool.js";
 import {
   DEFAULT_CONFIRMATION_DEPTH,
   STALE_INPUT_RECONCILE_ATTEMPTS,
@@ -82,6 +88,29 @@ import { withStaleInputReconcile } from "./reconcile-retry.js";
 // The Lucid `UTxO` shape, derived from a CLI helper so the feeder does not
 // import `@lucid-evolution/lucid` directly.
 type UTxO = Awaited<ReturnType<typeof findSingleUtxoAtUnit>>;
+
+// The Lucid instance shape, derived from the CLI factory so the feeder does not
+// import `@lucid-evolution/lucid` directly.
+type LucidInstance = Awaited<ReturnType<typeof makeConfiguredLucidWithConfig>>;
+
+/**
+ * Attach a reservation's signing key to a Lucid instance and report which kind
+ * was loaded. A seed reservation selects the BIP-39 wallet; a private-key
+ * reservation selects the raw key. Returns the `WalletSource` the state writer
+ * records, so the wallet a tx is signed from always matches the reservation the
+ * arbiter handed out.
+ */
+function selectReservationWallet(
+  lucid: LucidInstance,
+  reservation: WalletReservation,
+): "seed" | "private-key" {
+  if (reservation.signer.kind === "seed") {
+    lucid.selectWallet.fromSeed(reservation.signer.value);
+    return "seed";
+  }
+  lucid.selectWallet.fromPrivateKey(reservation.signer.value);
+  return "private-key";
+}
 
 // The combined state object the CLI's update builders consume. It is a
 // `PairStateArtifact` (wallet/pair/pairState/datum/transactions) merged with
@@ -120,10 +149,6 @@ export type OracleIntentSubmitParams = {
    *   waiting_utxo, writing_state
    */
   onStep?: (step: string, meta?: { txHash?: string }) => void;
-  /** Per-router signer override. When provided, the bridge uses this key
-   *  instead of the global CARDANO_WALLET_SEED_<NETWORK> /
-   *  CARDANO_PRIVATE_KEY_<NETWORK> env vars. */
-  signer?: RouterSigner;
 };
 
 export type OracleIntentBatchSubmitParams = {
@@ -137,9 +162,6 @@ export type OracleIntentBatchSubmitParams = {
     intentHash: string;
     onStep?: (step: string, meta?: { txHash?: string }) => void;
   }>;
-  /** Per-router signer override. All intents in a batch share one lane
-   *  (one client/protocol state) and therefore one signer. */
-  signer?: RouterSigner;
 };
 
 /**
@@ -291,6 +313,14 @@ export type OracleIntentBridge = {
     collateralLovelace: bigint;
     maxInputs?: number;
   }): Promise<{ txHash: string | null; confirmed: boolean }>;
+  /**
+   * Refresh the wallet arbiter's UTxO cache for every pool wallet by reading
+   * each wallet's current UTxO set from chain. The arbiter reserves fee +
+   * collateral inputs from this cache, so the daemon primes it once at startup
+   * and refreshes it on the balance tick to keep reservations drawing on live
+   * UTxOs. Read-only; never signs or submits.
+   */
+  refreshWalletPoolUtxos(): Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -300,6 +330,15 @@ export type OracleIntentBridge = {
 export type RealBridgeOptions = {
   /** Progress lines are forwarded to this sink (default: process.stderr). */
   log?: (line: string) => void;
+  /** Hands out a wallet + a disjoint UTxO subset per build so parallel lanes
+   *  never draw the same fee/collateral input from a shared signer wallet.
+   *  Acquired at the connect step, released on confirm/fail. */
+  arbiter: WalletArbiter;
+  /** The signer-wallet pool the arbiter reserves from. The bridge reads
+   *  `walletPool.all()` to decide whether to pin reserved inputs (multi-wallet)
+   *  or let Lucid select freely (single-wallet), and refreshes its UTxO cache
+   *  in `refreshWalletPoolUtxos`. */
+  walletPool: WalletPool;
   /**
    * Number of Cardano blocks the bridge waits past inclusion before
    * declaring the tx confirmed.
@@ -437,29 +476,16 @@ export function createRealOracleIntentBridge(
   // protocol:init), passed in by the daemon via readDepositMaxPerUpdateFold.
   // 0/absent disables the fold (always pure updates). Not a feeder-YAML key.
   const depositMaxPerUpdateFold = options.depositMaxPerUpdateFold ?? 0;
-
-  /**
-   * Apply a per-router signer override on top of the env-derived CLI config.
-   * Returns a new config object (never mutates the input) with exactly one
-   * of cardanoWalletSeed / cardanoPrivateKey set from the router signer, so
-   * `selectConfiguredWalletWithConfig` loads the right wallet. When `signer`
-   * is undefined the env-derived config passes through unchanged (single
-   * global wallet — the common single-client case).
-   */
-  function applySigner(
-    cliConfig: CliConfig,
-    signer: RouterSigner | undefined,
-  ): CliConfig {
-    if (!signer) return cliConfig;
-    if (signer.kind === "seed") {
-      return { ...cliConfig, cardanoWalletSeed: signer.value, cardanoPrivateKey: null };
-    }
-    return { ...cliConfig, cardanoPrivateKey: signer.value, cardanoWalletSeed: null };
-  }
+  // The wallet arbiter + pool the bridge signs from. Every build acquires a
+  // reservation (a wallet + a disjoint UTxO subset) at the connect step and
+  // releases it on confirm/fail, so parallel lanes never draw the same fee or
+  // collateral input from a shared signer wallet.
+  const arbiter = options.arbiter;
+  const walletPool = options.walletPool;
 
   const bridge: OracleIntentBridge = {
     async submitOracleUpdate(params: OracleIntentSubmitParams): Promise<OracleUpdateResult> {
-      const { clientStatePath, protocolStatePath, enriched, intentHash, onStep, signer } = params;
+      const { clientStatePath, protocolStatePath, enriched, intentHash, onStep } = params;
       const { fullIntent } = enriched;
 
       log(`submitOracleUpdate: intentHash=${intentHash} symbol=${fullIntent.symbol}`);
@@ -520,373 +546,418 @@ export function createRealOracleIntentBridge(
       // ------------------------------------------------------------------
       onStep?.("connecting");
       log(`connecting to Cardano…`);
-      const cliConfig = applySigner(getCliConfig(), signer);
-      const lucid = await makeConfiguredLucidWithConfig(cliConfig);
-      const walletSource = await selectConfiguredWalletWithConfig(lucid, cliConfig);
-      const wallet = lucid.wallet();
-      const [walletAddress, walletUtxos] = await Promise.all([
-        wallet.address(),
-        wallet.getUtxos(),
-      ]);
-      const walletDefaults = deriveConfiguredWalletDefaults({ source: walletSource, address: walletAddress });
-
-      const networkNow = await getNetworkNow(lucid);
-      assertDiaOracleIntentNotExpired(intent, networkNow.unixTimeSec);
-
-      // Compute pair unit first — needed for the on-chain isCreate check.
-      if (!client.compiledScripts.pairMintPolicy) {
-        throw new Error("Bridge: pairMintPolicy compiled script not found. Run receiver:parameterize first.");
-      }
-      const pairMintPolicy = mintingPolicyFromCompiledScript(client.compiledScripts.pairMintPolicy);
-      const pairPolicyId = policyIdFromMintingPolicy(pairMintPolicy);
-      const pairTokenName = diaIntentTokenNameFromSymbol(intent);
-      const pairUnit = `${pairPolicyId}${pairTokenName}`;
-      if (!client.compiledScripts.pairValidator) {
-        throw new Error("Bridge: pairValidator compiled script not found. Run receiver:parameterize first.");
-      }
-      const pairValidator = spendingValidatorFromCompiledScript(client.compiledScripts.pairValidator);
-      const pairValidatorHash = scriptHashFromValidator(pairValidator);
-      const pairValidatorAddress = scriptAddressFromValidator(pairValidator);
-      const pairId = diaPairIdHex(intent);
-
-      // ------------------------------------------------------------------
-      // isCreate decided from chain — not from local file.
-      // utxosAtWithUnit returns [] when the pair NFT has never been minted
-      // or was burned; a non-empty result means a live pair UTxO exists.
-      // ------------------------------------------------------------------
-      const chainPairUtxos = await lucid.utxosAtWithUnit(pairValidatorAddress, pairUnit);
-
-      if (chainPairUtxos.length > 1) {
-        const outRefs = chainPairUtxos
-          .map((u: { txHash: string; outputIndex: number }) => `${u.txHash}#${u.outputIndex}`)
-          .join(", ");
-        log(
-          `WARN [duplicate-pairs] symbol=${fullIntent.symbol} count=${chainPairUtxos.length} ` +
-          `outRefs=[${outRefs}] — ` +
-          `chain state has multiple Pair UTxOs for the same unit. ` +
-          `Remedy: npm run cli -- pair:dedup ` +
-          `--client-state ${clientStatePath} ` +
-          `--protocol-state ${protocolStatePath}`,
-        );
-      }
-
-      const isCreate = chainPairUtxos.length === 0;
-      const currentPairUtxo = chainPairUtxos[0] ?? null;
-
-      if (isCreate) {
-        assertPaymentKeyHashIsConfigSigner(
-          walletDefaults.paymentKeyHash,
-          protocol.configState.validConfigSigners,
-          {
-            unauthorizedMessage:
-              "Bridge: pair creation requires the configured wallet to be a config admin.",
-          },
-        );
-      }
-
-      // Read local pair state. If the pair is on-chain but the local file is
-      // absent (startup reconcile failed or file was deleted mid-run),
-      // reconstruct a minimal state from the on-chain datum so the monotonic-
-      // nonce check and buildState have the correct baseline.
-      const pairStatePath = pairStatePathForSymbol(clientStatePath, fullIntent.symbol, pairSlugFromSymbol);
-      let existingPair = await readOptionalPairState(pairStatePath);
-      if (!isCreate && !existingPair && currentPairUtxo?.datum) {
-        const onChain = decodePairDatum(currentPairUtxo.datum);
-        log(
-          `submitOracleUpdate: local pair state missing for symbol=${fullIntent.symbol}; ` +
-          `reconstructed from chain nonce=${onChain.nonce}`,
-        );
-        existingPair = {
-          wallet: { source: "seed", address: walletAddress },
-          pair: { tokenName: pairTokenName, pairId, pairUnit, pairValidatorAddress },
-          pairState: {
-            ...onChain,
-            intent: {
-              intentType: "", version: "0", chainId: "0", nonce: "0", expiry: "0",
-              symbol: fullIntent.symbol, price: onChain.price,
-              timestamp: onChain.timestamp, source: "", signature: "", signer: onChain.signer,
-            },
-          },
-          datum: { pairCbor: currentPairUtxo.datum },
-        };
-      }
-
-      const minUtxoLovelace = existingPair?.pairState.minUtxoLovelace ?? protocol.configState.minUtxoLovelace;
-
-      const state = buildState({
-        client,
-        protocol,
-        existingPair,
-        intent,
-        walletAddress,
-        pairTokenName,
-        pairId,
-        pairUnit,
-        pairValidatorAddress,
-        minUtxoLovelace,
-      });
-      if (pairValidatorHash !== state.scripts.pairValidatorHash) {
-        throw new Error("Bridge: pair validator hash does not match the current blueprint.");
-      }
-      if (normalizeHex(state.pair.pairId, "pair.pairId") !== normalizeHex(pairId, "intent.symbol")) {
-        throw new Error(`Bridge: intent symbol ${intent.symbol} does not match pair id ${state.pair.pairId}.`);
-      }
-      // Monotonicity is validated by `buildOracleUpdateTx` against the LIVE
-      // on-chain pair datum (the single source of truth) — not the local
-      // pair-state file. A superseded intent makes the builder throw before any
-      // tx is built; the submitter classifies it as a benign NonMonotonicNonce.
-
-      const currentConfigUtxo = await findSingleUtxoAtUnit(
-        lucid,
-        state.scripts.configValidatorAddress,
-        state.scripts.configUnit,
-        "config",
-      );
-      // currentPairUtxo already fetched above via utxosAtWithUnit (isCreate check).
-      const currentReceiverUtxo = await findSingleUtxoAtUnit(
-        lucid,
-        state.receiver.receiverValidatorAddress,
-        state.receiver.receiverUnit,
-        "receiver",
-      );
-
-      // ------------------------------------------------------------------
-      // 4. Build, sign, submit — with opportunistic best-effort deposit fold.
-      //
-      // When the fold is enabled (depositMaxPerUpdateFold > 0) we first try to
-      // fold up to that many confirmed, clean (ADA-only, >= floor) side-deposits
-      // into THIS update (absorbed into the Receiver balance via AccrueFee). If
-      // the combined tx fails to BUILD or SUBMIT, we fall back to the SAME update
-      // WITHOUT the deposits (a pure update) so a bad/contended deposit never
-      // blocks a price update. Selection + the fold cap come from the protocol
-      // state's configState (set at the CLI's protocol:init) — no hardcoded
-      // values; the standalone auto-merge still handles bulk sweeps.
-      // ------------------------------------------------------------------
-      let depositFold:
-        | Awaited<ReturnType<typeof selectDepositsForUpdateFold>>
-        | undefined;
-      if (depositMaxPerUpdateFold > 0) {
-        try {
-          // selectDepositsForUpdateFold reads the floor + the
-          // depositMaxPerUpdateFold cap from configState and filters to clean
-          // ADA deposits — the same eligibility the CLI sweep applies.
-          const selected = await selectDepositsForUpdateFold({ lucid, client, protocol });
-          if (selected.utxos.length > 0) {
-            depositFold = selected;
-            log(
-              `fold: selected ${selected.utxos.length} clean deposit(s) totalling ` +
-              `${selected.sweptLovelace} lovelace to absorb into update symbol=${fullIntent.symbol}`,
-            );
+      // Acquire a signer wallet + a disjoint UTxO subset for this build so
+      // parallel lanes never draw the same fee/collateral input. Thrown before
+      // any chain work, WalletUnavailableError is retryable: the lane retries
+      // shortly with a fresh acquire (no inflight stamp, no state write).
+      const reservation = arbiter.acquire();
+      if ("unavailable" in reservation) throw new WalletUnavailableError();
+      // Inputs consumed / change produced by the tx, assembled once the tx is
+      // built and its hash is known. Seeded empty so a failure before the build
+      // releases the reservation without touching the wallet's cached UTxOs.
+      let settled: { consumedOutRefs: string[]; producedUtxos: WalletUtxo[] } = {
+        consumedOutRefs: [],
+        producedUtxos: [],
+      };
+      try {
+        const lucid = await makeConfiguredLucidWithConfig(getCliConfig());
+        const walletSource = selectReservationWallet(lucid, reservation);
+        const wallet = lucid.wallet();
+        const walletAddress = reservation.address;
+        const walletUtxos = await wallet.getUtxos();
+        // A multi-wallet pool pins coin selection to the reserved UTxOs so two
+        // lanes sharing one wallet never pick the same input. A single-wallet
+        // pool skips the pin and lets Lucid select from the whole wallet, so
+        // coin selection stays byte-for-byte identical to a non-pooled deploy.
+        if (walletPool.all().length > 1) {
+          const reservedOutRefs = new Set(reservation.utxos.map((u) => u.outRef));
+          const pinned = walletUtxos.filter((u) =>
+            reservedOutRefs.has(`${u.txHash}#${u.outputIndex}`),
+          );
+          if (pinned.length < reservation.utxos.length) {
+            // A reserved UTxO is no longer live (spent elsewhere or provider lag);
+            // fail retryable so the lane re-acquires against a fresh wallet view.
+            throw new WalletUnavailableError();
           }
-        } catch (err) {
-          // Selection failure (provider hiccup, missing deposit script) must
-          // never block the update — proceed with a pure update.
-          log(`fold: deposit selection failed, proceeding pure — ${(err as Error).message}`);
-          depositFold = undefined;
+          lucid.overrideUTxOs(pinned);
         }
-      }
+        const walletDefaults = deriveConfiguredWalletDefaults({ source: walletSource, address: walletAddress });
 
-      // Build the tx for a given fold (or none). Kept as a closure so the
-      // fallback path re-runs it with no deposits. Returns the built artifacts
-      // needed by the confirmation + state-write steps below.
-      async function buildUpdate(fold: typeof depositFold) {
-        const built = await buildOracleUpdateTx(lucid, {
-          isCreate,
-          intent,
-          witness,
-          networkNow,
-          currentConfigUtxo,
-          currentPairUtxo,
-          currentReceiverUtxo,
-          walletPaymentKeyHash: walletDefaults.paymentKeyHash,
-          scripts: state.scripts,
-          compiledScripts: state.compiledScripts,
-          referenceScripts: state.referenceScripts,
-          configState: state.configState,
-          pairState: state.pairState,
-          pair: state.pair,
-          receiver: state.receiver,
-          depositFold:
-            fold && fold.utxos.length > 0
-              ? {
-                  utxos: fold.utxos,
-                  depositValidator: fold.depositValidator,
-                  referenceOutRef: fold.referenceOutRef,
-                }
-              : undefined,
-        });
-        return built;
-      }
+        const networkNow = await getNetworkNow(lucid);
+        assertDiaOracleIntentNotExpired(intent, networkNow.unixTimeSec);
 
-      onStep?.("building");
-      log(`building oracle update tx for symbol=${fullIntent.symbol}`);
-
-      let txSignBuilder: Awaited<ReturnType<typeof buildOracleUpdateTx>>["txSignBuilder"];
-      let nextPairState: Awaited<ReturnType<typeof buildOracleUpdateTx>>["nextPairState"];
-      let nextPairDatumCbor: Awaited<ReturnType<typeof buildOracleUpdateTx>>["nextPairDatumCbor"];
-      let txHash: string;
-      let feePaidLovelace: string | undefined;
-
-      // Extract the tx fee from a built tx body (best-effort; a future Lucid API
-      // change must not break the happy path).
-      const extractFee = (
-        builder: Awaited<ReturnType<typeof buildOracleUpdateTx>>["txSignBuilder"],
-      ): string | undefined => {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const fee = (builder as any).toTransaction?.().body?.().fee?.();
-          return fee !== undefined && fee !== null ? BigInt(fee).toString() : undefined;
-        } catch {
-          return undefined;
+        // Compute pair unit first — needed for the on-chain isCreate check.
+        if (!client.compiledScripts.pairMintPolicy) {
+          throw new Error("Bridge: pairMintPolicy compiled script not found. Run receiver:parameterize first.");
         }
-      };
+        const pairMintPolicy = mintingPolicyFromCompiledScript(client.compiledScripts.pairMintPolicy);
+        const pairPolicyId = policyIdFromMintingPolicy(pairMintPolicy);
+        const pairTokenName = diaIntentTokenNameFromSymbol(intent);
+        const pairUnit = `${pairPolicyId}${pairTokenName}`;
+        if (!client.compiledScripts.pairValidator) {
+          throw new Error("Bridge: pairValidator compiled script not found. Run receiver:parameterize first.");
+        }
+        const pairValidator = spendingValidatorFromCompiledScript(client.compiledScripts.pairValidator);
+        const pairValidatorHash = scriptHashFromValidator(pairValidator);
+        const pairValidatorAddress = scriptAddressFromValidator(pairValidator);
+        const pairId = diaPairIdHex(intent);
 
-      // One build → sign → submit attempt for a given fold (or none). Returns
-      // the built artifacts; throws on build/sign/submit failure so the
-      // fold-fallback wrapper can retry pure.
-      const attemptSubmit = async (fold: typeof depositFold) => {
-        const built = await buildUpdate(fold);
-        const builtHash = built.txSignBuilder.toHash();
-        const builtFee = extractFee(built.txSignBuilder);
-        onStep?.("signing", { txHash: builtHash });
-        const signedTx = await built.txSignBuilder.sign.withWallet().complete();
-        onStep?.("submitting", { txHash: builtHash });
-        await signedTx.submit();
-        onStep?.("submitted", { txHash: builtHash });
-        return {
-          txSignBuilder: built.txSignBuilder,
-          nextPairState: built.nextPairState,
-          nextPairDatumCbor: built.nextPairDatumCbor,
-          txHash: builtHash,
-          feePaidLovelace: builtFee,
-        };
-      };
+        // ------------------------------------------------------------------
+        // isCreate decided from chain — not from local file.
+        // utxosAtWithUnit returns [] when the pair NFT has never been minted
+        // or was burned; a non-empty result means a live pair UTxO exists.
+        // ------------------------------------------------------------------
+        const chainPairUtxos = await lucid.utxosAtWithUnit(pairValidatorAddress, pairUnit);
 
-      // Try the folded tx first; on ANY build/sign/submit failure, fall back to
-      // a pure update (at most one fallback). `runWithFoldFallback` is the pure
-      // orchestration core (unit-tested in lib-bridge/__tests__).
-      const submitted = await runWithFoldFallback({
-        fold: depositFold,
-        attempt: attemptSubmit,
-        onFallback: (err) =>
+        if (chainPairUtxos.length > 1) {
+          const outRefs = chainPairUtxos
+            .map((u: { txHash: string; outputIndex: number }) => `${u.txHash}#${u.outputIndex}`)
+            .join(", ");
           log(
-            `fold: combined update+absorb failed for symbol=${fullIntent.symbol} ` +
-            `(${err.message}); retrying as a PURE update without deposits`,
-          ),
-      });
-      txSignBuilder = submitted.txSignBuilder;
-      nextPairState = submitted.nextPairState;
-      nextPairDatumCbor = submitted.nextPairDatumCbor;
-      txHash = submitted.txHash;
-      feePaidLovelace = submitted.feePaidLovelace;
-      if (submitted.foldedDeposits > 0) {
-        log(
-          `fold: submitted update+absorb txHash=${txHash} deposits=${submitted.foldedDeposits}`,
-        );
-      }
-      log(`submitted: txHash=${txHash} intentHash=${intentHash}`);
+            `WARN [duplicate-pairs] symbol=${fullIntent.symbol} count=${chainPairUtxos.length} ` +
+            `outRefs=[${outRefs}] — ` +
+            `chain state has multiple Pair UTxOs for the same unit. ` +
+            `Remedy: npm run cli -- pair:dedup ` +
+            `--client-state ${clientStatePath} ` +
+            `--protocol-state ${protocolStatePath}`,
+          );
+        }
 
-      // ------------------------------------------------------------------
-      // 5. Await confirmation.
-      // ------------------------------------------------------------------
-      onStep?.("waiting_confirm", { txHash });
-      const confirmed = await awaitTxConfirmation({
-        lucid,
-        txHash,
-        reportProgress: log,
-        label: `oracle update (${fullIntent.symbol}, intentHash=${intentHash})`,
-      });
+        const isCreate = chainPairUtxos.length === 0;
+        const currentPairUtxo = chainPairUtxos[0] ?? null;
 
-      if (!confirmed) {
-        throw new Error(
-          `Transaction ${txHash} was submitted but confirmation was never observed ` +
-          `(intentHash=${intentHash}).`,
-        );
-      }
+        if (isCreate) {
+          assertPaymentKeyHashIsConfigSigner(
+            walletDefaults.paymentKeyHash,
+            protocol.configState.validConfigSigners,
+            {
+              unauthorizedMessage:
+                "Bridge: pair creation requires the configured wallet to be a config admin.",
+            },
+          );
+        }
 
-      // Honour `cardano.confirmation_depth`: wait an approximation of
-      // `(depth - 1) × 20 s` (Cardano's slot time) past inclusion, then
-      // re-check the tx is still on chain. If a reorg dropped it, this
-      // throws `TxDroppedFromChainError` which the daemon classifies as
-      // `TxDroppedFromChain` → increments `transactionsReorg`.
-      if (confirmationDepth > 1) {
-        log(`awaiting ${confirmationDepth - 1} extra block(s) past inclusion of ${txHash}`);
-        await sleep((confirmationDepth - 1) * 20_000);
-        await assertTxStillOnChain({ txHash });
-      }
+        // Read local pair state. If the pair is on-chain but the local file is
+        // absent (startup reconcile failed or file was deleted mid-run),
+        // reconstruct a minimal state from the on-chain datum so the monotonic-
+        // nonce check and buildState have the correct baseline.
+        const pairStatePath = pairStatePathForSymbol(clientStatePath, fullIntent.symbol, pairSlugFromSymbol);
+        let existingPair = await readOptionalPairState(pairStatePath);
+        if (!isCreate && !existingPair && currentPairUtxo?.datum) {
+          const onChain = decodePairDatum(currentPairUtxo.datum);
+          log(
+            `submitOracleUpdate: local pair state missing for symbol=${fullIntent.symbol}; ` +
+            `reconstructed from chain nonce=${onChain.nonce}`,
+          );
+          existingPair = {
+            wallet: { source: "seed", address: walletAddress },
+            pair: { tokenName: pairTokenName, pairId, pairUnit, pairValidatorAddress },
+            pairState: {
+              ...onChain,
+              intent: {
+                intentType: "", version: "0", chainId: "0", nonce: "0", expiry: "0",
+                symbol: fullIntent.symbol, price: onChain.price,
+                timestamp: onChain.timestamp, source: "", signature: "", signer: onChain.signer,
+              },
+            },
+            datum: { pairCbor: currentPairUtxo.datum },
+          };
+        }
 
-      onStep?.("waiting_utxo", { txHash });
-      await waitForWalletSettlement({
-        wallet,
-        previousUtxos: walletUtxos,
-        transaction: txSignBuilder,
-        label: "oracle update",
-      });
-      await Promise.all([
-        waitForUnitUtxoReplacement({
+        const minUtxoLovelace = existingPair?.pairState.minUtxoLovelace ?? protocol.configState.minUtxoLovelace;
+
+        const state = buildState({
+          client,
+          protocol,
+          existingPair,
+          intent,
+          walletAddress,
+          pairTokenName,
+          pairId,
+          pairUnit,
+          pairValidatorAddress,
+          minUtxoLovelace,
+        });
+        if (pairValidatorHash !== state.scripts.pairValidatorHash) {
+          throw new Error("Bridge: pair validator hash does not match the current blueprint.");
+        }
+        if (normalizeHex(state.pair.pairId, "pair.pairId") !== normalizeHex(pairId, "intent.symbol")) {
+          throw new Error(`Bridge: intent symbol ${intent.symbol} does not match pair id ${state.pair.pairId}.`);
+        }
+        // Monotonicity is validated by `buildOracleUpdateTx` against the LIVE
+        // on-chain pair datum (the single source of truth) — not the local
+        // pair-state file. A superseded intent makes the builder throw before any
+        // tx is built; the submitter classifies it as a benign NonMonotonicNonce.
+
+        const currentConfigUtxo = await findSingleUtxoAtUnit(
           lucid,
-          address: state.pair.pairValidatorAddress,
-          unit: state.pair.pairUnit,
-          label: "pair",
-          previousOutRef: currentPairUtxo ?? undefined,
-          txHash,
-        }),
-        waitForUnitUtxoReplacement({
+          state.scripts.configValidatorAddress,
+          state.scripts.configUnit,
+          "config",
+        );
+        // currentPairUtxo already fetched above via utxosAtWithUnit (isCreate check).
+        const currentReceiverUtxo = await findSingleUtxoAtUnit(
           lucid,
-          address: state.receiver.receiverValidatorAddress,
-          unit: state.receiver.receiverUnit,
-          label: "receiver",
-          previousOutRef: currentReceiverUtxo,
+          state.receiver.receiverValidatorAddress,
+          state.receiver.receiverUnit,
+          "receiver",
+        );
+
+        // ------------------------------------------------------------------
+        // 4. Build, sign, submit — with opportunistic best-effort deposit fold.
+        //
+        // When the fold is enabled (depositMaxPerUpdateFold > 0) we first try to
+        // fold up to that many confirmed, clean (ADA-only, >= floor) side-deposits
+        // into THIS update (absorbed into the Receiver balance via AccrueFee). If
+        // the combined tx fails to BUILD or SUBMIT, we fall back to the SAME update
+        // WITHOUT the deposits (a pure update) so a bad/contended deposit never
+        // blocks a price update. Selection + the fold cap come from the protocol
+        // state's configState (set at the CLI's protocol:init) — no hardcoded
+        // values; the standalone auto-merge still handles bulk sweeps.
+        // ------------------------------------------------------------------
+        let depositFold:
+          | Awaited<ReturnType<typeof selectDepositsForUpdateFold>>
+          | undefined;
+        if (depositMaxPerUpdateFold > 0) {
+          try {
+            // selectDepositsForUpdateFold reads the floor + the
+            // depositMaxPerUpdateFold cap from configState and filters to clean
+            // ADA deposits — the same eligibility the CLI sweep applies.
+            const selected = await selectDepositsForUpdateFold({ lucid, client, protocol });
+            if (selected.utxos.length > 0) {
+              depositFold = selected;
+              log(
+                `fold: selected ${selected.utxos.length} clean deposit(s) totalling ` +
+                `${selected.sweptLovelace} lovelace to absorb into update symbol=${fullIntent.symbol}`,
+              );
+            }
+          } catch (err) {
+            // Selection failure (provider hiccup, missing deposit script) must
+            // never block the update — proceed with a pure update.
+            log(`fold: deposit selection failed, proceeding pure — ${(err as Error).message}`);
+            depositFold = undefined;
+          }
+        }
+
+        // Build the tx for a given fold (or none). Kept as a closure so the
+        // fallback path re-runs it with no deposits. Returns the built artifacts
+        // needed by the confirmation + state-write steps below.
+        async function buildUpdate(fold: typeof depositFold) {
+          const built = await buildOracleUpdateTx(lucid, {
+            isCreate,
+            intent,
+            witness,
+            networkNow,
+            currentConfigUtxo,
+            currentPairUtxo,
+            currentReceiverUtxo,
+            walletPaymentKeyHash: walletDefaults.paymentKeyHash,
+            scripts: state.scripts,
+            compiledScripts: state.compiledScripts,
+            referenceScripts: state.referenceScripts,
+            configState: state.configState,
+            pairState: state.pairState,
+            pair: state.pair,
+            receiver: state.receiver,
+            depositFold:
+              fold && fold.utxos.length > 0
+                ? {
+                    utxos: fold.utxos,
+                    depositValidator: fold.depositValidator,
+                    referenceOutRef: fold.referenceOutRef,
+                  }
+                : undefined,
+          });
+          return built;
+        }
+
+        onStep?.("building");
+        log(`building oracle update tx for symbol=${fullIntent.symbol}`);
+
+        let txSignBuilder: Awaited<ReturnType<typeof buildOracleUpdateTx>>["txSignBuilder"];
+        let nextPairState: Awaited<ReturnType<typeof buildOracleUpdateTx>>["nextPairState"];
+        let nextPairDatumCbor: Awaited<ReturnType<typeof buildOracleUpdateTx>>["nextPairDatumCbor"];
+        let txHash: string;
+        let feePaidLovelace: string | undefined;
+
+        // Extract the tx fee from a built tx body (best-effort; a future Lucid API
+        // change must not break the happy path).
+        const extractFee = (
+          builder: Awaited<ReturnType<typeof buildOracleUpdateTx>>["txSignBuilder"],
+        ): string | undefined => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const fee = (builder as any).toTransaction?.().body?.().fee?.();
+            return fee !== undefined && fee !== null ? BigInt(fee).toString() : undefined;
+          } catch {
+            return undefined;
+          }
+        };
+
+        // One build → sign → submit attempt for a given fold (or none). Returns
+        // the built artifacts; throws on build/sign/submit failure so the
+        // fold-fallback wrapper can retry pure.
+        const attemptSubmit = async (fold: typeof depositFold) => {
+          const built = await buildUpdate(fold);
+          const builtHash = built.txSignBuilder.toHash();
+          const builtFee = extractFee(built.txSignBuilder);
+          onStep?.("signing", { txHash: builtHash });
+          const signedTx = await built.txSignBuilder.sign.withWallet().complete();
+          onStep?.("submitting", { txHash: builtHash });
+          await signedTx.submit();
+          onStep?.("submitted", { txHash: builtHash });
+          return {
+            txSignBuilder: built.txSignBuilder,
+            nextPairState: built.nextPairState,
+            nextPairDatumCbor: built.nextPairDatumCbor,
+            txHash: builtHash,
+            feePaidLovelace: builtFee,
+          };
+        };
+
+        // Try the folded tx first; on ANY build/sign/submit failure, fall back to
+        // a pure update (at most one fallback). `runWithFoldFallback` is the pure
+        // orchestration core (unit-tested in lib-bridge/__tests__).
+        const submitted = await runWithFoldFallback({
+          fold: depositFold,
+          attempt: attemptSubmit,
+          onFallback: (err) =>
+            log(
+              `fold: combined update+absorb failed for symbol=${fullIntent.symbol} ` +
+              `(${err.message}); retrying as a PURE update without deposits`,
+            ),
+        });
+        txSignBuilder = submitted.txSignBuilder;
+        nextPairState = submitted.nextPairState;
+        nextPairDatumCbor = submitted.nextPairDatumCbor;
+        txHash = submitted.txHash;
+        feePaidLovelace = submitted.feePaidLovelace;
+        // The tx is built and its hash is known; record exactly which wallet
+        // inputs it consumed and which change it produced. Assigning here (before
+        // the confirmation wait) guarantees a tx that landed on chain marks its
+        // inputs consumed even if a later confirmation/reorg throws.
+        settled = {
+          consumedOutRefs: computeSpentWalletOutRefs(walletUtxos, txSignBuilder),
+          producedUtxos: computeWalletChangeOutputs(txSignBuilder, txHash, reservation.address),
+        };
+        // Release any pinned wallet view now the build is done: while the pin is
+        // set, wallet.getUtxos() returns the frozen reserved subset, which would
+        // stall the settlement wait (spent inputs never disappear from it) and
+        // skew the post-confirm wallet-balance gauges. Clearing it makes every
+        // post-build chain read query the live provider again. A no-op when the
+        // single-wallet path never pinned.
+        lucid.overrideUTxOs([]);
+        if (submitted.foldedDeposits > 0) {
+          log(
+            `fold: submitted update+absorb txHash=${txHash} deposits=${submitted.foldedDeposits}`,
+          );
+        }
+        log(`submitted: txHash=${txHash} intentHash=${intentHash}`);
+
+        // ------------------------------------------------------------------
+        // 5. Await confirmation.
+        // ------------------------------------------------------------------
+        onStep?.("waiting_confirm", { txHash });
+        const confirmed = await awaitTxConfirmation({
+          lucid,
           txHash,
-        }),
-      ]);
-      onStep?.("writing_state", { txHash });
-      await writePairState(pairStatePath, {
-        wallet: { source: walletSource, address: walletAddress },
-        pair: { ...state.pair },
-        pairState: nextPairState,
-        datum: { pairCbor: nextPairDatumCbor },
-        transactions: appendTransactionRecord(state.transactions, {
-          step: "feeder:update",
-          submittedTxHash: txHash,
-          confirmed,
-        }),
-      });
+          reportProgress: log,
+          label: `oracle update (${fullIntent.symbol}, intentHash=${intentHash})`,
+        });
 
-      log(`confirmed: txHash=${txHash} receiverUnit=${state.receiver.receiverUnit as string}`);
+        if (!confirmed) {
+          throw new Error(
+            `Transaction ${txHash} was submitted but confirmation was never observed ` +
+            `(intentHash=${intentHash}).`,
+          );
+        }
 
-      // ------------------------------------------------------------------
-      // 6. Capture post-confirm balances for Prometheus gauges.
-      //    Each query is best-effort: a provider hiccup leaves the field
-      //    undefined and the daemon skips emitting that gauge rather
-      //    than reporting a misleading 0.
-      // ------------------------------------------------------------------
-      const postState = await capturePostConfirmState({
-        lucid,
-        wallet,
-        receiverValidatorAddress: state.receiver.receiverValidatorAddress as string,
-        depositValidatorAddress: state.receiver.depositValidatorAddress as string | undefined,
-        receiverUnit: state.receiver.receiverUnit as string,
-        paymentHookValidatorAddress: state.scripts.paymentHookValidatorAddress,
-        paymentHookUnit: state.scripts.paymentHookUnit,
-        log,
-      });
+        // Honour `cardano.confirmation_depth`: wait an approximation of
+        // `(depth - 1) × 20 s` (Cardano's slot time) past inclusion, then
+        // re-check the tx is still on chain. If a reorg dropped it, this
+        // throws `TxDroppedFromChainError` which the daemon classifies as
+        // `TxDroppedFromChain` → increments `transactionsReorg`.
+        if (confirmationDepth > 1) {
+          log(`awaiting ${confirmationDepth - 1} extra block(s) past inclusion of ${txHash}`);
+          await sleep((confirmationDepth - 1) * 20_000);
+          await assertTxStillOnChain({ txHash });
+        }
 
-      return {
-        txHash,
-        receiverUnit: state.receiver.receiverUnit as string,
-        pairUnit,
-        pairValidatorAddress: state.pair.pairValidatorAddress,
-        isCreate,
-        feePaidLovelace,
-        postState,
-      };
+        onStep?.("waiting_utxo", { txHash });
+        await waitForWalletSettlement({
+          wallet,
+          previousUtxos: walletUtxos,
+          transaction: txSignBuilder,
+          label: "oracle update",
+        });
+        await Promise.all([
+          waitForUnitUtxoReplacement({
+            lucid,
+            address: state.pair.pairValidatorAddress,
+            unit: state.pair.pairUnit,
+            label: "pair",
+            previousOutRef: currentPairUtxo ?? undefined,
+            txHash,
+          }),
+          waitForUnitUtxoReplacement({
+            lucid,
+            address: state.receiver.receiverValidatorAddress,
+            unit: state.receiver.receiverUnit,
+            label: "receiver",
+            previousOutRef: currentReceiverUtxo,
+            txHash,
+          }),
+        ]);
+        onStep?.("writing_state", { txHash });
+        await writePairState(pairStatePath, {
+          wallet: { source: walletSource, address: walletAddress },
+          pair: { ...state.pair },
+          pairState: nextPairState,
+          datum: { pairCbor: nextPairDatumCbor },
+          transactions: appendTransactionRecord(state.transactions, {
+            step: "feeder:update",
+            submittedTxHash: txHash,
+            confirmed,
+          }),
+        });
+
+        log(`confirmed: txHash=${txHash} receiverUnit=${state.receiver.receiverUnit as string}`);
+
+        // ------------------------------------------------------------------
+        // 6. Capture post-confirm balances for Prometheus gauges.
+        //    Each query is best-effort: a provider hiccup leaves the field
+        //    undefined and the daemon skips emitting that gauge rather
+        //    than reporting a misleading 0.
+        // ------------------------------------------------------------------
+        const postState = await capturePostConfirmState({
+          lucid,
+          wallet,
+          receiverValidatorAddress: state.receiver.receiverValidatorAddress as string,
+          depositValidatorAddress: state.receiver.depositValidatorAddress as string | undefined,
+          receiverUnit: state.receiver.receiverUnit as string,
+          paymentHookValidatorAddress: state.scripts.paymentHookValidatorAddress,
+          paymentHookUnit: state.scripts.paymentHookUnit,
+          log,
+        });
+
+        return {
+          txHash,
+          receiverUnit: state.receiver.receiverUnit as string,
+          pairUnit,
+          pairValidatorAddress: state.pair.pairValidatorAddress,
+          isCreate,
+          feePaidLovelace,
+          postState,
+        };
+      } finally {
+        arbiter.release(reservation, settled);
+      }
     },
 
     async submitOracleUpdateBatch(
       params: OracleIntentBatchSubmitParams,
     ): Promise<OracleBatchUpdateResult> {
-      const { clientStatePath, protocolStatePath, updates, signer } = params;
+      const { clientStatePath, protocolStatePath, updates } = params;
 
       if (updates.length === 0) {
         throw new Error("Bridge: batch submission requires at least one intent.");
@@ -937,398 +1008,446 @@ export function createRealOracleIntentBridge(
       assertOracleUpdateBootstrapRefsResolved(protocol.bootstrapRefs);
 
       emitBatchStep(updates, "connecting");
-      const cliConfig = applySigner(getCliConfig(), signer);
-      const lucid = await makeConfiguredLucidWithConfig(cliConfig);
-      const walletSource = await selectConfiguredWalletWithConfig(lucid, cliConfig);
-      const wallet = lucid.wallet();
-      const [walletAddress, walletUtxos] = await Promise.all([
-        wallet.address(),
-        wallet.getUtxos(),
-      ]);
-      const walletDefaults = deriveConfiguredWalletDefaults({ source: walletSource, address: walletAddress });
-      const networkNow = await getNetworkNow(lucid);
+      // Acquire a signer wallet + a disjoint UTxO subset for this batch so
+      // parallel lanes never draw the same fee/collateral input. Retryable when
+      // none is free: the lane re-acquires shortly (no inflight stamp, no write).
+      const reservation = arbiter.acquire();
+      if ("unavailable" in reservation) throw new WalletUnavailableError();
+      // Inputs consumed / change produced by the batch tx, assembled once it is
+      // built and its hash is known. Seeded empty so a pre-build failure releases
+      // the reservation without touching the wallet's cached UTxOs.
+      let settled: { consumedOutRefs: string[]; producedUtxos: WalletUtxo[] } = {
+        consumedOutRefs: [],
+        producedUtxos: [],
+      };
+      try {
+        const lucid = await makeConfiguredLucidWithConfig(getCliConfig());
+        const walletSource = selectReservationWallet(lucid, reservation);
+        const wallet = lucid.wallet();
+        const walletAddress = reservation.address;
+        const walletUtxos = await wallet.getUtxos();
+        // A multi-wallet pool pins coin selection to the reserved UTxOs so two
+        // lanes sharing one wallet never pick the same input. Pinned once here,
+        // before the stale-input reconcile closure: a pinned wallet input no
+        // longer self-heals on rebuild, so per-process locks + the reservation
+        // TTL + the balance-tick UTxO refresh are what bound its staleness. A
+        // single-wallet pool skips the pin so coin selection stays byte-for-byte
+        // identical to a non-pooled deploy.
+        if (walletPool.all().length > 1) {
+          const reservedOutRefs = new Set(reservation.utxos.map((u) => u.outRef));
+          const pinned = walletUtxos.filter((u) =>
+            reservedOutRefs.has(`${u.txHash}#${u.outputIndex}`),
+          );
+          if (pinned.length < reservation.utxos.length) {
+            // A reserved UTxO is no longer live (spent elsewhere or provider lag);
+            // fail retryable so the lane re-acquires against a fresh wallet view.
+            throw new WalletUnavailableError();
+          }
+          lucid.overrideUTxOs(pinned);
+        }
+        const walletDefaults = deriveConfiguredWalletDefaults({ source: walletSource, address: walletAddress });
+        const networkNow = await getNetworkNow(lucid);
 
-      const domain = normalizeDiaEip712Domain({
-        name: protocol.configState.domain.name,
-        version: protocol.configState.domain.version,
-        sourceChainId: protocol.configState.domain.sourceChainId,
-        verifyingContract: protocol.configState.domain.verifyingContract,
-      });
-
-      const preparedEntries: Array<{
-        update: OracleIntentBatchSubmitParams["updates"][number];
-        state: CombinedUpdateState;
-        pairStatePath: string;
-        pairUnit: string;
-        isCreate: boolean;
-        currentPairUtxo: UTxO | null;
-        intent: Awaited<ReturnType<typeof normalizeDiaOracleIntent>>;
-        witness: Awaited<ReturnType<typeof recoverDiaOracleIntentWitness>>;
-      }> = [];
-
-      // Candidates dropped because their intent does not strictly beat the
-      // live on-chain pair datum — already superseded on chain. Reported
-      // benignly (not failed): no tx, no fee, retried on the next DIA intent.
-      const skippedEntries: Array<{ intentHash: string; pairUnit: string; pairValidatorAddress: string }> = [];
-
-      let requiresConfigSigner = false;
-
-      for (const update of updates) {
-        const { fullIntent } = update.enriched;
-        const intent = normalizeDiaOracleIntent({
-          intentType: fullIntent.intentType,
-          version: fullIntent.version,
-          chainId: fullIntent.chainId.toString(),
-          nonce: fullIntent.nonce.toString(),
-          expiry: fullIntent.expiry.toString(),
-          symbol: fullIntent.symbol,
-          price: fullIntent.price.toString(),
-          timestamp: fullIntent.timestamp.toString(),
-          source: fullIntent.source,
-          signature: fullIntent.signature,
-          signer: fullIntent.signer,
+        const domain = normalizeDiaEip712Domain({
+          name: protocol.configState.domain.name,
+          version: protocol.configState.domain.version,
+          sourceChainId: protocol.configState.domain.sourceChainId,
+          verifyingContract: protocol.configState.domain.verifyingContract,
         });
-        const witness = recoverDiaOracleIntentWitness(domain, intent);
-        if (!protocol.configState.authorizedDiaPublicKeys.includes(witness.signerPublicKey)) {
-          throw new Error("Bridge: recovered DIA signer public key is not authorized in the provided config state.");
-        }
-        assertDiaOracleIntentNotExpired(intent, networkNow.unixTimeSec);
 
-        if (!client.compiledScripts.pairMintPolicy) {
-          throw new Error("Bridge: pairMintPolicy compiled script not found. Run receiver:parameterize first.");
-        }
-        const pairMintPolicy = mintingPolicyFromCompiledScript(client.compiledScripts.pairMintPolicy);
-        const pairPolicyId = policyIdFromMintingPolicy(pairMintPolicy);
-        const pairTokenName = diaIntentTokenNameFromSymbol(intent);
-        const pairUnit = `${pairPolicyId}${pairTokenName}`;
-        if (!client.compiledScripts.pairValidator) {
-          throw new Error("Bridge: pairValidator compiled script not found. Run receiver:parameterize first.");
-        }
-        const pairValidator = spendingValidatorFromCompiledScript(client.compiledScripts.pairValidator);
-        const pairValidatorHash = scriptHashFromValidator(pairValidator);
-        const pairValidatorAddress = scriptAddressFromValidator(pairValidator);
-        const pairId = diaPairIdHex(intent);
-        const chainPairUtxos = await lucid.utxosAtWithUnit(pairValidatorAddress, pairUnit);
+        const preparedEntries: Array<{
+          update: OracleIntentBatchSubmitParams["updates"][number];
+          state: CombinedUpdateState;
+          pairStatePath: string;
+          pairUnit: string;
+          isCreate: boolean;
+          currentPairUtxo: UTxO | null;
+          intent: Awaited<ReturnType<typeof normalizeDiaOracleIntent>>;
+          witness: Awaited<ReturnType<typeof recoverDiaOracleIntentWitness>>;
+        }> = [];
 
-        if (chainPairUtxos.length > 1) {
-          const outRefs = chainPairUtxos
-            .map((utxo: { txHash: string; outputIndex: number }) => `${utxo.txHash}#${utxo.outputIndex}`)
-            .join(", ");
-          log(
-            `WARN [duplicate-pairs] symbol=${fullIntent.symbol} count=${chainPairUtxos.length} outRefs=[${outRefs}]`,
+        // Candidates dropped because their intent does not strictly beat the
+        // live on-chain pair datum — already superseded on chain. Reported
+        // benignly (not failed): no tx, no fee, retried on the next DIA intent.
+        const skippedEntries: Array<{ intentHash: string; pairUnit: string; pairValidatorAddress: string }> = [];
+
+        let requiresConfigSigner = false;
+
+        for (const update of updates) {
+          const { fullIntent } = update.enriched;
+          const intent = normalizeDiaOracleIntent({
+            intentType: fullIntent.intentType,
+            version: fullIntent.version,
+            chainId: fullIntent.chainId.toString(),
+            nonce: fullIntent.nonce.toString(),
+            expiry: fullIntent.expiry.toString(),
+            symbol: fullIntent.symbol,
+            price: fullIntent.price.toString(),
+            timestamp: fullIntent.timestamp.toString(),
+            source: fullIntent.source,
+            signature: fullIntent.signature,
+            signer: fullIntent.signer,
+          });
+          const witness = recoverDiaOracleIntentWitness(domain, intent);
+          if (!protocol.configState.authorizedDiaPublicKeys.includes(witness.signerPublicKey)) {
+            throw new Error("Bridge: recovered DIA signer public key is not authorized in the provided config state.");
+          }
+          assertDiaOracleIntentNotExpired(intent, networkNow.unixTimeSec);
+
+          if (!client.compiledScripts.pairMintPolicy) {
+            throw new Error("Bridge: pairMintPolicy compiled script not found. Run receiver:parameterize first.");
+          }
+          const pairMintPolicy = mintingPolicyFromCompiledScript(client.compiledScripts.pairMintPolicy);
+          const pairPolicyId = policyIdFromMintingPolicy(pairMintPolicy);
+          const pairTokenName = diaIntentTokenNameFromSymbol(intent);
+          const pairUnit = `${pairPolicyId}${pairTokenName}`;
+          if (!client.compiledScripts.pairValidator) {
+            throw new Error("Bridge: pairValidator compiled script not found. Run receiver:parameterize first.");
+          }
+          const pairValidator = spendingValidatorFromCompiledScript(client.compiledScripts.pairValidator);
+          const pairValidatorHash = scriptHashFromValidator(pairValidator);
+          const pairValidatorAddress = scriptAddressFromValidator(pairValidator);
+          const pairId = diaPairIdHex(intent);
+          const chainPairUtxos = await lucid.utxosAtWithUnit(pairValidatorAddress, pairUnit);
+
+          if (chainPairUtxos.length > 1) {
+            const outRefs = chainPairUtxos
+              .map((utxo: { txHash: string; outputIndex: number }) => `${utxo.txHash}#${utxo.outputIndex}`)
+              .join(", ");
+            log(
+              `WARN [duplicate-pairs] symbol=${fullIntent.symbol} count=${chainPairUtxos.length} outRefs=[${outRefs}]`,
+            );
+          }
+
+          const isCreate = chainPairUtxos.length === 0;
+          const currentPairUtxo = chainPairUtxos[0] ?? null;
+          if (isCreate) {
+            requiresConfigSigner = true;
+          }
+
+          const pairStatePath = pairStatePathForSymbol(clientStatePath, fullIntent.symbol, pairSlugFromSymbol);
+          let existingPair = await readOptionalPairState(pairStatePath);
+          if (!isCreate && !existingPair && currentPairUtxo?.datum) {
+            const onChain = decodePairDatum(currentPairUtxo.datum);
+            existingPair = {
+              wallet: { source: "seed", address: walletAddress },
+              pair: { tokenName: pairTokenName, pairId, pairUnit, pairValidatorAddress },
+              pairState: {
+                ...onChain,
+                intent: {
+                  intentType: "",
+                  version: "0",
+                  chainId: "0",
+                  nonce: "0",
+                  expiry: "0",
+                  symbol: fullIntent.symbol,
+                  price: onChain.price,
+                  timestamp: onChain.timestamp,
+                  source: "",
+                  signature: "",
+                  signer: onChain.signer,
+                },
+              },
+              datum: { pairCbor: currentPairUtxo.datum },
+            };
+          }
+
+          const minUtxoLovelace =
+            existingPair?.pairState.minUtxoLovelace ?? protocol.configState.minUtxoLovelace;
+
+          const state = buildState({
+            client,
+            protocol,
+            existingPair,
+            intent,
+            walletAddress,
+            pairTokenName,
+            pairId,
+            pairUnit,
+            pairValidatorAddress,
+            minUtxoLovelace,
+          });
+
+          if (pairValidatorHash !== state.scripts.pairValidatorHash) {
+            throw new Error("Bridge: pair validator hash does not match the current blueprint.");
+          }
+          if (normalizeHex(state.pair.pairId, "pair.pairId") !== normalizeHex(pairId, "intent.symbol")) {
+            throw new Error(`Bridge: intent symbol ${intent.symbol} does not match pair id ${state.pair.pairId}.`);
+          }
+          // Validate against the LIVE on-chain pair datum — the single source of
+          // truth — not the local pair-state file (which can drift behind chain).
+          // A non-create intent that does not strictly beat the on-chain
+          // (timestamp, nonce) is already superseded on chain: skip it so it never
+          // poisons the atomic batch (one stale pair would revert the whole tx and
+          // waste the fee). It is reported benignly and retried on the next DIA
+          // intent. The builder re-asserts this as a final guard.
+          if (!isCreate && currentPairUtxo?.datum) {
+            const onChain = decodePairDatum(currentPairUtxo.datum);
+            const beatsOnChain =
+              intent.timestamp > BigInt(onChain.timestamp) && intent.nonce > BigInt(onChain.nonce);
+            if (!beatsOnChain) {
+              log(
+                `submitOracleUpdateBatch: skipping ${fullIntent.symbol} — intent ` +
+                  `(ts=${intent.timestamp}, nonce=${intent.nonce}) does not beat on-chain ` +
+                  `(ts=${onChain.timestamp}, nonce=${onChain.nonce}); superseded.`,
+              );
+              skippedEntries.push({ intentHash: update.intentHash, pairUnit, pairValidatorAddress });
+              continue;
+            }
+          }
+
+          preparedEntries.push({
+            update,
+            state,
+            pairStatePath,
+            pairUnit,
+            isCreate,
+            currentPairUtxo,
+            intent,
+            witness,
+          });
+        }
+
+        if (requiresConfigSigner) {
+          assertPaymentKeyHashIsConfigSigner(
+            walletDefaults.paymentKeyHash,
+            protocol.configState.validConfigSigners,
+            {
+              unauthorizedMessage:
+                "Bridge: batch pair creation requires the configured wallet to be a config admin.",
+            },
           );
         }
 
-        const isCreate = chainPairUtxos.length === 0;
-        const currentPairUtxo = chainPairUtxos[0] ?? null;
-        if (isCreate) {
-          requiresConfigSigner = true;
-        }
-
-        const pairStatePath = pairStatePathForSymbol(clientStatePath, fullIntent.symbol, pairSlugFromSymbol);
-        let existingPair = await readOptionalPairState(pairStatePath);
-        if (!isCreate && !existingPair && currentPairUtxo?.datum) {
-          const onChain = decodePairDatum(currentPairUtxo.datum);
-          existingPair = {
-            wallet: { source: "seed", address: walletAddress },
-            pair: { tokenName: pairTokenName, pairId, pairUnit, pairValidatorAddress },
-            pairState: {
-              ...onChain,
-              intent: {
-                intentType: "",
-                version: "0",
-                chainId: "0",
-                nonce: "0",
-                expiry: "0",
-                symbol: fullIntent.symbol,
-                price: onChain.price,
-                timestamp: onChain.timestamp,
-                source: "",
-                signature: "",
-                signer: onChain.signer,
-              },
-            },
-            datum: { pairCbor: currentPairUtxo.datum },
-          };
-        }
-
-        const minUtxoLovelace =
-          existingPair?.pairState.minUtxoLovelace ?? protocol.configState.minUtxoLovelace;
-
-        const state = buildState({
-          client,
-          protocol,
-          existingPair,
-          intent,
-          walletAddress,
-          pairTokenName,
-          pairId,
-          pairUnit,
-          pairValidatorAddress,
-          minUtxoLovelace,
-        });
-
-        if (pairValidatorHash !== state.scripts.pairValidatorHash) {
-          throw new Error("Bridge: pair validator hash does not match the current blueprint.");
-        }
-        if (normalizeHex(state.pair.pairId, "pair.pairId") !== normalizeHex(pairId, "intent.symbol")) {
-          throw new Error(`Bridge: intent symbol ${intent.symbol} does not match pair id ${state.pair.pairId}.`);
-        }
-        // Validate against the LIVE on-chain pair datum — the single source of
-        // truth — not the local pair-state file (which can drift behind chain).
-        // A non-create intent that does not strictly beat the on-chain
-        // (timestamp, nonce) is already superseded on chain: skip it so it never
-        // poisons the atomic batch (one stale pair would revert the whole tx and
-        // waste the fee). It is reported benignly and retried on the next DIA
-        // intent. The builder re-asserts this as a final guard.
-        if (!isCreate && currentPairUtxo?.datum) {
-          const onChain = decodePairDatum(currentPairUtxo.datum);
-          const beatsOnChain =
-            intent.timestamp > BigInt(onChain.timestamp) && intent.nonce > BigInt(onChain.nonce);
-          if (!beatsOnChain) {
+        const [firstEntry] = preparedEntries;
+        if (!firstEntry) {
+          // Every candidate was superseded on chain — nothing to build or submit.
+          // Report all as benign skips: no tx, no fee. The submitter maps each to
+          // a NonMonotonicNonce-equivalent (benign) result.
+          if (skippedEntries.length > 0) {
             log(
-              `submitOracleUpdateBatch: skipping ${fullIntent.symbol} — intent ` +
-                `(ts=${intent.timestamp}, nonce=${intent.nonce}) does not beat on-chain ` +
-                `(ts=${onChain.timestamp}, nonce=${onChain.nonce}); superseded.`,
+              `submitOracleUpdateBatch: all ${skippedEntries.length} candidate(s) superseded on chain; no tx submitted.`,
             );
-            skippedEntries.push({ intentHash: update.intentHash, pairUnit, pairValidatorAddress });
-            continue;
+            return {
+              txHash: "",
+              receiverUnit: "",
+              entries: skippedEntries.map((e) => ({
+                intentHash: e.intentHash,
+                pairUnit: e.pairUnit,
+                pairValidatorAddress: e.pairValidatorAddress,
+                isCreate: false,
+                skipped: true,
+              })),
+            };
           }
+          throw new Error("Bridge: batch submission requires at least one prepared entry.");
         }
 
-        preparedEntries.push({
-          update,
-          state,
-          pairStatePath,
-          pairUnit,
-          isCreate,
-          currentPairUtxo,
-          intent,
-          witness,
-        });
-      }
+        // Build → sign → submit with stale-input reconcile: every attempt
+        // re-fetches the script UTxO set fresh (config, receiver, pairs) and
+        // rebuilds, so a UTxO the provider's indexer still reported as live but
+        // the previous batch already spent (BadInputsUTxO after a restart / RPC
+        // turbulence) is reconciled away instead of failing the batch. For a
+        // single-wallet pool the rebuild re-selects wallet inputs from a fresh
+        // provider view; for a multi-wallet pool the wallet inputs stay pinned
+        // (overrideUTxOs above), so per-process locks + the reservation TTL +
+        // the balance-tick UTxO refresh bound their staleness instead. Non-stale
+        // errors rethrow immediately. The happy path runs the closure once.
+        const submitted = await withStaleInputReconcile(
+          async () => {
+            const currentConfigUtxo = await findSingleUtxoAtUnit(
+              lucid,
+              firstEntry.state.scripts.configValidatorAddress,
+              firstEntry.state.scripts.configUnit,
+              "config",
+            );
+            const currentReceiverUtxo = await findSingleUtxoAtUnit(
+              lucid,
+              firstEntry.state.receiver.receiverValidatorAddress,
+              firstEntry.state.receiver.receiverUnit,
+              "receiver",
+            );
+            const currentPairUtxoByUnit = new Map<string, UTxO>();
+            for (const entry of preparedEntries) {
+              if (entry.isCreate) continue;
+              const fresh = (
+                await lucid.utxosAtWithUnit(entry.state.pair.pairValidatorAddress, entry.pairUnit)
+              )[0];
+              if (fresh) currentPairUtxoByUnit.set(entry.pairUnit, fresh);
+            }
 
-      if (requiresConfigSigner) {
-        assertPaymentKeyHashIsConfigSigner(
-          walletDefaults.paymentKeyHash,
-          protocol.configState.validConfigSigners,
+            emitBatchStep(updates, "building");
+            const built = await buildBatchOracleUpdateTx(lucid, {
+              entries: preparedEntries.map((entry) => ({
+                intent: entry.intent,
+                witness: entry.witness,
+                pairArtifact: entry.state,
+                isCreate: entry.isCreate,
+              })),
+              networkNow,
+              currentConfigUtxo,
+              currentReceiverUtxo,
+              currentPairUtxoByUnit,
+              walletPaymentKeyHash: walletDefaults.paymentKeyHash,
+              protocolState: protocol,
+              clientState: client,
+            });
+
+            const builtHash = built.txSignBuilder.toHash();
+            emitBatchStep(updates, "signing", { txHash: builtHash });
+            const signedTx = await built.txSignBuilder.sign.withWallet().complete();
+            emitBatchStep(updates, "submitting", { txHash: builtHash });
+            await signedTx.submit();
+            emitBatchStep(updates, "submitted", { txHash: builtHash });
+            return {
+              txSignBuilder: built.txSignBuilder,
+              updatedPairStates: built.updatedPairStates,
+              txHash: builtHash,
+              currentReceiverUtxo,
+            };
+          },
+          async () => {},
           {
-            unauthorizedMessage:
-              "Bridge: batch pair creation requires the configured wallet to be a config admin.",
+            maxAttempts: STALE_INPUT_RECONCILE_ATTEMPTS,
+            reconcileDelayMs: STALE_INPUT_RECONCILE_DELAY_MS,
+            log,
           },
         );
-      }
+        const { txSignBuilder, updatedPairStates, txHash, currentReceiverUtxo } = submitted;
+        // The batch tx is built and its hash is known; record exactly which
+        // wallet inputs it consumed and which change it produced. Assigning here
+        // (before the confirmation wait) guarantees a tx that landed on chain
+        // marks its inputs consumed even if a later confirmation/reorg throws.
+        settled = {
+          consumedOutRefs: computeSpentWalletOutRefs(walletUtxos, txSignBuilder),
+          producedUtxos: computeWalletChangeOutputs(txSignBuilder, txHash, reservation.address),
+        };
+        // Release any pinned wallet view now the build is done: while the pin is
+        // set, wallet.getUtxos() returns the frozen reserved subset, which would
+        // stall the settlement wait and skew the post-confirm wallet-balance
+        // gauges. Clearing it makes every post-build chain read query the live
+        // provider again. A no-op when the single-wallet path never pinned.
+        lucid.overrideUTxOs([]);
 
-      const [firstEntry] = preparedEntries;
-      if (!firstEntry) {
-        // Every candidate was superseded on chain — nothing to build or submit.
-        // Report all as benign skips: no tx, no fee. The submitter maps each to
-        // a NonMonotonicNonce-equivalent (benign) result.
-        if (skippedEntries.length > 0) {
-          log(
-            `submitOracleUpdateBatch: all ${skippedEntries.length} candidate(s) superseded on chain; no tx submitted.`,
+        emitBatchStep(updates, "waiting_confirm", { txHash });
+        const confirmed = await awaitTxConfirmation({
+          lucid,
+          txHash,
+          reportProgress: log,
+          label: `oracle update batch (${updates.map((update) => update.enriched.fullIntent.symbol).join(", ")})`,
+        });
+
+        if (!confirmed) {
+          throw new Error(
+            `Transaction ${txHash} was submitted but confirmation was never observed ` +
+            `(intentCount=${updates.length}).`,
           );
-          return {
-            txHash: "",
-            receiverUnit: "",
-            entries: skippedEntries.map((e) => ({
+        }
+
+        // Honour `cardano.confirmation_depth` — see the single-tx path for
+        // the full rationale (RealBridgeOptions.confirmationDepth).
+        if (confirmationDepth > 1) {
+          log(`awaiting ${confirmationDepth - 1} extra block(s) past batch inclusion of ${txHash}`);
+          await sleep((confirmationDepth - 1) * 20_000);
+          await assertTxStillOnChain({ txHash });
+        }
+
+        emitBatchStep(updates, "waiting_utxo", { txHash });
+        await waitForWalletSettlement({
+          wallet,
+          previousUtxos: walletUtxos,
+          transaction: txSignBuilder,
+          label: "oracle update batch",
+        });
+        await Promise.all([
+          ...preparedEntries.map((entry) =>
+            waitForUnitUtxoReplacement({
+              lucid,
+              address: entry.state.pair.pairValidatorAddress,
+              unit: entry.pairUnit,
+              label: `pair:${entry.update.enriched.fullIntent.symbol}`,
+              previousOutRef: entry.currentPairUtxo ?? undefined,
+              txHash,
+            })),
+          waitForUnitUtxoReplacement({
+            lucid,
+            address: firstEntry.state.receiver.receiverValidatorAddress,
+            unit: firstEntry.state.receiver.receiverUnit,
+            label: "receiver",
+            previousOutRef: currentReceiverUtxo,
+            txHash,
+          }),
+        ]);
+
+        const updatedPairStateByUnit = new Map<
+          string,
+          { pairUnit: string; nextPairState: unknown; nextPairDatumCbor: string }
+        >(
+          updatedPairStates.map((state: { pairUnit: string; nextPairState: unknown; nextPairDatumCbor: string }) => [
+            state.pairUnit,
+            state,
+          ]),
+        );
+
+        emitBatchStep(updates, "writing_state", { txHash });
+        await Promise.all(
+          preparedEntries.map(async (entry) => {
+            const updatedState = updatedPairStateByUnit.get(entry.pairUnit);
+            if (!updatedState) {
+              throw new Error(`Bridge: missing updated pair state for ${entry.pairUnit}.`);
+            }
+            await writePairState(entry.pairStatePath, {
+              wallet: { source: walletSource, address: walletAddress },
+              pair: { ...entry.state.pair },
+              pairState: updatedState.nextPairState,
+              datum: { pairCbor: updatedState.nextPairDatumCbor },
+              transactions: appendTransactionRecord(entry.state.transactions, {
+                step: "feeder:update:batch",
+                submittedTxHash: txHash,
+                confirmed,
+              }),
+            });
+          }),
+        );
+
+        // Capture post-confirm balances once for the whole batch — the
+        // receiver, payment hook, and admin wallet are shared across all
+        // entries in this submission.
+        const postState = await capturePostConfirmState({
+          lucid,
+          wallet,
+          receiverValidatorAddress: firstEntry.state.receiver.receiverValidatorAddress as string,
+          depositValidatorAddress: firstEntry.state.receiver.depositValidatorAddress as string | undefined,
+          receiverUnit: firstEntry.state.receiver.receiverUnit as string,
+          paymentHookValidatorAddress: firstEntry.state.scripts.paymentHookValidatorAddress,
+          paymentHookUnit: firstEntry.state.scripts.paymentHookUnit,
+          log,
+        });
+
+        return {
+          txHash,
+          receiverUnit: firstEntry.state.receiver.receiverUnit as string,
+          entries: [
+            ...preparedEntries.map((entry) => ({
+              intentHash: entry.update.intentHash,
+              pairUnit: entry.pairUnit,
+              pairValidatorAddress: entry.state.pair.pairValidatorAddress,
+              isCreate: entry.isCreate,
+              skipped: false,
+            })),
+            ...skippedEntries.map((e) => ({
               intentHash: e.intentHash,
               pairUnit: e.pairUnit,
               pairValidatorAddress: e.pairValidatorAddress,
               isCreate: false,
               skipped: true,
             })),
-          };
-        }
-        throw new Error("Bridge: batch submission requires at least one prepared entry.");
+          ],
+          postState,
+        };
+      } finally {
+        arbiter.release(reservation, settled);
       }
-
-      // Build → sign → submit with stale-input reconcile: every attempt
-      // re-fetches the script UTxO set fresh (config, receiver, pairs) and
-      // rebuilds, so a UTxO the provider's indexer still reported as live but
-      // the previous batch already spent (BadInputsUTxO after a restart / RPC
-      // turbulence) is reconciled away instead of failing the batch. Wallet
-      // inputs self-heal — lucid re-selects from a fresh provider view on each
-      // rebuild. Non-stale errors rethrow immediately. The happy path runs the
-      // closure exactly once.
-      const submitted = await withStaleInputReconcile(
-        async () => {
-          const currentConfigUtxo = await findSingleUtxoAtUnit(
-            lucid,
-            firstEntry.state.scripts.configValidatorAddress,
-            firstEntry.state.scripts.configUnit,
-            "config",
-          );
-          const currentReceiverUtxo = await findSingleUtxoAtUnit(
-            lucid,
-            firstEntry.state.receiver.receiverValidatorAddress,
-            firstEntry.state.receiver.receiverUnit,
-            "receiver",
-          );
-          const currentPairUtxoByUnit = new Map<string, UTxO>();
-          for (const entry of preparedEntries) {
-            if (entry.isCreate) continue;
-            const fresh = (
-              await lucid.utxosAtWithUnit(entry.state.pair.pairValidatorAddress, entry.pairUnit)
-            )[0];
-            if (fresh) currentPairUtxoByUnit.set(entry.pairUnit, fresh);
-          }
-
-          emitBatchStep(updates, "building");
-          const built = await buildBatchOracleUpdateTx(lucid, {
-            entries: preparedEntries.map((entry) => ({
-              intent: entry.intent,
-              witness: entry.witness,
-              pairArtifact: entry.state,
-              isCreate: entry.isCreate,
-            })),
-            networkNow,
-            currentConfigUtxo,
-            currentReceiverUtxo,
-            currentPairUtxoByUnit,
-            walletPaymentKeyHash: walletDefaults.paymentKeyHash,
-            protocolState: protocol,
-            clientState: client,
-          });
-
-          const builtHash = built.txSignBuilder.toHash();
-          emitBatchStep(updates, "signing", { txHash: builtHash });
-          const signedTx = await built.txSignBuilder.sign.withWallet().complete();
-          emitBatchStep(updates, "submitting", { txHash: builtHash });
-          await signedTx.submit();
-          emitBatchStep(updates, "submitted", { txHash: builtHash });
-          return {
-            txSignBuilder: built.txSignBuilder,
-            updatedPairStates: built.updatedPairStates,
-            txHash: builtHash,
-            currentReceiverUtxo,
-          };
-        },
-        async () => {},
-        {
-          maxAttempts: STALE_INPUT_RECONCILE_ATTEMPTS,
-          reconcileDelayMs: STALE_INPUT_RECONCILE_DELAY_MS,
-          log,
-        },
-      );
-      const { txSignBuilder, updatedPairStates, txHash, currentReceiverUtxo } = submitted;
-
-      emitBatchStep(updates, "waiting_confirm", { txHash });
-      const confirmed = await awaitTxConfirmation({
-        lucid,
-        txHash,
-        reportProgress: log,
-        label: `oracle update batch (${updates.map((update) => update.enriched.fullIntent.symbol).join(", ")})`,
-      });
-
-      if (!confirmed) {
-        throw new Error(
-          `Transaction ${txHash} was submitted but confirmation was never observed ` +
-          `(intentCount=${updates.length}).`,
-        );
-      }
-
-      // Honour `cardano.confirmation_depth` — see the single-tx path for
-      // the full rationale (RealBridgeOptions.confirmationDepth).
-      if (confirmationDepth > 1) {
-        log(`awaiting ${confirmationDepth - 1} extra block(s) past batch inclusion of ${txHash}`);
-        await sleep((confirmationDepth - 1) * 20_000);
-        await assertTxStillOnChain({ txHash });
-      }
-
-      emitBatchStep(updates, "waiting_utxo", { txHash });
-      await waitForWalletSettlement({
-        wallet,
-        previousUtxos: walletUtxos,
-        transaction: txSignBuilder,
-        label: "oracle update batch",
-      });
-      await Promise.all([
-        ...preparedEntries.map((entry) =>
-          waitForUnitUtxoReplacement({
-            lucid,
-            address: entry.state.pair.pairValidatorAddress,
-            unit: entry.pairUnit,
-            label: `pair:${entry.update.enriched.fullIntent.symbol}`,
-            previousOutRef: entry.currentPairUtxo ?? undefined,
-            txHash,
-          })),
-        waitForUnitUtxoReplacement({
-          lucid,
-          address: firstEntry.state.receiver.receiverValidatorAddress,
-          unit: firstEntry.state.receiver.receiverUnit,
-          label: "receiver",
-          previousOutRef: currentReceiverUtxo,
-          txHash,
-        }),
-      ]);
-
-      const updatedPairStateByUnit = new Map<
-        string,
-        { pairUnit: string; nextPairState: unknown; nextPairDatumCbor: string }
-      >(
-        updatedPairStates.map((state: { pairUnit: string; nextPairState: unknown; nextPairDatumCbor: string }) => [
-          state.pairUnit,
-          state,
-        ]),
-      );
-
-      emitBatchStep(updates, "writing_state", { txHash });
-      await Promise.all(
-        preparedEntries.map(async (entry) => {
-          const updatedState = updatedPairStateByUnit.get(entry.pairUnit);
-          if (!updatedState) {
-            throw new Error(`Bridge: missing updated pair state for ${entry.pairUnit}.`);
-          }
-          await writePairState(entry.pairStatePath, {
-            wallet: { source: walletSource, address: walletAddress },
-            pair: { ...entry.state.pair },
-            pairState: updatedState.nextPairState,
-            datum: { pairCbor: updatedState.nextPairDatumCbor },
-            transactions: appendTransactionRecord(entry.state.transactions, {
-              step: "feeder:update:batch",
-              submittedTxHash: txHash,
-              confirmed,
-            }),
-          });
-        }),
-      );
-
-      // Capture post-confirm balances once for the whole batch — the
-      // receiver, payment hook, and admin wallet are shared across all
-      // entries in this submission.
-      const postState = await capturePostConfirmState({
-        lucid,
-        wallet,
-        receiverValidatorAddress: firstEntry.state.receiver.receiverValidatorAddress as string,
-        depositValidatorAddress: firstEntry.state.receiver.depositValidatorAddress as string | undefined,
-        receiverUnit: firstEntry.state.receiver.receiverUnit as string,
-        paymentHookValidatorAddress: firstEntry.state.scripts.paymentHookValidatorAddress,
-        paymentHookUnit: firstEntry.state.scripts.paymentHookUnit,
-        log,
-      });
-
-      return {
-        txHash,
-        receiverUnit: firstEntry.state.receiver.receiverUnit as string,
-        entries: [
-          ...preparedEntries.map((entry) => ({
-            intentHash: entry.update.intentHash,
-            pairUnit: entry.pairUnit,
-            pairValidatorAddress: entry.state.pair.pairValidatorAddress,
-            isCreate: entry.isCreate,
-            skipped: false,
-          })),
-          ...skippedEntries.map((e) => ({
-            intentHash: e.intentHash,
-            pairUnit: e.pairUnit,
-            pairValidatorAddress: e.pairValidatorAddress,
-            isCreate: false,
-            skipped: true,
-          })),
-        ],
-        postState,
-      };
     },
 
     async snapshotBalances(params: {
@@ -1498,6 +1617,31 @@ export function createRealOracleIntentBridge(
           `merged=${result.consolidatedUtxoCount}`,
       );
       return { txHash: result.submittedTxHash, confirmed: result.confirmed };
+    },
+
+    async refreshWalletPoolUtxos(): Promise<void> {
+      // Read each pool wallet's current UTxO set from chain and replace its
+      // arbiter cache. `utxosAt` needs only the address (no wallet select), so a
+      // single Lucid built from the base config serves every wallet. The arbiter
+      // still excludes locked outRefs from spendable() and re-applies its release
+      // delta, so this refresh is safe against live reservations.
+      const lucid = await makeConfiguredLucidWithConfig(getCliConfig());
+      for (const poolWallet of walletPool.all()) {
+        try {
+          const utxos = await lucid.utxosAt(poolWallet.address);
+          const mapped: WalletUtxo[] = utxos.map((u) => ({
+            outRef: `${u.txHash}#${u.outputIndex}`,
+            lovelace: u.assets.lovelace,
+            hasOnlyAda: Object.keys(u.assets).length === 1,
+          }));
+          walletPool.setUtxos(poolWallet.id, mapped);
+        } catch (error) {
+          // A transient provider failure leaves the wallet's prior cache in
+          // place; the next refresh tick retries. The arbiter falls back to
+          // `{ unavailable: true }` (retryable) if the stale cache is exhausted.
+          log(`refresh-wallet-pool: utxo query failed for ${poolWallet.id}: ${(error as Error).message}`);
+        }
+      }
     },
   };
 

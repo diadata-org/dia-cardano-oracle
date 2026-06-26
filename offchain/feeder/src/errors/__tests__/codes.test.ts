@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { classifyError, type FeederErrorCode } from "../codes.js";
+import { NON_RETRIABLE_CODES } from "../../submitter/retry-policy.js";
+import { WalletUnavailableError } from "../../submitter/wallet/wallet-arbiter.js";
 
 class TxDroppedFromChainError extends Error {
   constructor(message = "tx dropped from chain") {
@@ -21,6 +23,17 @@ describe("classifyError", () => {
     const r = classifyError(new TxDroppedFromChainError());
     assert.equal(r.code, "TxDroppedFromChain");
     assert.match(r.remediation, /re-queued/i);
+  });
+
+  it("detects WalletUnavailableError by name and maps it to a retryable code", () => {
+    const r = classifyError(new WalletUnavailableError());
+    assert.equal(r.code, "WalletUnavailable");
+    assert.match(r.remediation, /retries shortly/i);
+    assert.equal(
+      NON_RETRIABLE_CODES.has("WalletUnavailable"),
+      false,
+      "WalletUnavailable must stay retryable so the lane retries when a wallet frees up",
+    );
   });
 
   it("classifies intent-expired messages", () => {

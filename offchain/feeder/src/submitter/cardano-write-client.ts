@@ -97,7 +97,7 @@ export function createCardanoWriteClient(
   }
 
   async function submitSingleRequest(request: SubmitRequest): Promise<SubmitResult> {
-    const { intentHash, enriched, signer } = request;
+    const { intentHash, enriched } = request;
     const symbol = enriched.fullIntent.symbol;
     log(`[${label}] submit: intentHash=${intentHash} symbol=${symbol}`);
 
@@ -118,7 +118,6 @@ export function createCardanoWriteClient(
         enriched,
         intentHash,
         onStep: trackStep,
-        signer,
       });
 
       const total_ms = Date.now() - startMs;
@@ -202,10 +201,6 @@ export function createCardanoWriteClient(
         const result = await bridge.submitOracleUpdateBatch({
           clientStatePath,
           protocolStatePath,
-          // All requests in a batch share one Cardano lane (same client +
-          // protocol state) and therefore one signer; take it from the
-          // first request. The coalescer guarantees lane homogeneity.
-          signer: requests[0]?.signer,
           updates: requests.map((request) => ({
             enriched: request.enriched,
             intentHash: request.intentHash,

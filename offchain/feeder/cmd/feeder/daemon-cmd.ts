@@ -40,7 +40,6 @@ import {
   validateModularConfig,
   type ModularConfig,
   type InfrastructureConfig,
-  type RouterConfig,
   type ValidationIssue,
 } from "../../src/config/index.js";
 import { createRegistryEnricher, identityTransformer } from "../../src/pipeline/index.js";
@@ -92,8 +91,12 @@ import {
   type CoalescerManager,
   type InflightTable,
 } from "../../src/submitter/index.js";
+import { resolveWalletPoolSigners } from "../../src/submitter/wallet/load-pool.js";
+import { createWalletPool, type PoolWallet } from "../../src/submitter/wallet/wallet-pool.js";
+import { createUtxoLockTable } from "../../src/submitter/wallet/utxo-lock-table.js";
+import { createWalletArbiter } from "../../src/submitter/wallet/wallet-arbiter.js";
 import type { CardanoDestinationConfig } from "../../src/config/types.js";
-import type { SubmitRequest, SubmitResult, RouterSigner } from "../../src/submitter/types.js";
+import type { SubmitRequest, SubmitResult } from "../../src/submitter/types.js";
 import {
   isNoTransactionFailure,
   isTransactionRepresentative,
@@ -220,47 +223,6 @@ type IntentRuntimeEntry = RouterRuntimeIdentity & {
   symbol: string;
   submittedAtMs?: number;
 };
-
-/**
- * Resolve a per-router Cardano signer for every enabled router, keyed by
- * router id. Each router declares either `private_key_env` (the name of an
- * env var holding the seed/key — the recommended form) or an inline
- * `private_key` (discouraged). The resolved value's kind is inferred from
- * the env var name: a name containing `PRIVATE_KEY` yields a raw private
- * key, any other name (e.g. `…_WALLET_SEED_…`) yields a mnemonic seed.
- *
- * Fails loud: a router whose `private_key_env` names an env var that is
- * absent or empty throws at startup, rather than silently falling back to
- * a different (possibly wrong) signer. Routers with neither field — which
- * the config validator already rejects — are skipped, leaving the bridge
- * to use its global env default defensively.
- */
-function resolveRouterSigners(
-  routers: RouterConfig[],
-  report: (line: string) => void,
-): Map<string, RouterSigner> {
-  const signers = new Map<string, RouterSigner>();
-  for (const router of routers) {
-    if (router.private_key_env) {
-      const value = process.env[router.private_key_env]?.trim();
-      if (!value) {
-        throw new Error(
-          `Router "${router.id}": private_key_env "${router.private_key_env}" is not set ` +
-          `(or empty) in the environment. Set it before starting the daemon.`,
-        );
-      }
-      const kind: RouterSigner["kind"] = router.private_key_env.includes("PRIVATE_KEY")
-        ? "privateKey"
-        : "seed";
-      signers.set(router.id, { kind, value });
-      report(`daemon: router "${router.id}" signer resolved from ${router.private_key_env} (kind=${kind})`);
-    } else if (router.private_key) {
-      signers.set(router.id, { kind: "privateKey", value: router.private_key });
-      report(`daemon: router "${router.id}" signer resolved from inline private_key (kind=privateKey)`);
-    }
-  }
-  return signers;
-}
 
 function parsePositiveInteger(raw: number | undefined): number | undefined {
   if (raw === undefined) {
@@ -1027,14 +989,6 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const routerRegistry = createRouterRegistry(config.routers);
   report(`daemon: router registry loaded (${routerRegistry.all.length} router(s))`);
 
-  // Resolve each router's Cardano signer from its `private_key_env` (or the
-  // inline `private_key` fallback) ONCE at startup. Multi-client deployments
-  // give each router its own signing key; single-client deployments point
-  // every router at the same CARDANO_WALLET_SEED_<NETWORK> env var, which
-  // resolves to one shared signer. A named-but-absent env var is a hard
-  // startup error (fail loud) rather than a silent fallback to the wrong key.
-  const routerSigners = resolveRouterSigners(routerRegistry.all, report);
-
   // routerId -> customer id. Validation makes customer_id required, so the
   // runtime does not carry compatibility fallbacks here.
   const routerCustomers = new Map<string, string>(
@@ -1048,14 +1002,59 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // logs are debug-level — too verbose for normal operation.
   const debugReport = (line: string) => report(`[debug] ${line}`);
 
-  const bridge: OracleIntentBridge = dryRun
-    ? makeDryRunBridge(report)
-    : createRealOracleIntentBridge({
-        log: debugReport,
-        confirmationDepth: cardanoConfirmationDepth,
-        depositMinLovelace,
-        depositMaxPerUpdateFold,
-      });
+  let bridge: OracleIntentBridge;
+  if (dryRun) {
+    bridge = makeDryRunBridge(report);
+  } else {
+    // Resolve the signer-wallet pool ONCE at startup. The `wallets:` block
+    // declares one main wallet (the on-chain PaymentHook withdraw target) plus
+    // any pool wallets; when it is absent the pool degenerates to a single main
+    // wallet read from CARDANO_WALLET_SEED_<NETWORK>. Each entry's env var is
+    // read here (fail loud if missing); the address is derived next.
+    const networkSuffix = getCliConfig().networkSuffix;
+    const resolvedSigners = resolveWalletPoolSigners({
+      wallets: infra.wallets,
+      networkSuffix,
+      env: process.env,
+    });
+    // Derive each wallet's bech32 address from its signer. One Lucid built from
+    // the base config serves every wallet: select the key, read the address.
+    // This yields exactly the address the bridge later signs from.
+    const addressLucid = await makeConfiguredLucidWithConfig(getCliConfig());
+    const poolWallets: PoolWallet[] = [];
+    for (const resolved of resolvedSigners) {
+      if (resolved.signer.kind === "seed") {
+        addressLucid.selectWallet.fromSeed(resolved.signer.value);
+      } else {
+        addressLucid.selectWallet.fromPrivateKey(resolved.signer.value);
+      }
+      const address = await addressLucid.wallet().address();
+      poolWallets.push({ id: resolved.id, role: resolved.role, signer: resolved.signer, address });
+      report(`daemon: wallet "${resolved.id}" (${resolved.role}) resolved kind=${resolved.signer.kind} address=${address}`);
+    }
+    // The arbiter hands out a wallet + a disjoint UTxO subset per build so
+    // parallel lanes never draw the same fee/collateral input. The UTxO-lock TTL
+    // reuses worker_pool.inflight_timeout_ms (the same safeguard window the
+    // in-flight tables use).
+    const walletPool = createWalletPool(poolWallets);
+    const arbiter = createWalletArbiter({
+      pool: walletPool,
+      lockTable: createUtxoLockTable(),
+      lockTtlMs: inflightTimeoutMs,
+    });
+    bridge = createRealOracleIntentBridge({
+      log: debugReport,
+      arbiter,
+      walletPool,
+      confirmationDepth: cardanoConfirmationDepth,
+      depositMinLovelace,
+      depositMaxPerUpdateFold,
+    });
+    // Prime the arbiter's UTxO cache once before the queue starts so the first
+    // acquire sees live wallet UTxOs; the balance tick refreshes it thereafter.
+    await bridge.refreshWalletPoolUtxos();
+    report(`daemon: wallet pool primed (${poolWallets.length} wallet(s))`);
+  }
 
   const retryPolicy = createDefaultRetryPolicy({ maxRetries, delayMs: retryDelayMs });
 
@@ -2034,6 +2033,14 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   }
 
   async function refreshBalanceGauges(): Promise<void> {
+    // Refresh the wallet arbiter's UTxO cache once per tick (the pool is global,
+    // not per-destination) so reservations always draw on live UTxOs. Guarded so
+    // a pool-refresh failure never blocks the per-client balance + health pass.
+    try {
+      await bridge.refreshWalletPoolUtxos();
+    } catch (err) {
+      report(`wallet-pool-refresh: failed: ${(err as Error).message}`);
+    }
     let primaryOk = false;
     for (const dest of balanceRefreshDests) {
       try {
@@ -2297,7 +2304,6 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           dedupCache,
           enricher,
           routerRegistry,
-          routerSigners,
           routerCustomers,
           priceCache,
           latestIntents,
@@ -2362,7 +2368,6 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           dedupCache,
           enricher,
           routerRegistry,
-          routerSigners,
           routerCustomers,
           priceCache,
           latestIntents,
@@ -2452,7 +2457,6 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           observedAtMs: Date.now(),
           scannerType: "inject",
           routerRegistry,
-          routerSigners,
           routerCustomers,
           priceCache,
           latestIntents,
@@ -2509,10 +2513,6 @@ type ProcessOneEventInputs = {
   dedupCache: ReturnType<typeof createDedupCache>;
   enricher: (event: ExtractedEvent) => Promise<EnrichedIntent>;
   routerRegistry: ReturnType<typeof createRouterRegistry>;
-  /** Per-router Cardano signer, keyed by router id. Resolved once at
-   *  startup; attached to each SubmitRequest so the bridge signs with the
-   *  router's own key. */
-  routerSigners: Map<string, RouterSigner>;
   /** Router id -> customer_id (the router's owner). Used to stamp the runtime
    *  identity once, so downstream metrics/logs read `customerId` off the entry
    *  instead of looking it up again. */
@@ -2552,7 +2552,6 @@ async function processOneEvent(inputs: ProcessOneEventInputs): Promise<void> {
     observedAtMs: inputs.observedAtMs,
     scannerType: inputs.scannerType,
     routerRegistry: inputs.routerRegistry,
-    routerSigners: inputs.routerSigners,
     routerCustomers: inputs.routerCustomers,
     priceCache: inputs.priceCache,
     latestIntents: inputs.latestIntents,
@@ -2583,7 +2582,7 @@ type ProcessEnrichedIntentInputs = Omit<
 
 async function processEnrichedIntent(inputs: ProcessEnrichedIntentInputs): Promise<void> {
   const {
-    enriched, observedAtMs, scannerType, routerRegistry, routerSigners, routerCustomers,
+    enriched, observedAtMs, scannerType, routerRegistry, routerCustomers,
     priceCache, latestIntents, coalescerManager, updatePoolManager, fileLogger, db, intentRuntime, dryRun, report, metrics,
   } = inputs;
   const event = enriched.event;
@@ -2777,7 +2776,6 @@ async function processEnrichedIntent(inputs: ProcessEnrichedIntentInputs): Promi
       destination: cardano,
       routerId: dispatch.routerId,
       destinationIndex: dispatch.destinationIndex,
-      signer: routerSigners.get(dispatch.routerId),
     };
 
     // hand off to coalescer (supersession + accumulation window)
@@ -2972,6 +2970,9 @@ function makeDryRunBridge(report: (line: string) => void): OracleIntentBridge {
         `daemon: [dry-run bridge] consolidateWallet collateral=${params.collateralLovelace} (no-op)`,
       );
       return { txHash: null, confirmed: false };
+    },
+    async refreshWalletPoolUtxos() {
+      // Dry-run never touches chain and has no arbiter; nothing to refresh.
     },
   };
 }

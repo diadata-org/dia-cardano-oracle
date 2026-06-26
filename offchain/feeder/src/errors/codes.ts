@@ -50,6 +50,9 @@ export type FeederErrorCode =
   /** The intent was still in the feeder queue when it became too old to
    *  be worth submitting (> `max_intent_age_at_flush`). */
   | "IntentAgedOut"
+  /** Every signer wallet was momentarily reserved or short on clean UTxOs when
+   *  the build asked the arbiter for one. Transient — the lane retries shortly. */
+  | "WalletUnavailable"
   /** Lucid tx builder or signing failed for a reason not covered above. */
   | "BuilderError"
   /** A non-Error value was thrown or no pattern matched. */
@@ -90,6 +93,15 @@ export function classifyError(err: unknown): ClassifiedError {
       remediation:
         "The submitted transaction was rolled back by a chain reorganisation. " +
         "The intent will be re-queued on the next incoming event.",
+    };
+  }
+
+  if (err.name === "WalletUnavailableError") {
+    return {
+      code: "WalletUnavailable",
+      remediation:
+        "All signer wallets are momentarily reserved or short on clean UTxOs. " +
+        "The lane retries shortly; top up or add pool wallets if it persists.",
     };
   }
 
