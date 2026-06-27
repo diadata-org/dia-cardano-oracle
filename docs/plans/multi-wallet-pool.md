@@ -57,11 +57,19 @@ files, function signatures, tests, acceptance criteria, and a QA gate. Follow th
       stay in the feeder** (`config/constants.ts` with YAML pointers); the CLI gets
       values via PARAMETERS — the `wallet:split` command builds the profile from
       flags, the feeder daemon from `wallet_shape` YAML.
-    - **Remaining → 3d-iii step 5**: the daemon trigger for BOTH paths on the
-      balance tick (`shouldAutoConsolidate` per-wallet + `shouldAutoSplit`), each
-      gated by its own flag, each enqueued like the other maintenance ops. Needs
-      the per-wallet snapshot (largest-UTxO + usable count per wallet) — shared with
-      Phase 4's per-wallet gauges and 3c-ii's funding loop.
+    - ✅ **daemon auto-split trigger (3d-iii step 5)**: once per balance tick the
+      daemon reads `arbiter.stats()` (now exposing `maxUtxoLovelace` +
+      `usableUtxoCount` per wallet, surfaced via `bridge.walletStats()`) and
+      `shouldAutoSplit`-s each concentrated wallet, detached from the client lanes
+      (the arbiter's per-UTxO locks are the safety), gated by `auto_split` + a
+      per-wallet in-progress guard.
+    - **auto-consolidate stays main-wallet** (decision): the existing
+      `maybeAutoConsolidate` runs on the main wallet, where dust fragmentation
+      actually happens (it receives withdraws + pays fees). Pool wallets get clean
+      funding chunks and are kept in profile by auto-split, so each fee payment
+      returns a working-sized UTxO — they do not realistically fragment.
+      Generalizing consolidate to per-wallet (mirroring split's signer + arbiter
+      reservation plumbing) is a documented LOW-VALUE follow-up, not done here.
 - ⬜ **Phase 4 — per-wallet observability** (expanded, see [Observability](#observability-per-wallet)):
   - **per-wallet gauges** (`wallet` label) for balance, largest-UTxO, usable-UTxO
     count, reservations — fed from `arbiter.stats()` (computed today, used by
