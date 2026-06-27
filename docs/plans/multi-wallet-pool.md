@@ -34,27 +34,56 @@ files, function signatures, tests, acceptance criteria, and a QA gate. Follow th
     band resolved from `wallet_pool` ?? defaults.
   - **3c-iii** — per-wallet selectors on `settle` / `withdrawFromPaymentHook`
     (withdraw is main-only via `acquireWallet(main)`; settle can use any wallet).
-- 🚧 **Phase 3d — wallet UTxO shaping (single-wallet parallelism, top priority)**:
-  the pure planner `planWalletReshape` ✅ and the full `wallet_shape` config
-  (constants + types + validator + commented infra-yaml example) ✅ are done.
-  **Remaining (wiring):**
-  - **3d-ii** — `arbiter.acquireSpecificUtxos(walletId, outRefs)` (reserve the
-    exact UTxOs the planner chose), the CLI `reshape-wallet` tx (self-payment to
-    the profile, pinned + returning consumed/produced), and the bridge
-    `reshapeWallet({ walletId })` method.
-  - **3d-iii** — the daemon reshape trigger on the balance tick, and **retiring
-    `consolidateWallet`** (delete the CLI op, bridge method, auto-consolidate
-    trigger, and `wallet:consolidate` command — the shaper subsumes it).
-- ⬜ **Phase 4 — per-wallet observability**: a `wallet` label on the admin-wallet
-  gauges + every `.set()` site; `AdminWalletLow` / `AdminWalletFragmented`
-  per-wallet; new `MainWalletCannotFundPool` / `PoolWalletLow` alerts + pool /
-  shape gauges; a `$wallet` dashboard variable; threshold-drift extended.
+- 🚧 **Phase 3d — wallet UTxO shaping = TWO opposite, separate paths**. The wallet
+  has two opposite shape problems; each is its own clear path (own alert, own auto
+  flag, own manual command). **Nothing is retired** — `consolidate` stays; `split`
+  is added beside it. See [the design decision](#phase-3d--wallet-utxo-shaping-two-opposite-paths).
+  - **Fragmented (dust)** → `consolidate` (merge dust → collateral + working). The
+    existing CLI op, bridge method, auto-trigger, and `AdminWalletLow`/
+    `AdminWalletFragmented` alerts **all stay**; the alert becomes per-wallet.
+  - **Concentrated (few + big)** → `split` (break a `> split_above` UTxO into the
+    profile). The NEW path. **Done (3d-iii steps 1–4):**
+    - ✅ **renamed reshape → split** end to end (`planWalletSplit`, `split-wallet.ts`,
+      `bridge.splitWallet`, `wallet:split` CLI).
+    - ✅ **`min_usable_utxos`** YAML knob (constant + type + validator + test).
+    - ✅ **`shouldAutoSplit`** pure decision (mirror of `shouldAutoConsolidate`) +
+      the **`auto_split`** flag in the `alerting` block. Split trigger:
+      `∃ pure-ADA UTxO > split_above_lovelace` **AND** `usableUtxoCount <
+      min_usable_utxos` — a lone big UTxO in an otherwise healthy wallet is left
+      alone (splitting only buys parallelism the wallet lacks).
+    - ✅ **planner moved to the CLI** — `planWalletSplit` + its types live in
+      `cli/src/wallet/split-plan.ts` beside the `split-wallet` executor (the CLI
+      owns "how to split"; the feeder imports the pure planner). **Config defaults
+      stay in the feeder** (`config/constants.ts` with YAML pointers); the CLI gets
+      values via PARAMETERS — the `wallet:split` command builds the profile from
+      flags, the feeder daemon from `wallet_shape` YAML.
+    - **Remaining → 3d-iii step 5**: the daemon trigger for BOTH paths on the
+      balance tick (`shouldAutoConsolidate` per-wallet + `shouldAutoSplit`), each
+      gated by its own flag, each enqueued like the other maintenance ops. Needs
+      the per-wallet snapshot (largest-UTxO + usable count per wallet) — shared with
+      Phase 4's per-wallet gauges and 3c-ii's funding loop.
+- ⬜ **Phase 4 — per-wallet observability** (expanded, see [Observability](#observability-per-wallet)):
+  - **per-wallet gauges** (`wallet` label) for balance, largest-UTxO, usable-UTxO
+    count, reservations — fed from `arbiter.stats()` (computed today, used by
+    nobody). These BACK the per-wallet alerts.
+  - **per-wallet alerts**: `WalletFragmented{wallet}` (dust, critical) +
+    `WalletConcentrated{wallet}` (few+big, warning) — the two opposite shape sides;
+    `PoolWalletLow{wallet}` + `MainWalletCannotFundPool`; existing `AdminWalletLow`
+    becomes per-wallet.
+  - **`wallet` label on EVERY tx metric** — every oracle-update / settle / withdraw
+    / fund / split / consolidate tx records which wallet signed it (the reservation
+    already carries `walletId`), so EVERY panel — incl. the tx panels — filters by
+    wallet. Low cardinality (a handful of wallets).
+  - **a new Grafana dashboard** showing everything per-wallet for all wallets, with
+    a `$wallet` template filter; the `$wallet` var is added to the existing
+    dashboards too. `threshold-drift` extended for the new keys.
 - ⬜ **Phase 5 — docs + verification**: architecture doc (pool + arbiter + funding
-  + shaper), feeder README, grafana-dashboards; the emulator integration test
-  (two parallel lanes on a one-wallet pool both confirm; a reshaped single wallet
-  backs N lanes); full CLI + feeder suites green.
+  + the two shape paths), feeder README, grafana-dashboards; the emulator
+  integration test (two parallel lanes on a one-wallet pool both confirm; a split
+  single wallet backs N lanes); full CLI + feeder suites green.
 
-**Test counts as of this checkpoint:** feeder 761, CLI 56, all green.
+**Test counts as of this checkpoint:** feeder 768, CLI 58, all green (3d-iii steps
+1–4 landed; the 6 split-planner tests moved to the CLI with the planner).
 
 ## Contents
 
@@ -76,6 +105,7 @@ files, function signatures, tests, acceptance criteria, and a QA gate. Follow th
   - [Phase 1 — Arbiter core (pure, TDD)](#phase-1--arbiter-core-pure-tdd)
   - [Phase 2 — Build-seam integration](#phase-2--build-seam-integration)
   - [Phase 3 — Per-wallet lifecycle and main→pool funding](#phase-3--per-wallet-lifecycle-and-mainpool-funding)
+  - [Phase 3d — Wallet UTxO shaping (two opposite paths)](#phase-3d--wallet-utxo-shaping-two-opposite-paths)
   - [Phase 4 — Per-wallet observability](#phase-4--per-wallet-observability)
   - [Phase 5 — Docs and verification](#phase-5--docs-and-verification)
 - [Patterns to mirror](#patterns-to-mirror)
@@ -281,20 +311,49 @@ Everything single-wallet today becomes per-wallet, keyed by `walletId`:
 
 ## Observability (per wallet)
 
-- Add a `wallet` label to `cardano_admin_wallet_lovelace` and
-  `cardano_admin_wallet_max_utxo_lovelace`; the balance-refresh tick emits one
-  series per wallet.
-- Alerts `AdminWalletLow` / `AdminWalletFragmented` carry the `wallet` label (fire
-  per wallet). New alerts: `MainWalletCannotFundPool` (critical),
-  `PoolWalletLow` (warning — fan-out should self-heal), and a pool-utilization /
-  lock-contention gauge for visibility.
-- New metrics: `cardano_wallet_pool_reservations` (per wallet, gauge),
-  `cardano_wallet_pool_acquire_unavailable_total` (counter),
-  `cardano_pool_fund_total{wallet,outcome}` (counter).
-- Dashboard: a `$wallet` template variable; the two admin-wallet panels become
-  per-wallet; a pool-overview row (free/busy, spendable per wallet, fund events).
-- Thresholds stay per-network in YAML; `generate-monitoring` writes them and the
-  threshold-drift test guards them (extend for the new keys).
+Per-wallet metrics are not a nice-to-have — **the per-wallet alerts read them**, so
+they come first. `arbiter.stats()` already computes per-wallet `reservations` +
+`spendableLovelace` and is called by nobody today; the balance tick will emit it.
+
+**Per-wallet balance/shape gauges** (all carry a `wallet` label; one series per
+wallet, emitted on the balance-refresh tick):
+
+- `cardano_wallet_lovelace{wallet}` — total spendable (was `cardano_admin_wallet_lovelace`).
+- `cardano_wallet_max_utxo_lovelace{wallet}` — largest pure-ADA UTxO (collateral
+  floor; was `cardano_admin_wallet_max_utxo_lovelace`).
+- `cardano_wallet_usable_utxos{wallet}` — count of arbiter-usable pure-ADA UTxOs
+  (the split trigger's "few" side).
+- `cardano_wallet_pool_reservations{wallet}` — active reservations (free vs busy).
+- `cardano_wallet_pool_acquire_unavailable_total` (counter) — backpressure events.
+- `cardano_pool_fund_total{wallet,outcome}` (counter) — fund events per pool wallet.
+
+**`wallet` label on EVERY transaction metric.** Every tx the feeder builds is signed
+by a reservation that already carries `walletId`, so threading that label into the
+tx metrics is free of new plumbing. Add the `wallet` label to the existing tx
+counters/histograms (submit count, confirmation latency, fee, retries, failures) so
+EVERY panel — including the transaction panels — can be filtered by wallet, and an
+operator can see which txs each wallet performed. Cardinality is bounded (a handful
+of wallets) so this is safe for Prometheus.
+
+**Per-wallet alerts** — the two opposite shape sides plus balance, all per wallet:
+
+| Alert | Severity | Fires when | Auto-action it pairs with |
+|---|---|---|---|
+| `WalletFragmented{wallet}` | critical | largest pure-ADA UTxO < collateral floor (can't build) | auto-`consolidate` |
+| `WalletConcentrated{wallet}` | warning | `∃ UTxO > split_above` AND `usable < min_usable_utxos` | auto-`split` |
+| `WalletLow{wallet}` | critical | total spendable < `wallet_low_lovelace` | fund (pool) / withdraw (main) |
+| `PoolWalletLow{wallet}` | warning | pool wallet spendable < `pool_wallet_low_lovelace` (fan-out should self-heal) | auto-fund main→pool |
+| `MainWalletCannotFundPool` | critical | a pool is low AND main can't fund it without breaking its reserve | manual top-up of main |
+
+`WalletFragmented` ↔ `WalletConcentrated` are **mutually exclusive** (dust ⇒ no big
+UTxO; concentrated ⇒ no dust), which is exactly why they are two alerts, not one.
+
+**Dashboards.** A NEW Grafana dashboard surfaces everything per-wallet for all
+wallets at once, with a `$wallet` template filter (a multi-value `label_values`
+query over the `wallet` label). The `$wallet` variable is also added to the
+existing dashboards (default `.*` so current panels are unchanged) so the tx panels
+can be sliced by wallet. Thresholds stay per-network in YAML; `generate-monitoring`
+writes them and the threshold-drift test guards them (extend for the new keys).
 
 ## Phases
 
@@ -439,78 +498,114 @@ and each call acquires at the connect step and releases in a `finally`.
 - **Acceptance**: a low pool wallet is topped up to target from the main in an
   integration test; main reserve respected; cooldown honoured.
 
-### Phase 3d — Wallet UTxO shaping (single-wallet parallelism)
+### Phase 3d — Wallet UTxO shaping (two opposite paths)
 
 **This is the highest-value piece for single-wallet operation, arguably more
 important than the multi-wallet pool.** The arbiter already lets one wallet serve
 parallel lanes by handing each a disjoint UTxO subset — but only over the UTxOs
-that exist. A wallet naturally drifts toward few UTxOs (change accumulates; the
-old consolidate merges everything into one collateral UTxO + one working UTxO),
-so in practice a single wallet can back only one lane at a time. With more clients
-than wallets, and key management being the cost of extra wallets, making each
-wallet hold many usable UTxOs is the primary lever; the pool is then optional
-scale-out.
+that exist. With more clients than wallets, and key management being the cost of
+extra wallets, making each wallet hold many usable UTxOs is the primary lever; the
+pool is then optional scale-out.
 
-The maintenance op evolves from "consolidate to 1 collateral + 1 working" into
-"**shape the wallet to a target UTxO profile**" — splitting a large UTxO into many
-small ones AND merging dust, both toward the profile. The old `consolidateWallet`
-is subsumed (deleted, not left as an orphan): merging fragmented dust is the
-degenerate case of reshaping toward the profile.
+A wallet's UTxO set drifts in **two opposite directions**, and each is a separate,
+clearly-named path with its own alert, its own optional auto-flag, and its own
+manual command. **Nothing is retired** — `consolidate` and `split` coexist:
 
-- **Config — a `wallet_shape` block** in `infrastructure.<network>.yaml` (applies
-  to EVERY wallet, pool or not, so single-wallet deployments use it too). Each key
-  falls back to a `DEFAULT_*` constant in `config/constants.ts`; nothing inline.
+| Direction | Symptom | Path | Alert | Auto flag | Manual CLI |
+|---|---|---|---|---|---|
+| **Fragmented** | shattered into dust → no collateral-capable UTxO → every build traps | `consolidate` (merge dust → collateral + working; existing, has an input cap) | `WalletFragmented{wallet}` (critical) | `auto_consolidate_below_lovelace` | `wallet:consolidate` |
+| **Concentrated** | few + big UTxOs → can't feed parallel lanes | `split` (break a `> split_above` UTxO into the profile; NEW) | `WalletConcentrated{wallet}` (warning) | `auto_split` | `wallet:split` |
+
+The two are **mutually exclusive** (dust ⇒ no big UTxO; concentrated ⇒ no dust), so
+two alerts, not one. Keeping `consolidate` for the dust direction means the NEW
+`split` planner does ONE thing (break big → profile) and never needs the
+bidirectional/dust-sweep complexity.
+
+**The split path** (prototyped under the name "reshape" in 3d-ii — rename to
+`split` end to end, no shim, feeder not deployed):
+
+- **Config — the `wallet_shape` block** (applies to EVERY wallet; each key falls
+  back to a `DEFAULT_*` constant; nothing inline):
   ```yaml
   wallet_shape:
     working_utxo_count: 5            # keep ~this many working UTxOs
     working_utxo_lovelace: 100000000 # 100 ADA each
     collateral_utxo_count: 5         # keep ~this many collateral UTxOs
     collateral_utxo_lovelace: 10000000  # 10 ADA each
-    split_above_lovelace: 550000000  # a pure-ADA UTxO larger than this is split
+    split_above_lovelace: 550000000  # a pure-ADA UTxO larger than this may be split
+    min_usable_utxos: 5             # NEW: split only when usable UTxOs fall below this
   ```
   Defaults: `DEFAULT_WORKING_UTXO_COUNT=5`, `DEFAULT_WORKING_UTXO_LOVELACE=100_000_000n`,
   `DEFAULT_COLLATERAL_UTXO_COUNT=5`, `DEFAULT_COLLATERAL_UTXO_LOVELACE=10_000_000n`,
-  `DEFAULT_SPLIT_ABOVE_LOVELACE=550_000_000n`. With 5 working + 5 collateral and one
-  working + one collateral reserved per build, a single wallet backs ~5 concurrent
-  lanes.
-- **Pure planner** `wallet-shape.ts` → `planWalletReshape(utxos, profile)`:
-  classifies the wallet's pure-ADA UTxOs into working / collateral / oversized /
-  dust against the profile; decides whether to reshape (a UTxO `> split_above`, or
-  fewer than `working_utxo_count` working / `collateral_utxo_count` collateral
-  UTxOs); and returns the target outputs to create (N working of working size + M
-  collateral of collateral size) plus the inputs to consume to fund them + fee +
-  change. `{ act: false, reason }` when already shaped. Pure (no chain) → fully
-  unit-tested: oversized → split; fragmented dust → merge; partially-shaped →
-  top up the missing pieces; already-shaped → no-op; insufficient balance → no-op.
-- **CLI `reshape-wallet` tx**: a self-payment that consumes the planned inputs and
-  pays the planned outputs back to the wallet (mirrors the old consolidate's
-  structure but produces the profile, not 1+1). Signed by the wallet, pins the
-  reserved UTxOs (arbitrated), returns consumed/produced like `fund-pool-wallet`.
-- **Bridge `reshapeWallet({ walletId })`** + daemon trigger on the balance tick:
-  for each wallet, `acquireWallet(walletId)` → run the reshape if the planner says
-  so; per-wallet in-progress guard; the arbiter's `unavailable` is the natural
-  backpressure (no extra lane — a client lane simply gets `WalletUnavailable` and
-  retries when UTxOs free up).
-- **Retire `consolidateWallet`**: delete the CLI op, the bridge method, the
-  auto-consolidate trigger, and the `wallet:consolidate` command; the
-  `admin_wallet_min_collateral_lovelace` / `auto_consolidate_below_lovelace`
-  thresholds fold into the shape trigger (too few collateral UTxOs).
-- **Tests (many)**: the planner matrix above; the CLI reshape tx build (fixture);
-  the daemon trigger; and an arbiter test confirming that after a reshape the
-  single wallet backs `working_utxo_count` concurrent acquires.
-- **Acceptance**: a single wallet with one fat UTxO is reshaped into the profile
-  and then serves N parallel lanes with disjoint UTxOs (no `UtxoNotFound`).
+  `DEFAULT_SPLIT_ABOVE_LOVELACE=550_000_000n`, `DEFAULT_MIN_USABLE_UTXOS=5`.
+  The defaults are named constants in the FEEDER's `config/constants.ts` (with
+  YAML pointers); `resolveWalletShapeProfile` maps the YAML over them. The CLI
+  never owns config defaults — it receives profile values as PARAMETERS.
+- ✅ **Pure planner in the CLI** `cli/src/wallet/split-plan.ts` →
+  `planWalletSplit(utxos, profile)`: consumes the oversized UTxO(s) + enough
+  top-up and pays back the missing profile pieces; `{act:false}` when already
+  shaped or funds are insufficient. It lives beside its `split-wallet` executor
+  (the CLI owns "how to split"); the feeder's `wallet-shape.ts` imports it and
+  keeps only `resolveWalletShapeProfile` (the YAML→profile seam). Fully unit-tested
+  in the CLI runner.
+- ✅ **Split trigger** (the auto decision `shouldAutoSplit`, mirror of
+  `shouldAutoConsolidate`): act only when **`∃ pure-ADA UTxO > split_above_lovelace`
+  AND `usableUtxoCount < min_usable_utxos`** — a lone big UTxO in an otherwise
+  healthy wallet is left alone; splitting is for parallelism, so it fires only when
+  the wallet is too concentrated to feed lanes. Gated by the `auto_split` flag.
+- ✅ **CLI `wallet:split` tx** (`split-wallet.ts`): a self-payment consuming the
+  planned inputs and paying the profile outputs; pins the arbitrated UTxOs; returns
+  consumed/produced. The manual `wallet:split` command in `index.ts` builds the
+  profile from flags (`--split-above`, `--working-count`, …) and self-plans.
+- ✅ **Bridge `splitWallet({ walletId })`** — plans against the arbiter cache,
+  reserves the exact UTxOs, self-pays. **Remaining**: the daemon trigger on the
+  balance tick; per-wallet in-progress guard; the arbiter's `unavailable` is the
+  natural backpressure (no extra lane).
+
+**The consolidate path** (kept, generalized to per-wallet):
+
+- `wallet:consolidate` CLI, `bridge.consolidateWallet`, `shouldAutoConsolidate`,
+  and the `auto_consolidate_below_lovelace` trigger all **stay**. The daemon loops
+  the consolidate decision over every wallet (per-wallet in-progress guard), not
+  just the admin wallet.
+- `WalletFragmented` (was `AdminWalletFragmented`) becomes per-wallet.
+
+- **Tests (many)**: the split planner matrix (green); `shouldAutoSplit` matrix;
+  `shouldAutoConsolidate` still green; the CLI split tx build; the daemon triggers
+  for both paths; an arbiter test confirming a split single wallet backs
+  `working_utxo_count` concurrent acquires.
+- **Acceptance**: a single wallet with one fat UTxO trips `WalletConcentrated`, is
+  split into the profile, and then serves N parallel lanes with disjoint UTxOs (no
+  `UtxoNotFound`); a dust-shattered wallet trips `WalletFragmented` and is
+  consolidated. Both manual commands work standalone.
 
 ### Phase 4 — Per-wallet observability
 
-- `metrics.ts`: add `wallet` label to the two admin-wallet gauges; new pool
-  metrics. All `.set()`/`.inc()` sites pass the label.
-- `monitoring/alerts.yml`: `wallet` label on existing admin alerts; add
-  `MainWalletCannotFundPool`, `PoolWalletLow`. `generate-monitoring.ts` + the
-  threshold-drift test cover the new YAML keys.
-- `feeder.json`: `$wallet` variable; per-wallet panels; pool-overview row.
-- **Tests**: metric label presence; threshold-drift; generate-monitoring idempotence.
-- **Acceptance**: dashboards render per wallet; alerts carry the label; drift test green.
+Order matters: the per-wallet gauges land first because the per-wallet alerts read
+them. Full detail in [Observability](#observability-per-wallet).
+
+- **Per-wallet gauges** (`metrics.ts`): rename the two admin-wallet gauges to
+  `cardano_wallet_*` with a `wallet` label; add `cardano_wallet_usable_utxos`,
+  `cardano_wallet_pool_reservations`, `cardano_wallet_pool_acquire_unavailable_total`,
+  `cardano_pool_fund_total{wallet,outcome}`. The balance tick emits one series per
+  wallet from `arbiter.stats()` (used by nobody today).
+- **`wallet` label on EVERY tx metric**: thread `reservation.walletId` into the
+  oracle-update / settle / withdraw / fund / split / consolidate tx counters +
+  histograms (submit, confirm latency, fee, retries, failures). No new plumbing —
+  the reservation already carries it. Every panel, incl. tx panels, becomes
+  wallet-filterable. Low cardinality.
+- **Alerts** (`monitoring/alerts.yml`): the two opposite shape alerts
+  `WalletFragmented{wallet}` (critical) + `WalletConcentrated{wallet}` (warning);
+  `WalletLow{wallet}`, `PoolWalletLow{wallet}`, `MainWalletCannotFundPool`.
+  `generate-monitoring.ts` + the threshold-drift test cover the new YAML keys
+  (`wallet_low_lovelace`, `min_usable_utxos`, the `wallet_pool.*` band).
+- **Dashboards**: a NEW per-wallet dashboard (all wallets at a glance) with a
+  `$wallet` multi-value template filter; add the `$wallet` variable (default `.*`)
+  to the existing dashboards so the tx panels can be sliced by wallet.
+- **Tests**: metric label presence (incl. tx metrics); threshold-drift;
+  generate-monitoring idempotence; the `$wallet` var query is valid.
+- **Acceptance**: the new dashboard renders per wallet and filters by `$wallet`;
+  tx panels filter by wallet; both shape alerts carry the label; drift test green.
 
 ### Phase 5 — Docs and verification
 
