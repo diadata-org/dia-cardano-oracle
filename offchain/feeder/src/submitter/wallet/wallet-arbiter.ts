@@ -79,6 +79,7 @@ export type WalletArbiter = {
   stats(): {
     wallets: Array<{
       walletId: string;
+      role: WalletRole;
       reservations: number;
       spendableLovelace: bigint;
       maxUtxoLovelace: bigint;
@@ -253,6 +254,7 @@ export function createWalletArbiter(deps: WalletArbiterDeps): WalletArbiter {
           const pureAda = pool.getUtxos(w.id).filter((u) => u.hasOnlyAda);
           return {
             walletId: w.id,
+            role: w.role,
             reservations: activeReservations.get(w.id) ?? 0,
             spendableLovelace: spendable(w.id).reduce((acc, u) => acc + u.lovelace, 0n),
             maxUtxoLovelace: pureAda.reduce((m, u) => (u.lovelace > m ? u.lovelace : m), 0n),

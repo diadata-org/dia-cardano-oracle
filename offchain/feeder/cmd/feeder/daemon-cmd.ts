@@ -94,6 +94,7 @@ import {
 } from "../../src/submitter/index.js";
 import { resolveWalletPoolSigners } from "../../src/submitter/wallet/load-pool.js";
 import { resolveWalletShapeProfile } from "../../src/submitter/wallet/wallet-shape.js";
+import { shouldFundPoolWallet } from "../../src/submitter/wallet/pool-funding.js";
 import { createWalletPool, type PoolWallet } from "../../src/submitter/wallet/wallet-pool.js";
 import { createUtxoLockTable } from "../../src/submitter/wallet/utxo-lock-table.js";
 import { createWalletArbiter } from "../../src/submitter/wallet/wallet-arbiter.js";
@@ -187,6 +188,10 @@ import {
   INTENT_INJECT_DIRNAME,
   DEFAULT_INTENT_INJECT_POLL_MS,
   DEFAULT_MIN_USABLE_UTXOS,
+  DEFAULT_POOL_WALLET_LOW_LOVELACE,
+  DEFAULT_POOL_WALLET_TARGET_LOVELACE,
+  DEFAULT_MAIN_WALLET_RESERVE_LOVELACE,
+  DEFAULT_POOL_FUND_MIN_INTERVAL_MS,
 } from "../../src/config/constants.js";
 
 // ---------------------------------------------------------------------------
@@ -984,6 +989,20 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const autoSplitEnabled = alerting.auto_split === true;
   const walletSplitAboveLovelace = resolveWalletShapeProfile(infra.wallet_shape).splitAboveLovelace;
   const walletMinUsableUtxos = infra.wallet_shape?.min_usable_utxos ?? DEFAULT_MIN_USABLE_UTXOS;
+  // Main→pool funding band (lovelace) + cooldown, from `wallet_pool` with the
+  // `DEFAULT_*` fallbacks. The loop only acts when the pool has more than the
+  // single main wallet (a 1-wallet pool has nothing to fund).
+  const poolFundLowLovelace = BigInt(
+    infra.wallet_pool?.pool_wallet_low_lovelace ?? DEFAULT_POOL_WALLET_LOW_LOVELACE,
+  );
+  const poolFundTargetLovelace = BigInt(
+    infra.wallet_pool?.pool_wallet_target_lovelace ?? DEFAULT_POOL_WALLET_TARGET_LOVELACE,
+  );
+  const mainWalletReserveLovelace = BigInt(
+    infra.wallet_pool?.main_wallet_reserve_lovelace ?? DEFAULT_MAIN_WALLET_RESERVE_LOVELACE,
+  );
+  const poolFundMinIntervalMs =
+    infra.wallet_pool?.pool_fund_min_interval_ms ?? DEFAULT_POOL_FUND_MIN_INTERVAL_MS;
 
   const maxQueueSize = infra.health_check?.max_queue_size;
 
@@ -1850,6 +1869,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // spans many ticks). The arbiter's per-UTxO locks make it safe to run detached
   // from the client lanes, so this guard only collapses duplicate enqueues.
   const splitInProgress = new Set<string>();
+  // Main→pool funding: a per-wallet in-progress guard plus the last-funded stamp
+  // that drives the per-wallet cooldown in `shouldFundPoolWallet`.
+  const fundInProgress = new Set<string>();
+  const lastFundedAtMs = new Map<string, number>();
 
   // Log each client's deposit address exactly once (the first refresh that
   // resolves it) so operators can see / hand it out — a client funds its
@@ -2061,6 +2084,47 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     }
   }
 
+  // Main→pool funding runs once per tick over every POOL wallet, off the same
+  // per-wallet snapshot. A low pool wallet is topped up from the main (which is
+  // the only self-funding wallet); the main never drops below its reserve. Like
+  // split, the fund tx reserves the main's UTxOs via the arbiter, so it runs
+  // DETACHED — the arbiter's `unavailable` is the backpressure, no extra lane.
+  function maybeFundPoolWallets(nowMs: number): void {
+    const stats = bridge.walletStats();
+    const main = stats.find((w) => w.role === "main");
+    if (!main) return; // single-wallet pool or dry-run: nothing to fund
+    for (const w of stats) {
+      if (w.role !== "pool" || fundInProgress.has(w.walletId)) continue;
+      const decision = shouldFundPoolWallet({
+        poolWalletSpendableLovelace: w.spendableLovelace,
+        mainWalletSpendableLovelace: main.spendableLovelace,
+        lowLovelace: poolFundLowLovelace,
+        targetLovelace: poolFundTargetLovelace,
+        mainReserveLovelace: mainWalletReserveLovelace,
+        inProgress: false,
+        lastFundedAtMs: lastFundedAtMs.get(w.walletId),
+        nowMs,
+        minIntervalMs: poolFundMinIntervalMs,
+      });
+      if (decision.act !== true) continue;
+      fundInProgress.add(w.walletId);
+      lastFundedAtMs.set(w.walletId, nowMs);
+      report(
+        `auto-fund: main → ${w.walletId} amount=${decision.amountLovelace} ` +
+        `(spendable=${w.spendableLovelace} low=${poolFundLowLovelace} target=${poolFundTargetLovelace})`,
+      );
+      void bridge
+        .fundPoolWallet({ toWalletId: w.walletId, amountLovelace: decision.amountLovelace })
+        .then((r) =>
+          report(`auto-fund: ${w.walletId} done funded=${r.funded} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`),
+        )
+        .catch((err) => report(`[warn] auto-fund: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`))
+        .finally(() => {
+          fundInProgress.delete(w.walletId);
+        });
+    }
+  }
+
   // Cardano API provider health — primary (the lucid build/submit provider) vs
   // secondary (confirmation/reorg redundancy), keyed off CARDANO_PROVIDER so the
   // critical alert always tracks whichever provider actually builds.
@@ -2091,9 +2155,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     } catch (err) {
       report(`wallet-pool-refresh: failed: ${(err as Error).message}`);
     }
-    // Per-wallet shape maintenance — once per tick over the whole pool, off the
+    // Per-wallet pool maintenance — once per tick over the whole pool, off the
     // freshly refreshed cache. Detached (the arbiter's locks are the safety).
     maybeAutoSplitWallets();
+    maybeFundPoolWallets(Date.now());
     let primaryOk = false;
     for (const dest of balanceRefreshDests) {
       try {

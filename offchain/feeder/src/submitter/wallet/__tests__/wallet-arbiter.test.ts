@@ -155,6 +155,7 @@ describe("createWalletArbiter", () => {
     });
 
     const s = arbiter.stats().wallets[0]!;
+    assert.equal(s.role, "main", "carries the wallet role (so the funding loop can tell main from pool)");
     assert.equal(s.maxUtxoLovelace, 600_000_000n, "largest pure-ADA UTxO");
     assert.equal(s.usableUtxoCount, 3, "pure-ADA UTxOs >= the collateral floor (big, w, c); dust + token excluded");
   });

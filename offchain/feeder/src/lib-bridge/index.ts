@@ -355,6 +355,7 @@ export type OracleIntentBridge = {
    */
   walletStats(): Array<{
     walletId: string;
+    role: "main" | "pool";
     reservations: number;
     spendableLovelace: bigint;
     maxUtxoLovelace: bigint;
