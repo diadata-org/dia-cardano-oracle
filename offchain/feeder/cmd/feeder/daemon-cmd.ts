@@ -88,6 +88,7 @@ import {
   shouldAutoSettle,
   shouldAutoWithdraw,
   shouldAutoConsolidate,
+  shouldAutoSplit,
   type CoalescerManager,
   type InflightTable,
 } from "../../src/submitter/index.js";
@@ -185,6 +186,7 @@ import {
   CARDANO_NETWORK_MAGIC,
   INTENT_INJECT_DIRNAME,
   DEFAULT_INTENT_INJECT_POLL_MS,
+  DEFAULT_MIN_USABLE_UTXOS,
 } from "../../src/config/constants.js";
 
 // ---------------------------------------------------------------------------
@@ -975,6 +977,13 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     alerting.admin_wallet_min_collateral_lovelace !== undefined
       ? BigInt(alerting.admin_wallet_min_collateral_lovelace)
       : 5_000_000n;
+  // Auto-split trigger (the OPPOSITE of consolidate): a wallet is concentrated
+  // when its largest pure-ADA UTxO exceeds `split_above_lovelace` AND it has
+  // fewer than `min_usable_utxos` usable UTxOs. Gated by the `auto_split` flag;
+  // the thresholds come from `wallet_shape`.
+  const autoSplitEnabled = alerting.auto_split === true;
+  const walletSplitAboveLovelace = resolveWalletShapeProfile(infra.wallet_shape).splitAboveLovelace;
+  const walletMinUsableUtxos = infra.wallet_shape?.min_usable_utxos ?? DEFAULT_MIN_USABLE_UTXOS;
 
   const maxQueueSize = infra.health_check?.max_queue_size;
 
@@ -1837,6 +1846,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   const settleInProgress = new Set<string>();
   let withdrawInProgress = false;
   let consolidateInProgress = false;
+  // Auto-split runs per wallet, so a Set keyed by wallet id (a wallet's split
+  // spans many ticks). The arbiter's per-UTxO locks make it safe to run detached
+  // from the client lanes, so this guard only collapses duplicate enqueues.
+  const splitInProgress = new Set<string>();
 
   // Log each client's deposit address exactly once (the first refresh that
   // resolves it) so operators can see / hand it out — a client funds its
@@ -2013,6 +2026,41 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       });
   }
 
+  // Auto-split runs once per tick over every pool wallet (not per client), so it
+  // reads the arbiter's per-wallet shape snapshot directly. A concentrated wallet
+  // is split toward the profile; the bridge reserves the exact planned UTxOs via
+  // the arbiter, so the task runs DETACHED from the client lanes (the arbiter's
+  // per-UTxO locks are the safety, not a lane). `splitInProgress` collapses
+  // duplicate enqueues across the many ticks one split spans.
+  function maybeAutoSplitWallets(): void {
+    if (!autoSplitEnabled) return;
+    for (const w of bridge.walletStats()) {
+      const decision = shouldAutoSplit({
+        maxUtxoLovelace: w.maxUtxoLovelace,
+        usableUtxoCount: w.usableUtxoCount,
+        splitAboveLovelace: walletSplitAboveLovelace,
+        minUsableUtxos: walletMinUsableUtxos,
+        enabled: autoSplitEnabled,
+        inProgress: splitInProgress.has(w.walletId),
+      });
+      if (decision.act !== true) continue;
+      splitInProgress.add(w.walletId);
+      report(
+        `auto-split: ${w.walletId} concentrated (largestUtxo=${w.maxUtxoLovelace} usable=${w.usableUtxoCount} ` +
+        `threshold=${walletSplitAboveLovelace}/${walletMinUsableUtxos})`,
+      );
+      void bridge
+        .splitWallet({ walletId: w.walletId })
+        .then((r) =>
+          report(`auto-split: ${w.walletId} done split=${r.split} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`),
+        )
+        .catch((err) => report(`[warn] auto-split: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`))
+        .finally(() => {
+          splitInProgress.delete(w.walletId);
+        });
+    }
+  }
+
   // Cardano API provider health — primary (the lucid build/submit provider) vs
   // secondary (confirmation/reorg redundancy), keyed off CARDANO_PROVIDER so the
   // critical alert always tracks whichever provider actually builds.
@@ -2043,6 +2091,9 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     } catch (err) {
       report(`wallet-pool-refresh: failed: ${(err as Error).message}`);
     }
+    // Per-wallet shape maintenance — once per tick over the whole pool, off the
+    // freshly refreshed cache. Detached (the arbiter's locks are the safety).
+    maybeAutoSplitWallets();
     let primaryOk = false;
     for (const dest of balanceRefreshDests) {
       try {
@@ -2985,6 +3036,9 @@ function makeDryRunBridge(report: (line: string) => void): OracleIntentBridge {
     },
     async refreshWalletPoolUtxos() {
       // Dry-run never touches chain and has no arbiter; nothing to refresh.
+    },
+    walletStats() {
+      return [];
     },
   };
 }

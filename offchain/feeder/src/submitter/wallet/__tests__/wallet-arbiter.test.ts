@@ -140,6 +140,25 @@ describe("createWalletArbiter", () => {
     assert.deepEqual(arbiter.acquire(), { unavailable: true });
   });
 
+  it("stats expose per-wallet largest-UTxO and usable-UTxO count (for the shape triggers)", () => {
+    const { arbiter } = setup({
+      wallets: [wallet("main", "main")],
+      caches: {
+        main: [
+          { outRef: "big#0", lovelace: 600_000_000n, hasOnlyAda: true }, // splittable
+          { outRef: "w#0", lovelace: 100_000_000n, hasOnlyAda: true }, // usable
+          { outRef: "c#0", lovelace: 8_000_000n, hasOnlyAda: true }, // usable (>= 5 ADA floor)
+          { outRef: "dust#0", lovelace: 2_000_000n, hasOnlyAda: true }, // below the floor → not usable
+          { outRef: "nft#0", lovelace: 5_000_000n, hasOnlyAda: false }, // token → not usable
+        ],
+      },
+    });
+
+    const s = arbiter.stats().wallets[0]!;
+    assert.equal(s.maxUtxoLovelace, 600_000_000n, "largest pure-ADA UTxO");
+    assert.equal(s.usableUtxoCount, 3, "pure-ADA UTxOs >= the collateral floor (big, w, c); dust + token excluded");
+  });
+
   it("treats a double release as a no-op (active count never under-counts)", () => {
     const { arbiter } = setup({
       wallets: [wallet("main", "main")],

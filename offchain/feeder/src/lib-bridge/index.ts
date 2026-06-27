@@ -347,6 +347,19 @@ export type OracleIntentBridge = {
    * UTxOs. Read-only; never signs or submits.
    */
   refreshWalletPoolUtxos(): Promise<void>;
+  /**
+   * Per-wallet shape snapshot from the arbiter — `maxUtxoLovelace` and
+   * `usableUtxoCount` drive the auto-split / auto-consolidate triggers, and all
+   * four fields feed the per-wallet gauges. Reads the (already refreshed) cache;
+   * never touches chain. Empty in dry-run.
+   */
+  walletStats(): Array<{
+    walletId: string;
+    reservations: number;
+    spendableLovelace: bigint;
+    maxUtxoLovelace: bigint;
+    usableUtxoCount: number;
+  }>;
 };
 
 // ---------------------------------------------------------------------------
@@ -1750,6 +1763,10 @@ export function createRealOracleIntentBridge(
           log(`refresh-wallet-pool: utxo query failed for ${poolWallet.id}: ${(error as Error).message}`);
         }
       }
+    },
+
+    walletStats() {
+      return arbiter.stats().wallets;
     },
   };
 

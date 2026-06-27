@@ -73,8 +73,18 @@ export type WalletArbiter = {
     reservation: WalletReservation,
     settled: { consumedOutRefs: string[]; producedUtxos: WalletUtxo[] },
   ): void;
-  /** Per-wallet snapshot for gauges. */
-  stats(): { wallets: Array<{ walletId: string; reservations: number; spendableLovelace: bigint }> };
+  /** Per-wallet snapshot for gauges and the shape triggers. `maxUtxoLovelace` and
+   *  `usableUtxoCount` count ALL pure-ADA UTxOs (locked or not), since a UTxO in
+   *  use by a lane still means the wallet is neither fragmented nor concentrated. */
+  stats(): {
+    wallets: Array<{
+      walletId: string;
+      reservations: number;
+      spendableLovelace: bigint;
+      maxUtxoLovelace: bigint;
+      usableUtxoCount: number;
+    }>;
+  };
 };
 
 export type WalletArbiterDeps = {
@@ -239,11 +249,16 @@ export function createWalletArbiter(deps: WalletArbiterDeps): WalletArbiter {
 
     stats() {
       return {
-        wallets: pool.all().map((w) => ({
-          walletId: w.id,
-          reservations: activeReservations.get(w.id) ?? 0,
-          spendableLovelace: spendable(w.id).reduce((acc, u) => acc + u.lovelace, 0n),
-        })),
+        wallets: pool.all().map((w) => {
+          const pureAda = pool.getUtxos(w.id).filter((u) => u.hasOnlyAda);
+          return {
+            walletId: w.id,
+            reservations: activeReservations.get(w.id) ?? 0,
+            spendableLovelace: spendable(w.id).reduce((acc, u) => acc + u.lovelace, 0n),
+            maxUtxoLovelace: pureAda.reduce((m, u) => (u.lovelace > m ? u.lovelace : m), 0n),
+            usableUtxoCount: pureAda.filter((u) => u.lovelace >= minCollateral).length,
+          };
+        }),
       };
     },
   };
