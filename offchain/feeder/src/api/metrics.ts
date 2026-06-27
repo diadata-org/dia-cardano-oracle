@@ -118,6 +118,12 @@ export type FeederMetrics = {
    *  tx fees. Singleton — no labels. */
   cardanoAdminWalletLovelace: FeedGauge;
   cardanoAdminWalletMaxUtxoLovelace: FeedGauge;
+  /** Per signer-wallet shape gauges (label `wallet` = pool id). Feed the
+   *  per-wallet shape + funding alerts and the $wallet dashboard. */
+  cardanoWalletSpendableLovelace: FeedGauge;
+  cardanoWalletMaxUtxoLovelace: FeedGauge;
+  cardanoWalletUsableUtxos: FeedGauge;
+  cardanoWalletReservations: FeedGauge;
   cardanoReceiverTopupWarnings: FeedCounter;
   /** Sum of clean, un-merged ADA deposits waiting at the client's side-deposit
    *  address (`receiver.depositValidatorAddress`). A `deposit:merge` folds
@@ -254,6 +260,10 @@ export const noopMetrics: FeederMetrics = {
   cardanoPaymentHookAccruedLovelace: noopGauge,
   cardanoAdminWalletLovelace: noopGauge,
   cardanoAdminWalletMaxUtxoLovelace: noopGauge,
+  cardanoWalletSpendableLovelace: noopGauge,
+  cardanoWalletMaxUtxoLovelace: noopGauge,
+  cardanoWalletUsableUtxos: noopGauge,
+  cardanoWalletReservations: noopGauge,
   cardanoReceiverTopupWarnings: noopCounter,
   cardanoDepositPendingLovelace: noopGauge,
   cardanoPairIsCreate: noopGauge,
@@ -563,6 +573,30 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "cardano_admin_wallet_max_utxo_lovelace",
       "Largest single pure-ADA UTxO in the admin/signer wallet. A script tx needs a collateral UTxO distinct from its fee inputs, so THIS — not the total — determines whether the wallet can still build: when it falls below `alerting.admin_wallet_min_collateral_lovelace` the wallet is fragmented (every build traps) even if the total looks healthy → AdminWalletFragmented. The daemon auto-consolidates below `alerting.auto_consolidate_below_lovelace`.",
       [],
+      true,
+    ),
+    cardanoWalletSpendableLovelace: gauge(
+      "cardano_wallet_spendable_lovelace",
+      "Per signer-wallet spendable lovelace (unlocked pure-ADA UTxOs) — what a new tx can actually draw on. The `wallet` label is the pool id (the main wallet is `wallet=main`). A pool wallet below `wallet_pool.pool_wallet_low_lovelace` is auto-funded from the main; the main below `alerting.admin_wallet_low_lovelace` must be refilled.",
+      ["wallet"],
+      true,
+    ),
+    cardanoWalletMaxUtxoLovelace: gauge(
+      "cardano_wallet_max_utxo_lovelace",
+      "Per signer-wallet largest pure-ADA UTxO. Below the collateral floor the wallet is fragmented (every script build traps → consolidate); above `wallet_shape.split_above_lovelace` with too few usable UTxOs it is concentrated (→ split). The `wallet` label is the pool id.",
+      ["wallet"],
+      true,
+    ),
+    cardanoWalletUsableUtxos: gauge(
+      "cardano_wallet_usable_utxos",
+      "Per signer-wallet count of pure-ADA UTxOs at or above the collateral floor — how many disjoint inputs the arbiter can hand to concurrent lanes. Below `wallet_shape.min_usable_utxos` (with a splittable UTxO present) the wallet is split for more parallelism. The `wallet` label is the pool id.",
+      ["wallet"],
+      true,
+    ),
+    cardanoWalletReservations: gauge(
+      "cardano_wallet_reservations",
+      "Per signer-wallet count of active arbiter reservations (lanes currently building against this wallet). The `wallet` label is the pool id.",
+      ["wallet"],
       true,
     ),
     cardanoReceiverTopupWarnings: counter(

@@ -2159,6 +2159,13 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     // freshly refreshed cache. Detached (the arbiter's locks are the safety).
     maybeAutoSplitWallets();
     maybeFundPoolWallets(Date.now());
+    // Per-wallet gauges from the same snapshot (empty in dry-run → no series).
+    for (const w of bridge.walletStats()) {
+      metrics.cardanoWalletSpendableLovelace.set({ wallet: w.walletId }, Number(w.spendableLovelace));
+      metrics.cardanoWalletMaxUtxoLovelace.set({ wallet: w.walletId }, Number(w.maxUtxoLovelace));
+      metrics.cardanoWalletUsableUtxos.set({ wallet: w.walletId }, w.usableUtxoCount);
+      metrics.cardanoWalletReservations.set({ wallet: w.walletId }, w.reservations);
+    }
     let primaryOk = false;
     for (const dest of balanceRefreshDests) {
       try {
