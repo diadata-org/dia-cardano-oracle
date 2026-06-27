@@ -64,9 +64,11 @@ export {
   shouldAutoSettle,
   shouldAutoWithdraw,
   shouldAutoConsolidate,
+  shouldAutoSplit,
 } from "./auto-remediation.js";
 export type {
   AutoSettleDecision,
   AutoWithdrawDecision,
   AutoConsolidateDecision,
+  AutoSplitDecision,
 } from "./auto-remediation.js";

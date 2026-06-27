@@ -60,6 +60,12 @@ export type WalletArbiter = {
    *  withdraw or a pool-funding tx), or report it unavailable. Bypasses the
    *  free→busy priority `acquire()` applies. */
   acquireWallet(walletId: string): AcquireResult;
+  /** Reserve the EXACT UTxOs a caller names (the set the split planner chose),
+   *  or report unavailable if any is missing, token-bearing, or already locked by
+   *  another lane. Unlike `acquire()` it draws no collateral pick — the split
+   *  tx is a plain self-payment — and locks only the named UTxOs, so other lanes
+   *  keep using the wallet's remaining UTxOs in parallel. */
+  acquireSpecificUtxos(walletId: string, outRefs: string[]): AcquireResult;
   /** Release a reservation once its tx confirms or fails. `consumedOutRefs` are
    *  removed from the wallet's cache and `producedUtxos` (the change) added, so
    *  the next acquire sees fresh UTxOs. */
@@ -149,10 +155,9 @@ export function createWalletArbiter(deps: WalletArbiterDeps): WalletArbiter {
     return [collateral, ...rest];
   }
 
-  /** Lock a fresh UTxO subset of `w` and return the reservation. */
-  function reserveFrom(w: PoolWallet): WalletReservation {
+  /** Lock the given UTxO set under a fresh reservation and return it. */
+  function reserveExact(w: PoolWallet, reserved: WalletUtxo[]): WalletReservation {
     const reservationId = `res-${(seq += 1)}`;
-    const reserved = pickUtxos(spendable(w.id));
     for (const u of reserved) {
       lockTable.lock(
         makeUtxoLockEntry(w.id, u.outRef, reservationId, {
@@ -174,6 +179,11 @@ export function createWalletArbiter(deps: WalletArbiterDeps): WalletArbiter {
     };
   }
 
+  /** Lock a fresh, arbiter-chosen UTxO subset of `w` and return the reservation. */
+  function reserveFrom(w: PoolWallet): WalletReservation {
+    return reserveExact(w, pickUtxos(spendable(w.id)));
+  }
+
   return {
     acquire() {
       const w = chooseWallet();
@@ -185,6 +195,26 @@ export function createWalletArbiter(deps: WalletArbiterDeps): WalletArbiter {
       const w = pool.get(walletId);
       if (!w || !isUsable(w)) return { unavailable: true };
       return reserveFrom(w);
+    },
+
+    acquireSpecificUtxos(walletId, outRefs) {
+      const w = pool.get(walletId);
+      if (!w || pool.isConsolidating(w.id) || outRefs.length === 0) return { unavailable: true };
+
+      // Every named UTxO must still be spendable (pure ADA, unlocked, in cache);
+      // if a client lane grabbed one first, back off so the caller retries later.
+      // Validate every named UTxO BEFORE locking any (no partial-lock leak): a
+      // taken ref is removed from `free`, so a repeated out-ref misses on its
+      // second lookup and fails the whole request rather than locking twice.
+      const free = new Map(spendable(w.id).map((u) => [u.outRef, u]));
+      const reserved: WalletUtxo[] = [];
+      for (const ref of outRefs) {
+        const u = free.get(ref);
+        if (!u) return { unavailable: true };
+        free.delete(ref);
+        reserved.push(u);
+      }
+      return reserveExact(w, reserved);
     },
 
     release(reservation, settled) {

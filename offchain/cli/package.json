@@ -97,6 +97,14 @@
       "types": "./dist/transactions/fund-pool-wallet.d.ts",
       "default": "./dist/transactions/fund-pool-wallet.js"
     },
+    "./transactions/split-wallet": {
+      "types": "./dist/transactions/split-wallet.d.ts",
+      "default": "./dist/transactions/split-wallet.js"
+    },
+    "./wallet/split-plan": {
+      "types": "./dist/wallet/split-plan.d.ts",
+      "default": "./dist/wallet/split-plan.js"
+    },
     "./wallet/wallet": {
       "types": "./dist/wallet/wallet.d.ts",
       "default": "./dist/wallet/wallet.js"

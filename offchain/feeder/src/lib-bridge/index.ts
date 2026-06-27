@@ -61,6 +61,7 @@ import { depositMerge, selectDepositsForUpdateFold } from "@diadata-org/dia-card
 import { settleAccruedFees } from "@diadata-org/dia-cardano-oracle-cli/transactions/settle";
 import { paymentHookWithdraw } from "@diadata-org/dia-cardano-oracle-cli/transactions/payment-hook-withdraw";
 import { fundPoolWallet as fundPoolWalletTx } from "@diadata-org/dia-cardano-oracle-cli/transactions/fund-pool-wallet";
+import { splitWallet as splitWalletTx } from "@diadata-org/dia-cardano-oracle-cli/transactions/split-wallet";
 import { deriveConfiguredWalletDefaults } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet";
 import { consolidateWallet } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet-consolidate";
 import type { DiaOracleIntent } from "@diadata-org/dia-cardano-oracle-cli/core/dia-intent";
@@ -79,6 +80,7 @@ import {
   type WalletReservation,
 } from "../submitter/wallet/wallet-arbiter.js";
 import type { WalletPool, WalletUtxo } from "../submitter/wallet/wallet-pool.js";
+import { planWalletSplit, type WalletShapeProfile } from "../submitter/wallet/wallet-shape.js";
 import {
   DEFAULT_CONFIRMATION_DEPTH,
   STALE_INPUT_RECONCILE_ATTEMPTS,
@@ -326,6 +328,18 @@ export type OracleIntentBridge = {
     amountLovelace: bigint;
   }): Promise<{ txHash: string | null; confirmed: boolean; funded: boolean }>;
   /**
+   * Split a wallet toward the configured target UTxO profile — split oversized
+   * UTxOs (and top up missing pieces) into N working + M collateral UTxOs so a
+   * SINGLE wallet can back many concurrent lanes. Plans against the arbiter's
+   * live UTxO cache, reserves exactly the planned inputs (so it never collides
+   * with a client lane), and self-pays the profile. `split` is false when the
+   * wallet is already shaped or its planned inputs are momentarily reserved (the
+   * daemon retries on the next tick). It subsumes `consolidateWallet`.
+   */
+  splitWallet(params: {
+    walletId: string;
+  }): Promise<{ txHash: string | null; confirmed: boolean; split: boolean }>;
+  /**
    * Refresh the wallet arbiter's UTxO cache for every pool wallet by reading
    * each wallet's current UTxO set from chain. The arbiter reserves fee +
    * collateral inputs from this cache, so the daemon primes it once at startup
@@ -351,6 +365,9 @@ export type RealBridgeOptions = {
    *  or let Lucid select freely (single-wallet), and refreshes its UTxO cache
    *  in `refreshWalletPoolUtxos`. */
   walletPool: WalletPool;
+  /** Target UTxO profile the `splitWallet` method plans toward, resolved from
+   *  `infrastructure.<network>.yaml::wallet_shape` (with `DEFAULT_*` fallbacks). */
+  walletShapeProfile: WalletShapeProfile;
   /**
    * Number of Cardano blocks the bridge waits past inclusion before
    * declaring the tx confirmed.
@@ -494,6 +511,9 @@ export function createRealOracleIntentBridge(
   // collateral input from a shared signer wallet.
   const arbiter = options.arbiter;
   const walletPool = options.walletPool;
+  // Target UTxO profile the split method plans toward (split big UTxOs into N
+  // working + M collateral pieces so one wallet backs many lanes).
+  const walletShapeProfile = options.walletShapeProfile;
 
   const bridge: OracleIntentBridge = {
     async submitOracleUpdate(params: OracleIntentSubmitParams): Promise<OracleUpdateResult> {
@@ -1662,6 +1682,46 @@ export function createRealOracleIntentBridge(
         settled = { consumedOutRefs: result.consumedOutRefs, producedUtxos: result.producedUtxos };
         log(`fundPoolWallet: confirmed=${result.confirmed} txHash=${result.submittedTxHash ?? "(none)"}`);
         return { txHash: result.submittedTxHash, confirmed: result.confirmed, funded: true };
+      } finally {
+        arbiter.release(reservation, settled);
+      }
+    },
+
+    async splitWallet(params: {
+      walletId: string;
+    }): Promise<{ txHash: string | null; confirmed: boolean; split: boolean }> {
+      const target = walletPool.get(params.walletId);
+      if (!target) {
+        throw new Error(`splitWallet: unknown wallet "${params.walletId}".`);
+      }
+      // Plan against the arbiter's live UTxO cache (kept fresh by
+      // refreshWalletPoolUtxos). `already_shaped`/`insufficient` are no-ops.
+      const plan = planWalletSplit(walletPool.getUtxos(target.id), walletShapeProfile);
+      if (!plan.act) {
+        log(`splitWallet: ${target.id} no-op (${plan.reason})`);
+        return { txHash: null, confirmed: false, split: false };
+      }
+      // Reserve EXACTLY the planned inputs so the split never collides with a
+      // client lane; if a lane already holds one, back off and retry next tick.
+      const reservation = arbiter.acquireSpecificUtxos(target.id, plan.consumeOutRefs);
+      if ("unavailable" in reservation) {
+        log(`splitWallet: ${target.id} planned inputs momentarily reserved; skipping`);
+        return { txHash: null, confirmed: false, split: false };
+      }
+      log(`splitWallet: ${target.id} splitting ${plan.consumeOutRefs.length} input(s) into ${plan.outputLovelaces.length} output(s)`);
+      let settled: { consumedOutRefs: string[]; producedUtxos: WalletUtxo[] } = {
+        consumedOutRefs: [],
+        producedUtxos: [],
+      };
+      try {
+        const result = await splitWalletTx({
+          signer: target.signer,
+          consumeOutRefs: plan.consumeOutRefs,
+          outputLovelaces: plan.outputLovelaces,
+        });
+        settled = { consumedOutRefs: result.consumedOutRefs, producedUtxos: result.producedUtxos };
+        log(`splitWallet: confirmed=${result.confirmed} txHash=${result.submittedTxHash ?? "(none)"}`);
+        return { txHash: result.submittedTxHash, confirmed: result.confirmed, split: true };
       } finally {
         arbiter.release(reservation, settled);
       }

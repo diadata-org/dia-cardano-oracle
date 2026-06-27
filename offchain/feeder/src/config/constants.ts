@@ -378,7 +378,7 @@ export const MIN_COLLATERAL_UTXO_LOVELACE = 5_000_000n;
 // Wallet UTxO shape
 //
 // Fallbacks for `infrastructure.<network>.yaml::wallet_shape` — the target UTxO
-// profile each wallet is reshaped toward so even a single wallet can back many
+// profile each wallet is split toward so even a single wallet can back many
 // parallel lanes (the arbiter hands each lane a disjoint UTxO subset). The YAML
 // value is authoritative where a key exists.
 // ---------------------------------------------------------------------------
@@ -393,6 +393,9 @@ export const DEFAULT_COLLATERAL_UTXO_COUNT = 5;
 export const DEFAULT_COLLATERAL_UTXO_LOVELACE = 10_000_000n;
 /** A pure-ADA UTxO larger than this is split. YAML: `wallet_shape.split_above_lovelace`. */
 export const DEFAULT_SPLIT_ABOVE_LOVELACE = 550_000_000n;
-/** Headroom kept on a reshape tx's consumed inputs for fee + change min-UTxO.
+/** Split fires only when usable pure-ADA UTxOs fall below this count.
+ *  YAML: `wallet_shape.min_usable_utxos`. */
+export const DEFAULT_MIN_USABLE_UTXOS = 5;
+/** Headroom kept on a split tx's consumed inputs for fee + change min-UTxO.
  *  Constant-only — a structural tx-build margin, not an operator knob. */
-export const RESHAPE_FEE_BUFFER_LOVELACE = 2_000_000n;
+export const SPLIT_FEE_BUFFER_LOVELACE = 2_000_000n;

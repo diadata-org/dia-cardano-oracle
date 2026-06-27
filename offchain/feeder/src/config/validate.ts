@@ -114,6 +114,7 @@ function validateWalletShape(
   validatePositiveInteger("collateral_utxo_count", shape.collateral_utxo_count, c);
   validatePositiveInteger("collateral_utxo_lovelace", shape.collateral_utxo_lovelace, c);
   validatePositiveInteger("split_above_lovelace", shape.split_above_lovelace, c);
+  validatePositiveInteger("min_usable_utxos", shape.min_usable_utxos, c);
   if (
     shape.collateral_utxo_lovelace !== undefined &&
     shape.working_utxo_lovelace !== undefined &&

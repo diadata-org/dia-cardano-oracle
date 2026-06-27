@@ -97,3 +97,37 @@ export function shouldAutoConsolidate(input: {
   }
   return { act: false, reason: "healthy" };
 }
+
+export type AutoSplitDecision =
+  | { act: true; reason: "concentrated" }
+  | { act: false; reason: "disabled" | "healthy" | "in_progress" | "unknown" };
+
+/**
+ * Should the daemon auto-run `wallet:split` (break a large pure-ADA UTxO into the
+ * target profile) on this tick? This is the OPPOSITE of consolidate: it fires when
+ * the wallet is too CONCENTRATED to feed parallel lanes — a UTxO larger than
+ * `splitAboveLovelace` exists AND fewer than `minUsableUtxos` arbiter-usable
+ * UTxOs remain. A lone big UTxO in an otherwise healthy wallet is left alone,
+ * since splitting only buys parallelism the wallet already has. Gated by the
+ * `auto_split` flag; the manual `wallet:split` command works regardless.
+ */
+export function shouldAutoSplit(input: {
+  maxUtxoLovelace?: bigint;
+  usableUtxoCount?: number;
+  splitAboveLovelace: bigint;
+  minUsableUtxos: number;
+  enabled?: boolean;
+  inProgress: boolean;
+}): AutoSplitDecision {
+  if (input.inProgress) return { act: false, reason: "in_progress" };
+  if (!input.enabled) return { act: false, reason: "disabled" };
+  // No reading → cannot judge (the wallet query failed this tick). Skip rather
+  // than act blind; a real concentration persists and fires on a later tick.
+  if (input.maxUtxoLovelace === undefined || input.usableUtxoCount === undefined) {
+    return { act: false, reason: "unknown" };
+  }
+  if (input.maxUtxoLovelace > input.splitAboveLovelace && input.usableUtxoCount < input.minUsableUtxos) {
+    return { act: true, reason: "concentrated" };
+  }
+  return { act: false, reason: "healthy" };
+}

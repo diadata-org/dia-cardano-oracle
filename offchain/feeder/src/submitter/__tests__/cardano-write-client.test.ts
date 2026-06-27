@@ -80,6 +80,9 @@ describe("createCardanoWriteClient", () => {
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },
+      async splitWallet() {
+        return { txHash: null, confirmed: false, split: false };
+      },
       async refreshWalletPoolUtxos() {},
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-single");
@@ -149,6 +152,9 @@ describe("createCardanoWriteClient", () => {
       async consolidateWallet() { return { txHash: null, confirmed: false }; },
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
+      },
+      async splitWallet() {
+        return { txHash: null, confirmed: false, split: false };
       },
       async refreshWalletPoolUtxos() {},
       async submitOracleUpdate() {
@@ -220,6 +226,9 @@ describe("createCardanoWriteClient", () => {
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },
+      async splitWallet() {
+        return { txHash: null, confirmed: false, split: false };
+      },
       async refreshWalletPoolUtxos() {},
       async submitOracleUpdate() {
         throw new Error("unexpected single call");
@@ -283,6 +292,9 @@ describe("createCardanoWriteClient", () => {
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },
+      async splitWallet() {
+        return { txHash: null, confirmed: false, split: false };
+      },
       async refreshWalletPoolUtxos() {},
       async submitOracleUpdate() {
         throw new Error("unexpected single call");
@@ -331,6 +343,9 @@ describe("createCardanoWriteClient", () => {
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },
+      async splitWallet() {
+        return { txHash: null, confirmed: false, split: false };
+      },
       async refreshWalletPoolUtxos() {},
       async submitOracleUpdate(params) {
         emitStandardSteps(params.onStep, "tx-fee");
@@ -368,6 +383,9 @@ describe("createCardanoWriteClient", () => {
       async consolidateWallet() { return { txHash: null, confirmed: false }; },
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
+      },
+      async splitWallet() {
+        return { txHash: null, confirmed: false, split: false };
       },
       async refreshWalletPoolUtxos() {},
       async submitOracleUpdate(params) {
@@ -409,6 +427,9 @@ describe("createCardanoWriteClient", () => {
       async consolidateWallet() { return { txHash: null, confirmed: false }; },
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
+      },
+      async splitWallet() {
+        return { txHash: null, confirmed: false, split: false };
       },
       async refreshWalletPoolUtxos() {},
       async submitOracleUpdate(params) {

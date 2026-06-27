@@ -92,6 +92,7 @@ import {
   type InflightTable,
 } from "../../src/submitter/index.js";
 import { resolveWalletPoolSigners } from "../../src/submitter/wallet/load-pool.js";
+import { resolveWalletShapeProfile } from "../../src/submitter/wallet/wallet-shape.js";
 import { createWalletPool, type PoolWallet } from "../../src/submitter/wallet/wallet-pool.js";
 import { createUtxoLockTable } from "../../src/submitter/wallet/utxo-lock-table.js";
 import { createWalletArbiter } from "../../src/submitter/wallet/wallet-arbiter.js";
@@ -1046,6 +1047,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       log: debugReport,
       arbiter,
       walletPool,
+      walletShapeProfile: resolveWalletShapeProfile(infra.wallet_shape),
       confirmationDepth: cardanoConfirmationDepth,
       depositMinLovelace,
       depositMaxPerUpdateFold,
@@ -2976,6 +2978,10 @@ function makeDryRunBridge(report: (line: string) => void): OracleIntentBridge {
         `daemon: [dry-run bridge] fundPoolWallet → ${params.toWalletId} amount=${params.amountLovelace} (no-op)`,
       );
       return { txHash: null, confirmed: false, funded: false };
+    },
+    async splitWallet(params) {
+      report(`daemon: [dry-run bridge] splitWallet ${params.walletId} (no-op)`);
+      return { txHash: null, confirmed: false, split: false };
     },
     async refreshWalletPoolUtxos() {
       // Dry-run never touches chain and has no arbiter; nothing to refresh.

@@ -243,6 +243,88 @@ describe("createWalletArbiter", () => {
     assert.deepEqual(arbiter.acquireWallet("p1"), { unavailable: true }, "consolidating");
   });
 
+  it("acquireSpecificUtxos reserves exactly the requested utxos, verbatim and without a collateral requirement", () => {
+    const { lockTable, arbiter } = setup({
+      wallets: [wallet("main", "main")],
+      caches: {
+        main: [
+          { outRef: "big#0", lovelace: 600_000_000n, hasOnlyAda: true }, // oversized, to be split
+          { outRef: "tiny#0", lovelace: 2_000_000n, hasOnlyAda: true }, // below the collateral floor
+          { outRef: "spare#0", lovelace: 98_000_000n, hasOnlyAda: true },
+        ],
+      },
+    });
+
+    // The split planner picks an oversized utxo + a tiny top-up; neither is a
+    // collateral-capable pick, and the order is preserved exactly.
+    const r = asReservation(arbiter.acquireSpecificUtxos("main", ["big#0", "tiny#0"]));
+
+    assert.equal(r.walletId, "main");
+    assert.deepEqual(
+      r.utxos.map((u) => u.outRef),
+      ["big#0", "tiny#0"],
+      "reserves exactly the requested out-refs, in order",
+    );
+    for (const u of r.utxos) assert.equal(lockTable.isLocked("main", u.outRef), true, "requested utxos are locked");
+    assert.equal(lockTable.isLocked("main", "spare#0"), false, "the un-requested utxo stays free for other lanes");
+  });
+
+  it("acquireSpecificUtxos returns unavailable when a requested utxo is already locked by another lane", () => {
+    const { arbiter } = setup({
+      wallets: [wallet("main", "main")],
+      caches: { main: utxos("main", 4) },
+    });
+
+    const held = asReservation(arbiter.acquire()); // locks two of main's utxos
+    const stolen = held.utxos[0]!.outRef;
+
+    assert.deepEqual(
+      arbiter.acquireSpecificUtxos("main", [stolen, "main-tx#3"]),
+      { unavailable: true },
+      "a client lane already holds one of the requested utxos — split backs off",
+    );
+  });
+
+  it("acquireSpecificUtxos returns unavailable for an unknown id, a missing out-ref, or a consolidating wallet", () => {
+    const { pool, arbiter } = setup({
+      wallets: [wallet("main", "main"), wallet("p1", "pool")],
+      caches: { main: utxos("main", 4), p1: utxos("p1", 4) },
+    });
+
+    assert.deepEqual(arbiter.acquireSpecificUtxos("missing", ["main-tx#0"]), { unavailable: true }, "unknown id");
+    assert.deepEqual(arbiter.acquireSpecificUtxos("main", []), { unavailable: true }, "empty request");
+    assert.deepEqual(arbiter.acquireSpecificUtxos("main", ["nope#9"]), { unavailable: true }, "out-ref not in cache");
+
+    pool.setConsolidating("p1", true);
+    assert.deepEqual(arbiter.acquireSpecificUtxos("p1", ["p1-tx#0"]), { unavailable: true }, "consolidating");
+  });
+
+  it("acquireSpecificUtxos + release split outputs let a single wallet back two concurrent lanes", () => {
+    const { pool, arbiter } = setup({
+      wallets: [wallet("main", "main")],
+      caches: { main: [{ outRef: "big#0", lovelace: 600_000_000n, hasOnlyAda: true }] }, // one fat utxo, no parallelism
+    });
+
+    // Before split: a single fat utxo can't even form one 2-utxo reservation.
+    assert.deepEqual(arbiter.acquire(), { unavailable: true }, "one fat utxo backs no lane");
+
+    // Split consumes the fat utxo and produces a parallel-friendly profile.
+    const split = asReservation(arbiter.acquireSpecificUtxos("main", ["big#0"]));
+    const profile: WalletUtxo[] = [
+      { outRef: "w#0", lovelace: 100_000_000n, hasOnlyAda: true },
+      { outRef: "w#1", lovelace: 100_000_000n, hasOnlyAda: true },
+      { outRef: "c#0", lovelace: 10_000_000n, hasOnlyAda: true },
+      { outRef: "c#1", lovelace: 10_000_000n, hasOnlyAda: true },
+    ];
+    arbiter.release(split, { consumedOutRefs: ["big#0"], producedUtxos: profile });
+
+    // After split: the same wallet now backs two disjoint concurrent lanes.
+    const a = asReservation(arbiter.acquire());
+    const b = asReservation(arbiter.acquire());
+    const aRefs = new Set(a.utxos.map((u) => u.outRef));
+    for (const u of b.utxos) assert.equal(aRefs.has(u.outRef), false, "the two post-split lanes are disjoint");
+  });
+
   it("round-robins across free wallets on repeated acquire/release", () => {
     const { arbiter } = setup({
       wallets: [wallet("main", "main"), wallet("p1", "pool"), wallet("p2", "pool")],

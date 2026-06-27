@@ -513,8 +513,16 @@ describe("validateModularConfig — wallet pool", () => {
       collateral_utxo_count: 5,
       collateral_utxo_lovelace: 10_000_000,
       split_above_lovelace: 550_000_000,
+      min_usable_utxos: 5,
     };
     assert.deepEqual(validateModularConfig(config), []);
+  });
+
+  it("rejects a wallet_shape with a non-positive min_usable_utxos", () => {
+    const config = makeConfig(false);
+    config.infrastructure!.wallet_shape = { min_usable_utxos: 0 };
+    const issues = validateModularConfig(config);
+    assert.ok(issues.some((i) => i.severity === "error" && i.path.endsWith("min_usable_utxos")));
   });
 
   it("rejects a wallet_shape where collateral is not below working size", () => {

@@ -84,7 +84,7 @@ export type InfrastructureConfig = {
   wallets?: WalletConfigEntry[];
   /** Main→pool funding band. Omit to use the `DEFAULT_*` constants. */
   wallet_pool?: WalletPoolFundingConfig;
-  /** Target UTxO shape each wallet is reshaped toward (for single-wallet
+  /** Target UTxO shape each wallet is split toward (for single-wallet
    *  parallelism). Omit to use the `DEFAULT_*` constants. */
   wallet_shape?: WalletShapeConfig;
 };
@@ -100,8 +100,12 @@ export type WalletShapeConfig = {
   collateral_utxo_count?: number;
   /** Target size of each collateral UTxO (lovelace). */
   collateral_utxo_lovelace?: number;
-  /** A pure-ADA UTxO larger than this is split when the wallet is reshaped. */
+  /** A pure-ADA UTxO larger than this may be split into the profile. */
   split_above_lovelace?: number;
+  /** Split fires only when usable pure-ADA UTxOs fall below this count — a lone
+   *  big UTxO in an otherwise healthy wallet is left alone, since splitting only
+   *  matters when the wallet is too concentrated to feed parallel lanes. */
+  min_usable_utxos?: number;
 };
 
 /** One signer wallet in `infrastructure.<network>.yaml::wallets[]`. */
@@ -389,6 +393,12 @@ export type AlertingConfig = {
    *  + working balance). MUST be < `admin_wallet_min_collateral_lovelace` so the
    *  AdminWalletFragmented alert fires first. */
   auto_consolidate_below_lovelace?: number;
+  /** When true → the daemon auto-runs `wallet:split` (break a `> split_above`
+   *  UTxO into the profile) whenever the WalletConcentrated condition holds
+   *  (`wallet_shape.split_above_lovelace` + `wallet_shape.min_usable_utxos`).
+   *  Absent/false → split is manual only (the alert still fires). The opposite
+   *  maintenance to consolidate; the two never act on the same wallet at once. */
+  auto_split?: boolean;
 };
 
 export type ReplicaConfig = {

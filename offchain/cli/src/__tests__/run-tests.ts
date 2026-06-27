@@ -78,6 +78,8 @@ import { buildPairApplyUpdateRedeemer } from "../core/redeemers.js";
 import { writeStateJsonFile } from "../core/state.js";
 import { depositFund, isCleanAdaDeposit } from "../transactions/deposit.js";
 import { fundPoolWallet } from "../transactions/fund-pool-wallet.js";
+import { splitWallet } from "../transactions/split-wallet.js";
+import { planWalletSplit, type SplitUtxo, type WalletShapeProfile } from "../wallet/split-plan.js";
 import { selectConsolidationUtxos } from "../wallet/wallet-consolidate.js";
 import { resolveClientUtxoRefs } from "../transactions/reclaim-reference-script.js";
 import { completeWithRetry } from "../core/tx-build.js";
@@ -121,6 +123,7 @@ await run("testClientStateInit", testClientStateInit);
 await run("testDepositFundReadsFloorFromConfigState", testDepositFundReadsFloorFromConfigState);
 await run("testDepositMergeSelectionFiltersAndCaps", testDepositMergeSelectionFiltersAndCaps);
 await run("testConsolidationUtxoSelection", testConsolidationUtxoSelection);
+await run("testPlanWalletSplit", testPlanWalletSplit);
 await run("testRunStateResolution", testRunStateResolution);
 
 // --- Datum encoder/decoder regression tests ---------------------------------
@@ -186,6 +189,7 @@ await run("testWalletSettlementWaitsForSpentInputs", testWalletSettlementWaitsFo
 await run("testComputeSpentWalletOutRefs", testComputeSpentWalletOutRefs);
 await run("testComputeWalletChangeOutputs", testComputeWalletChangeOutputs);
 await run("testFundPoolWalletRejectsNonPositiveAmount", testFundPoolWalletRejectsNonPositiveAmount);
+await run("testSplitWalletRejectsInvalidPlan", testSplitWalletRejectsInvalidPlan);
 
 // --- Lucid emulator harness (smoke: pay + reference script genesis) ---------
 await run("runLucidEmulatorHarnessSmokeTests", runLucidEmulatorHarnessSmokeTests);
@@ -564,6 +568,29 @@ async function testFundPoolWalletRejectsNonPositiveAmount(): Promise<void> {
         }),
       /amountLovelace must be positive/,
       `expected amount ${bad} to be rejected`,
+    );
+  }
+}
+
+async function testSplitWalletRejectsInvalidPlan(): Promise<void> {
+  // The plan guards run before any chain work, so a degenerate split plan is
+  // rejected without selecting a wallet or touching a provider.
+  const signer = { kind: "seed" as const, value: "irrelevant" };
+  await assert.rejects(
+    () => splitWallet({ signer, consumeOutRefs: [], outputLovelaces: [100_000_000n] }),
+    /consumeOutRefs must not be empty/,
+    "an empty input set is rejected",
+  );
+  await assert.rejects(
+    () => splitWallet({ signer, consumeOutRefs: ["tx#0"], outputLovelaces: [] }),
+    /outputLovelaces must not be empty/,
+    "an empty output set is rejected",
+  );
+  for (const bad of [0n, -1_000_000n]) {
+    await assert.rejects(
+      () => splitWallet({ signer, consumeOutRefs: ["tx#0"], outputLovelaces: [bad] }),
+      /outputLovelaces must all be positive/,
+      `a non-positive output (${bad}) is rejected`,
     );
   }
 }
@@ -1003,6 +1030,93 @@ function testDepositMergeSelectionFiltersAndCaps(): void {
 }
 
 // wallet:consolidate selection — pure-ADA UTxOs only (collateral must be pure
+// Split planner — break a wallet toward the target profile (the OPPOSITE of
+// consolidate: too concentrated → split a big UTxO into many usable ones).
+function testPlanWalletSplit(): void {
+  const ADA = 1_000_000n;
+  const PROFILE: WalletShapeProfile = {
+    workingCount: 5,
+    workingLovelace: 100n * ADA,
+    collateralCount: 5,
+    collateralLovelace: 10n * ADA,
+    splitAboveLovelace: 550n * ADA,
+    feeBufferLovelace: 2n * ADA,
+  };
+  const utxo = (outRef: string, ada: bigint, hasOnlyAda = true): SplitUtxo => ({
+    outRef,
+    lovelace: ada * ADA,
+    hasOnlyAda,
+  });
+  const asPlan = (p: ReturnType<typeof planWalletSplit>) => {
+    assert.ok(p.act, "expected a split plan");
+    return p;
+  };
+
+  // Primary case: one fat UTxO → the full profile (5 collateral + 5 working).
+  {
+    const plan = asPlan(planWalletSplit([utxo("fat#0", 600n)], PROFILE));
+    assert.deepEqual(plan.consumeOutRefs, ["fat#0"], "consumes the oversized UTxO");
+    const counts = plan.outputLovelaces.reduce<Record<string, number>>((acc, v) => {
+      const k = v.toString();
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {});
+    assert.equal(counts[(10n * ADA).toString()], 5, "5 collateral outputs of 10 ADA");
+    assert.equal(counts[(100n * ADA).toString()], 5, "5 working outputs of 100 ADA");
+  }
+
+  // Already shaped → no-op.
+  {
+    const shaped: SplitUtxo[] = [
+      ...Array.from({ length: 5 }, (_, i) => utxo(`c#${i}`, 10n)),
+      ...Array.from({ length: 5 }, (_, i) => utxo(`w#${i}`, 100n)),
+    ];
+    assert.deepEqual(planWalletSplit(shaped, PROFILE), { act: false, reason: "already_shaped" });
+  }
+
+  // Oversized UTxO broken into working pieces even when the counts are met.
+  {
+    const utxos: SplitUtxo[] = [
+      ...Array.from({ length: 5 }, (_, i) => utxo(`c#${i}`, 10n)),
+      ...Array.from({ length: 5 }, (_, i) => utxo(`w#${i}`, 100n)),
+      utxo("fat#0", 600n),
+    ];
+    const plan = asPlan(planWalletSplit(utxos, PROFILE));
+    assert.deepEqual(plan.consumeOutRefs, ["fat#0"], "only the oversized UTxO is consumed");
+    assert.deepEqual(
+      plan.outputLovelaces,
+      Array.from({ length: 5 }, () => 100n * ADA),
+      "the fat UTxO is split into working-sized pieces",
+    );
+  }
+
+  // Tops up only the missing pieces, preserving good UTxOs.
+  {
+    const utxos: SplitUtxo[] = [
+      ...Array.from({ length: 5 }, (_, i) => utxo(`c#${i}`, 10n)),
+      utxo("w#0", 100n),
+      utxo("w#1", 100n),
+      utxo("med#0", 400n),
+    ];
+    const plan = asPlan(planWalletSplit(utxos, PROFILE));
+    assert.ok(!plan.consumeOutRefs.includes("c#0"), "good collateral preserved");
+    assert.ok(!plan.consumeOutRefs.includes("w#0"), "good working preserved");
+  }
+
+  // Insufficient funds → no-op.
+  {
+    const dust = Array.from({ length: 10 }, (_, i) => utxo(`d#${i}`, 1n));
+    assert.deepEqual(planWalletSplit(dust, PROFILE), { act: false, reason: "insufficient" });
+  }
+
+  // Token-bearing UTxOs are never touched (collateral must be pure ADA).
+  {
+    const utxos: SplitUtxo[] = [utxo("fat#0", 600n), utxo("nft#0", 5n, false)];
+    const plan = asPlan(planWalletSplit(utxos, PROFILE));
+    assert.ok(!plan.consumeOutRefs.includes("nft#0"), "the token UTxO is never consumed");
+  }
+}
+
 // ADA), smallest first (the dust is what blocks collateral), capped at maxInputs.
 function testConsolidationUtxoSelection(): void {
   const TOKEN_UNIT = `${"aa".repeat(28)}4449415f5245434549564552`;

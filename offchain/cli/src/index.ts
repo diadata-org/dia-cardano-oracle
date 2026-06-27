@@ -47,6 +47,7 @@ function printUsage(): void {
   npm run cli -- wallet
   npm run cli -- wallet:utxos
   npm run cli -- wallet:consolidate [--max-inputs 60] [--build-only]
+  npm run cli -- wallet:split [--split-above 550000000] [--working-count 5] [--working-lovelace 100000000] [--collateral-count 5] [--collateral-lovelace 10000000] [--build-only]
   npm run cli -- wallet:defaults
   npm run cli -- ethereum-wallet:create
   Paths use ../state/<network>_run_<id>/...; when omitted, commands use RUN_ID or the newest run dir.
@@ -276,6 +277,61 @@ async function run(): Promise<void> {
         buildOnly: hasBuildOnlyFlag(),
       });
       printJson(result);
+      return;
+    }
+
+    case "wallet:split": {
+      // The OPPOSITE of consolidate: break the configured wallet's UTxOs toward
+      // the target profile (split a large UTxO into many usable ones) so a single
+      // wallet can feed parallel lanes. Plans with the shared `planWalletSplit`,
+      // then self-pays the profile. No-op when the wallet is already shaped.
+      const { makeConfiguredLucid, selectConfiguredWallet } = await import("./core/lucid.js");
+      const { planWalletSplit } = await import("./wallet/split-plan.js");
+      const { splitWallet } = await import("./transactions/split-wallet.js");
+      const cfg = getCliConfig();
+      const signer = cfg.cardanoWalletSeed
+        ? { kind: "seed" as const, value: cfg.cardanoWalletSeed }
+        : cfg.cardanoPrivateKey
+          ? { kind: "privateKey" as const, value: cfg.cardanoPrivateKey }
+          : undefined;
+      if (!signer) {
+        throw new Error(
+          `Missing wallet configuration. Set CARDANO_WALLET_SEED_${cfg.networkSuffix} or CARDANO_PRIVATE_KEY_${cfg.networkSuffix}.`,
+        );
+      }
+      // The target profile comes from flags (the feeder daemon sources it from
+      // `wallet_shape` YAML instead). Defaults match the feeder's documented
+      // shape so a flagless manual run matches automatic behaviour.
+      const profile = {
+        workingCount: Number(optionalFlagValue("--working-count") ?? 5),
+        workingLovelace: BigInt(optionalFlagValue("--working-lovelace") ?? 100_000_000),
+        collateralCount: Number(optionalFlagValue("--collateral-count") ?? 5),
+        collateralLovelace: BigInt(optionalFlagValue("--collateral-lovelace") ?? 10_000_000),
+        splitAboveLovelace: BigInt(optionalFlagValue("--split-above") ?? 550_000_000),
+        feeBufferLovelace: 2_000_000n,
+      };
+      const lucid = await makeConfiguredLucid();
+      await selectConfiguredWallet(lucid);
+      const utxos = await lucid.wallet().getUtxos();
+      const plan = planWalletSplit(
+        utxos.map((u) => ({
+          outRef: `${u.txHash}#${u.outputIndex}`,
+          lovelace: u.assets.lovelace,
+          hasOnlyAda: Object.keys(u.assets).length === 1,
+        })),
+        profile,
+      );
+      if (!plan.act) {
+        printJson({ acted: false, reason: plan.reason });
+        return;
+      }
+      const result = await splitWallet({
+        signer,
+        consumeOutRefs: plan.consumeOutRefs,
+        outputLovelaces: plan.outputLovelaces,
+        buildOnly: hasBuildOnlyFlag(),
+      });
+      printJson({ acted: true, ...result });
       return;
     }
 
