@@ -140,6 +140,37 @@ describe("createWalletArbiter", () => {
     assert.deepEqual(arbiter.acquire(), { unavailable: true });
   });
 
+  it("acquireWalletForAmount reserves enough largest-first UTxOs to cover a value transfer", () => {
+    const { lockTable, arbiter } = setup({
+      wallets: [wallet("main", "main")],
+      caches: {
+        main: [
+          { outRef: "w#0", lovelace: 100_000_000n, hasOnlyAda: true },
+          { outRef: "w#1", lovelace: 100_000_000n, hasOnlyAda: true },
+          { outRef: "c#0", lovelace: 10_000_000n, hasOnlyAda: true },
+        ],
+      },
+    });
+
+    // Funding 150 ADA can't come from a single 100-ADA UTxO; it must reserve two.
+    const r = asReservation(arbiter.acquireWalletForAmount("main", 150_000_000n));
+    assert.deepEqual(
+      r.utxos.map((u) => u.outRef).sort(),
+      ["w#0", "w#1"],
+      "reserves the two largest UTxOs (200 ADA) to cover 150 ADA, leaving the small one free",
+    );
+    for (const u of r.utxos) assert.equal(lockTable.isLocked("main", u.outRef), true);
+    assert.equal(lockTable.isLocked("main", "c#0"), false, "the un-needed small UTxO stays free");
+  });
+
+  it("acquireWalletForAmount returns unavailable when spendable UTxOs can't cover the amount", () => {
+    const { arbiter } = setup({
+      wallets: [wallet("main", "main")],
+      caches: { main: [{ outRef: "w#0", lovelace: 100_000_000n, hasOnlyAda: true }] },
+    });
+    assert.deepEqual(arbiter.acquireWalletForAmount("main", 150_000_000n), { unavailable: true });
+  });
+
   it("stats expose per-wallet largest-UTxO and usable-UTxO count (for the shape triggers)", () => {
     const { arbiter } = setup({
       wallets: [wallet("main", "main")],
@@ -303,6 +334,20 @@ describe("createWalletArbiter", () => {
       { unavailable: true },
       "a client lane already holds one of the requested utxos — split backs off",
     );
+  });
+
+  it("acquireSpecificUtxos rejects a duplicated out-ref without locking it (no partial-lock leak)", () => {
+    const { lockTable, arbiter } = setup({
+      wallets: [wallet("main", "main")],
+      caches: { main: utxos("main", 4) },
+    });
+
+    assert.deepEqual(
+      arbiter.acquireSpecificUtxos("main", ["main-tx#0", "main-tx#0"]),
+      { unavailable: true },
+      "a repeated out-ref fails the whole request (the second lookup misses)",
+    );
+    assert.equal(lockTable.isLocked("main", "main-tx#0"), false, "the first occurrence is NOT left locked");
   });
 
   it("acquireSpecificUtxos returns unavailable for an unknown id, a missing out-ref, or a consolidating wallet", () => {

@@ -76,7 +76,7 @@ describe("createCardanoWriteClient", () => {
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },
@@ -152,7 +152,7 @@ describe("createCardanoWriteClient", () => {
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },
@@ -228,7 +228,7 @@ describe("createCardanoWriteClient", () => {
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },
@@ -297,7 +297,7 @@ describe("createCardanoWriteClient", () => {
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },
@@ -351,7 +351,7 @@ describe("createCardanoWriteClient", () => {
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },
@@ -395,7 +395,7 @@ describe("createCardanoWriteClient", () => {
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },
@@ -442,7 +442,7 @@ describe("createCardanoWriteClient", () => {
       async mergeDeposits() { return { txHash: null, confirmed: false }; },
       async settle() { return { txHash: null, confirmed: false }; },
       async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
       async fundPoolWallet() {
         return { txHash: null, confirmed: false, funded: false };
       },

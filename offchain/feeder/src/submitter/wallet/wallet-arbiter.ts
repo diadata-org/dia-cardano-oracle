@@ -66,6 +66,11 @@ export type WalletArbiter = {
    *  tx is a plain self-payment — and locks only the named UTxOs, so other lanes
    *  keep using the wallet's remaining UTxOs in parallel. */
   acquireSpecificUtxos(walletId: string, outRefs: string[]): AcquireResult;
+  /** Reserve enough of a SPECIFIC wallet's pure-ADA UTxOs (largest-first) to
+   *  cover `minLovelace`, for a VALUE-carrying tx (a main→pool funding transfer)
+   *  rather than the fixed fee+collateral pick `acquire()` makes. Reports
+   *  unavailable if the wallet's spendable UTxOs do not sum to `minLovelace`. */
+  acquireWalletForAmount(walletId: string, minLovelace: bigint): AcquireResult;
   /** Release a reservation once its tx confirms or fails. `consumedOutRefs` are
    *  removed from the wallet's cache and `producedUtxos` (the change) added, so
    *  the next acquire sees fresh UTxOs. */
@@ -225,6 +230,24 @@ export function createWalletArbiter(deps: WalletArbiterDeps): WalletArbiter {
         free.delete(ref);
         reserved.push(u);
       }
+      return reserveExact(w, reserved);
+    },
+
+    acquireWalletForAmount(walletId, minLovelace) {
+      const w = pool.get(walletId);
+      if (!w || pool.isConsolidating(w.id)) return { unavailable: true };
+      // Largest-first so the fewest inputs cover the amount; lock them all.
+      const byLargest = spendable(w.id).sort((a, b) =>
+        a.lovelace > b.lovelace ? -1 : a.lovelace < b.lovelace ? 1 : 0,
+      );
+      const reserved: WalletUtxo[] = [];
+      let sum = 0n;
+      for (const u of byLargest) {
+        reserved.push(u);
+        sum += u.lovelace;
+        if (sum >= minLovelace) break;
+      }
+      if (sum < minLovelace) return { unavailable: true };
       return reserveExact(w, reserved);
     },
 

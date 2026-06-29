@@ -8,9 +8,9 @@
 
 import type { WalletShapeProfile } from "@diadata-org/dia-cardano-oracle-cli/wallet/split-plan";
 import {
+  DEFAULT_BIG_UTXO_ABOVE_LOVELACE,
   DEFAULT_COLLATERAL_UTXO_COUNT,
   DEFAULT_COLLATERAL_UTXO_LOVELACE,
-  DEFAULT_SPLIT_ABOVE_LOVELACE,
   DEFAULT_WORKING_UTXO_COUNT,
   DEFAULT_WORKING_UTXO_LOVELACE,
   SPLIT_FEE_BUFFER_LOVELACE,
@@ -38,10 +38,10 @@ export function resolveWalletShapeProfile(config: WalletShapeConfig | undefined)
       config?.collateral_utxo_lovelace !== undefined
         ? BigInt(config.collateral_utxo_lovelace)
         : DEFAULT_COLLATERAL_UTXO_LOVELACE,
-    splitAboveLovelace:
-      config?.split_above_lovelace !== undefined
-        ? BigInt(config.split_above_lovelace)
-        : DEFAULT_SPLIT_ABOVE_LOVELACE,
+    bigUtxoAboveLovelace:
+      config?.big_utxo_above_lovelace !== undefined
+        ? BigInt(config.big_utxo_above_lovelace)
+        : DEFAULT_BIG_UTXO_ABOVE_LOVELACE,
     feeBufferLovelace: SPLIT_FEE_BUFFER_LOVELACE,
   };
 }

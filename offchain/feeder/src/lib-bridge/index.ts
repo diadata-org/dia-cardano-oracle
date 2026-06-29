@@ -63,7 +63,7 @@ import { paymentHookWithdraw } from "@diadata-org/dia-cardano-oracle-cli/transac
 import { fundPoolWallet as fundPoolWalletTx } from "@diadata-org/dia-cardano-oracle-cli/transactions/fund-pool-wallet";
 import { splitWallet as splitWalletTx } from "@diadata-org/dia-cardano-oracle-cli/transactions/split-wallet";
 import { deriveConfiguredWalletDefaults } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet";
-import { consolidateWallet } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet-consolidate";
+import { consolidateWallet as consolidateWalletTx } from "@diadata-org/dia-cardano-oracle-cli/wallet/wallet-consolidate";
 import type { DiaOracleIntent } from "@diadata-org/dia-cardano-oracle-cli/core/dia-intent";
 import type {
   ClientStateArtifact,
@@ -82,7 +82,10 @@ import {
 import type { WalletPool, WalletUtxo } from "../submitter/wallet/wallet-pool.js";
 import { planWalletSplit, type WalletShapeProfile } from "../submitter/wallet/wallet-shape.js";
 import {
+  CONSOLIDATE_MIN_HEADROOM_LOVELACE,
   DEFAULT_CONFIRMATION_DEPTH,
+  DEFAULT_CONSOLIDATE_MAX_INPUTS,
+  POOL_FUND_FEE_BUFFER_LOVELACE,
   STALE_INPUT_RECONCILE_ATTEMPTS,
   STALE_INPUT_RECONCILE_DELAY_MS,
 } from "../config/constants.js";
@@ -151,7 +154,7 @@ export type OracleIntentSubmitParams = {
    *   submitted (carries txHash), waiting_confirm,
    *   waiting_utxo, writing_state
    */
-  onStep?: (step: string, meta?: { txHash?: string }) => void;
+  onStep?: (step: string, meta?: { txHash?: string; wallet?: string }) => void;
 };
 
 export type OracleIntentBatchSubmitParams = {
@@ -163,7 +166,7 @@ export type OracleIntentBatchSubmitParams = {
   updates: Array<{
     enriched: EnrichedIntent;
     intentHash: string;
-    onStep?: (step: string, meta?: { txHash?: string }) => void;
+    onStep?: (step: string, meta?: { txHash?: string; wallet?: string }) => void;
   }>;
 };
 
@@ -305,17 +308,18 @@ export type OracleIntentBridge = {
     amountLovelace: bigint;
   }): Promise<{ txHash: string | null; confirmed: boolean }>;
   /**
-   * Defragment the admin/signer wallet: fold its pure-ADA UTxOs into a dedicated
-   * collateral UTxO + working balance by delegating to the CLI's
-   * `consolidateWallet`. A plain pubkey self-payment (NO script inputs → NO
-   * collateral needed to build), so it recovers even an all-dust wallet. It
-   * spends ONLY wallet UTxOs (not the Receiver), but the daemon still runs it on
-   * the lane to keep its own UTxO view consistent. Throws on failure.
+   * Defragment a SPECIFIC signer wallet: fold its dust pure-ADA UTxOs into a
+   * dedicated collateral UTxO + working balance. A plain pubkey self-payment (NO
+   * script inputs → NO collateral needed to build) so it recovers even an all-dust
+   * wallet. Reserves the dust through the arbiter (so it never collides with a
+   * client lane on the same wallet) and signs with the wallet's own key.
+   * `consolidated` is false when there is too little dust worth merging or the
+   * dust is momentarily reserved (the daemon retries next tick).
    */
   consolidateWallet(params: {
+    walletId: string;
     collateralLovelace: bigint;
-    maxInputs?: number;
-  }): Promise<{ txHash: string | null; confirmed: boolean }>;
+  }): Promise<{ txHash: string | null; confirmed: boolean; consolidated: boolean }>;
   /**
    * Top up a pool wallet from the main wallet — the on-chain side of the
    * main→pool funding loop. Reserves the main's UTxOs through the arbiter (so it
@@ -817,7 +821,7 @@ export function createRealOracleIntentBridge(
           return built;
         }
 
-        onStep?.("building");
+        onStep?.("building", { wallet: reservation.walletId });
         log(`building oracle update tx for symbol=${fullIntent.symbol}`);
 
         let txSignBuilder: Awaited<ReturnType<typeof buildOracleUpdateTx>>["txSignBuilder"];
@@ -1322,7 +1326,7 @@ export function createRealOracleIntentBridge(
               if (fresh) currentPairUtxoByUnit.set(entry.pairUnit, fresh);
             }
 
-            emitBatchStep(updates, "building");
+            emitBatchStep(updates, "building", { wallet: reservation.walletId });
             const built = await buildBatchOracleUpdateTx(lucid, {
               entries: preparedEntries.map((entry) => ({
                 intent: entry.intent,
@@ -1614,55 +1618,123 @@ export function createRealOracleIntentBridge(
       protocolStatePath: string;
     }): Promise<{ txHash: string | null; confirmed: boolean }> {
       // Delegate to the CLI's `settleAccruedFees` (single Receiver here) so the
-      // feeder keeps one source of truth for the settle tx shape. Serialization
-      // against the update lane is the CALLER's responsibility.
+      // feeder keeps one source of truth for the settle tx shape. The settle
+      // signs with the main wallet (= the configured wallet), so reserve its
+      // fee/collateral UTxOs through the arbiter: this serialises the settle's
+      // coin selection against any client update lane drawing on the same wallet,
+      // so the two never pick the same input. Released on completion.
       log(`settle: client=${params.clientStatePath}`);
-      const result = await settleAccruedFees({
-        protocolStatePath: path.resolve(params.protocolStatePath),
-        clientStatePaths: [path.resolve(params.clientStatePath)],
-        buildOnly: false,
-      });
-      const record = result.transactions?.[result.transactions.length - 1];
-      const txHash = record?.submittedTxHash ?? null;
-      const confirmed = record?.confirmed === true;
-      log(`settle: confirmed=${confirmed} txHash=${txHash ?? "(none)"} drained=${result.totalSettledLovelace}`);
-      return { txHash, confirmed };
+      const main = walletPool.main();
+      const reservation = arbiter.acquireWallet(main.id);
+      if ("unavailable" in reservation) {
+        log(`settle: main wallet has no free UTxO to back the settle this tick; skipping`);
+        return { txHash: null, confirmed: false };
+      }
+      let settled: { consumedOutRefs: string[]; producedUtxos: WalletUtxo[] } = {
+        consumedOutRefs: [],
+        producedUtxos: [],
+      };
+      try {
+        const result = await settleAccruedFees({
+          protocolStatePath: path.resolve(params.protocolStatePath),
+          clientStatePaths: [path.resolve(params.clientStatePath)],
+          buildOnly: false,
+          reservedOutRefs: reservation.utxos.map((u) => u.outRef),
+        });
+        settled = { consumedOutRefs: result.consumedOutRefs, producedUtxos: result.producedUtxos };
+        const record = result.transactions?.[result.transactions.length - 1];
+        const txHash = record?.submittedTxHash ?? null;
+        const confirmed = record?.confirmed === true;
+        log(`settle: confirmed=${confirmed} txHash=${txHash ?? "(none)"} drained=${result.totalSettledLovelace}`);
+        return { txHash, confirmed };
+      } finally {
+        arbiter.release(reservation, settled);
+      }
     },
 
     async withdrawFromPaymentHook(params: {
       protocolStatePath: string;
       amountLovelace: bigint;
     }): Promise<{ txHash: string | null; confirmed: boolean }> {
+      // Same arbitration as `settle`: the withdraw signs with the main wallet, so
+      // reserve its fee/collateral pick to keep it from colliding with a client
+      // update lane on the same wallet.
       log(`withdrawFromPaymentHook: amount=${params.amountLovelace}`);
-      const result = (await paymentHookWithdraw({
-        amountLovelace: params.amountLovelace.toString(),
-        statePath: path.resolve(params.protocolStatePath),
-        buildOnly: false,
-      })) as {
-        transactions?: Array<{ submittedTxHash?: string | null; confirmed?: boolean }>;
+      const main = walletPool.main();
+      const reservation = arbiter.acquireWallet(main.id);
+      if ("unavailable" in reservation) {
+        log(`withdrawFromPaymentHook: main wallet has no free UTxO to back the withdraw this tick; skipping`);
+        return { txHash: null, confirmed: false };
+      }
+      let settled: { consumedOutRefs: string[]; producedUtxos: WalletUtxo[] } = {
+        consumedOutRefs: [],
+        producedUtxos: [],
       };
-      const record = result.transactions?.[result.transactions.length - 1];
-      const txHash = record?.submittedTxHash ?? null;
-      const confirmed = record?.confirmed === true;
-      log(`withdrawFromPaymentHook: confirmed=${confirmed} txHash=${txHash ?? "(none)"}`);
-      return { txHash, confirmed };
+      try {
+        const result = await paymentHookWithdraw({
+          amountLovelace: params.amountLovelace.toString(),
+          statePath: path.resolve(params.protocolStatePath),
+          buildOnly: false,
+          reservedOutRefs: reservation.utxos.map((u) => u.outRef),
+        });
+        settled = { consumedOutRefs: result.consumedOutRefs, producedUtxos: result.producedUtxos };
+        const record =
+          result.artifact.transactions?.[result.artifact.transactions.length - 1];
+        const txHash = record?.submittedTxHash ?? null;
+        const confirmed = record?.confirmed === true;
+        log(`withdrawFromPaymentHook: confirmed=${confirmed} txHash=${txHash ?? "(none)"}`);
+        return { txHash, confirmed };
+      } finally {
+        arbiter.release(reservation, settled);
+      }
     },
 
     async consolidateWallet(params: {
+      walletId: string;
       collateralLovelace: bigint;
-      maxInputs?: number;
-    }): Promise<{ txHash: string | null; confirmed: boolean }> {
-      log(`consolidateWallet: collateral=${params.collateralLovelace} maxInputs=${params.maxInputs ?? 60}`);
-      const result = await consolidateWallet({
-        maxInputs: params.maxInputs ?? 60,
-        buildOnly: false,
-        collateralLovelace: params.collateralLovelace,
-      });
-      log(
-        `consolidateWallet: confirmed=${result.confirmed} txHash=${result.submittedTxHash ?? "(none)"} ` +
-          `merged=${result.consolidatedUtxoCount}`,
-      );
-      return { txHash: result.submittedTxHash, confirmed: result.confirmed };
+    }): Promise<{ txHash: string | null; confirmed: boolean; consolidated: boolean }> {
+      const target = walletPool.get(params.walletId);
+      if (!target) {
+        throw new Error(`consolidateWallet: unknown wallet "${params.walletId}".`);
+      }
+      // Merge the SMALLEST pure-ADA UTxOs (the dust that starves collateral) up to
+      // the input cap; need enough to leave a collateral UTxO + change + fee.
+      const dust = walletPool
+        .getUtxos(target.id)
+        .filter((u) => u.hasOnlyAda)
+        .sort((a, b) => (a.lovelace < b.lovelace ? -1 : a.lovelace > b.lovelace ? 1 : 0))
+        .slice(0, DEFAULT_CONSOLIDATE_MAX_INPUTS);
+      const total = dust.reduce((acc, u) => acc + u.lovelace, 0n);
+      if (dust.length < 2 || total < params.collateralLovelace + CONSOLIDATE_MIN_HEADROOM_LOVELACE) {
+        log(`consolidateWallet: ${target.id} nothing worth merging (dust=${dust.length} total=${total})`);
+        return { txHash: null, confirmed: false, consolidated: false };
+      }
+      // Reserve EXACTLY the dust so the consolidate never collides with a client
+      // lane that also draws on this wallet; release on completion.
+      const reservation = arbiter.acquireSpecificUtxos(target.id, dust.map((u) => u.outRef));
+      if ("unavailable" in reservation) {
+        log(`consolidateWallet: ${target.id} dust momentarily reserved; skipping`);
+        return { txHash: null, confirmed: false, consolidated: false };
+      }
+      let settled: { consumedOutRefs: string[]; producedUtxos: WalletUtxo[] } = {
+        consumedOutRefs: [],
+        producedUtxos: [],
+      };
+      try {
+        log(`consolidateWallet: ${target.id} merging ${dust.length} dust UTxO(s) totalling ${total}`);
+        const result = await consolidateWalletTx({
+          signer: target.signer,
+          reservedOutRefs: dust.map((u) => u.outRef),
+          maxInputs: DEFAULT_CONSOLIDATE_MAX_INPUTS,
+          collateralLovelace: params.collateralLovelace,
+          buildOnly: false,
+        });
+        settled = { consumedOutRefs: result.consumedOutRefs, producedUtxos: result.producedUtxos };
+        log(`consolidateWallet: confirmed=${result.confirmed} txHash=${result.submittedTxHash ?? "(none)"} merged=${result.consolidatedUtxoCount}`);
+        return { txHash: result.submittedTxHash, confirmed: result.confirmed, consolidated: true };
+      } finally {
+        arbiter.release(reservation, settled);
+      }
     },
 
     async fundPoolWallet(params: {
@@ -1675,11 +1747,16 @@ export function createRealOracleIntentBridge(
         throw new Error(`fundPoolWallet: unknown pool wallet "${params.toWalletId}".`);
       }
       log(`fundPoolWallet: ${main.id} → ${target.id} amount=${params.amountLovelace}`);
-      // Reserve the main wallet's UTxOs so this transfer never collides with an
-      // oracle update that also draws on the main; release them on completion.
-      const reservation = arbiter.acquireWallet(main.id);
+      // Reserve ENOUGH of the main wallet's UTxOs to cover the transfer (amount +
+      // fee/change headroom), so this never collides with an oracle update that
+      // also draws on the main; release them on completion. A plain fee+collateral
+      // pick would pin too few inputs and fail to balance a large transfer.
+      const reservation = arbiter.acquireWalletForAmount(
+        main.id,
+        params.amountLovelace + POOL_FUND_FEE_BUFFER_LOVELACE,
+      );
       if ("unavailable" in reservation) {
-        log(`fundPoolWallet: main wallet has no free UTxOs this tick; skipping`);
+        log(`fundPoolWallet: main wallet lacks free UTxOs to cover the transfer this tick; skipping`);
         return { txHash: null, confirmed: false, funded: false };
       }
       let settled: { consumedOutRefs: string[]; producedUtxos: WalletUtxo[] } = {
@@ -1722,12 +1799,12 @@ export function createRealOracleIntentBridge(
         log(`splitWallet: ${target.id} planned inputs momentarily reserved; skipping`);
         return { txHash: null, confirmed: false, split: false };
       }
-      log(`splitWallet: ${target.id} splitting ${plan.consumeOutRefs.length} input(s) into ${plan.outputLovelaces.length} output(s)`);
       let settled: { consumedOutRefs: string[]; producedUtxos: WalletUtxo[] } = {
         consumedOutRefs: [],
         producedUtxos: [],
       };
       try {
+        log(`splitWallet: ${target.id} splitting ${plan.consumeOutRefs.length} input(s) into ${plan.outputLovelaces.length} output(s)`);
         const result = await splitWalletTx({
           signer: target.signer,
           consumeOutRefs: plan.consumeOutRefs,
@@ -1996,7 +2073,7 @@ async function writePairState(filePath: string, state: unknown): Promise<void> {
 function emitBatchStep(
   updates: OracleIntentBatchSubmitParams["updates"],
   step: string,
-  meta?: { txHash?: string },
+  meta?: { txHash?: string; wallet?: string },
 ): void {
   for (const update of updates) {
     update.onStep?.(step, meta);

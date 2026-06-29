@@ -113,7 +113,7 @@ function validateWalletShape(
   validatePositiveInteger("working_utxo_lovelace", shape.working_utxo_lovelace, c);
   validatePositiveInteger("collateral_utxo_count", shape.collateral_utxo_count, c);
   validatePositiveInteger("collateral_utxo_lovelace", shape.collateral_utxo_lovelace, c);
-  validatePositiveInteger("split_above_lovelace", shape.split_above_lovelace, c);
+  validatePositiveInteger("big_utxo_above_lovelace", shape.big_utxo_above_lovelace, c);
   validatePositiveInteger("min_usable_utxos", shape.min_usable_utxos, c);
   if (
     shape.collateral_utxo_lovelace !== undefined &&
@@ -127,12 +127,12 @@ function validateWalletShape(
   }
   if (
     shape.working_utxo_lovelace !== undefined &&
-    shape.split_above_lovelace !== undefined &&
-    shape.working_utxo_lovelace > shape.split_above_lovelace
+    shape.big_utxo_above_lovelace !== undefined &&
+    shape.working_utxo_lovelace > shape.big_utxo_above_lovelace
   ) {
     c.error(
-      "split_above_lovelace",
-      "split_above_lovelace must be at least working_utxo_lovelace, else working UTxOs would be split on sight.",
+      "big_utxo_above_lovelace",
+      "big_utxo_above_lovelace must be at least working_utxo_lovelace, else working UTxOs would count as big on sight.",
     );
   }
 }

@@ -230,6 +230,9 @@ type IntentRuntimeEntry = RouterRuntimeIdentity & {
   observedAtMs: number;
   symbol: string;
   submittedAtMs?: number;
+  /** Signer wallet that built this tx (pool id), reported by the bridge via the
+   *  `building` step. Labels the per-transaction metrics. */
+  wallet?: string;
 };
 
 function parsePositiveInteger(raw: number | undefined): number | undefined {
@@ -983,11 +986,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       ? BigInt(alerting.admin_wallet_min_collateral_lovelace)
       : 5_000_000n;
   // Auto-split trigger (the OPPOSITE of consolidate): a wallet is concentrated
-  // when its largest pure-ADA UTxO exceeds `split_above_lovelace` AND it has
+  // when its largest pure-ADA UTxO exceeds `big_utxo_above_lovelace` AND it has
   // fewer than `min_usable_utxos` usable UTxOs. Gated by the `auto_split` flag;
   // the thresholds come from `wallet_shape`.
   const autoSplitEnabled = alerting.auto_split === true;
-  const walletSplitAboveLovelace = resolveWalletShapeProfile(infra.wallet_shape).splitAboveLovelace;
+  const walletBigUtxoAboveLovelace = resolveWalletShapeProfile(infra.wallet_shape).bigUtxoAboveLovelace;
   const walletMinUsableUtxos = infra.wallet_shape?.min_usable_utxos ?? DEFAULT_MIN_USABLE_UTXOS;
   // Main→pool funding band (lovelace) + cooldown, from `wallet_pool` with the
   // `DEFAULT_*` fallbacks. The loop only acts when the pool has more than the
@@ -1126,8 +1129,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       createCardanoWriteClient(clientStatePath, protocolStatePath, {
         bridge,
         log: debugReport,
-        onStep: (intentHash, symbol, step, txHash) => {
+        onStep: (intentHash, symbol, step, txHash, wallet) => {
           const runtime = intentRuntime.get(intentHash);
+          // Record which signer wallet built this tx (reported at the `building`
+          // step) so the per-transaction metrics can be filtered by wallet.
+          if (wallet && runtime) runtime.wallet = wallet;
           // Per-client submission phase (building/submitting/awaiting-confirmation).
           const phase = submissionStateForStep(step);
           if (phase !== null && runtime) {
@@ -1292,21 +1298,23 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
               outcome: "confirmed",
             });
           }
-          metrics.transactionsTotal.inc({ ...labels, outcome: "confirmed" });
-          metrics.transactionPairs.observe({ ...labels, outcome: "confirmed" }, batchSize);
+          // The signer wallet that built this tx labels the per-transaction series.
+          const txLabels = { ...labels, wallet: runtime?.wallet ?? "" };
+          metrics.transactionsTotal.inc({ ...txLabels, outcome: "confirmed" });
+          metrics.transactionPairs.observe({ ...txLabels, outcome: "confirmed" }, batchSize);
           if (runtime?.submittedAtMs !== undefined) {
             metrics.txProcessingToSubmissionSeconds.observe(
-              labels,
+              txLabels,
               (runtime.submittedAtMs - runtime.observedAtMs) / 1_000,
             );
             metrics.txSubmissionToConfirmationSeconds.observe(
-              labels,
+              txLabels,
               (nowMs - runtime.submittedAtMs) / 1_000,
             );
           }
           if (runtime) {
             metrics.txEndToEndSeconds.observe(
-              labels,
+              txLabels,
               (nowMs - runtime.observedAtMs) / 1_000,
             );
           }
@@ -1528,8 +1536,9 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
                 outcome: "failed",
               });
             }
-            metrics.transactionsTotal.inc({ ...labels, outcome: "failed" });
-            metrics.transactionPairs.observe({ ...labels, outcome: "failed" }, batchSize);
+            const failWallet = runtime?.wallet ?? "";
+            metrics.transactionsTotal.inc({ ...labels, outcome: "failed", wallet: failWallet });
+            metrics.transactionPairs.observe({ ...labels, outcome: "failed", wallet: failWallet }, batchSize);
           }
         }
         if (result.code === "TxDroppedFromChain") {
@@ -1864,7 +1873,8 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // consolidate (one shared admin wallet) are process-wide, so a boolean each.
   const settleInProgress = new Set<string>();
   let withdrawInProgress = false;
-  let consolidateInProgress = false;
+  // Auto-consolidate runs per wallet (like split), so a Set keyed by wallet id.
+  const consolidateInProgress = new Set<string>();
   // Auto-split runs per wallet, so a Set keyed by wallet id (a wallet's split
   // spans many ticks). The arbiter's per-UTxO locks make it safe to run detached
   // from the client lanes, so this guard only collapses duplicate enqueues.
@@ -2017,36 +2027,35 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       });
   }
 
-  async function maybeAutoConsolidate(
-    dest: { cardano: CardanoDestinationConfig },
-    snapshot: { adminWalletMaxUtxoLovelace?: bigint },
-  ): Promise<void> {
-    const decision = shouldAutoConsolidate({
-      adminWalletMaxUtxoLovelace: snapshot.adminWalletMaxUtxoLovelace,
-      autoConsolidateBelowLovelace,
-      inProgress: consolidateInProgress,
-    });
-    if (!decision.act) return;
-    consolidateInProgress = true;
-    report(
-      `auto-consolidate: enqueueing wallet consolidate largestUtxo=${snapshot.adminWalletMaxUtxoLovelace ?? "?"} ` +
-      `threshold=${autoConsolidateBelowLovelace} collateral=${collateralUtxoLovelace}`,
-    );
-    // Consolidate spends ONLY admin-wallet UTxOs (a plain self-payment, no
-    // script, no collateral needed to build), but every update also spends
-    // wallet UTxOs for fees, so we run it on a lane and keep it single-flight
-    // process-wide to avoid colliding with an in-flight build.
-    void queueManager
-      .enqueueLaneTask(dest.cardano, async () => {
-        const res = await bridge.consolidateWallet({ collateralLovelace: collateralUtxoLovelace });
-        report(`auto-consolidate: done confirmed=${res.confirmed} txHash=${res.txHash ?? "(none)"}`);
-      })
-      .catch((err) => {
-        report(`[warn] auto-consolidate: failed — ${sanitizeLogLine((err as Error).message)}`);
-      })
-      .finally(() => {
-        consolidateInProgress = false;
+  // Auto-consolidate runs once per tick over every wallet (mirror of auto-split,
+  // the OPPOSITE shape problem): a fragmented wallet (largest pure-ADA UTxO below
+  // the floor) has its dust merged into a collateral + working UTxO. The
+  // consolidate reserves exactly that dust via the arbiter, so it runs DETACHED
+  // from the client lanes (the per-UTxO locks are the safety, no extra lane).
+  function maybeAutoConsolidateWallets(): void {
+    if (autoConsolidateBelowLovelace === undefined) return;
+    for (const w of bridge.walletStats()) {
+      const decision = shouldAutoConsolidate({
+        maxUtxoLovelace: w.maxUtxoLovelace,
+        autoConsolidateBelowLovelace,
+        inProgress: consolidateInProgress.has(w.walletId),
       });
+      if (decision.act !== true) continue;
+      consolidateInProgress.add(w.walletId);
+      report(
+        `auto-consolidate: ${w.walletId} fragmented (largestUtxo=${w.maxUtxoLovelace} ` +
+        `threshold=${autoConsolidateBelowLovelace} collateral=${collateralUtxoLovelace})`,
+      );
+      void bridge
+        .consolidateWallet({ walletId: w.walletId, collateralLovelace: collateralUtxoLovelace })
+        .then((r) =>
+          report(`auto-consolidate: ${w.walletId} done consolidated=${r.consolidated} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`),
+        )
+        .catch((err) => report(`[warn] auto-consolidate: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`))
+        .finally(() => {
+          consolidateInProgress.delete(w.walletId);
+        });
+    }
   }
 
   // Auto-split runs once per tick over every pool wallet (not per client), so it
@@ -2061,7 +2070,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       const decision = shouldAutoSplit({
         maxUtxoLovelace: w.maxUtxoLovelace,
         usableUtxoCount: w.usableUtxoCount,
-        splitAboveLovelace: walletSplitAboveLovelace,
+        bigUtxoAboveLovelace: walletBigUtxoAboveLovelace,
         minUsableUtxos: walletMinUsableUtxos,
         enabled: autoSplitEnabled,
         inProgress: splitInProgress.has(w.walletId),
@@ -2070,7 +2079,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       splitInProgress.add(w.walletId);
       report(
         `auto-split: ${w.walletId} concentrated (largestUtxo=${w.maxUtxoLovelace} usable=${w.usableUtxoCount} ` +
-        `threshold=${walletSplitAboveLovelace}/${walletMinUsableUtxos})`,
+        `threshold=${walletBigUtxoAboveLovelace}/${walletMinUsableUtxos})`,
       );
       void bridge
         .splitWallet({ walletId: w.walletId })
@@ -2108,16 +2117,18 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       });
       if (decision.act !== true) continue;
       fundInProgress.add(w.walletId);
-      lastFundedAtMs.set(w.walletId, nowMs);
       report(
         `auto-fund: main → ${w.walletId} amount=${decision.amountLovelace} ` +
         `(spendable=${w.spendableLovelace} low=${poolFundLowLovelace} target=${poolFundTargetLovelace})`,
       );
       void bridge
         .fundPoolWallet({ toWalletId: w.walletId, amountLovelace: decision.amountLovelace })
-        .then((r) =>
-          report(`auto-fund: ${w.walletId} done funded=${r.funded} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`),
-        )
+        .then((r) => {
+          // Arm the cooldown only on a confirmed transfer; a failed/skipped fund
+          // (no ADA moved) must be retriable on the next tick, not blocked.
+          if (r.funded && r.confirmed) lastFundedAtMs.set(w.walletId, nowMs);
+          report(`auto-fund: ${w.walletId} done funded=${r.funded} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`);
+        })
         .catch((err) => report(`[warn] auto-fund: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`))
         .finally(() => {
           fundInProgress.delete(w.walletId);
@@ -2158,13 +2169,15 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     // Per-wallet pool maintenance — once per tick over the whole pool, off the
     // freshly refreshed cache. Detached (the arbiter's locks are the safety).
     maybeAutoSplitWallets();
+    maybeAutoConsolidateWallets();
     maybeFundPoolWallets(Date.now());
     // Per-wallet gauges from the same snapshot (empty in dry-run → no series).
     for (const w of bridge.walletStats()) {
-      metrics.cardanoWalletSpendableLovelace.set({ wallet: w.walletId }, Number(w.spendableLovelace));
-      metrics.cardanoWalletMaxUtxoLovelace.set({ wallet: w.walletId }, Number(w.maxUtxoLovelace));
-      metrics.cardanoWalletUsableUtxos.set({ wallet: w.walletId }, w.usableUtxoCount);
-      metrics.cardanoWalletReservations.set({ wallet: w.walletId }, w.reservations);
+      const labels = { wallet: w.walletId, role: w.role };
+      metrics.cardanoWalletSpendableLovelace.set(labels, Number(w.spendableLovelace));
+      metrics.cardanoWalletMaxUtxoLovelace.set(labels, Number(w.maxUtxoLovelace));
+      metrics.cardanoWalletUsableUtxos.set(labels, w.usableUtxoCount);
+      metrics.cardanoWalletReservations.set(labels, w.reservations);
     }
     let primaryOk = false;
     for (const dest of balanceRefreshDests) {
@@ -2215,7 +2228,6 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         await maybeAutoMergeDeposits(dest, b);
         await maybeAutoSettle(dest, b);
         await maybeAutoWithdraw(dest, b);
-        await maybeAutoConsolidate(dest, b);
       } catch (err) {
         report(`balance-refresh: ${dest.clientStatePath} failed: ${(err as Error).message}`);
       }
@@ -3092,9 +3104,9 @@ function makeDryRunBridge(report: (line: string) => void): OracleIntentBridge {
     },
     async consolidateWallet(params) {
       report(
-        `daemon: [dry-run bridge] consolidateWallet collateral=${params.collateralLovelace} (no-op)`,
+        `daemon: [dry-run bridge] consolidateWallet ${params.walletId} collateral=${params.collateralLovelace} (no-op)`,
       );
-      return { txHash: null, confirmed: false };
+      return { txHash: null, confirmed: false, consolidated: false };
     },
     async fundPoolWallet(params) {
       report(

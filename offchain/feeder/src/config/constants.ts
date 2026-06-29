@@ -363,6 +363,16 @@ export const DEFAULT_POOL_WALLET_TARGET_LOVELACE = 200_000_000;
 /** The main wallet never funds the pool below this spendable lovelace reserve.
  *  YAML: `wallet_pool.main_wallet_reserve_lovelace`. */
 export const DEFAULT_MAIN_WALLET_RESERVE_LOVELACE = 100_000_000;
+/** Headroom added to a main→pool funding amount when reserving the main's UTxOs,
+ *  so the reserved set also covers the tx fee + the change min-UTxO. Constant-only
+ *  — a structural tx-build margin, not an operator knob. */
+export const POOL_FUND_FEE_BUFFER_LOVELACE = 3_000_000n;
+/** Most dust UTxOs a single consolidate tx merges, so the tx never exceeds the
+ *  chain's max size (mirrors the CLI's `--max-inputs` default). Structural. */
+export const DEFAULT_CONSOLIDATE_MAX_INPUTS = 60;
+/** A wallet is only auto-consolidated when its dust sums to at least the target
+ *  collateral UTxO plus this headroom for the change UTxO + fee. Structural. */
+export const CONSOLIDATE_MIN_HEADROOM_LOVELACE = 3_000_000n;
 /** Per-wallet cooldown between main→pool funding txs (ms).
  *  YAML: `wallet_pool.pool_fund_min_interval_ms`. */
 export const DEFAULT_POOL_FUND_MIN_INTERVAL_MS = 5 * 60_000;
@@ -383,18 +393,23 @@ export const MIN_COLLATERAL_UTXO_LOVELACE = 5_000_000n;
 // value is authoritative where a key exists.
 // ---------------------------------------------------------------------------
 
-/** Working UTxOs to keep per wallet. YAML: `wallet_shape.working_utxo_count`. */
-export const DEFAULT_WORKING_UTXO_COUNT = 5;
+/** Working UTxOs a split fills the wallet up to. Higher than `min_usable_utxos`
+ *  (the trigger) so a split leaves headroom and does not re-fire every tick
+ *  (hysteresis). YAML: `wallet_shape.working_utxo_count`. */
+export const DEFAULT_WORKING_UTXO_COUNT = 10;
 /** Target size of each working UTxO. YAML: `wallet_shape.working_utxo_lovelace`. */
 export const DEFAULT_WORKING_UTXO_LOVELACE = 100_000_000n;
-/** Collateral UTxOs to keep per wallet. YAML: `wallet_shape.collateral_utxo_count`. */
+/** Collateral UTxOs a split fills the wallet up to. Collateral is returned on a
+ *  successful tx (it does not drain), so this stays at the base count.
+ *  YAML: `wallet_shape.collateral_utxo_count`. */
 export const DEFAULT_COLLATERAL_UTXO_COUNT = 5;
 /** Target size of each collateral UTxO. YAML: `wallet_shape.collateral_utxo_lovelace`. */
 export const DEFAULT_COLLATERAL_UTXO_LOVELACE = 10_000_000n;
-/** A pure-ADA UTxO larger than this is split. YAML: `wallet_shape.split_above_lovelace`. */
-export const DEFAULT_SPLIT_ABOVE_LOVELACE = 550_000_000n;
-/** Split fires only when usable pure-ADA UTxOs fall below this count.
- *  YAML: `wallet_shape.min_usable_utxos`. */
+/** A pure-ADA UTxO larger than this is considered big and is a candidate to
+ *  split. YAML: `wallet_shape.big_utxo_above_lovelace`. */
+export const DEFAULT_BIG_UTXO_ABOVE_LOVELACE = 550_000_000n;
+/** Split TRIGGER: it fires only when usable pure-ADA UTxOs fall below this count
+ *  (and a big UTxO is present). YAML: `wallet_shape.min_usable_utxos`. */
 export const DEFAULT_MIN_USABLE_UTXOS = 5;
 /** Headroom kept on a split tx's consumed inputs for fee + change min-UTxO.
  *  Constant-only — a structural tx-build margin, not an operator knob. */

@@ -83,7 +83,7 @@ export type AutoConsolidateDecision =
  * because total is blind to fragmentation.
  */
 export function shouldAutoConsolidate(input: {
-  adminWalletMaxUtxoLovelace?: bigint;
+  maxUtxoLovelace?: bigint;
   autoConsolidateBelowLovelace?: bigint;
   inProgress: boolean;
 }): AutoConsolidateDecision {
@@ -91,8 +91,8 @@ export function shouldAutoConsolidate(input: {
   if (input.autoConsolidateBelowLovelace === undefined) return { act: false, reason: "disabled" };
   // No reading → cannot judge (the wallet query failed this tick). Skip rather
   // than act blind; a real fragmentation persists and fires on a later tick.
-  if (input.adminWalletMaxUtxoLovelace === undefined) return { act: false, reason: "unknown" };
-  if (input.adminWalletMaxUtxoLovelace < input.autoConsolidateBelowLovelace) {
+  if (input.maxUtxoLovelace === undefined) return { act: false, reason: "unknown" };
+  if (input.maxUtxoLovelace < input.autoConsolidateBelowLovelace) {
     return { act: true, reason: "fragmented" };
   }
   return { act: false, reason: "healthy" };
@@ -106,7 +106,7 @@ export type AutoSplitDecision =
  * Should the daemon auto-run `wallet:split` (break a large pure-ADA UTxO into the
  * target profile) on this tick? This is the OPPOSITE of consolidate: it fires when
  * the wallet is too CONCENTRATED to feed parallel lanes — a UTxO larger than
- * `splitAboveLovelace` exists AND fewer than `minUsableUtxos` arbiter-usable
+ * `bigUtxoAboveLovelace` exists AND fewer than `minUsableUtxos` arbiter-usable
  * UTxOs remain. A lone big UTxO in an otherwise healthy wallet is left alone,
  * since splitting only buys parallelism the wallet already has. Gated by the
  * `auto_split` flag; the manual `wallet:split` command works regardless.
@@ -114,7 +114,7 @@ export type AutoSplitDecision =
 export function shouldAutoSplit(input: {
   maxUtxoLovelace?: bigint;
   usableUtxoCount?: number;
-  splitAboveLovelace: bigint;
+  bigUtxoAboveLovelace: bigint;
   minUsableUtxos: number;
   enabled?: boolean;
   inProgress: boolean;
@@ -126,7 +126,7 @@ export function shouldAutoSplit(input: {
   if (input.maxUtxoLovelace === undefined || input.usableUtxoCount === undefined) {
     return { act: false, reason: "unknown" };
   }
-  if (input.maxUtxoLovelace > input.splitAboveLovelace && input.usableUtxoCount < input.minUsableUtxos) {
+  if (input.maxUtxoLovelace > input.bigUtxoAboveLovelace && input.usableUtxoCount < input.minUsableUtxos) {
     return { act: true, reason: "concentrated" };
   }
   return { act: false, reason: "healthy" };

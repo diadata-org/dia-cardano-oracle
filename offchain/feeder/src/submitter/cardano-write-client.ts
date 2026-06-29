@@ -53,7 +53,7 @@ import { classifyError } from "../errors/index.js";
 export type CardanoWriteClientDeps = {
   bridge: OracleIntentBridge;
   log?: (line: string) => void;
-  onStep?: (intentHash: string, symbol: string, step: string, txHash?: string) => void;
+  onStep?: (intentHash: string, symbol: string, step: string, txHash?: string, wallet?: string) => void;
   onTransaction?: (entry: TransactionLogEntry) => void | Promise<void>;
 };
 
@@ -106,9 +106,9 @@ export function createCardanoWriteClient(
 
     deps.onStep?.(intentHash, symbol, "tx_start");
 
-    function trackStep(step: string, meta?: { txHash?: string }): void {
+    function trackStep(step: string, meta?: { txHash?: string; wallet?: string }): void {
       stepStartMs[step] = Date.now();
-      deps.onStep?.(intentHash, symbol, step, meta?.txHash);
+      deps.onStep?.(intentHash, symbol, step, meta?.txHash, meta?.wallet);
     }
 
     try {
@@ -211,6 +211,7 @@ export function createCardanoWriteClient(
                 request.enriched.fullIntent.symbol,
                 step,
                 meta?.txHash,
+                meta?.wallet,
               );
             },
           })),

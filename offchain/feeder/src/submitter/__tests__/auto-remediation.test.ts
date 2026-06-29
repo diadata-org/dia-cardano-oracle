@@ -72,7 +72,7 @@ describe("shouldAutoConsolidate", () => {
   it("acts when the largest UTxO falls BELOW the floor (the real outage shape)", () => {
     // Last night: 34 UTxOs all ~2 ADA, largest 2 ADA, floor 7 ADA → fragmented.
     const d = shouldAutoConsolidate({
-      adminWalletMaxUtxoLovelace: 2_000_000n,
+      maxUtxoLovelace: 2_000_000n,
       autoConsolidateBelowLovelace: 7_000_000n,
       inProgress: false,
     });
@@ -82,7 +82,7 @@ describe("shouldAutoConsolidate", () => {
   it("does NOT act when a fat UTxO is present (healthy)", () => {
     assert.deepEqual(
       shouldAutoConsolidate({
-        adminWalletMaxUtxoLovelace: 45_000_000n,
+        maxUtxoLovelace: 45_000_000n,
         autoConsolidateBelowLovelace: 7_000_000n,
         inProgress: false,
       }),
@@ -98,9 +98,9 @@ describe("shouldAutoConsolidate", () => {
   });
 
   it("is disabled when the threshold is undefined and skips when in progress", () => {
-    assert.equal(shouldAutoConsolidate({ adminWalletMaxUtxoLovelace: 1n, inProgress: false }).reason, "disabled");
+    assert.equal(shouldAutoConsolidate({ maxUtxoLovelace: 1n, inProgress: false }).reason, "disabled");
     assert.equal(
-      shouldAutoConsolidate({ adminWalletMaxUtxoLovelace: 1n, autoConsolidateBelowLovelace: 7_000_000n, inProgress: true }).reason,
+      shouldAutoConsolidate({ maxUtxoLovelace: 1n, autoConsolidateBelowLovelace: 7_000_000n, inProgress: true }).reason,
       "in_progress",
     );
   });
@@ -108,7 +108,7 @@ describe("shouldAutoConsolidate", () => {
 
 describe("shouldAutoSplit", () => {
   const base = {
-    splitAboveLovelace: 550_000_000n,
+    bigUtxoAboveLovelace: 550_000_000n,
     minUsableUtxos: 5,
     enabled: true,
     inProgress: false,
