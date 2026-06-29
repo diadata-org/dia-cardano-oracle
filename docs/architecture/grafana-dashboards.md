@@ -47,8 +47,8 @@ shown as `{…}`). Dashboard PNG snapshots are rendered by `make evidence3` (the
 | **Signer Wallets** | `feeder-wallets` | per signer wallet | "Is each signer wallet funded, collateral-capable, and split enough to feed parallel lanes?" |
 
 The **Signer Wallets** dashboard (filter: `$wallet`) shows the multi-wallet pool's
-per-wallet `cardano_wallet_*{wallet,role}` gauges — spendable balance, largest UTxO
-(collateral floor), usable-UTxO count, and active arbiter reservations — backing the
+per-wallet `cardano_wallet_*{wallet,role}` gauges — total balance, spendable balance,
+largest UTxO (collateral floor), usable-UTxO count, and active arbiter reservations — backing the
 `PoolWalletLow` / `MainWalletCannotFundPool` / `WalletConcentrated` alerts.
 
 **Why different units?** The feeder batches: one Cardano transaction can carry **N price
@@ -127,7 +127,7 @@ what changes:
 | **Admin / PaymentHook / Receiver-accrued (sum) · Scanner block lag · Provider health** | – | – | – | – | – |
 | Tx fee avg · Tx involving router | ✓ | ✓ | ✓ | (fee only) | – |
 | All Transactions-dashboard panels | ✓ | ✓ | (membership) | (membership) | – |
-| **Signer Wallets panels** (spendable · largest UTxO · usable UTxOs · reservations) | – | – | – | – | – |
+| **Signer Wallets panels** (total · spendable · largest UTxO · usable UTxOs · reservations) | – | – | – | – | – |
 
 > The **global** panels never change with filters: *Admin / PaymentHook / Receiver-accrued
 > (sum)* (protocol-wide singletons), *Scanner block lag* (one scanner), and *Provider health*
@@ -783,7 +783,7 @@ Per signer-wallet health for the multi-wallet pool (filtered by `network` **and*
 one place to answer "is each wallet funded, collateral-capable, and spread across enough UTxOs to
 feed parallel lanes?". The feeder signs every Cardano tx from a **pool** of wallets; an arbiter hands
 each concurrent lane a disjoint subset of one wallet's UTxOs so two lanes never pick the same input.
-These four gauges are emitted once per balance-refresh tick, one series per wallet, and back the
+These five gauges are emitted once per balance-refresh tick, one series per wallet, and back the
 `PoolWalletLow` / `MainWalletCannotFundPool` / `WalletConcentrated` alerts.
 
 The `$wallet` filter is a multi-value list of every wallet id (default `.*` = all). `wallet="main"`
@@ -792,6 +792,18 @@ is the wallet registered on-chain as the PaymentHook `withdrawAddress` (where wi
 runs a one-wallet pool, so the dashboard shows a single `main` series — see the README's signer-pool
 section for enabling pool wallets.
 
+**Total balance per wallet — ADA** · `timeseries` · ADA — `dia_bridge_cardano_wallet_total_lovelace{…, wallet=~"$wallet"} / 1e6`
+
+![Total balance per wallet — ADA](img/wallets-panel-5.png)
+
+- **What it shows** — each wallet's gross lovelace across **all** live UTxOs at that address,
+  including UTxOs currently reserved by a lane and UTxOs that also carry native assets.
+- **How to read it** — this is the inventory view. Compare it with the spendable panel to spot
+  a wallet that looks rich in total ADA but has little actually available for the next build.
+- **When to worry** — a wide, persistent gap between total and spendable usually means the wallet
+  is tied up in active reservations, fragmented into unusable/token-bearing UTxOs, or waiting on
+  the next balance-refresh tick after recent movement.
+
 **Spendable per wallet — ADA** · `timeseries` · ADA — `dia_bridge_cardano_wallet_spendable_lovelace{…, wallet=~"$wallet"} / 1e6`
 
 ![Spendable per wallet — ADA](img/wallets-panel-1.png)
@@ -799,9 +811,9 @@ section for enabling pool wallets.
 - **What it shows** — each wallet's spendable balance: the lovelace in **unlocked, pure-ADA** UTxOs,
   i.e. what a new tx can actually draw on (locked/reserved UTxOs and asset-bearing UTxOs are excluded).
   One line per wallet (`{{wallet}} ({{role}})`).
-- **How to read it** — green at/above **50 ADA**; the band between a pool wallet's low mark and its
-  fill target gives the funding hysteresis.
-- **When to worry** — a `role="pool"` wallet below **50 ADA** (`wallet_pool.pool_wallet_low_lovelace`)
+- **How to read it** — green at/above **150 ADA**; the band between a pool wallet's low mark and its
+  fill target (550 ADA) gives the funding hysteresis.
+- **When to worry** — a `role="pool"` wallet below **150 ADA** (`wallet_pool.pool_wallet_low_lovelace`)
   is auto-funded from the main; if the **main** itself is below its **100 ADA** reserve
   (`main_wallet_reserve_lovelace`) it can no longer fund the pool → `MainWalletCannotFundPool`
   (top the main up via settle + withdraw, or externally).
@@ -815,9 +827,9 @@ section for enabling pool wallets.
   can build at all.
 - **How to read it** — green at/above the **10 ADA** collateral floor.
 - **When to worry** — below the floor the wallet is **fragmented** (shattered into dust, no
-  collateral-capable UTxO) → `WalletFragmented`, auto-`consolidate`. Far above it (**> 550 ADA**,
-  `big_utxo_above_lovelace`) **with too few usable UTxOs** the wallet is **concentrated** → it can't
-  feed parallel lanes → `WalletConcentrated`, auto-`split`. The two are mutually exclusive.
+  collateral-capable UTxO) → `WalletFragmented`, auto-`consolidate`. The OPPOSITE problem,
+  **concentration**, is judged on the usable-UTxO *count* (next panel), not this size — a wallet can
+  hold a big balance yet still be split for lanes. The two are mutually exclusive.
 
 **Usable UTxOs per wallet** · `timeseries` · count — `dia_bridge_cardano_wallet_usable_utxos{…}`
 
@@ -827,9 +839,10 @@ section for enabling pool wallets.
   **disjoint inputs** the arbiter can hand to concurrent lanes. This is the parallelism budget of the
   wallet.
 - **How to read it** — green at/above **5** (`wallet_shape.min_usable_utxos`).
-- **When to worry** — below 5 **with a splittable (> 550 ADA) UTxO present**, the wallet is split to
-  mint more usable pieces (filled up to `working_utxo_count` = 10, above the trigger, for hysteresis).
-  Few usable UTxOs and no big UTxO to split is instead the fragmentation case above.
+- **When to worry** — below 5 the wallet is **concentrated** → auto-`split` carves its largest UTxO
+  into more lanes, working-first, filling up to `working_utxo_count` = 5 working + 5 collateral = ~10
+  usable (above the trigger, for hysteresis). There is no balance gate — the trigger is purely this
+  count. If the wallet is also out of large UTxOs to carve, that is the fragmentation case above.
 
 **Active reservations per wallet** · `timeseries` · count — `dia_bridge_cardano_wallet_reservations{…}`
 
@@ -892,9 +905,9 @@ All 20 alert rules in `monitoring/alerts.yml`, grouped by area. Severity: 🔴 c
 | PaymentHook accrued | ⚪ `PaymentHookWithdrawReady` | accrued above | **50 ADA** | `payment-hook:withdraw` (collect revenue) |
 | Admin wallet | 🔴 `AdminWalletLow` | balance below | **5 ADA** | `settle` then `payment-hook:withdraw` to refill |
 | Admin wallet largest UTxO | 🔴 `AdminWalletFragmented` | largest pure-ADA UTxO below | **10 ADA** | `wallet:consolidate` (usually auto) |
-| Signer Wallets — spendable (pool) | 🟡 `PoolWalletLow` | a `role="pool"` wallet spendable below | **50 ADA** | Auto-funds from the main (usually self-heals) |
+| Signer Wallets — spendable (pool) | 🟡 `PoolWalletLow` | a `role="pool"` wallet spendable below | **150 ADA** | Auto-funds from the main (usually self-heals) |
 | Signer Wallets — main reserve | 🔴 `MainWalletCannotFundPool` | a pool is low **and** the main is below its reserve | **main < 100 ADA** | Refill main: `settle` + `payment-hook:withdraw` into it |
-| Signer Wallets — largest UTxO + usable | 🟡 `WalletConcentrated` | usable UTxOs < 5 **and** largest UTxO above | **550 ADA** | `wallet:split` (usually auto) |
+| Signer Wallets — usable UTxOs | 🟡 `WalletConcentrated` | usable UTxOs below (any balance) | **5 UTxOs** | `wallet:split` (usually auto) |
 | Reorg counter | 🟡 `ReorgRateHigh` | reorgs per hour over | **3 / h** | Check provider lag + scanner block lag |
 | Provider health (primary) | 🔴 `PrimaryProviderDown` | primary no success for | **600 s** | Rotate the key / switch `CARDANO_PROVIDER`, `make restart` |
 | Provider health (secondary) | 🟡 `SecondaryProviderDown` | secondary no probe for | **900 s** | Fix/rotate its endpoint in `feeder/.env`, `make restart` |
@@ -936,8 +949,9 @@ hand out). A **reservation** is one lane's hold on a wallet's UTxOs while it bui
 
 **Fragmented vs concentrated** (opposite, mutually exclusive). *Fragmented* = shattered into dust,
 no collateral-capable UTxO → builds trap (`AdminWalletFragmented`, auto-`consolidate`).
-*Concentrated* = a few big UTxOs but too few usable ones → can't feed parallel lanes
-(`WalletConcentrated`, auto-`split`). Architecture deep-dive: [`feeder.md` → Signer-wallet pool](./feeder.md#signer-wallet-pool--per-wallet-parallelism).
+*Concentrated* = too few usable UTxOs (by COUNT, not balance) → can't feed parallel lanes
+(`WalletConcentrated`, auto-`split`, which carves the largest UTxO into more lanes). Architecture
+deep-dive: [`feeder.md` → Signer-wallet pool](./feeder.md#signer-wallet-pool--per-wallet-parallelism).
 
 ## 11. Screenshots
 

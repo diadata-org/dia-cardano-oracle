@@ -994,9 +994,10 @@ metric-family reference.
 | `cardano_payment_hook_accrued_lovelace` | Fees in the PaymentHook → `PaymentHookWithdrawReady`. |
 | `cardano_admin_wallet_lovelace` | Admin/signer wallet total → `AdminWalletLow`. |
 | `cardano_admin_wallet_max_utxo_lovelace` | Largest pure-ADA UTxO (collateral floor) → `AdminWalletFragmented`. |
+| `cardano_wallet_total_lovelace{wallet,role}` | Per signer-wallet total ADA across all live UTxOs. |
 | `cardano_wallet_spendable_lovelace{wallet,role}` | Per signer-wallet spendable ADA → `PoolWalletLow` / `MainWalletCannotFundPool`, and the funding loop. |
-| `cardano_wallet_max_utxo_lovelace{wallet,role}` | Per-wallet largest pure-ADA UTxO → `WalletConcentrated` (split) / fragmentation. |
-| `cardano_wallet_usable_utxos{wallet,role}` | Per-wallet count of collateral-capable UTxOs (lanes it can feed) → `WalletConcentrated`. |
+| `cardano_wallet_max_utxo_lovelace{wallet,role}` | Per-wallet largest pure-ADA UTxO → fragmentation (collateral floor). |
+| `cardano_wallet_usable_utxos{wallet,role}` | Per-wallet count of collateral-capable UTxOs (lanes it can feed) → `WalletConcentrated` (split trigger). |
 | `cardano_wallet_reservations{wallet,role}` | Per-wallet active arbiter reservations (lanes building against it). |
 | `cardano_deposit_pending_lovelace{client_id,deposit_address}` | Un-merged side-deposits per client. |
 
@@ -1209,8 +1210,8 @@ same Receiver are **mutually exclusive by construction**, never racing.
 | **auto-settle** | Receiver `accrued` ≥ threshold | drain accrued → PaymentHook (`settle`) | `auto_settle_lovelace` |
 | **auto-withdraw** | PaymentHook `accrued` ≥ threshold | PaymentHook → admin wallet (`payment-hook:withdraw`), refilling the wallet | `auto_withdraw_lovelace` |
 | **auto-consolidate** | largest pure-ADA wallet UTxO < threshold (too FRAGMENTED) | fold dust into a dedicated collateral UTxO + working balance (`wallet:consolidate`) | `auto_consolidate_below_lovelace` |
-| **auto-split** | a UTxO > `big_utxo_above` AND too few usable UTxOs (too CONCENTRATED) | break the big UTxO into the target profile (`wallet:split`) | `wallet_shape.*` + `auto_split` |
-| **auto-fund** | a **pool** wallet's spendable < low band | top it up from the main wallet | `wallet_pool.*` |
+| **auto-split** | fewer than `min_usable_utxos` usable UTxOs (too CONCENTRATED), regardless of balance | carve the largest UTxO into more lanes (`wallet:split`) | `wallet_shape.*` + `auto_split` |
+| **auto-fund** | a **pool** wallet's spendable < low band | top it up from the main, paid as the missing shape pieces in one tx | `wallet_pool.*` |
 
 **Ordering invariant — alert first, automatic after.** Every `auto_*` threshold sits
 **beyond** its paired alert so the operator-facing alert fires *first* and the automatic
@@ -1252,28 +1253,39 @@ own alert, auto-flag, and manual command:
 | Direction | Symptom | Path | Alert |
 |---|---|---|---|
 | **Fragmented** | shattered into sub-collateral dust → no collateral-capable UTxO → every build traps | `wallet:consolidate` (merge dust → 1 collateral + working) | `AdminWalletFragmented` |
-| **Concentrated** | a few big UTxOs → too few disjoint inputs to feed lanes | `wallet:split` (break a `> big_utxo_above` UTxO into the profile, rest as change) | `WalletConcentrated{wallet}` |
+| **Concentrated** | too few disjoint usable UTxOs to feed lanes (by COUNT, not size) | `wallet:split` (carve the largest UTxO into more lanes, rest as change) | `WalletConcentrated{wallet}` |
 
-The two are mutually exclusive (dust ⇒ no big UTxO; concentrated ⇒ no dust). The pure
-planner `planWalletSplit` lives in the **CLI** (`cli/src/wallet/split-plan.ts`, beside
-its `split-wallet` executor); the feeder imports it and maps `wallet_shape` YAML over
-the CLI's default profile in `resolveWalletShapeProfile`.
+The two are mutually exclusive (dust ⇒ no large UTxO to carve; concentrated ⇒ no dust).
+The shape is computed by one shared pure planner — `planShapeOutputs` (and its split
+wrapper `planWalletSplit`) — in the **CLI** (`cli/src/wallet/split-plan.ts`, beside its
+`split-wallet` executor); the feeder imports it and maps `wallet_shape` YAML over the
+CLI's default profile in `resolveWalletShapeProfile`.
 
-**Hysteresis (no per-tick oscillation).** The split TRIGGER is `min_usable_utxos`
-(5) — a wallet with fewer usable UTxOs and a big UTxO is split. But a split FILLS
-working UTxOs up to `working_utxo_count` (**10**, deliberately above the trigger),
-minting only what the big UTxO funds and leaving the rest as **one** change UTxO (never
-fanned into many pieces). So a split takes the wallet from `<5` usable up to `~10`,
-then it drains back to 5 before the next split — it does not split, use one, and
-immediately re-split. Collateral fills to `collateral_utxo_count` (5): it is returned
-on a successful tx (it does not drain), so it needs no headroom.
+**Working-first, no balance gate.** The split TRIGGER is purely the usable-UTxO COUNT
+(`min_usable_utxos` = 5) — concentration is about count, not size, so a wallet holding
+200 ADA as one UTxO is split exactly like one holding 600. The planner carves the
+**largest** pure-ADA UTxO into pieces **working-first**: up to `working_utxo_count`
+working lanes (5 × 100 ADA), and only once the lanes are full does it mint the dedicated
+collateral (5 × 10 ADA). A small wallet therefore becomes all lanes; the balancer returns
+the remainder as **one** change UTxO (itself a usable lane). It never fans a UTxO into
+pieces beyond the profile, and it **self-terminates** — once a wallet is as shaped as its
+balance allows the planner no-ops, so the trigger can fire each tick without churn.
+
+**Hysteresis (no per-tick oscillation).** A full shape is 5 working + 5 collateral = **10**
+usable UTxOs, well above the trigger of 5, so a freshly shaped wallet does not immediately
+re-split: it drains back below 5 before the next split.
 
 **Funding (main → pool).** Pool wallets drain (they pay fees) and only the main
 self-funds. On the balance tick the daemon tops up any pool wallet below
-`wallet_pool.pool_wallet_low_lovelace` to `pool_wallet_target_lovelace`, never drawing
+`wallet_pool.pool_wallet_low_lovelace` to `pool_wallet_target_lovelace` — paying the
+**missing shape pieces straight to the pool** (via the same `planShapeOutputs`) in ONE
+tx, so a freshly funded pool is usable immediately with no second split. It never draws
 the main below `main_wallet_reserve_lovelace` (else `MainWalletCannotFundPool` fires).
 The fund tx reserves the main's UTxOs through the arbiter, so it runs **detached** from
-the client lanes — the arbiter's `unavailable` is the backpressure, no extra lane.
+the client lanes — the arbiter's `unavailable` is the backpressure, no extra lane. Split
+re-shapes a wallet that DRIFTED concentrated (mainly the main, which has no funding path);
+funding shapes a pool on arrival — the two never act on the same need, so neither pays a
+redundant fee.
 
 All of split / fund / consolidate run once per tick over the pool from the arbiter's
 per-wallet snapshot (`bridge.walletStats()`), each gated by its own flag and a
