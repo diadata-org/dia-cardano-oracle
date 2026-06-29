@@ -1,6 +1,6 @@
 # DIA Cardano Oracle — Grafana dashboards guide
 
-The maintained, panel-by-panel reference for the three Grafana dashboards the feeder
+The maintained, panel-by-panel reference for the four Grafana dashboards the feeder
 ships. Written to be read by a non-specialist: for **every** chart it gives the metric
 (PromQL), then answers **what it shows · how to read it · when to worry**. It also
 explains **how the filter bar works** and which panels react to each filter, and ends
@@ -18,11 +18,11 @@ Thresholds quoted here are the canonical values from `infrastructure.<network>.y
 enforced by the `threshold-drift` test. PromQL exprs use the dashboard's `$network / $customer /
 $client / $router / $symbol` filter variables (omitted from the snippets below for readability,
 shown as `{…}`). Dashboard PNG snapshots are rendered by `make evidence3` (the Grafana renderer)
-— see [§ 10](#10-screenshots).
+— see [§ 11](#11-screenshots).
 
 ## Contents
 
-- [1. The three dashboards at a glance](#1-the-three-dashboards-at-a-glance)
+- [1. The dashboards at a glance](#1-the-dashboards-at-a-glance)
 - [2. How to open them](#2-how-to-open-them)
 - [3. How the filters work (read this first)](#3-how-the-filters-work-read-this-first)
   - [3.1 The filter cascade](#31-the-filter-cascade)
@@ -31,18 +31,25 @@ shown as `{…}`). Dashboard PNG snapshots are rendered by `make evidence3` (the
 - [4. Dashboard 1 — Overview (`dia-cardano-feeder`)](#4-dashboard-1--overview-dia-cardano-feeder)
 - [5. Dashboard 2 — Transactions (`dia-cardano-feeder-tx`)](#5-dashboard-2--transactions-dia-cardano-feeder-tx)
 - [6. Dashboard 3 — Internals (`dia-cardano-feeder-internals`)](#6-dashboard-3--internals-dia-cardano-feeder-internals)
-- [7. How alerts surface visually](#7-how-alerts-surface-visually)
-- [8. When to panic — one-page cheat sheet](#8-when-to-panic--one-page-cheat-sheet)
-- [9. Concepts the charts assume](#9-concepts-the-charts-assume)
-- [10. Screenshots](#10-screenshots)
+- [7. Dashboard 4 — Signer Wallets (`feeder-wallets`)](#7-dashboard-4--signer-wallets-feeder-wallets)
+- [8. How alerts surface visually](#8-how-alerts-surface-visually)
+- [9. When to panic — one-page cheat sheet](#9-when-to-panic--one-page-cheat-sheet)
+- [10. Concepts the charts assume](#10-concepts-the-charts-assume)
+- [11. Screenshots](#11-screenshots)
 
-## 1. The three dashboards at a glance
+## 1. The dashboards at a glance
 
 | Dashboard | UID | Counts in units of | Answers |
 | --- | --- | --- | --- |
 | **Overview** | `dia-cardano-feeder` | **symbol updates** (+ money / health) | "Is each price feed alive, fresh, accurate and funded?" |
 | **Transactions** | `dia-cardano-feeder-tx` | **transactions** | "How are the Cardano transactions themselves performing?" |
 | **Internals** | `dia-cardano-feeder-internals` | feeder internals | "Where is time/work going inside the feeder, and where do intents drop off?" |
+| **Signer Wallets** | `feeder-wallets` | per signer wallet | "Is each signer wallet funded, collateral-capable, and split enough to feed parallel lanes?" |
+
+The **Signer Wallets** dashboard (filter: `$wallet`) shows the multi-wallet pool's
+per-wallet `cardano_wallet_*{wallet,role}` gauges — spendable balance, largest UTxO
+(collateral floor), usable-UTxO count, and active arbiter reservations — backing the
+`PoolWalletLow` / `MainWalletCannotFundPool` / `WalletConcentrated` alerts.
 
 **Why different units?** The feeder batches: one Cardano transaction can carry **N price
 pairs**. So a tx that updates 5 pairs is **5 symbol updates** on Overview and **1
@@ -59,6 +66,7 @@ The monitoring stack runs under Docker (`make up MONITORING=1`).
 | Overview | <http://localhost:3000/d/dia-cardano-feeder> | — |
 | Transactions | <http://localhost:3000/d/dia-cardano-feeder-tx> | — |
 | Internals | <http://localhost:3000/d/dia-cardano-feeder-internals> | — |
+| Signer Wallets | <http://localhost:3000/d/feeder-wallets> | — |
 
 All auto-refresh every 30 s; the time picker (top-right) controls the window for every panel
 at once. Dashboards are provisioned from the JSON files, so edit the JSON and reload Grafana —
@@ -68,7 +76,9 @@ there is no manual import.
 
 The Overview and Transactions dashboards carry a **filter bar** (Grafana *template variables*)
 to zoom from "everything" down to one customer, client, router or symbol without editing a
-query. The Internals dashboard is feeder-wide (filtered by `network` only).
+query. The Internals dashboard is feeder-wide (filtered by `network` only). The Signer Wallets
+dashboard filters by `network` and **`$wallet`** (which signer wallet), independent of the
+`Customer → … → Symbol` cascade.
 
 ### 3.1 The filter cascade
 
@@ -79,6 +89,7 @@ query. The Internals dashboard is feeder-wide (filtered by `network` only).
 | **Router** | An off-chain config group of symbols + policy pointing at a client (`router_id`). | `client_test_01_router_a_majors`, `All` |
 | **Symbol** | The price pair. | `BTC/USD`, `All` |
 | **Error code** | *(Overview only)* a real transaction-failure code, to slice the failures chart. | `BuilderError`, `All` |
+| **Wallet** | *(Signer Wallets + Transactions)* which signer wallet (`wallet`), to slice per-wallet health and tx attribution. Not part of the cascade. | `main`, `pool-1`, `All` |
 
 The filters chain **left to right**: `Customer → Client → Router → Symbol`. Picking a customer
 narrows the Client dropdown to that customer's clients, which narrows Router, which narrows
@@ -116,10 +127,18 @@ what changes:
 | **Admin / PaymentHook / Receiver-accrued (sum) · Scanner block lag · Provider health** | – | – | – | – | – |
 | Tx fee avg · Tx involving router | ✓ | ✓ | ✓ | (fee only) | – |
 | All Transactions-dashboard panels | ✓ | ✓ | (membership) | (membership) | – |
+| **Signer Wallets panels** (spendable · largest UTxO · usable UTxOs · reservations) | – | – | – | – | – |
 
 > The **global** panels never change with filters: *Admin / PaymentHook / Receiver-accrued
 > (sum)* (protocol-wide singletons), *Scanner block lag* (one scanner), and *Provider health*
 > (the two shared API providers). Internals panels react only to `network`.
+>
+> **`$wallet`** (Signer Wallets + Transactions) is a separate axis, not part of the
+> `Customer → … → Symbol` cascade. The **Signer Wallets** panels react only to `network` +
+> `$wallet`. On the **Transactions** dashboard the `wallet` label rides on the per-transaction
+> metrics — `transactions_total`, `transaction_pairs`, and the three tx-latency histograms — so
+> those panels can additionally be sliced by which signer wallet executed each tx; the membership
+> and per-client queue/state panels carry no `wallet` label.
 
 ## 4. Dashboard 1 — Overview (`dia-cardano-feeder`)
 
@@ -416,7 +435,11 @@ higher = more amortized fees per pair.
 ![Transactions dashboard — full dashboard](img/tx-full.png)
 
 Everything here is counted **per transaction** (a batch of N pairs is ONE tx). Filtered by
-Customer / Client (and Symbol on the membership panel).
+Customer / Client (and Symbol on the membership panel). The per-transaction metrics
+(`transactions_total`, `transaction_pairs`, and the three stage/end-to-end latency histograms)
+also carry a **`wallet`** label, so with a signer pool you can slice these panels by which
+wallet signed each tx via the `$wallet` filter (see § 3.3); on a single-wallet deploy every tx
+is attributed to `main`.
 
 ### Row T1 — Transaction latency by stage
 
@@ -752,7 +775,76 @@ feeder-only).
 - **When to worry** — a sustained indexer climb (it scales with consumer query traffic) is the usual
   reason the 24h total above approaches the quota.
 
-## 7. How alerts surface visually
+## 7. Dashboard 4 — Signer Wallets (`feeder-wallets`)
+
+![Signer Wallets dashboard — full dashboard](img/wallets-full.png)
+
+Per signer-wallet health for the multi-wallet pool (filtered by `network` **and** `$wallet`) — the
+one place to answer "is each wallet funded, collateral-capable, and spread across enough UTxOs to
+feed parallel lanes?". The feeder signs every Cardano tx from a **pool** of wallets; an arbiter hands
+each concurrent lane a disjoint subset of one wallet's UTxOs so two lanes never pick the same input.
+These four gauges are emitted once per balance-refresh tick, one series per wallet, and back the
+`PoolWalletLow` / `MainWalletCannotFundPool` / `WalletConcentrated` alerts.
+
+The `$wallet` filter is a multi-value list of every wallet id (default `.*` = all). `wallet="main"`
+is the wallet registered on-chain as the PaymentHook `withdrawAddress` (where withdrawn fees land);
+`role="pool"` wallets only pay tx fees + collateral. With no `wallets:` block configured the feeder
+runs a one-wallet pool, so the dashboard shows a single `main` series — see the README's signer-pool
+section for enabling pool wallets.
+
+**Spendable per wallet — ADA** · `timeseries` · ADA — `dia_bridge_cardano_wallet_spendable_lovelace{…, wallet=~"$wallet"} / 1e6`
+
+![Spendable per wallet — ADA](img/wallets-panel-1.png)
+
+- **What it shows** — each wallet's spendable balance: the lovelace in **unlocked, pure-ADA** UTxOs,
+  i.e. what a new tx can actually draw on (locked/reserved UTxOs and asset-bearing UTxOs are excluded).
+  One line per wallet (`{{wallet}} ({{role}})`).
+- **How to read it** — green at/above **50 ADA**; the band between a pool wallet's low mark and its
+  fill target gives the funding hysteresis.
+- **When to worry** — a `role="pool"` wallet below **50 ADA** (`wallet_pool.pool_wallet_low_lovelace`)
+  is auto-funded from the main; if the **main** itself is below its **100 ADA** reserve
+  (`main_wallet_reserve_lovelace`) it can no longer fund the pool → `MainWalletCannotFundPool`
+  (top the main up via settle + withdraw, or externally).
+
+**Largest UTxO per wallet — ADA (collateral floor)** · `timeseries` · ADA — `dia_bridge_cardano_wallet_max_utxo_lovelace{…} / 1e6`
+
+![Largest UTxO per wallet — ADA](img/wallets-panel-2.png)
+
+- **What it shows** — the single biggest pure-ADA UTxO in each wallet. A script tx needs a collateral
+  UTxO **distinct** from its fee inputs, so **this** — not the total balance — gates whether the wallet
+  can build at all.
+- **How to read it** — green at/above the **10 ADA** collateral floor.
+- **When to worry** — below the floor the wallet is **fragmented** (shattered into dust, no
+  collateral-capable UTxO) → `WalletFragmented`, auto-`consolidate`. Far above it (**> 550 ADA**,
+  `big_utxo_above_lovelace`) **with too few usable UTxOs** the wallet is **concentrated** → it can't
+  feed parallel lanes → `WalletConcentrated`, auto-`split`. The two are mutually exclusive.
+
+**Usable UTxOs per wallet** · `timeseries` · count — `dia_bridge_cardano_wallet_usable_utxos{…}`
+
+![Usable UTxOs per wallet](img/wallets-panel-3.png)
+
+- **What it shows** — the count of pure-ADA UTxOs at/above the collateral floor — i.e. how many
+  **disjoint inputs** the arbiter can hand to concurrent lanes. This is the parallelism budget of the
+  wallet.
+- **How to read it** — green at/above **5** (`wallet_shape.min_usable_utxos`).
+- **When to worry** — below 5 **with a splittable (> 550 ADA) UTxO present**, the wallet is split to
+  mint more usable pieces (filled up to `working_utxo_count` = 10, above the trigger, for hysteresis).
+  Few usable UTxOs and no big UTxO to split is instead the fragmentation case above.
+
+**Active reservations per wallet** · `timeseries` · count — `dia_bridge_cardano_wallet_reservations{…}`
+
+![Active reservations per wallet](img/wallets-panel-4.png)
+
+- **What it shows** — how many lanes are currently building against each wallet (open arbiter
+  reservations). This is the live concurrency the wallet is carrying.
+- **When to worry** — a persistently high reservation count next to a **low** usable-UTxO count is the
+  signature of a wallet under more lane pressure than its UTxOs can serve disjointly — split it (or add
+  a pool wallet) so lanes stop contending.
+
+> The `img/wallets-*.png` snapshots are produced by the Grafana renderer the same way as the other
+> dashboards (see [§ 11](#11-screenshots)); run a feeder window with `MONITORING=1`, then render.
+
+## 8. How alerts surface visually
 
 An alert condition shows up in three places, all from one pipeline (feeder metrics → Prometheus
 rules → Alertmanager → feeder webhook → `alert_log`):
@@ -771,29 +863,51 @@ To see an alert fire on demand without waiting for a real incident, the
 `client_id="trigger"`, so it is filterable and distinct from real feeds). See the feeder README →
 *How alerts work*.
 
-## 8. When to panic — one-page cheat sheet
+The 20 rules in `monitoring/alerts.yml` cover six areas: **feed health** (`OraclePairStale`,
+`PriceAgeHigh`, `FeedAccuracyFail`, `PriceDeviationHigh`), **client funding** (`ReceiverBalanceLow`,
+`ReceiverDepositsPending`, `SettleOverdue`, `PaymentHookWithdrawReady`), **admin wallet**
+(`AdminWalletLow`, `AdminWalletFragmented`), **signer-wallet pool** (`PoolWalletLow`,
+`MainWalletCannotFundPool`, `WalletConcentrated`), **chain** (`ReorgRateHigh`), and **providers**
+(`PrimaryProviderDown`, `SecondaryProviderDown`, `ProviderQuotaWall`, `ProviderErrorRateHigh`,
+`ProviderRequestQuotaHigh{Blockfrost,Koios}`). The next section (§ 9) is the authoritative
+one-line-per-alert list with thresholds and first actions; every rule's full remediation lives in
+`alerts.yml` itself.
+
+## 9. When to panic — one-page cheat sheet
 
 Thresholds are the canonical values from `infrastructure.<network>.yaml::alerting` (mirrored into the
 Prometheus rules and the Grafana panel colours; kept in sync by the threshold-drift test).
 
+All 20 alert rules in `monitoring/alerts.yml`, grouped by area. Severity: 🔴 critical · 🟡 warning · ⚪ info.
+
 | Panel | Alert | Fires when | Default | First action |
 | --- | --- | --- | --- | --- |
-| Pair staleness | `OraclePairStale` | on-chain value older than | **3600 s** | Check Receiver/Admin balance + `make logs` |
-| Price age p95 | `PriceAgeHigh` | source price age p95 over | **600 s** | DIA source publishing stale prices (upstream) |
-| Feed sanity verdict | `FeedAccuracyFail` | verdict sustained at | **2 (broken)** | On-chain disagrees with source — `npm run sanity:feeds` |
-| Receiver balance | `ReceiverBalanceLow` | balance below | **2 ADA** | Send ADA to the client's deposit address |
-| Admin wallet | `AdminWalletLow` | balance below | **5 ADA** | `settle` then `payment-hook:withdraw` to refill |
-| Admin wallet largest UTxO | `AdminWalletFragmented` | largest pure-ADA UTxO below | **10 ADA** | `wallet:consolidate` |
-| Receiver accrued | `SettleOverdue` | accrued above | **10 ADA** | Run `settle` |
-| PaymentHook accrued | `PaymentHookWithdrawReady` | accrued above | **50 ADA** | DIA `payment-hook:withdraw` |
-| Price deviation p95 | `PriceDeviationHigh` | p95 deviation over | **5 %** | Investigate the DIA source |
-| Reorg counter | `ReorgRateHigh` | reorgs per hour over | **3 / h** | Check provider lag + scanner block lag |
-| Provider health (primary) | `PrimaryProviderDown` | primary no success for | **600 s** | Rotate the key / switch `CARDANO_PROVIDER`, `make restart` |
-| Provider health (secondary) | `SecondaryProviderDown` | secondary no probe for | **900 s** | Fix/rotate its endpoint in `feeder/.env`, `make restart` |
+| Pair staleness | 🟡 `OraclePairStale` | on-chain value older than | **3600 s** | Check Receiver/Admin balance + `make logs` |
+| Price age p95 | 🟡 `PriceAgeHigh` | source price age p95 over | **600 s** | DIA source publishing stale prices (upstream) |
+| Feed sanity verdict | 🔴 `FeedAccuracyFail` | verdict sustained at | **2 (broken)** | On-chain disagrees with source — `npm run sanity:feeds` |
+| Price deviation p95 | 🔴 `PriceDeviationHigh` | p95 deviation over | **5 %** | Investigate the DIA source |
+| Receiver balance | 🟡 `ReceiverBalanceLow` | balance below | **2 ADA** | Send ADA to the client's deposit address |
+| Deposit pending | ⚪ `ReceiverDepositsPending` | un-merged deposits above | **5 ADA** | `deposit:merge` (folds deposits → balance) |
+| Receiver accrued | 🟡 `SettleOverdue` | accrued above | **10 ADA** | Run `settle` |
+| PaymentHook accrued | ⚪ `PaymentHookWithdrawReady` | accrued above | **50 ADA** | `payment-hook:withdraw` (collect revenue) |
+| Admin wallet | 🔴 `AdminWalletLow` | balance below | **5 ADA** | `settle` then `payment-hook:withdraw` to refill |
+| Admin wallet largest UTxO | 🔴 `AdminWalletFragmented` | largest pure-ADA UTxO below | **10 ADA** | `wallet:consolidate` (usually auto) |
+| Signer Wallets — spendable (pool) | 🟡 `PoolWalletLow` | a `role="pool"` wallet spendable below | **50 ADA** | Auto-funds from the main (usually self-heals) |
+| Signer Wallets — main reserve | 🔴 `MainWalletCannotFundPool` | a pool is low **and** the main is below its reserve | **main < 100 ADA** | Refill main: `settle` + `payment-hook:withdraw` into it |
+| Signer Wallets — largest UTxO + usable | 🟡 `WalletConcentrated` | usable UTxOs < 5 **and** largest UTxO above | **550 ADA** | `wallet:split` (usually auto) |
+| Reorg counter | 🟡 `ReorgRateHigh` | reorgs per hour over | **3 / h** | Check provider lag + scanner block lag |
+| Provider health (primary) | 🔴 `PrimaryProviderDown` | primary no success for | **600 s** | Rotate the key / switch `CARDANO_PROVIDER`, `make restart` |
+| Provider health (secondary) | 🟡 `SecondaryProviderDown` | secondary no probe for | **900 s** | Fix/rotate its endpoint in `feeder/.env`, `make restart` |
+| Provider requests (by outcome) | 🔴 `ProviderQuotaWall` | a `402 Payment Required` (quota wall) in 5 m | **≥ 1** | Rotate/upgrade key or switch `CARDANO_PROVIDER`, `make restart` |
+| Provider requests (by outcome) | 🟡 `ProviderErrorRateHigh` | error/throttle share over | **20 %** | Upgrade/rotate the key, or switch provider |
+| Requests 24h vs quota | 🟡 `ProviderRequestQuotaHighBlockfrost` | Blockfrost 24h requests over | **40 000** | Rotate/upgrade the Blockfrost key |
+| Requests 24h vs quota | 🟡 `ProviderRequestQuotaHighKoios` | Koios 24h requests over | **40 000** | Point `KOIOS_API_URL` at a higher-quota endpoint |
 | Tx success ratio | _(watch manually)_ | confirmed/total drops | — | Failures panel + `make logs` |
 | Scanner block lag | _(watch manually)_ | lag keeps climbing | — | Provider/connectivity check |
 
-## 9. Concepts the charts assume
+The three **Signer Wallets** alerts are on the [Signer Wallets dashboard](#7-dashboard-4--signer-wallets-feeder-wallets); the provider-quota alerts surface on the Internals dashboard's provider panels. The wallet maintenance (`wallet:consolidate`, `wallet:split`) and the main-refill (`settle` + `payment-hook:withdraw`) usually run automatically — the alert fires first as a heads-up.
+
+## 10. Concepts the charts assume
 
 **Symbol updates vs transactions (the batch factor).** One transaction can carry many pairs.
 Overview counts in **symbol updates**; the Transactions dashboard counts in **transactions**. A
@@ -806,7 +920,26 @@ per-pair panels key by `(symbol, client_id)` so each on-chain feed is a distinct
 deep (default **1**) — probabilistically final, sufficient for a price feed. Higher depths (3–5)
 buy practical finality at the cost of latency. Detail: README → *What "confirmed" means*.
 
-## 10. Screenshots
+**Signer-wallet pool & the arbiter** (Signer Wallets dashboard). The feeder signs every Cardano
+tx from a pool of one or more wallets: exactly one **`main`** (the on-chain PaymentHook
+`withdrawAddress`, where withdrawn fees land and which self-funds from revenue) plus zero or more
+**`pool`** wallets that only pay fees + collateral. An **arbiter** hands each concurrent lane a
+**disjoint subset** of one wallet's UTxOs, so parallel lanes never select the same fee/collateral
+input — that is how a single wallet still serves many lanes. With no `wallets:` configured the pool
+degenerates to just `main`, and the dashboard shows one series.
+
+**Collateral floor, usable UTxOs, reservations.** A Cardano script tx needs a **collateral** UTxO
+distinct from its fee inputs, so a wallet's *largest* pure-ADA UTxO — not its total — gates whether
+it can build (the **collateral floor**, 10 ADA). A **usable UTxO** is a pure-ADA UTxO at/above that
+floor; the count is the wallet's **parallelism budget** (how many disjoint inputs the arbiter can
+hand out). A **reservation** is one lane's hold on a wallet's UTxOs while it builds.
+
+**Fragmented vs concentrated** (opposite, mutually exclusive). *Fragmented* = shattered into dust,
+no collateral-capable UTxO → builds trap (`AdminWalletFragmented`, auto-`consolidate`).
+*Concentrated* = a few big UTxOs but too few usable ones → can't feed parallel lanes
+(`WalletConcentrated`, auto-`split`). Architecture deep-dive: [`feeder.md` → Signer-wallet pool](./feeder.md#signer-wallet-pool--per-wallet-parallelism).
+
+## 11. Screenshots
 
 The images embedded above (`img/`) were rendered by the Grafana image renderer from a live
 multi-customer Preview deployment (two customers, two clients, three routers — including the same

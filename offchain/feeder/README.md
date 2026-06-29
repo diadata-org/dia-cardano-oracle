@@ -1037,6 +1037,9 @@ Price deviation is **percent** (0–100).
 | `PaymentHookWithdrawReady` | `dia_bridge_cardano_payment_hook_accrued_lovelace` | `payment_hook_withdraw_ready_lovelace` | `50 000 000` (50 ADA) | `make cli CMD="payment-hook:withdraw --amount-lovelace <lovelace> --protocol-state /app/offchain/state/preview_run_<id>/config-bootstrap.json"` |
 | `AdminWalletLow` | `dia_bridge_cardano_admin_wallet_lovelace` | `admin_wallet_low_lovelace` | `5 000 000` (5 ADA) | Collect protocol revenue into this wallet: `settle` then `payment-hook:withdraw` (the withdraw_address is this wallet). Only if there is no accrued revenue, fund the address in `state/<net>_run_<id>/config-bootstrap.json` externally (Preview: faucet). |
 | `AdminWalletFragmented` | `dia_bridge_cardano_admin_wallet_max_utxo_lovelace` | `admin_wallet_min_collateral_lovelace` | `10 000 000` (10 ADA) | The wallet's **largest** pure-ADA UTxO fell below the collateral floor — no UTxO can back collateral and builds trap, even if the total looks fine. The daemon auto-consolidates below `auto_consolidate_below_lovelace`; to force it: `make cli CMD="wallet:consolidate"`. |
+| `WalletConcentrated` | `dia_bridge_cardano_wallet_max_utxo_lovelace` + `_usable_utxos` | `wallet_shape.big_utxo_above_lovelace` + `min_usable_utxos` | `550` ADA / `5` UTxOs | A signer wallet (label `{{wallet}}`) holds a big UTxO but too few usable UTxOs to feed parallel lanes (the OPPOSITE of fragmentation). The daemon auto-splits when `auto_split` is on; to force it: `make cli CMD="wallet:split"`. |
+| `PoolWalletLow` | `dia_bridge_cardano_wallet_spendable_lovelace{role="pool"}` | `wallet_pool.pool_wallet_low_lovelace` | `50 000 000` (50 ADA) | A pool wallet drained; the daemon auto-funds it from the main. Persists only if the main can't fund it — then refill the main (`settle` + `payment-hook:withdraw`). |
+| `MainWalletCannotFundPool` | `dia_bridge_cardano_wallet_spendable_lovelace{role="pool"}` + `{role="main"}` | `wallet_pool.pool_wallet_low_lovelace` + `main_wallet_reserve_lovelace` | `50` / `100` ADA | A pool wallet is **actually below its low mark** AND the main is below its reserve, so auto-funding is STUCK — the low pool will drain. The escalation of `PoolWalletLow` (a pool that can't self-heal). Refill the main from protocol revenue or externally. |
 | `PriceDeviationHigh` | `dia_bridge_price_deviation_percent_bucket` (p95) | `price_deviation_high_percent` | `5` % | Investigate DIA source — possible misreport. |
 | `PriceAgeHigh` | `dia_bridge_price_age_seconds_bucket` (p95) | `price_age_high_seconds` | `600` s | DIA source publishing stale prices for a **routed** pair (the metric is scoped to symbols this feeder publishes, not every scanned symbol). |
 | `ReorgRateHigh` | `dia_bridge_transactions_reorg_total` | `reorg_rate_high_per_hour` | `> 3 / 1 h` | Check provider lag + scanner block-lag panel. |
@@ -1086,14 +1089,22 @@ test. Each `auto_*` key is optional; unset disables that step.
 | `auto_settle_lovelace` | `30 000 000` (30 ADA) | Receiver accrued ≥ this → auto `settle` | `SettleOverdue` (10 ADA) |
 | `auto_withdraw_lovelace` | `100 000 000` (100 ADA) | PaymentHook accrued ≥ this → auto `payment-hook:withdraw` | `PaymentHookWithdrawReady` (50 ADA) |
 | `auto_consolidate_below_lovelace` | `7 000 000` (7 ADA) | largest wallet UTxO < this → auto `wallet:consolidate` | `AdminWalletFragmented` (10 ADA) |
+| `auto_split` | `true` | a wallet is concentrated (UTxO > `big_utxo_above` AND usable < `min_usable_utxos`) → auto `wallet:split` (fills working up to `working_utxo_count`=10) | `WalletConcentrated` |
+| `wallet_pool.*` band | low `50` / target `200` ADA | a **pool** wallet's spendable < low → auto-fund from the main up to target | `PoolWalletLow` / `MainWalletCannotFundPool` |
 
-`wallet:consolidate` is also a manual command (`make cli CMD="wallet:consolidate"` /
-`npm run cli -- wallet:consolidate [--max-inputs 60]`): a plain self-payment that folds
-the wallet's dust into one **dedicated collateral UTxO** + working balance. It needs no
-collateral to build, so it recovers even an all-dust wallet. Full rationale (the fee loop,
-the fragmentation failure, the alert→automatic ordering, and the WASM self-heal) is in
-[Architecture → Fee loop & automatic maintenance](../../docs/architecture/feeder.md#fee-loop--automatic-maintenance-settle--withdraw--consolidate)
-and the [at-a-glance table](../../docs/architecture/feeder.md#alerts--automatic-remediation--at-a-glance).
+`wallet:consolidate` (fragmented → merge) and `wallet:split` (concentrated → break a big
+UTxO into the profile) are also **manual** commands:
+
+```bash
+make cli CMD="wallet:consolidate"   # or: npm run cli -- wallet:consolidate [--max-inputs 60]
+make cli CMD="wallet:split"         # or: npm run cli -- wallet:split [--big-utxo-above 550000000] [--build-only]
+```
+
+They are the two opposite UTxO-shape fixes; both are plain self-payments needing no
+collateral to build. Full rationale (the wallet pool + arbiter, the two shape paths, the
+main→pool funding, the alert→automatic ordering, and the WASM self-heal) is in
+[Architecture → Signer-wallet pool & per-wallet parallelism](../../docs/architecture/feeder.md#signer-wallet-pool--per-wallet-parallelism)
+and the [Fee loop & maintenance section](../../docs/architecture/feeder.md#fee-loop--automatic-maintenance-settle--withdraw--consolidate).
 
 ### Provider health (primary vs secondary)
 
