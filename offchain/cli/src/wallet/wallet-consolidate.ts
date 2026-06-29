@@ -35,7 +35,12 @@ import { makeConfiguredLucid, selectConfiguredWallet } from "../core/lucid.js";
 import { completeWithRetry } from "../core/tx-build.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
 import { awaitTxConfirmation } from "../core/tx-confirmation.js";
-import { waitForWalletSettlement } from "../core/chain-helpers.js";
+import {
+  computeSpentWalletOutRefs,
+  computeWalletChangeOutputs,
+  waitForWalletSettlement,
+  type WalletChangeUtxo,
+} from "../core/chain-helpers.js";
 
 export type ConsolidateWalletResult = {
   source: "seed" | "private-key";
@@ -46,6 +51,10 @@ export type ConsolidateWalletResult = {
   collateralLovelace: string;
   submittedTxHash: string | null;
   confirmed: boolean;
+  /** Wallet inputs the tx spent (out-refs) — for the arbiter's cache delta. */
+  consumedOutRefs: string[];
+  /** Change the tx paid back to the wallet — for the arbiter's cache delta. */
+  producedUtxos: WalletChangeUtxo[];
 };
 
 /** Pure-ADA UTxOs (single `lovelace` asset), smallest first — the dust is
@@ -66,10 +75,28 @@ export async function consolidateWallet(args: {
   maxInputs: number;
   buildOnly: boolean;
   collateralLovelace?: bigint;
+  /** Arbitrated per-wallet path: sign with this wallet instead of the configured
+   *  one. The feeder passes its pool wallet's signer; the manual command omits it. */
+  signer?: { kind: "seed" | "privateKey"; value: string };
+  /** Arbitrated per-wallet path: consume exactly these (already-reserved) dust
+   *  out-refs instead of selecting them here. The feeder reserves them through the
+   *  arbiter first so a consolidate never collides with a concurrent build. */
+  reservedOutRefs?: string[];
 }): Promise<ConsolidateWalletResult> {
   const collateralLovelace = args.collateralLovelace ?? DEFAULT_COLLATERAL_LOVELACE;
   const lucid = await makeConfiguredLucid();
-  const source = await selectConfiguredWallet(lucid);
+  let source: "seed" | "private-key";
+  if (args.signer) {
+    if (args.signer.kind === "seed") {
+      lucid.selectWallet.fromSeed(args.signer.value);
+      source = "seed";
+    } else {
+      lucid.selectWallet.fromPrivateKey(args.signer.value);
+      source = "private-key";
+    }
+  } else {
+    source = await selectConfiguredWallet(lucid);
+  }
   const wallet = lucid.wallet();
   const [address, allUtxos] = await Promise.all([wallet.address(), wallet.getUtxos()]);
 
@@ -82,7 +109,19 @@ export async function consolidateWallet(args: {
     );
   }
 
-  const selected = selectConsolidationUtxos(allUtxos, args.maxInputs);
+  // Arbitrated path: consume exactly the reserved out-refs (pinned so coin
+  // selection draws nothing else). Manual path: pick the dust here.
+  let selected: UTxO[];
+  if (args.reservedOutRefs) {
+    const wanted = new Set(args.reservedOutRefs);
+    selected = allUtxos.filter((u) => wanted.has(`${u.txHash}#${u.outputIndex}`));
+    if (selected.length < args.reservedOutRefs.length) {
+      throw new Error("wallet:consolidate: a reserved UTxO is no longer live.");
+    }
+    lucid.overrideUTxOs(selected);
+  } else {
+    selected = selectConsolidationUtxos(allUtxos, args.maxInputs);
+  }
   const consolidatedLovelace = selected.reduce((acc, u) => acc + (u.assets.lovelace ?? 0n), 0n);
   // Need enough to fund the dedicated collateral UTxO + a viable change output
   // + fee. Require a comfortable margin above the collateral amount.
@@ -111,6 +150,12 @@ export async function consolidateWallet(args: {
         .pay.ToAddress(address, { lovelace: collateralLovelace }),
     reportProgress,
   );
+  const txHash = txSignBuilder.toHash();
+  const consumedOutRefs = computeSpentWalletOutRefs(allUtxos, txSignBuilder);
+  const producedUtxos = computeWalletChangeOutputs(txSignBuilder, txHash, address);
+  // Release any pin now the build is done, so confirmation + settlement reads hit
+  // the live provider rather than the frozen reserved subset.
+  lucid.overrideUTxOs([]);
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
 
   let submittedTxHash: string | null = null;
@@ -147,6 +192,8 @@ export async function consolidateWallet(args: {
     collateralLovelace: collateralLovelace.toString(),
     submittedTxHash,
     confirmed,
+    consumedOutRefs,
+    producedUtxos,
   };
 }
 

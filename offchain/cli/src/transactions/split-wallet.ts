@@ -91,7 +91,7 @@ export async function splitWallet(args: {
   lucid.overrideUTxOs(pinned);
 
   reportProgress(
-    `Reshaping ${pinned.length} UTxO(s) at ${address} into ${args.outputLovelaces.length} output(s)`,
+    `Splitting ${pinned.length} UTxO(s) at ${address} into ${args.outputLovelaces.length} output(s)`,
   );
   // Force the planned inputs and lay out one explicit output per planned piece;
   // the balancer returns the leftover as change. No script inputs => no

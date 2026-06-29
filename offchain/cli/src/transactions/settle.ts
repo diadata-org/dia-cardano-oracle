@@ -20,12 +20,15 @@ import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   buildPaymentHookDatumCbor,
   buildReceiverDatumCbor,
+  computeSpentWalletOutRefs,
+  computeWalletChangeOutputs,
   decodeReceiverDatum,
   findSingleUtxoAtUnit,
   requireInlineDatum,
   waitForWalletSettlement,
   waitForUnitUtxoReplacement,
   writeJsonFile,
+  type WalletChangeUtxo,
 } from "../core/chain-helpers.js";
 import {
   assertPaymentKeyHashIsConfigSigner,
@@ -49,6 +52,10 @@ type SettleResult = {
   }>;
   totalSettledLovelace: string;
   transactions?: ConfigStateArtifact["transactions"];
+  /** Wallet inputs the tx spent + change produced — the arbiter's cache delta
+   *  (only meaningful on the arbitrated `reservedOutRefs` path). */
+  consumedOutRefs: string[];
+  producedUtxos: WalletChangeUtxo[];
 };
 
 /**
@@ -68,6 +75,10 @@ export async function settleAccruedFees(args: {
   protocolStatePath: string;
   clientStatePaths: string[];
   buildOnly: boolean;
+  /** Arbitrated path (feeder): pin the wallet's fee/collateral coin selection to
+   *  these already-reserved out-refs so the settle never draws a UTxO another
+   *  lane reserved. The manual command omits it (uses the whole wallet). */
+  reservedOutRefs?: string[];
 }): Promise<SettleResult> {
   const protocolStatePath = path.resolve(args.protocolStatePath);
   const clientStatePaths = args.clientStatePaths.map((p) => path.resolve(p));
@@ -120,6 +131,18 @@ export async function settleAccruedFees(args: {
     wallet.address(),
     wallet.getUtxos(),
   ]);
+  // Arbitrated path: pin coin selection to the reserved fee/collateral UTxOs so
+  // the settle never draws an input another lane holds. The script inputs
+  // (Receiver / Config / PaymentHook) are collected explicitly, so the pin only
+  // constrains the wallet's fee + collateral pick. Cleared after the build.
+  if (args.reservedOutRefs) {
+    const reserved = new Set(args.reservedOutRefs);
+    const pinned = walletUtxos.filter((u) => reserved.has(`${u.txHash}#${u.outputIndex}`));
+    if (pinned.length < args.reservedOutRefs.length) {
+      throw new Error("settle: a reserved wallet UTxO is no longer live.");
+    }
+    lucid.overrideUTxOs(pinned);
+  }
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
 
   assertPaymentKeyHashIsConfigSigner(
@@ -222,6 +245,12 @@ export async function settleAccruedFees(args: {
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
+  // Arbiter cache delta: the wallet inputs this tx consumes + the change it pays
+  // back. Computed from the built body (deterministic hash), then the coin-select
+  // pin is cleared so confirmation reads see the whole wallet again.
+  const consumedOutRefs = computeSpentWalletOutRefs(walletUtxos, txSignBuilder);
+  const producedUtxos = computeWalletChangeOutputs(txSignBuilder, unsignedHash, walletAddress);
+  if (args.reservedOutRefs) lucid.overrideUTxOs([]);
   let submittedTxHash: string | null = null;
   let confirmed = false;
 
@@ -326,6 +355,8 @@ export async function settleAccruedFees(args: {
       submittedTxHash,
       confirmed,
     }),
+    consumedOutRefs,
+    producedUtxos,
   };
 }
 

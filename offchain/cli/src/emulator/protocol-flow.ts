@@ -831,12 +831,12 @@ export async function runEmulatorProtocolFlow(
         const { paymentHookWithdraw } = await import(
           "../transactions/payment-hook-withdraw.js"
         );
-        const state = await paymentHookWithdraw({
+        const { artifact } = await paymentHookWithdraw({
           amountLovelace: hookWithdrawAmount.toString(),
           statePath: protocolStatePath,
           buildOnly: false,
         });
-        await writeStateJsonFile(protocolStatePath, state);
+        await writeStateJsonFile(protocolStatePath, artifact);
       });
     } else {
       reportProgress("[emulator-flow] payment-hook:withdraw skipped (insufficient accrued)");
@@ -1034,12 +1034,12 @@ export async function runEmulatorProtocolFlow(
           const { paymentHookWithdraw } = await import(
             "../transactions/payment-hook-withdraw.js"
           );
-          const state = await paymentHookWithdraw({
+          const { artifact } = await paymentHookWithdraw({
             amountLovelace: hookAccrued.toString(),
             statePath: protocolStatePath,
             buildOnly: false,
           });
-          await writeStateJsonFile(protocolStatePath, state);
+          await writeStateJsonFile(protocolStatePath, artifact);
         });
       }
 

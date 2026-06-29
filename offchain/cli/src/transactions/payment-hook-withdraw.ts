@@ -28,11 +28,14 @@ import { completeWithRetry } from "../core/tx-build.js";
 import { deriveConfiguredWalletDefaults } from "../wallet/wallet.js";
 import {
   buildPaymentHookDatumCbor,
+  computeSpentWalletOutRefs,
+  computeWalletChangeOutputs,
   decodePaymentHookDatum,
   findSingleUtxoAtUnit,
   toBigInt,
   waitForWalletSettlement,
   waitForUnitUtxoReplacement,
+  type WalletChangeUtxo,
 } from "../core/chain-helpers.js";
 import {
   assertPaymentKeyHashIsConfigSigner,
@@ -42,11 +45,24 @@ import {
 
 export { assertPaymentHookWithdrawAmountValid } from "../preflight/index.js";
 
+/** The new protocol state to persist, plus the arbiter cache delta. The delta is
+ *  a transient signing-pool concern (feeder arbitration) and is kept OUT of the
+ *  persisted `artifact` so no stale out-ref ever lands in a state file. */
+export type PaymentHookWithdrawResult = {
+  artifact: ConfigStateArtifact;
+  consumedOutRefs: string[];
+  producedUtxos: WalletChangeUtxo[];
+};
+
 export async function paymentHookWithdraw(args: {
   amountLovelace: string;
   statePath?: string;
   buildOnly: boolean;
-}): Promise<ConfigStateArtifact> {
+  /** Arbitrated path (feeder): pin the wallet's fee/collateral coin selection to
+   *  these already-reserved out-refs so the withdraw never draws a UTxO another
+   *  lane reserved. The manual command omits it (uses the whole wallet). */
+  reservedOutRefs?: string[];
+}): Promise<PaymentHookWithdrawResult> {
   reportProgress(`Using amountLovelace=${args.amountLovelace} for payment-hook withdraw`);
   const statePath = path.resolve(args.statePath ?? getDefaultConfigStatePath());
   reportProgress(`Loading config state from ${statePath}`);
@@ -68,6 +84,18 @@ export async function paymentHookWithdraw(args: {
     wallet.address(),
     wallet.getUtxos(),
   ]);
+  // Arbitrated path: pin coin selection to the reserved fee/collateral UTxOs so
+  // the withdraw never draws an input another lane holds. The PaymentHook + Config
+  // inputs are collected explicitly, so the pin only constrains the wallet's fee +
+  // collateral pick. Cleared after the build.
+  if (args.reservedOutRefs) {
+    const reserved = new Set(args.reservedOutRefs);
+    const pinned = walletUtxos.filter((u) => reserved.has(`${u.txHash}#${u.outputIndex}`));
+    if (pinned.length < args.reservedOutRefs.length) {
+      throw new Error("payment-hook withdraw: a reserved wallet UTxO is no longer live.");
+    }
+    lucid.overrideUTxOs(pinned);
+  }
   const walletDefaults = deriveConfiguredWalletDefaults({ source, address: walletAddress });
 
   assertPaymentKeyHashIsConfigSigner(
@@ -177,6 +205,12 @@ export async function paymentHookWithdraw(args: {
   reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
+  // Arbiter cache delta: the wallet inputs this tx consumes + the change it pays
+  // back. Computed from the built body (deterministic hash), then the coin-select
+  // pin is cleared so confirmation reads see the whole wallet again.
+  const consumedOutRefs = computeSpentWalletOutRefs(walletUtxos, txSignBuilder);
+  const producedUtxos = computeWalletChangeOutputs(txSignBuilder, unsignedHash, walletAddress);
+  if (args.reservedOutRefs) lucid.overrideUTxOs([]);
   let submittedTxHash: string | null = null;
   let confirmed = false;
 
@@ -216,21 +250,25 @@ export async function paymentHookWithdraw(args: {
   }
 
   return {
-    ...state,
-    wallet: {
-      source,
-      address: walletAddress,
+    artifact: {
+      ...state,
+      wallet: {
+        source,
+        address: walletAddress,
+      },
+      paymentHookState: nextPaymentHookState,
+      datum: {
+        ...state.datum,
+        paymentHookCbor: paymentHookDatumCbor,
+      },
+      transactions: appendTransactionRecord(state.transactions, {
+        step: stepId("payment-hook:withdraw"),
+        submittedTxHash,
+        confirmed,
+      }),
     },
-    paymentHookState: nextPaymentHookState,
-    datum: {
-      ...state.datum,
-      paymentHookCbor: paymentHookDatumCbor,
-    },
-    transactions: appendTransactionRecord(state.transactions, {
-      step: stepId("payment-hook:withdraw"),
-      submittedTxHash,
-      confirmed,
-    }),
+    consumedOutRefs,
+    producedUtxos,
   };
 }
 
