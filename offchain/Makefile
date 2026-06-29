@@ -296,7 +296,7 @@ evidence3: ## Build the COMPLETE M3 evidence pack into ONE dir (network from fee
 	echo "Complete M3 evidence pack: $$out/"
 
 .PHONY: evidence4
-evidence4: ## Build the M4 evidence pack (indexer + consumer demo). Needs the indexer up (make up). Pass EVIDENCE_ONCHAIN_LOG=path to embed an on-chain demo run.
+evidence4: ## Build the M4 evidence pack (indexer + consumer demo + the 4 Grafana dashboards). Needs the stack up with monitoring (make up MONITORING=1). Pass EVIDENCE_ONCHAIN_LOG=path to embed an on-chain demo run.
 	@if [ -z "$(EVIDENCE_NETWORK)" ]; then \
 	  echo "ERROR: CARDANO_NETWORK not set in feeder/.env — cannot pick evidence network." >&2; exit 1; \
 	fi; \
@@ -307,5 +307,6 @@ evidence4: ## Build the M4 evidence pack (indexer + consumer demo). Needs the in
 	echo "Building $(EVIDENCE_NETWORK) M4 evidence pack — stamp=$$runid indexer=$${INDEXER_URL:-http://localhost:3001}"; \
 	EVIDENCE_STAMP=$$runid EVIDENCE_NETWORK=$$net \
 	  INDEXER_URL=$${INDEXER_URL:-http://localhost:3001} \
+	  GRAFANA_ADMIN_PASSWORD=$${GRAFANA_ADMIN_PASSWORD:-admin} \
 	  EVIDENCE_ONCHAIN_LOG=$${EVIDENCE_ONCHAIN_LOG:-} RUN_ID=$(RUN_ID) \
 	  feeder/scripts/m4-evidence/package-m4-evidence.sh

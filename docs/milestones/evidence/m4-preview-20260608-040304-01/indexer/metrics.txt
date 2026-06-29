@@ -1,0 +1,189 @@
+# HELP process_cpu_user_seconds_total Total user CPU time spent in seconds.
+# TYPE process_cpu_user_seconds_total counter
+process_cpu_user_seconds_total{destination_chain="cardano",network="Preview"} 27.94950099999999
+
+# HELP process_cpu_system_seconds_total Total system CPU time spent in seconds.
+# TYPE process_cpu_system_seconds_total counter
+process_cpu_system_seconds_total{destination_chain="cardano",network="Preview"} 7.081715999999999
+
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total{destination_chain="cardano",network="Preview"} 35.031217000000005
+
+# HELP process_start_time_seconds Start time of the process since unix epoch in seconds.
+# TYPE process_start_time_seconds gauge
+process_start_time_seconds{destination_chain="cardano",network="Preview"} 1782711089
+
+# HELP process_resident_memory_bytes Resident memory size in bytes.
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes{destination_chain="cardano",network="Preview"} 198455296
+
+# HELP process_virtual_memory_bytes Virtual memory size in bytes.
+# TYPE process_virtual_memory_bytes gauge
+process_virtual_memory_bytes{destination_chain="cardano",network="Preview"} 65904898048
+
+# HELP process_heap_bytes Process heap size in bytes.
+# TYPE process_heap_bytes gauge
+process_heap_bytes{destination_chain="cardano",network="Preview"} 243552256
+
+# HELP process_open_fds Number of open file descriptors.
+# TYPE process_open_fds gauge
+process_open_fds{destination_chain="cardano",network="Preview"} 26
+
+# HELP process_max_fds Maximum number of open file descriptors.
+# TYPE process_max_fds gauge
+process_max_fds{destination_chain="cardano",network="Preview"} 1048576
+
+# HELP nodejs_eventloop_lag_seconds Lag of event loop in seconds.
+# TYPE nodejs_eventloop_lag_seconds gauge
+nodejs_eventloop_lag_seconds{destination_chain="cardano",network="Preview"} 0.002212642
+
+# HELP nodejs_eventloop_lag_min_seconds The minimum recorded event loop delay.
+# TYPE nodejs_eventloop_lag_min_seconds gauge
+nodejs_eventloop_lag_min_seconds{destination_chain="cardano",network="Preview"} 0.009084928
+
+# HELP nodejs_eventloop_lag_max_seconds The maximum recorded event loop delay.
+# TYPE nodejs_eventloop_lag_max_seconds gauge
+nodejs_eventloop_lag_max_seconds{destination_chain="cardano",network="Preview"} 0.012648447
+
+# HELP nodejs_eventloop_lag_mean_seconds The mean of the recorded event loop delays.
+# TYPE nodejs_eventloop_lag_mean_seconds gauge
+nodejs_eventloop_lag_mean_seconds{destination_chain="cardano",network="Preview"} 0.01030823902834008
+
+# HELP nodejs_eventloop_lag_stddev_seconds The standard deviation of the recorded event loop delays.
+# TYPE nodejs_eventloop_lag_stddev_seconds gauge
+nodejs_eventloop_lag_stddev_seconds{destination_chain="cardano",network="Preview"} 0.00024229928213814232
+
+# HELP nodejs_eventloop_lag_p50_seconds The 50th percentile of the recorded event loop delays.
+# TYPE nodejs_eventloop_lag_p50_seconds gauge
+nodejs_eventloop_lag_p50_seconds{destination_chain="cardano",network="Preview"} 0.010272767
+
+# HELP nodejs_eventloop_lag_p90_seconds The 90th percentile of the recorded event loop delays.
+# TYPE nodejs_eventloop_lag_p90_seconds gauge
+nodejs_eventloop_lag_p90_seconds{destination_chain="cardano",network="Preview"} 0.010551295
+
+# HELP nodejs_eventloop_lag_p99_seconds The 99th percentile of the recorded event loop delays.
+# TYPE nodejs_eventloop_lag_p99_seconds gauge
+nodejs_eventloop_lag_p99_seconds{destination_chain="cardano",network="Preview"} 0.011173887
+
+# HELP nodejs_active_resources Number of active resources that are currently keeping the event loop alive, grouped by async resource type.
+# TYPE nodejs_active_resources gauge
+nodejs_active_resources{type="PipeWrap",destination_chain="cardano",network="Preview"} 2
+nodejs_active_resources{type="TCPServerWrap",destination_chain="cardano",network="Preview"} 1
+nodejs_active_resources{type="TCPSocketWrap",destination_chain="cardano",network="Preview"} 1
+nodejs_active_resources{type="Immediate",destination_chain="cardano",network="Preview"} 1
+
+# HELP nodejs_active_resources_total Total number of active resources.
+# TYPE nodejs_active_resources_total gauge
+nodejs_active_resources_total{destination_chain="cardano",network="Preview"} 5
+
+# HELP nodejs_active_handles Number of active libuv handles grouped by handle type. Every handle type is C++ class name.
+# TYPE nodejs_active_handles gauge
+nodejs_active_handles{type="Socket",destination_chain="cardano",network="Preview"} 3
+nodejs_active_handles{type="Server",destination_chain="cardano",network="Preview"} 1
+
+# HELP nodejs_active_handles_total Total number of active handles.
+# TYPE nodejs_active_handles_total gauge
+nodejs_active_handles_total{destination_chain="cardano",network="Preview"} 4
+
+# HELP nodejs_active_requests Number of active libuv requests grouped by request type. Every request type is C++ class name.
+# TYPE nodejs_active_requests gauge
+
+# HELP nodejs_active_requests_total Total number of active requests.
+# TYPE nodejs_active_requests_total gauge
+nodejs_active_requests_total{destination_chain="cardano",network="Preview"} 0
+
+# HELP nodejs_heap_size_total_bytes Process heap size from Node.js in bytes.
+# TYPE nodejs_heap_size_total_bytes gauge
+nodejs_heap_size_total_bytes{destination_chain="cardano",network="Preview"} 88449024
+
+# HELP nodejs_heap_size_used_bytes Process heap size used from Node.js in bytes.
+# TYPE nodejs_heap_size_used_bytes gauge
+nodejs_heap_size_used_bytes{destination_chain="cardano",network="Preview"} 80095160
+
+# HELP nodejs_external_memory_bytes Node.js external memory size in bytes.
+# TYPE nodejs_external_memory_bytes gauge
+nodejs_external_memory_bytes{destination_chain="cardano",network="Preview"} 14591482
+
+# HELP nodejs_heap_space_size_total_bytes Process heap space size total from Node.js in bytes.
+# TYPE nodejs_heap_space_size_total_bytes gauge
+nodejs_heap_space_size_total_bytes{space="read_only",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_total_bytes{space="new",destination_chain="cardano",network="Preview"} 1048576
+nodejs_heap_space_size_total_bytes{space="old",destination_chain="cardano",network="Preview"} 51167232
+nodejs_heap_space_size_total_bytes{space="code",destination_chain="cardano",network="Preview"} 2621440
+nodejs_heap_space_size_total_bytes{space="shared",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_total_bytes{space="trusted",destination_chain="cardano",network="Preview"} 3719168
+nodejs_heap_space_size_total_bytes{space="new_large_object",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_total_bytes{space="large_object",destination_chain="cardano",network="Preview"} 29736960
+nodejs_heap_space_size_total_bytes{space="code_large_object",destination_chain="cardano",network="Preview"} 155648
+nodejs_heap_space_size_total_bytes{space="shared_large_object",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_total_bytes{space="trusted_large_object",destination_chain="cardano",network="Preview"} 0
+
+# HELP nodejs_heap_space_size_used_bytes Process heap space size used from Node.js in bytes.
+# TYPE nodejs_heap_space_size_used_bytes gauge
+nodejs_heap_space_size_used_bytes{space="read_only",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_used_bytes{space="new",destination_chain="cardano",network="Preview"} 750360
+nodejs_heap_space_size_used_bytes{space="old",destination_chain="cardano",network="Preview"} 45047744
+nodejs_heap_space_size_used_bytes{space="code",destination_chain="cardano",network="Preview"} 2190144
+nodejs_heap_space_size_used_bytes{space="shared",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_used_bytes{space="trusted",destination_chain="cardano",network="Preview"} 2378672
+nodejs_heap_space_size_used_bytes{space="new_large_object",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_used_bytes{space="large_object",destination_chain="cardano",network="Preview"} 29593448
+nodejs_heap_space_size_used_bytes{space="code_large_object",destination_chain="cardano",network="Preview"} 138432
+nodejs_heap_space_size_used_bytes{space="shared_large_object",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_used_bytes{space="trusted_large_object",destination_chain="cardano",network="Preview"} 0
+
+# HELP nodejs_heap_space_size_available_bytes Process heap space size available from Node.js in bytes.
+# TYPE nodejs_heap_space_size_available_bytes gauge
+nodejs_heap_space_size_available_bytes{space="read_only",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_available_bytes{space="new",destination_chain="cardano",network="Preview"} 280552
+nodejs_heap_space_size_available_bytes{space="old",destination_chain="cardano",network="Preview"} 5130392
+nodejs_heap_space_size_available_bytes{space="code",destination_chain="cardano",network="Preview"} 267136
+nodejs_heap_space_size_available_bytes{space="shared",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_available_bytes{space="trusted",destination_chain="cardano",network="Preview"} 1273736
+nodejs_heap_space_size_available_bytes{space="new_large_object",destination_chain="cardano",network="Preview"} 1048576
+nodejs_heap_space_size_available_bytes{space="large_object",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_available_bytes{space="code_large_object",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_available_bytes{space="shared_large_object",destination_chain="cardano",network="Preview"} 0
+nodejs_heap_space_size_available_bytes{space="trusted_large_object",destination_chain="cardano",network="Preview"} 0
+
+# HELP nodejs_version_info Node.js version info.
+# TYPE nodejs_version_info gauge
+nodejs_version_info{version="v22.23.1",major="22",minor="23",patch="1",destination_chain="cardano",network="Preview"} 1
+
+# HELP nodejs_gc_duration_seconds Garbage collection duration by kind, one of major, minor, incremental or weakcb.
+# TYPE nodejs_gc_duration_seconds histogram
+nodejs_gc_duration_seconds_bucket{le="0.001",destination_chain="cardano",network="Preview",kind="incremental"} 1
+nodejs_gc_duration_seconds_bucket{le="0.01",destination_chain="cardano",network="Preview",kind="incremental"} 6
+nodejs_gc_duration_seconds_bucket{le="0.1",destination_chain="cardano",network="Preview",kind="incremental"} 6
+nodejs_gc_duration_seconds_bucket{le="1",destination_chain="cardano",network="Preview",kind="incremental"} 6
+nodejs_gc_duration_seconds_bucket{le="2",destination_chain="cardano",network="Preview",kind="incremental"} 6
+nodejs_gc_duration_seconds_bucket{le="5",destination_chain="cardano",network="Preview",kind="incremental"} 6
+nodejs_gc_duration_seconds_bucket{le="+Inf",destination_chain="cardano",network="Preview",kind="incremental"} 6
+nodejs_gc_duration_seconds_sum{destination_chain="cardano",network="Preview",kind="incremental"} 0.011421093821525573
+nodejs_gc_duration_seconds_count{destination_chain="cardano",network="Preview",kind="incremental"} 6
+nodejs_gc_duration_seconds_bucket{le="0.001",destination_chain="cardano",network="Preview",kind="major"} 0
+nodejs_gc_duration_seconds_bucket{le="0.01",destination_chain="cardano",network="Preview",kind="major"} 5
+nodejs_gc_duration_seconds_bucket{le="0.1",destination_chain="cardano",network="Preview",kind="major"} 6
+nodejs_gc_duration_seconds_bucket{le="1",destination_chain="cardano",network="Preview",kind="major"} 6
+nodejs_gc_duration_seconds_bucket{le="2",destination_chain="cardano",network="Preview",kind="major"} 6
+nodejs_gc_duration_seconds_bucket{le="5",destination_chain="cardano",network="Preview",kind="major"} 6
+nodejs_gc_duration_seconds_bucket{le="+Inf",destination_chain="cardano",network="Preview",kind="major"} 6
+nodejs_gc_duration_seconds_sum{destination_chain="cardano",network="Preview",kind="major"} 0.05494260191917419
+nodejs_gc_duration_seconds_count{destination_chain="cardano",network="Preview",kind="major"} 6
+nodejs_gc_duration_seconds_bucket{le="0.001",destination_chain="cardano",network="Preview",kind="minor"} 295
+nodejs_gc_duration_seconds_bucket{le="0.01",destination_chain="cardano",network="Preview",kind="minor"} 312
+nodejs_gc_duration_seconds_bucket{le="0.1",destination_chain="cardano",network="Preview",kind="minor"} 312
+nodejs_gc_duration_seconds_bucket{le="1",destination_chain="cardano",network="Preview",kind="minor"} 312
+nodejs_gc_duration_seconds_bucket{le="2",destination_chain="cardano",network="Preview",kind="minor"} 312
+nodejs_gc_duration_seconds_bucket{le="5",destination_chain="cardano",network="Preview",kind="minor"} 312
+nodejs_gc_duration_seconds_bucket{le="+Inf",destination_chain="cardano",network="Preview",kind="minor"} 312
+nodejs_gc_duration_seconds_sum{destination_chain="cardano",network="Preview",kind="minor"} 0.2308196527957917
+nodejs_gc_duration_seconds_count{destination_chain="cardano",network="Preview",kind="minor"} 312
+
+# HELP dia_bridge_provider_requests_total Cardano API provider requests by provider, method, and outcome. Each retry attempt is one request — this tracks the provider's actual quota consumption. outcome: ok | rate_limited (429 throttle) | quota_exceeded (Blockfrost 402 daily-quota wall) | error.
+# TYPE dia_bridge_provider_requests_total counter
+dia_bridge_provider_requests_total{provider="Blockfrost",method="tip",outcome="ok",destination_chain="cardano",network="Preview"} 99
+dia_bridge_provider_requests_total{provider="Blockfrost",method="getUtxos",outcome="ok",destination_chain="cardano",network="Preview"} 206
+dia_bridge_provider_requests_total{provider="Blockfrost",method="getUtxos",outcome="error",destination_chain="cardano",network="Preview"} 8
+dia_bridge_provider_requests_total{provider="Blockfrost",method="tip",outcome="error",destination_chain="cardano",network="Preview"} 1

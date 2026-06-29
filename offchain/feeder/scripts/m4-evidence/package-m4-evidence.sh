@@ -10,7 +10,9 @@
 #     schema) — read over HTTP from a running indexer;
 #   - the end-to-end consumer demo on the emulator (run here, output captured);
 #   - the on-chain consumer demo output (embedded when you point it at a log);
-#   - the published Pair policy ids + addresses for the live feeds.
+#   - the published Pair policy ids + addresses for the live feeds;
+#   - live PNG renders of the four Grafana dashboards (Overview, Transactions,
+#     Internals, Signer Wallets), captured from the renderer when it is up.
 #
 # Read-only: it never writes a transaction. The feeder/indexer may keep running.
 #
@@ -19,6 +21,8 @@
 #   EVIDENCE_STAMP    Shared dir stamp. Default: the resolved run-dir id, else a
 #                     UTC timestamp.
 #   INDEXER_URL       Indexer base URL. Default: http://localhost:3001.
+#   GRAFANA_URL       Grafana base URL for the dashboard renders. Default:
+#                     http://localhost:3000 (GRAFANA_ADMIN_PASSWORD for auth).
 #   DEMO_SYMBOL       Sample pair for the per-pair captures. Default: first pair
 #                     the indexer reports (else BTC/USD).
 #   EVIDENCE_ONCHAIN_LOG  Path to a saved run of run-consumer-demo-onchain.sh
@@ -43,6 +47,12 @@ NETWORK_DISPLAY="$(tr '[:lower:]' '[:upper:]' <<<"${NETWORK:0:1}")${NETWORK:1}"
 INDEXER_URL="${INDEXER_URL:-http://localhost:3001}"
 INDEXER_URL="${INDEXER_URL%/}"
 
+# Grafana (for the dashboard PNG snapshots) — same defaults as the monitoring
+# stack. The renderer sidecar comes up with `make up MONITORING=1`.
+GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
+GRAFANA_USER="${GRAFANA_USER:-admin}"
+GRAFANA_PASS="${GRAFANA_ADMIN_PASSWORD:-admin}"
+
 STATE_ROOT="$REPO_ROOT/offchain/state"
 if [[ -n "${RUN_ID:-}" ]]; then
   STATE_DIR="$STATE_ROOT/${NETWORK}_run_${RUN_ID}"
@@ -60,7 +70,7 @@ OUT_BASE="$REPO_ROOT/docs/milestones/evidence/m4-${NETWORK}-${STAMP}"
 OUT_DIR="$OUT_BASE"
 suffix=1
 while [[ -e "$OUT_DIR" ]]; do OUT_DIR="$(printf '%s-%02d' "$OUT_BASE" "$suffix")"; suffix=$((suffix + 1)); done
-mkdir -p "$OUT_DIR/indexer" "$OUT_DIR/consumer-demo"
+mkdir -p "$OUT_DIR/indexer" "$OUT_DIR/consumer-demo" "$OUT_DIR/dashboards"
 MD_FILE="milestone-4-${NETWORK}-evidence.md"
 
 echo "[package-m4] network=$NETWORK_DISPLAY stamp=$STAMP indexer=$INDEXER_URL"
@@ -111,6 +121,38 @@ if [[ -n "${EVIDENCE_ONCHAIN_LOG:-}" && -f "${EVIDENCE_ONCHAIN_LOG}" ]]; then
   cp "${EVIDENCE_ONCHAIN_LOG}" "$OUT_DIR/consumer-demo/onchain.txt"
   ONCHAIN_PRESENT=1
   echo "[package-m4] embedded on-chain demo log from $EVIDENCE_ONCHAIN_LOG"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Dashboard snapshots — a full render of each of the four Grafana dashboards
+#    (Overview, Transactions, Internals, Signer Wallets). One full render shows
+#    every panel; the panel-by-panel reference lives in the dashboards guide
+#    (docs/architecture/grafana-dashboards.md). Needs the monitoring profile up
+#    (make up MONITORING=1).
+# ---------------------------------------------------------------------------
+render_dashboard() {
+  local uid="$1" slug="$2" out_png="$3"
+  curl -fsS --max-time 30 -u "$GRAFANA_USER:$GRAFANA_PASS" -o "$out_png" \
+    "$GRAFANA_URL/render/d/$uid/$slug?orgId=1&from=now-3h&to=now&width=1600&height=2400&kiosk=tv&tz=UTC"
+}
+
+DASHBOARDS_MD=""
+if curl -fsS --max-time 5 "$GRAFANA_URL/api/health" >/dev/null 2>&1; then
+  echo "[package-m4] Grafana reachable — rendering dashboards"
+  render_dashboard "dia-cardano-feeder" "dia-cardano-oracle-feeder" "$OUT_DIR/dashboards/overview-full.png" 2>/dev/null \
+    && DASHBOARDS_MD+=$'### Overview dashboard\n\n![Overview — full dashboard](dashboards/overview-full.png)\n\n_Is each price feed alive, fresh, accurate and funded? A batch of N pairs counts as N symbol updates here._\n'
+  render_dashboard "dia-cardano-feeder-tx" "dia-cardano-oracle-feeder-transactions" "$OUT_DIR/dashboards/tx-full.png" 2>/dev/null \
+    && DASHBOARDS_MD+=$'\n### Transactions dashboard\n\n![Transactions — full dashboard](dashboards/tx-full.png)\n\n_The per-transaction view: a batch of N pairs is ONE transaction. Stage latency, confirmed-vs-failed throughput, success ratio, batch size._\n'
+  render_dashboard "dia-cardano-feeder-internals" "dia-cardano-oracle-feeder-internals" "$OUT_DIR/dashboards/internals-full.png" 2>/dev/null \
+    && DASHBOARDS_MD+=$'\n### Internals dashboard\n\n![Internals — full dashboard](dashboards/internals-full.png)\n\n_Feeder-internal observability: pipeline-phase latency, scanner, worker pools, DB, cron/recovery, provider health._\n'
+  render_dashboard "feeder-wallets" "feeder-signer-wallets" "$OUT_DIR/dashboards/wallets-full.png" 2>/dev/null \
+    && DASHBOARDS_MD+=$'\n### Signer Wallets dashboard\n\n![Signer Wallets — full dashboard](dashboards/wallets-full.png)\n\n_Per signer-wallet health for the multi-wallet pool: spendable balance, collateral floor (largest UTxO), usable-UTxO count, and active arbiter reservations. With no pool configured this shows the single `main` wallet._\n'
+  if [[ -z "$DASHBOARDS_MD" ]]; then
+    DASHBOARDS_MD="_Grafana was reachable but the image renderer was not responding — no PNGs captured. Bring up the monitoring profile (\`cd offchain && make up MONITORING=1\`) and re-run._"
+  fi
+else
+  echo "[package-m4] WARNING: Grafana not reachable at $GRAFANA_URL — skipping dashboard snapshots"
+  DASHBOARDS_MD="_Grafana was not reachable at $GRAFANA_URL when this pack was assembled — no dashboard PNGs. Start the monitoring stack (\`cd offchain && make up MONITORING=1\`) and re-run._"
 fi
 
 # ---------------------------------------------------------------------------
@@ -197,6 +239,7 @@ Everything here is read-only: querying the chain and reading published values.
 - [Consuming a feed — end-to-end](#consuming-a-feed--end-to-end)
 - [Published feeds — policy ids](#published-feeds--policy-ids)
 - [Provider-usage monitoring](#provider-usage-monitoring)
+- [Dashboards](#dashboards)
 - [How to reproduce](#how-to-reproduce)
 - [Files in this pack](#files-in-this-pack)
 
@@ -257,6 +300,16 @@ last 24h vs daily quota (per provider)**, with an alert that fires before the
 daily quota is exhausted. The indexer's own usage is in
 [\`indexer/metrics.txt\`](indexer/metrics.txt) (series \`dia_bridge_provider_requests_total\`).
 
+## Dashboards
+
+The four Grafana dashboards the feeder ships, rendered live: **Overview**,
+**Transactions**, **Internals**, and **Signer Wallets** (new with the multi-wallet
+signer pool). A full render of each shows every panel; the panel-by-panel
+reference is the dashboards guide,
+[\`docs/architecture/grafana-dashboards.md\`](../../../architecture/grafana-dashboards.md).
+
+${DASHBOARDS_MD}
+
 ## How to reproduce
 
 \`\`\`sh
@@ -282,6 +335,7 @@ bash offchain/indexer/src/examples/run-consumer-demo-onchain.sh
 | \`indexer/metrics.txt\`      | The indexer's chain-provider request counts. |
 | \`consumer-demo/emulator.txt\` | The offline end-to-end consumer demo run. |
 | \`consumer-demo/onchain.txt\`  | The on-chain consumer demo run (when embedded). |
+| \`dashboards/*.png\`           | The four Grafana dashboards rendered live (Overview, Transactions, Internals, Signer Wallets). |
 EOF
 
 echo "[package-m4] done."
