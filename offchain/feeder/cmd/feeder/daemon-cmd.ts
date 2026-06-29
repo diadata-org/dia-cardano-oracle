@@ -986,11 +986,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       ? BigInt(alerting.admin_wallet_min_collateral_lovelace)
       : 5_000_000n;
   // Auto-split trigger (the OPPOSITE of consolidate): a wallet is concentrated
-  // when its largest pure-ADA UTxO exceeds `big_utxo_above_lovelace` AND it has
-  // fewer than `min_usable_utxos` usable UTxOs. Gated by the `auto_split` flag;
-  // the thresholds come from `wallet_shape`.
+  // when it has fewer than `min_usable_utxos` usable UTxOs, regardless of balance.
+  // The planner then carves the largest UTxO into lanes (or no-ops if it cannot).
+  // Gated by the `auto_split` flag; the threshold comes from `wallet_shape`.
   const autoSplitEnabled = alerting.auto_split === true;
-  const walletBigUtxoAboveLovelace = resolveWalletShapeProfile(infra.wallet_shape).bigUtxoAboveLovelace;
   const walletMinUsableUtxos = infra.wallet_shape?.min_usable_utxos ?? DEFAULT_MIN_USABLE_UTXOS;
   // Main→pool funding band (lovelace) + cooldown, from `wallet_pool` with the
   // `DEFAULT_*` fallbacks. The loop only acts when the pool has more than the
@@ -2068,9 +2067,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     if (!autoSplitEnabled) return;
     for (const w of bridge.walletStats()) {
       const decision = shouldAutoSplit({
-        maxUtxoLovelace: w.maxUtxoLovelace,
         usableUtxoCount: w.usableUtxoCount,
-        bigUtxoAboveLovelace: walletBigUtxoAboveLovelace,
         minUsableUtxos: walletMinUsableUtxos,
         enabled: autoSplitEnabled,
         inProgress: splitInProgress.has(w.walletId),
@@ -2078,8 +2075,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       if (decision.act !== true) continue;
       splitInProgress.add(w.walletId);
       report(
-        `auto-split: ${w.walletId} concentrated (largestUtxo=${w.maxUtxoLovelace} usable=${w.usableUtxoCount} ` +
-        `threshold=${walletBigUtxoAboveLovelace}/${walletMinUsableUtxos})`,
+        `auto-split: ${w.walletId} concentrated (usable=${w.usableUtxoCount} threshold=${walletMinUsableUtxos})`,
       );
       void bridge
         .splitWallet({ walletId: w.walletId })
@@ -2174,6 +2170,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     // Per-wallet gauges from the same snapshot (empty in dry-run → no series).
     for (const w of bridge.walletStats()) {
       const labels = { wallet: w.walletId, role: w.role };
+      metrics.cardanoWalletTotalLovelace.set(labels, Number(w.totalLovelace));
       metrics.cardanoWalletSpendableLovelace.set(labels, Number(w.spendableLovelace));
       metrics.cardanoWalletMaxUtxoLovelace.set(labels, Number(w.maxUtxoLovelace));
       metrics.cardanoWalletUsableUtxos.set(labels, w.usableUtxoCount);

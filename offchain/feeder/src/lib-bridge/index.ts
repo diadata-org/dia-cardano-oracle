@@ -80,7 +80,7 @@ import {
   type WalletReservation,
 } from "../submitter/wallet/wallet-arbiter.js";
 import type { WalletPool, WalletUtxo } from "../submitter/wallet/wallet-pool.js";
-import { planWalletSplit, type WalletShapeProfile } from "../submitter/wallet/wallet-shape.js";
+import { planWalletSplit, planShapeOutputs, type WalletShapeProfile } from "../submitter/wallet/wallet-shape.js";
 import {
   CONSOLIDATE_MIN_HEADROOM_LOVELACE,
   DEFAULT_CONFIRMATION_DEPTH,
@@ -354,13 +354,14 @@ export type OracleIntentBridge = {
   /**
    * Per-wallet shape snapshot from the arbiter — `maxUtxoLovelace` and
    * `usableUtxoCount` drive the auto-split / auto-consolidate triggers, and all
-   * four fields feed the per-wallet gauges. Reads the (already refreshed) cache;
+   * five fields feed the per-wallet gauges. Reads the (already refreshed) cache;
    * never touches chain. Empty in dry-run.
    */
   walletStats(): Array<{
     walletId: string;
     role: "main" | "pool";
     reservations: number;
+    totalLovelace: bigint;
     spendableLovelace: bigint;
     maxUtxoLovelace: bigint;
     usableUtxoCount: number;
@@ -1746,14 +1747,28 @@ export function createRealOracleIntentBridge(
       if (!target) {
         throw new Error(`fundPoolWallet: unknown pool wallet "${params.toWalletId}".`);
       }
-      log(`fundPoolWallet: ${main.id} → ${target.id} amount=${params.amountLovelace}`);
-      // Reserve ENOUGH of the main wallet's UTxOs to cover the transfer (amount +
+      // Plan the funding as the pool's MISSING shape pieces, working-first, so the
+      // pool lands already split into lanes + collateral in this one tx (no second
+      // split tx). `absorbRemainder` lands the whole transfer as pool UTxOs.
+      const outputLovelaces = planShapeOutputs(
+        walletPool.getUtxos(target.id),
+        walletShapeProfile,
+        params.amountLovelace,
+        { absorbRemainder: true },
+      );
+      if (outputLovelaces.length === 0) {
+        log(`fundPoolWallet: ${target.id} amount=${params.amountLovelace} funds no whole piece; skipping`);
+        return { txHash: null, confirmed: false, funded: false };
+      }
+      const totalLovelace = outputLovelaces.reduce((acc, v) => acc + v, 0n);
+      log(`fundPoolWallet: ${main.id} → ${target.id} amount=${totalLovelace} as ${outputLovelaces.length} UTxO(s)`);
+      // Reserve ENOUGH of the main wallet's UTxOs to cover the transfer (pieces +
       // fee/change headroom), so this never collides with an oracle update that
       // also draws on the main; release them on completion. A plain fee+collateral
       // pick would pin too few inputs and fail to balance a large transfer.
       const reservation = arbiter.acquireWalletForAmount(
         main.id,
-        params.amountLovelace + POOL_FUND_FEE_BUFFER_LOVELACE,
+        totalLovelace + POOL_FUND_FEE_BUFFER_LOVELACE,
       );
       if ("unavailable" in reservation) {
         log(`fundPoolWallet: main wallet lacks free UTxOs to cover the transfer this tick; skipping`);
@@ -1767,7 +1782,7 @@ export function createRealOracleIntentBridge(
         const result = await fundPoolWalletTx({
           signer: main.signer,
           toAddress: target.address,
-          amountLovelace: params.amountLovelace,
+          outputLovelaces,
           reservedOutRefs: reservation.utxos.map((u) => u.outRef),
         });
         settled = { consumedOutRefs: result.consumedOutRefs, producedUtxos: result.producedUtxos };

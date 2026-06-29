@@ -79,7 +79,7 @@ import { writeStateJsonFile } from "../core/state.js";
 import { depositFund, isCleanAdaDeposit } from "../transactions/deposit.js";
 import { fundPoolWallet } from "../transactions/fund-pool-wallet.js";
 import { splitWallet } from "../transactions/split-wallet.js";
-import { planWalletSplit, type SplitUtxo, type WalletShapeProfile } from "../wallet/split-plan.js";
+import { planWalletSplit, planShapeOutputs, type SplitUtxo, type WalletShapeProfile } from "../wallet/split-plan.js";
 import { selectConsolidationUtxos } from "../wallet/wallet-consolidate.js";
 import { resolveClientUtxoRefs } from "../transactions/reclaim-reference-script.js";
 import { completeWithRetry } from "../core/tx-build.js";
@@ -556,18 +556,28 @@ function testComputeWalletChangeOutputs(): void {
 }
 
 async function testFundPoolWalletRejectsNonPositiveAmount(): Promise<void> {
-  // The amount guard runs before any chain work, so a non-positive transfer is
+  // The output guards run before any chain work, so a degenerate transfer is
   // rejected without selecting a wallet or touching a provider.
+  await assert.rejects(
+    () =>
+      fundPoolWallet({
+        signer: { kind: "seed", value: "irrelevant" },
+        toAddress: "addr_test1qpool",
+        outputLovelaces: [],
+      }),
+    /outputLovelaces must not be empty/,
+    "expected an empty output list to be rejected",
+  );
   for (const bad of [0n, -1_000_000n]) {
     await assert.rejects(
       () =>
         fundPoolWallet({
           signer: { kind: "seed", value: "irrelevant" },
           toAddress: "addr_test1qpool",
-          amountLovelace: bad,
+          outputLovelaces: [bad],
         }),
-      /amountLovelace must be positive/,
-      `expected amount ${bad} to be rejected`,
+      /outputLovelaces must all be positive/,
+      `expected output ${bad} to be rejected`,
     );
   }
 }
@@ -1029,19 +1039,18 @@ function testDepositMergeSelectionFiltersAndCaps(): void {
   );
 }
 
-// wallet:consolidate selection — pure-ADA UTxOs only (collateral must be pure
-// Split planner — break a wallet toward the target profile (the OPPOSITE of
-// consolidate: too concentrated → split a big UTxO into many usable ones).
+// Shape planner — carve a wallet toward the target profile (the OPPOSITE of
+// consolidate: too concentrated → split the largest UTxO into many usable lanes).
+// Working-first, no balance gate: concentration is about UTxO COUNT, not size.
 function testPlanWalletSplit(): void {
   const ADA = 1_000_000n;
-  // Split fills working up to 10 (the hysteresis target, above the trigger of 5)
-  // and collateral up to 5. A big UTxO is one above 550 ADA.
+  // A 5-lane profile: up to 5 working (100 ADA) lanes + 5 collateral (10 ADA),
+  // minted only once the lanes are full. A full wallet holds 550 ADA shaped.
   const PROFILE: WalletShapeProfile = {
-    workingCount: 10,
+    workingCount: 5,
     workingLovelace: 100n * ADA,
     collateralCount: 5,
     collateralLovelace: 10n * ADA,
-    bigUtxoAboveLovelace: 550n * ADA,
     feeBufferLovelace: 2n * ADA,
   };
   const utxo = (outRef: string, ada: bigint, hasOnlyAda = true): SplitUtxo => ({
@@ -1055,78 +1064,63 @@ function testPlanWalletSplit(): void {
   };
   const count = (vals: bigint[], v: bigint) => vals.filter((x) => x === v).length;
 
-  // Primary case: a 600-ADA UTxO funds only the base (5 collateral + 5 working);
-  // collateral first, then working as the value allows. Rest is change.
+  // The balance→lanes table, with NO balance gate: each maps to one piece per
+  // 100 ADA (the last lane is the change UTxO the balancer returns).
   {
-    const plan = asPlan(planWalletSplit([utxo("fat#0", 600n)], PROFILE));
-    assert.deepEqual(plan.consumeOutRefs, ["fat#0"], "consumes the big UTxO");
-    assert.equal(count(plan.outputLovelaces, 10n * ADA), 5, "5 collateral outputs of 10 ADA");
-    assert.equal(count(plan.outputLovelaces, 100n * ADA), 5, "5 working (600 ADA funds only 5)");
+    assert.deepEqual(asPlan(planWalletSplit([utxo("fat#0", 200n)], PROFILE)).outputLovelaces, [100n * ADA]);
+    assert.deepEqual(asPlan(planWalletSplit([utxo("fat#0", 300n)], PROFILE)).outputLovelaces, [100n * ADA, 100n * ADA]);
+    assert.equal(asPlan(planWalletSplit([utxo("fat#0", 500n)], PROFILE)).outputLovelaces.length, 4);
   }
 
-  // No big UTxO → nothing to split (a low/dust wallet is funding/consolidate).
+  // A 200-ADA UTxO is FAR below the old 550-ADA gate, yet the split still fires —
+  // the trigger is purely the usable-UTxO count now.
+  assert.equal(planWalletSplit([utxo("fat#0", 200n)], PROFILE).act, true);
+
+  // A whale UTxO is bounded by the profile (5 working + 5 collateral), never the
+  // UTxO's size — the ~99,000 ADA remainder is one change UTxO.
+  {
+    const plan = asPlan(planWalletSplit([utxo("whale#0", 100_000n)], PROFILE));
+    assert.equal(plan.outputLovelaces.length, 10, "bounded by the profile (5 + 5), not the UTxO size");
+    assert.equal(count(plan.outputLovelaces, 100n * ADA), 5, "5 working lanes");
+    assert.equal(count(plan.outputLovelaces, 10n * ADA), 5, "then 5 collateral");
+  }
+
+  // Already shaped → no-op (no churn).
   {
     const shaped: SplitUtxo[] = [
-      ...Array.from({ length: 5 }, (_, i) => utxo(`c#${i}`, 10n)),
       ...Array.from({ length: 5 }, (_, i) => utxo(`w#${i}`, 100n)),
+      ...Array.from({ length: 5 }, (_, i) => utxo(`c#${i}`, 10n)),
     ];
     assert.deepEqual(planWalletSplit(shaped, PROFILE), { act: false, reason: "already_shaped" });
   }
 
-  // Profile already met → the big UTxO is left alone as a reserve (no churn).
-  {
-    const utxos: SplitUtxo[] = [
-      ...Array.from({ length: 5 }, (_, i) => utxo(`c#${i}`, 10n)),
-      ...Array.from({ length: 10 }, (_, i) => utxo(`w#${i}`, 100n)),
-      utxo("fat#0", 5000n),
-    ];
-    assert.deepEqual(planWalletSplit(utxos, PROFILE), { act: false, reason: "already_shaped" });
-  }
-
-  // A big UTxO tops working up toward the 10 target (hysteresis), leaving the
-  // good UTxOs untouched. 5 working present → mint 5 more from the big UTxO.
-  {
-    const utxos: SplitUtxo[] = [
-      ...Array.from({ length: 5 }, (_, i) => utxo(`c#${i}`, 10n)),
-      ...Array.from({ length: 5 }, (_, i) => utxo(`w#${i}`, 100n)),
-      utxo("fat#0", 5000n),
-    ];
-    const plan = asPlan(planWalletSplit(utxos, PROFILE));
-    assert.deepEqual(plan.consumeOutRefs, ["fat#0"], "only the big UTxO is consumed (good UTxOs preserved)");
-    assert.deepEqual(plan.outputLovelaces, Array.from({ length: 5 }, () => 100n * ADA), "5 more working → 10 total");
-  }
-
-  // A large empty-wallet UTxO fills the FULL profile: 5 collateral + 10 working,
-  // and the rest is a single change UTxO (NOT fanned into many pieces).
-  {
-    const plan = asPlan(planWalletSplit([utxo("fat#0", 5000n)], PROFILE));
-    assert.equal(plan.outputLovelaces.length, 15, "exactly 5 collateral + 10 working — no fan-out");
-    assert.equal(count(plan.outputLovelaces, 10n * ADA), 5);
-    assert.equal(count(plan.outputLovelaces, 100n * ADA), 10);
-  }
-
-  // A whale UTxO is bounded by the profile (15 outputs), never the UTxO's size —
-  // the ~99,000 ADA remainder is one change UTxO.
-  {
-    const plan = asPlan(planWalletSplit([utxo("whale#0", 100_000n)], PROFILE));
-    assert.equal(plan.outputLovelaces.length, 15, "bounded by the profile (5 + 10), not the UTxO size");
-  }
-
-  // Multiple big UTxOs are ALL consumed; the value fills the profile, rest change.
-  {
-    const utxos: SplitUtxo[] = [utxo("fat#0", 600n), utxo("fat#1", 700n)];
-    const plan = asPlan(planWalletSplit(utxos, PROFILE));
-    assert.deepEqual(plan.consumeOutRefs.sort(), ["fat#0", "fat#1"], "both big UTxOs are consumed");
-    assert.equal(count(plan.outputLovelaces, 10n * ADA), 5, "5 collateral");
-    // 1300 − 2 buffer − 50 collateral = 1248 → 10 working (the full target).
-    assert.equal(count(plan.outputLovelaces, 100n * ADA), 10, "fills working to the 10 target");
-  }
+  // Terminates: a wallet already at small pieces cannot be carved further.
+  assert.equal(planWalletSplit([utxo("a#0", 100n), utxo("b#0", 100n)], PROFILE).act, false);
 
   // Token-bearing UTxOs are never touched (collateral must be pure ADA).
   {
     const utxos: SplitUtxo[] = [utxo("fat#0", 600n), utxo("nft#0", 5n, false)];
     const plan = asPlan(planWalletSplit(utxos, PROFILE));
     assert.ok(!plan.consumeOutRefs.includes("nft#0"), "the token UTxO is never consumed");
+  }
+
+  // planShapeOutputs (shared piece planner): working-first; collateral only once
+  // lanes are full; `absorbRemainder` lands the whole amount as pieces (funding).
+  {
+    assert.deepEqual(planShapeOutputs([], PROFILE, 250n * ADA), [100n * ADA, 100n * ADA]);
+    const full = planShapeOutputs([], PROFILE, 600n * ADA);
+    assert.equal(count(full, 100n * ADA), 5, "fills the 5 lanes");
+    assert.ok(count(full, 10n * ADA) >= 1, "then collateral from the remainder");
+    const funded = planShapeOutputs([], PROFILE, 200n * ADA, { absorbRemainder: true });
+    assert.equal(funded.reduce((a, b) => a + b, 0n), 200n * ADA, "funding lands the whole amount");
+    assert.equal(funded.length, 2, "as two pool UTxOs");
+
+    // Production contract: funding an empty pool to the 550 ADA target lands the
+    // FULL shape — 5 working lanes + 5 collateral — in one tx (pool_wallet_target).
+    const fullFund = planShapeOutputs([], PROFILE, 550n * ADA, { absorbRemainder: true });
+    assert.equal(count(fullFund, 100n * ADA), 5, "5 working lanes funded");
+    assert.equal(count(fullFund, 10n * ADA), 5, "5 collateral funded");
+    assert.equal(fullFund.reduce((a, b) => a + b, 0n), 550n * ADA, "the whole 550 ADA lands in the pool");
   }
 }
 

@@ -285,7 +285,7 @@ groups:
       # ---------------------------------------------------------------------
       - alert: PoolWalletLow
         expr: >
-          dia_bridge_cardano_wallet_spendable_lovelace{role="pool"} / 1000000 < 50
+          dia_bridge_cardano_wallet_spendable_lovelace{role="pool"} / 1000000 < 150
         for: 5m
         labels:
           severity: warning
@@ -293,7 +293,7 @@ groups:
           summary: "Pool signer wallet {{ $labels.wallet }} is low — auto-funding from the main"
           description: >
             Pool wallet {{ $labels.wallet }} holds {{ $value | printf "%.2f" }} ADA
-            spendable (alert fires below 50 ADA). Pool wallets pay tx fees +
+            spendable (alert fires below 150 ADA). Pool wallets pay tx fees +
             collateral and drain over time; only the main wallet self-funds. The
             daemon AUTO-FUNDS this wallet from the main up to
             `wallet_pool.pool_wallet_target_lovelace` on the next balance tick, so
@@ -305,7 +305,7 @@ groups:
       # ---------------------------------------------------------------------
       - alert: MainWalletCannotFundPool
         expr: >
-          (count(dia_bridge_cardano_wallet_spendable_lovelace{role="pool"} / 1000000 < 50) > 0)
+          (count(dia_bridge_cardano_wallet_spendable_lovelace{role="pool"} / 1000000 < 150) > 0)
           and on()
           (dia_bridge_cardano_wallet_spendable_lovelace{role="main"} / 1000000 < 100)
         for: 10m
@@ -315,7 +315,7 @@ groups:
           summary: "Main wallet cannot fund the pool — a pool wallet is draining"
           description: >
             A pool wallet is below its `wallet_pool.pool_wallet_low_lovelace` low
-            mark (50 ADA) AND the main signer wallet holds
+            mark (150 ADA) AND the main signer wallet holds
             {{ $value | printf "%.2f" }} ADA — below its
             `wallet_pool.main_wallet_reserve_lovelace` reserve (100 ADA). The main
             never funds the pool below its reserve, so the auto-funding is STUCK:
@@ -332,23 +332,20 @@ groups:
 
       # ---------------------------------------------------------------------
       - alert: WalletConcentrated
-        expr: >
-          (dia_bridge_cardano_wallet_usable_utxos < 5)
-          and on(wallet)
-          (dia_bridge_cardano_wallet_max_utxo_lovelace / 1000000 > 550)
+        expr: dia_bridge_cardano_wallet_usable_utxos < 5
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: "Signer wallet {{ $labels.wallet }} is concentrated — split it for parallelism"
           description: >
-            Wallet {{ $labels.wallet }} has fewer than 5 usable UTxOs but holds a
-            pure-ADA UTxO above 550 ADA. The arbiter hands each parallel lane a
-            disjoint UTxO, so too few usable UTxOs caps the wallet at one lane even
-            though it holds plenty of ADA. This is the OPPOSITE of fragmentation
-            (too few big UTxOs, not too many small ones). The daemon AUTO-SPLITS the
-            big UTxO into the `wallet_shape` profile when `alerting.auto_split` is
-            on, so it usually self-heals on the next balance tick. To force it:
+            Wallet {{ $labels.wallet }} has fewer than 5 usable UTxOs. The arbiter
+            hands each parallel lane a disjoint UTxO, so too few usable UTxOs caps
+            the wallet at one lane even when it holds plenty of ADA — concentration
+            is about UTxO COUNT, not balance. This is the OPPOSITE of fragmentation
+            (too few usable UTxOs, not too many dust ones). The daemon AUTO-SPLITS
+            the largest UTxO into the `wallet_shape` profile when `alerting.auto_split`
+            is on, so it usually self-heals on the next balance tick. To force it:
               Docker: cd offchain && make cli CMD="wallet:split"
               npm:    cd offchain/cli && npm run cli -- wallet:split
 

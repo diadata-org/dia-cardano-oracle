@@ -256,13 +256,13 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
       "MainWalletCannotFundPool expr missing the wallet_pool.main_wallet_reserve_lovelace threshold",
     );
 
-    // WalletConcentrated is compound: usable < min_usable_utxos AND max > big_utxo_above.
+    // WalletConcentrated fires purely on the usable-UTxO count (no balance gate).
     const concentrated = rules.get("WalletConcentrated");
     assert.ok(concentrated, "alerts.yml missing WalletConcentrated");
     assert.deepEqual(
       new Set(allThresholds(concentrated.expr)),
-      new Set([shape.min_usable_utxos, shape.big_utxo_above_lovelace / 1_000_000]),
-      "WalletConcentrated expr thresholds drifted from wallet_shape.{min_usable_utxos, big_utxo_above_lovelace}",
+      new Set([shape.min_usable_utxos]),
+      "WalletConcentrated expr threshold drifted from wallet_shape.min_usable_utxos",
     );
   });
 
@@ -279,7 +279,8 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
       prose("MainWalletCannotFundPool"),
       new RegExp(`\\b${pool.main_wallet_reserve_lovelace / 1_000_000}\\s*ADA\\b`),
     );
-    assert.match(prose("WalletConcentrated"), new RegExp(`\\b${shape.big_utxo_above_lovelace / 1_000_000}\\s*ADA\\b`));
+    // WalletConcentrated prose states the usable-UTxO count (its only threshold).
+    assert.match(prose("WalletConcentrated"), new RegExp(`\\b${shape.min_usable_utxos}\\b`));
   });
 
   it("alerts.yml prose states the same ADA / percent numbers (operator-facing)", () => {

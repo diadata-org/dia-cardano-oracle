@@ -92,23 +92,19 @@ export type InfrastructureConfig = {
 /** Target UTxO profile in `infrastructure.<network>.yaml::wallet_shape`. Lovelace
  *  except the counts; each key falls back to a `DEFAULT_*` constant. */
 export type WalletShapeConfig = {
-  /** How many working UTxOs a split fills the wallet up to (the split target).
-   *  Set above `min_usable_utxos` so a split leaves headroom (hysteresis). */
+  /** How many working (lane) UTxOs the shape fills a wallet up to. With the
+   *  collateral count this clears `min_usable_utxos` with headroom (hysteresis). */
   working_utxo_count?: number;
   /** Target size of each working UTxO (lovelace). */
   working_utxo_lovelace?: number;
-  /** How many collateral-sized UTxOs a split fills up to (returned on success, so
-   *  it stays at the base count). */
+  /** How many collateral UTxOs the shape fills up to, minted only once the lanes
+   *  are full (returned on success, so it stays at the base count). */
   collateral_utxo_count?: number;
   /** Target size of each collateral UTxO (lovelace). */
   collateral_utxo_lovelace?: number;
-  /** A pure-ADA UTxO larger than this is considered big and is a candidate to
-   *  split (only split when the wallet is ALSO short on usable UTxOs). */
-  big_utxo_above_lovelace?: number;
-  /** Split TRIGGER: fires only when usable pure-ADA UTxOs fall below this count
-   *  AND a big UTxO is present — a lone big UTxO in an otherwise healthy wallet is
-   *  left alone, since splitting only matters when the wallet is too concentrated
-   *  to feed parallel lanes. */
+  /** Split TRIGGER: auto-split fires when usable pure-ADA UTxOs fall below this
+   *  count, regardless of balance — concentration is about UTxO COUNT, not size.
+   *  The planner no-ops if the wallet cannot be carved further. */
   min_usable_utxos?: number;
 };
 
@@ -397,9 +393,9 @@ export type AlertingConfig = {
    *  + working balance). MUST be < `admin_wallet_min_collateral_lovelace` so the
    *  AdminWalletFragmented alert fires first. */
   auto_consolidate_below_lovelace?: number;
-  /** When true → the daemon auto-runs `wallet:split` (break a big UTxO into the
-   *  profile) whenever the WalletConcentrated condition holds
-   *  (`wallet_shape.big_utxo_above_lovelace` + `wallet_shape.min_usable_utxos`).
+  /** When true → the daemon auto-runs `wallet:split` (carve the largest UTxO into
+   *  the `wallet_shape` profile) whenever a wallet has fewer than
+   *  `wallet_shape.min_usable_utxos` usable UTxOs, regardless of balance.
    *  Absent/false → split is manual only (the alert still fires). The opposite
    *  maintenance to consolidate; the two never act on the same wallet at once. */
   auto_split?: boolean;

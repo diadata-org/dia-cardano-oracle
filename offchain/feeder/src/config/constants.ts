@@ -356,10 +356,12 @@ export const ROUTER_ALLOWED_FIELDS = new Set([
 /** A pool wallet below this spendable lovelace is topped up from the main.
  *  Number (matches the YAML field); widened to bigint at the funding math.
  *  YAML: `wallet_pool.pool_wallet_low_lovelace`. */
-export const DEFAULT_POOL_WALLET_LOW_LOVELACE = 50_000_000;
-/** Funding fills a pool wallet up to this spendable lovelace.
+export const DEFAULT_POOL_WALLET_LOW_LOVELACE = 150_000_000;
+/** Funding fills a pool wallet up to this spendable lovelace — the full
+ *  `wallet_shape` (5 working × 100 ADA + 5 collateral × 10 ADA = 550 ADA), paid
+ *  as the missing pieces in one tx so the pool is usable immediately.
  *  YAML: `wallet_pool.pool_wallet_target_lovelace`. */
-export const DEFAULT_POOL_WALLET_TARGET_LOVELACE = 200_000_000;
+export const DEFAULT_POOL_WALLET_TARGET_LOVELACE = 550_000_000;
 /** The main wallet never funds the pool below this spendable lovelace reserve.
  *  YAML: `wallet_pool.main_wallet_reserve_lovelace`. */
 export const DEFAULT_MAIN_WALLET_RESERVE_LOVELACE = 100_000_000;
@@ -388,28 +390,29 @@ export const MIN_COLLATERAL_UTXO_LOVELACE = 5_000_000n;
 // Wallet UTxO shape
 //
 // Fallbacks for `infrastructure.<network>.yaml::wallet_shape` — the target UTxO
-// profile each wallet is split toward so even a single wallet can back many
-// parallel lanes (the arbiter hands each lane a disjoint UTxO subset). The YAML
-// value is authoritative where a key exists.
+// profile each wallet is shaped toward so even a single wallet can back many
+// parallel lanes (the arbiter hands each lane a disjoint UTxO subset). Both the
+// main→pool funding and the auto-split carve a wallet toward this profile,
+// working-first. The YAML value is authoritative where a key exists.
 // ---------------------------------------------------------------------------
 
-/** Working UTxOs a split fills the wallet up to. Higher than `min_usable_utxos`
- *  (the trigger) so a split leaves headroom and does not re-fire every tick
- *  (hysteresis). YAML: `wallet_shape.working_utxo_count`. */
-export const DEFAULT_WORKING_UTXO_COUNT = 10;
+/** Working (lane) UTxOs the shape fills a wallet up to. With the collateral
+ *  count this gives 10 usable UTxOs, well above the `min_usable_utxos` trigger
+ *  (5), so a shaped wallet does not re-split every tick (hysteresis).
+ *  YAML: `wallet_shape.working_utxo_count`. */
+export const DEFAULT_WORKING_UTXO_COUNT = 5;
 /** Target size of each working UTxO. YAML: `wallet_shape.working_utxo_lovelace`. */
 export const DEFAULT_WORKING_UTXO_LOVELACE = 100_000_000n;
-/** Collateral UTxOs a split fills the wallet up to. Collateral is returned on a
- *  successful tx (it does not drain), so this stays at the base count.
- *  YAML: `wallet_shape.collateral_utxo_count`. */
+/** Collateral UTxOs the shape fills a wallet up to, minted only once the working
+ *  lanes are full. Collateral is returned on a successful tx (it does not drain),
+ *  so it stays at the base count. YAML: `wallet_shape.collateral_utxo_count`. */
 export const DEFAULT_COLLATERAL_UTXO_COUNT = 5;
 /** Target size of each collateral UTxO. YAML: `wallet_shape.collateral_utxo_lovelace`. */
 export const DEFAULT_COLLATERAL_UTXO_LOVELACE = 10_000_000n;
-/** A pure-ADA UTxO larger than this is considered big and is a candidate to
- *  split. YAML: `wallet_shape.big_utxo_above_lovelace`. */
-export const DEFAULT_BIG_UTXO_ABOVE_LOVELACE = 550_000_000n;
-/** Split TRIGGER: it fires only when usable pure-ADA UTxOs fall below this count
- *  (and a big UTxO is present). YAML: `wallet_shape.min_usable_utxos`. */
+/** Split TRIGGER: auto-split fires when usable pure-ADA UTxOs fall below this
+ *  count, regardless of balance — concentration is about UTxO COUNT, not size.
+ *  The planner then no-ops if the wallet cannot be carved further.
+ *  YAML: `wallet_shape.min_usable_utxos`. */
 export const DEFAULT_MIN_USABLE_UTXOS = 5;
 /** Headroom kept on a split tx's consumed inputs for fee + change min-UTxO.
  *  Constant-only — a structural tx-build margin, not an operator knob. */

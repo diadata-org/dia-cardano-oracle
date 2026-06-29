@@ -103,18 +103,17 @@ export type AutoSplitDecision =
   | { act: false; reason: "disabled" | "healthy" | "in_progress" | "unknown" };
 
 /**
- * Should the daemon auto-run `wallet:split` (break a large pure-ADA UTxO into the
- * target profile) on this tick? This is the OPPOSITE of consolidate: it fires when
- * the wallet is too CONCENTRATED to feed parallel lanes — a UTxO larger than
- * `bigUtxoAboveLovelace` exists AND fewer than `minUsableUtxos` arbiter-usable
- * UTxOs remain. A lone big UTxO in an otherwise healthy wallet is left alone,
- * since splitting only buys parallelism the wallet already has. Gated by the
- * `auto_split` flag; the manual `wallet:split` command works regardless.
+ * Should the daemon auto-run `wallet:split` (carve the wallet's largest pure-ADA
+ * UTxO into more lanes) on this tick? This is the OPPOSITE of consolidate: it
+ * fires when the wallet is too CONCENTRATED to feed parallel lanes — fewer than
+ * `minUsableUtxos` arbiter-usable UTxOs — REGARDLESS of balance, since
+ * concentration is about UTxO count, not size. The actual carve is left to the
+ * planner (`planWalletSplit`), which no-ops when the wallet cannot be shaped
+ * further, so this trigger stays a simple count test and never churns. Gated by
+ * the `auto_split` flag; the manual `wallet:split` command works regardless.
  */
 export function shouldAutoSplit(input: {
-  maxUtxoLovelace?: bigint;
   usableUtxoCount?: number;
-  bigUtxoAboveLovelace: bigint;
   minUsableUtxos: number;
   enabled?: boolean;
   inProgress: boolean;
@@ -123,11 +122,7 @@ export function shouldAutoSplit(input: {
   if (!input.enabled) return { act: false, reason: "disabled" };
   // No reading → cannot judge (the wallet query failed this tick). Skip rather
   // than act blind; a real concentration persists and fires on a later tick.
-  if (input.maxUtxoLovelace === undefined || input.usableUtxoCount === undefined) {
-    return { act: false, reason: "unknown" };
-  }
-  if (input.maxUtxoLovelace > input.bigUtxoAboveLovelace && input.usableUtxoCount < input.minUsableUtxos) {
-    return { act: true, reason: "concentrated" };
-  }
+  if (input.usableUtxoCount === undefined) return { act: false, reason: "unknown" };
+  if (input.usableUtxoCount < input.minUsableUtxos) return { act: true, reason: "concentrated" };
   return { act: false, reason: "healthy" };
 }

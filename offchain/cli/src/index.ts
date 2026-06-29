@@ -47,7 +47,7 @@ function printUsage(): void {
   npm run cli -- wallet
   npm run cli -- wallet:utxos
   npm run cli -- wallet:consolidate [--max-inputs 60] [--build-only]
-  npm run cli -- wallet:split [--big-utxo-above 550000000] [--working-count 10] [--working-lovelace 100000000] [--collateral-count 5] [--collateral-lovelace 10000000] [--build-only]
+  npm run cli -- wallet:split [--working-count 5] [--working-lovelace 100000000] [--collateral-count 5] [--collateral-lovelace 10000000] [--build-only]
   npm run cli -- wallet:defaults
   npm run cli -- ethereum-wallet:create
   Paths use ../state/<network>_run_<id>/...; when omitted, commands use RUN_ID or the newest run dir.
@@ -303,11 +303,10 @@ async function run(): Promise<void> {
       // `wallet_shape` YAML instead). Defaults match the feeder's documented
       // shape so a flagless manual run matches automatic behaviour.
       const profile = {
-        workingCount: Number(optionalFlagValue("--working-count") ?? 10),
+        workingCount: Number(optionalFlagValue("--working-count") ?? 5),
         workingLovelace: BigInt(optionalFlagValue("--working-lovelace") ?? 100_000_000),
         collateralCount: Number(optionalFlagValue("--collateral-count") ?? 5),
         collateralLovelace: BigInt(optionalFlagValue("--collateral-lovelace") ?? 10_000_000),
-        bigUtxoAboveLovelace: BigInt(optionalFlagValue("--big-utxo-above") ?? 550_000_000),
         feeBufferLovelace: 2_000_000n,
       };
       const lucid = await makeConfiguredLucid();

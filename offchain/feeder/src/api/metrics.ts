@@ -120,6 +120,7 @@ export type FeederMetrics = {
   cardanoAdminWalletMaxUtxoLovelace: FeedGauge;
   /** Per signer-wallet shape gauges (label `wallet` = pool id). Feed the
    *  per-wallet shape + funding alerts and the $wallet dashboard. */
+  cardanoWalletTotalLovelace: FeedGauge;
   cardanoWalletSpendableLovelace: FeedGauge;
   cardanoWalletMaxUtxoLovelace: FeedGauge;
   cardanoWalletUsableUtxos: FeedGauge;
@@ -260,6 +261,7 @@ export const noopMetrics: FeederMetrics = {
   cardanoPaymentHookAccruedLovelace: noopGauge,
   cardanoAdminWalletLovelace: noopGauge,
   cardanoAdminWalletMaxUtxoLovelace: noopGauge,
+  cardanoWalletTotalLovelace: noopGauge,
   cardanoWalletSpendableLovelace: noopGauge,
   cardanoWalletMaxUtxoLovelace: noopGauge,
   cardanoWalletUsableUtxos: noopGauge,
@@ -575,6 +577,12 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       [],
       true,
     ),
+    cardanoWalletTotalLovelace: gauge(
+      "cardano_wallet_total_lovelace",
+      "Per signer-wallet total lovelace across every live UTxO at the wallet address, including locked/reserved and token-bearing UTxOs. The `wallet` label is the pool id and `role` is `main` or `pool`. This is the gross balance view; `cardano_wallet_spendable_lovelace` remains the tx-buildable subset.",
+      ["wallet", "role"],
+      true,
+    ),
     cardanoWalletSpendableLovelace: gauge(
       "cardano_wallet_spendable_lovelace",
       "Per signer-wallet spendable lovelace (unlocked pure-ADA UTxOs) — what a new tx can actually draw on. The `wallet` label is the pool id and `role` is `main` or `pool`. A `pool` wallet below `wallet_pool.pool_wallet_low_lovelace` is auto-funded from the main; the `main` below `alerting.admin_wallet_low_lovelace` must be refilled.",
@@ -583,7 +591,7 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     ),
     cardanoWalletMaxUtxoLovelace: gauge(
       "cardano_wallet_max_utxo_lovelace",
-      "Per signer-wallet largest pure-ADA UTxO. Below the collateral floor the wallet is fragmented (every script build traps → consolidate); above `wallet_shape.big_utxo_above_lovelace` with too few usable UTxOs it is concentrated (→ split). Labels: `wallet` (pool id), `role` (`main`/`pool`).",
+      "Per signer-wallet largest pure-ADA UTxO. Below the collateral floor the wallet is fragmented (every script build traps → consolidate). Concentration (→ split) is judged on the usable-UTxO COUNT instead (see `cardano_wallet_usable_utxos`), not this size. Labels: `wallet` (pool id), `role` (`main`/`pool`).",
       ["wallet", "role"],
       true,
     ),

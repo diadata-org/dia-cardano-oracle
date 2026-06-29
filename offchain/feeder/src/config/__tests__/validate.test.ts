@@ -512,7 +512,6 @@ describe("validateModularConfig — wallet pool", () => {
       working_utxo_lovelace: 100_000_000,
       collateral_utxo_count: 5,
       collateral_utxo_lovelace: 10_000_000,
-      big_utxo_above_lovelace: 550_000_000,
       min_usable_utxos: 5,
     };
     assert.deepEqual(validateModularConfig(config), []);
@@ -533,16 +532,6 @@ describe("validateModularConfig — wallet pool", () => {
     };
     const issues = validateModularConfig(config);
     assert.ok(issues.some((i) => i.severity === "error" && i.path.endsWith("working_utxo_lovelace")));
-  });
-
-  it("rejects a wallet_shape where big_utxo_above is below working size", () => {
-    const config = makeConfig(false);
-    config.infrastructure!.wallet_shape = {
-      working_utxo_lovelace: 100_000_000,
-      big_utxo_above_lovelace: 50_000_000,
-    };
-    const issues = validateModularConfig(config);
-    assert.ok(issues.some((i) => i.severity === "error" && i.path.endsWith("big_utxo_above_lovelace")));
   });
 
   it("rejects a funding band where low is not below target", () => {

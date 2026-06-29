@@ -108,53 +108,39 @@ describe("shouldAutoConsolidate", () => {
 
 describe("shouldAutoSplit", () => {
   const base = {
-    bigUtxoAboveLovelace: 550_000_000n,
     minUsableUtxos: 5,
     enabled: true,
     inProgress: false,
   };
 
-  it("acts when a big UTxO exists AND usable UTxOs are too few (concentrated)", () => {
-    const d = shouldAutoSplit({ ...base, maxUtxoLovelace: 600_000_000n, usableUtxoCount: 1 });
-    assert.deepEqual(d, { act: true, reason: "concentrated" });
+  it("acts purely on the usable-UTxO count, with no balance gate", () => {
+    // A wallet holding 200 ADA in one UTxO (far below the old 550 ADA gate) is
+    // concentrated: 1 usable < 5 → split. The planner decides whether anything
+    // can actually be carved (and no-ops if not), so the trigger stays simple.
+    assert.deepEqual(shouldAutoSplit({ ...base, usableUtxoCount: 1 }), {
+      act: true,
+      reason: "concentrated",
+    });
   });
 
-  it("does NOT act when there is a big UTxO but plenty of usable UTxOs", () => {
-    // A lone fat UTxO in an otherwise healthy wallet is left alone — splitting is
-    // for parallelism, and parallelism is already covered.
-    assert.deepEqual(
-      shouldAutoSplit({ ...base, maxUtxoLovelace: 600_000_000n, usableUtxoCount: 6 }),
-      { act: false, reason: "healthy" },
-    );
+  it("does NOT act when usable UTxOs already meet the minimum", () => {
+    assert.deepEqual(shouldAutoSplit({ ...base, usableUtxoCount: 5 }), {
+      act: false,
+      reason: "healthy",
+    });
   });
 
-  it("does NOT act when usable UTxOs are few but nothing is big enough to split", () => {
-    assert.deepEqual(
-      shouldAutoSplit({ ...base, maxUtxoLovelace: 100_000_000n, usableUtxoCount: 1 }),
-      { act: false, reason: "healthy" },
-    );
-  });
-
-  it("does not act blind when a wallet reading is unknown", () => {
-    assert.equal(
-      shouldAutoSplit({ ...base, usableUtxoCount: 1 }).reason,
-      "unknown",
-      "missing maxUtxoLovelace",
-    );
-    assert.equal(
-      shouldAutoSplit({ ...base, maxUtxoLovelace: 600_000_000n }).reason,
-      "unknown",
-      "missing usableUtxoCount",
-    );
+  it("does not act blind when the usable-UTxO reading is unknown", () => {
+    assert.equal(shouldAutoSplit({ ...base }).reason, "unknown");
   });
 
   it("is disabled when not enabled and skips when in progress", () => {
     assert.equal(
-      shouldAutoSplit({ ...base, enabled: false, maxUtxoLovelace: 600_000_000n, usableUtxoCount: 1 }).reason,
+      shouldAutoSplit({ ...base, enabled: false, usableUtxoCount: 1 }).reason,
       "disabled",
     );
     assert.equal(
-      shouldAutoSplit({ ...base, inProgress: true, maxUtxoLovelace: 600_000_000n, usableUtxoCount: 1 }).reason,
+      shouldAutoSplit({ ...base, inProgress: true, usableUtxoCount: 1 }).reason,
       "in_progress",
     );
   });

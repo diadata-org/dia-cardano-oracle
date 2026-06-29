@@ -6,8 +6,11 @@
 // an ordinary wallet payment — no script, no datum — mirroring `deposit:fund`,
 // signed by the main wallet rather than the globally-configured one.
 //
-// The "when / how much" decision lives in the feeder's pure `pool-funding.ts`;
-// this module only builds and submits the chosen transfer.
+// It pays one output per `outputLovelaces` entry, so a single funding tx lands
+// the pool already shaped into its working + collateral pieces (the feeder plans
+// those via `planShapeOutputs`) — a freshly funded pool is usable immediately,
+// with no second split tx. The "when / which pieces" decision lives in the
+// feeder; this module only builds and submits the chosen transfer.
 
 import { makeConfiguredLucid } from "../core/lucid.js";
 import { reportTxSignBuilderMetrics } from "../core/tx-metrics.js";
@@ -43,21 +46,25 @@ function reportProgress(message: string): void {
 }
 
 /**
- * Send `amountLovelace` from the main wallet (`signer`) to a pool wallet at
- * `toAddress`. Returns the submitted tx hash + confirmation flag; `buildOnly`
+ * Pay `outputLovelaces` (one UTxO per entry) from the main wallet (`signer`) to a
+ * pool wallet at `toAddress`, so the pool lands already shaped into lanes +
+ * collateral. Returns the submitted tx hash + confirmation flag; `buildOnly`
  * stops before signing for dry assembly.
  */
 export async function fundPoolWallet(args: {
   signer: FundPoolWalletSigner;
   toAddress: string;
-  amountLovelace: bigint;
+  outputLovelaces: bigint[];
   /** When set, coin selection is pinned to these main-wallet out-refs so the tx
    *  never picks a UTxO another lane reserved (the feeder arbitrates the main). */
   reservedOutRefs?: string[];
   buildOnly?: boolean;
 }): Promise<FundPoolWalletResult> {
-  if (args.amountLovelace <= 0n) {
-    throw new Error(`fund-pool-wallet: amountLovelace must be positive, got ${args.amountLovelace}.`);
+  if (args.outputLovelaces.length === 0) {
+    throw new Error("fund-pool-wallet: outputLovelaces must not be empty.");
+  }
+  if (args.outputLovelaces.some((v) => v <= 0n)) {
+    throw new Error("fund-pool-wallet: outputLovelaces must all be positive.");
   }
 
   reportProgress(`Connecting and selecting the main wallet (kind=${args.signer.kind})`);
@@ -80,12 +87,19 @@ export async function fundPoolWallet(args: {
     lucid.overrideUTxOs(pinned);
   }
 
-  reportProgress(`Paying ${args.amountLovelace} lovelace to pool wallet ${args.toAddress}`);
-  // A plain ADA output, no datum — an ordinary wallet-to-wallet transfer.
-  const txSignBuilder = await completeWithRetry(
-    () => lucid.newTx().pay.ToAddress(args.toAddress, { lovelace: args.amountLovelace }),
-    reportProgress,
+  const totalLovelace = args.outputLovelaces.reduce((acc, v) => acc + v, 0n);
+  reportProgress(
+    `Paying ${totalLovelace} lovelace to pool wallet ${args.toAddress} as ${args.outputLovelaces.length} UTxO(s)`,
   );
+  // One plain ADA output per shape piece, no datum — an ordinary wallet-to-wallet
+  // transfer that lands the pool already split into lanes + collateral.
+  const txSignBuilder = await completeWithRetry(() => {
+    let tx = lucid.newTx();
+    for (const lovelace of args.outputLovelaces) {
+      tx = tx.pay.ToAddress(args.toAddress, { lovelace });
+    }
+    return tx;
+  }, reportProgress);
 
   const txHash = txSignBuilder.toHash();
   const consumedOutRefs = computeSpentWalletOutRefs(walletUtxos, txSignBuilder);
