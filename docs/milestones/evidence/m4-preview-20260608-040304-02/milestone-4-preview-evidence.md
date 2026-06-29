@@ -24,7 +24,7 @@ a transaction that references that output and is allowed or denied based on the
 price. This pack shows both: the indexer answering live, and a real contract
 accepting a fresh price and rejecting one that does not meet its threshold.
 
-- **Indexer:** reachable; chain tip height 4425479; 17 live pair(s).
+- **Indexer:** reachable; chain tip height 4426437; 17 live pair(s).
 - **API reference:** captured (DIA Cardano Oracle Indexer API, 10 paths) — interactive UI at http://localhost:3001/docs.
 - **Consumer demo (emulator):** PASSED.
 - **Consumer demo (on-chain):** run separately — see below.
@@ -36,23 +36,23 @@ consumer references:
 
 | Symbol | Price | Age (s) | Client | Pair UTxO (TxIn) |
 | --- | --- | --- | --- | --- |
-| ADA/USD | 751000000 | 1821219 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#0 |
-| BNB/USD | 61510000000 | 1821210 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#1 |
-| DAI/USD | 100100345 | 1821210 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#2 |
-| SOL/USD | 18510000000 | 1821210 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#3 |
-| XRP/USD | 521000000 | 1821210 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#7 |
-| MATIC/USD | 981000000 | 1821210 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#8 |
-| NEIRO/USD | 61729199797437 | 568 | client-test-01 | 04c9a67d10c28e0c60b596cc71b49c65b46401bf63eb3b0f324127c86d2159fe#1 |
-| XVG/USD | 2245379110000000 | 559 | client-test-01 | 04c9a67d10c28e0c60b596cc71b49c65b46401bf63eb3b0f324127c86d2159fe#2 |
-| SHIB/USD | 4179470665725 | 501 | client-test-01 | 73b1a6b7a81083528e0cd4b0cfe07d51b2ed32c0f3009b286f01f5af281fb67a#3 |
-| ARB/USD | 75558155200000008 | 439 | client-test-01 | 3651aafb9d68bbc79f897d44deec0876d6ed7d93965f6877c256fe7aba375aea#0 |
-| LTC/USD | 42761703239698104320 | 327 | client-test-01 | eb2eac980df85ba75b13a9520683128b0fbf3f4a195b96f39bdf8fb0b2cbd790#0 |
-| BTC/USD | 60025226631062497525760 | 326 | client-test-01 | eb2eac980df85ba75b13a9520683128b0fbf3f4a195b96f39bdf8fb0b2cbd790#1 |
-| USDC/USD | 999603925895992896 | 223 | client-test-01 | 6a08a09dce0272ffe285f0a694023d28fb9bb38e5584b78a8fc4d245216b05c7#0 |
-| DOGE/USD | 73043247280377248 | 217 | client-test-01 | 6a08a09dce0272ffe285f0a694023d28fb9bb38e5584b78a8fc4d245216b05c7#1 |
-| USDT/USD | 998420000000000000 | 177 | client-test-01 | 0ca52576c7bb0cdd06b69abcaaee92021bf42ff0e588dac2c083faded7243cb3#0 |
-| ETH/USD | 1579854538792072511488 | 134 | client-test-01 | 98495a05a0a5c0f88189202e023552bad4eb52b8e4ab1126ab415ccd315208a3#0 |
-| BTC/USD | 60028088064679465713664 | 422 | client-test-02 | 5fe2c4054b351c92b9c5c46832f65feb62c50b01f2d88b25da2ee086c9a51c71#0 |
+| ADA/USD | 751000000 | 1853751 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#0 |
+| BNB/USD | 61510000000 | 1853742 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#1 |
+| DAI/USD | 100100345 | 1853742 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#2 |
+| SOL/USD | 18510000000 | 1853742 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#3 |
+| XRP/USD | 521000000 | 1853742 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#7 |
+| MATIC/USD | 981000000 | 1853742 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#8 |
+| NEIRO/USD | 62962473824719 | 710 | client-test-01 | 704cb345e818d155dcd3d9f32bf1d02539635f54c611611adffb2ba68b09cb7e#0 |
+| LTC/USD | 42434869422817857536 | 655 | client-test-01 | 7fa553d77a3c00e75ab83f7c70ffdbdef2c8e07fde3b69a3aa0c8cffcaa4126e#0 |
+| ARB/USD | 75549120161787504 | 673 | client-test-01 | 7fa553d77a3c00e75ab83f7c70ffdbdef2c8e07fde3b69a3aa0c8cffcaa4126e#4 |
+| XVG/USD | 2210313690000000 | 699 | client-test-01 | 7fa553d77a3c00e75ab83f7c70ffdbdef2c8e07fde3b69a3aa0c8cffcaa4126e#5 |
+| SHIB/USD | 4211425395423 | 639 | client-test-01 | 3777b14954b4a560751c162d04b7b617071edfc41060b95b8ff105994e0931c7#2 |
+| USDC/USD | 999717678700000000 | 154 | client-test-01 | 0e8298301a7967cd43aefd37b8a01d25d9818458c767aa25679ecbc14e92b6b7#0 |
+| DOGE/USD | 72710580127015856 | 150 | client-test-01 | 0e8298301a7967cd43aefd37b8a01d25d9818458c767aa25679ecbc14e92b6b7#1 |
+| ETH/USD | 1575515414109129670656 | 161 | client-test-01 | 0e8298301a7967cd43aefd37b8a01d25d9818458c767aa25679ecbc14e92b6b7#2 |
+| USDT/USD | 998368343197060288 | 208 | client-test-01 | 0e8298301a7967cd43aefd37b8a01d25d9818458c767aa25679ecbc14e92b6b7#3 |
+| BTC/USD | 59706342286348563513344 | 163 | client-test-01 | 0e8298301a7967cd43aefd37b8a01d25d9818458c767aa25679ecbc14e92b6b7#4 |
+| BTC/USD | 59545654679747807936512 | 749 | client-test-02 | a50c457a170b33a25d327035250d7f50c72c72761932fa0c8eb7b7ca78ca86ac#0 |
 
 Health response: [`indexer/health.json`](indexer/health.json) ·
 all pairs: [`indexer/pairs.json`](indexer/pairs.json).
@@ -77,7 +77,7 @@ consumer uses to verify the feed is genuine, and the output to reference:
     "txHash": "1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee",
     "outputIndex": 0
   },
-  "ageSeconds": 1821221,
+  "ageSeconds": 1853752,
   "clientId": "client-test-01"
 }
 ```
@@ -97,7 +97,7 @@ meets the configured minimum. Two runs prove both directions.
    Generating project's blueprint (./plutus.json)
 ==> [2/2] Running the end-to-end consumer demo (Lucid emulator + indexer)…
 1. Publishing the Pair UTxO (mint NFT + inline PairDatum)…
-2. Indexer reports BTC/USD: price=65000000000 at e82d96daa4a29737a0f82845ceb7afdc33d670ed8a111c89fd2e6d3d7d585df9#0
+2. Indexer reports BTC/USD: price=65000000000 at 6959dbe7d51f2f48ea50af8d0cba6138fa10119a5f3205f099e31dfee0e1274f#0
 3. Trying to spend (min_price < feed price)…
 3. Trying to spend (min_price > feed price)…
    → rejected: { Complete: "failed script execution Spend[0] the validator crashed / exited prematurely" }
@@ -118,7 +118,7 @@ The public identifiers a consumer needs, grouped by client:
 
 | Client | Pair policy id | Symbols |
 | --- | --- | --- |
-| client-test-01 | def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902 | ADA/USD, BNB/USD, DAI/USD, SOL/USD, XRP/USD, MATIC/USD, NEIRO/USD, XVG/USD, SHIB/USD, ARB/USD, LTC/USD, BTC/USD, USDC/USD, DOGE/USD, USDT/USD, ETH/USD |
+| client-test-01 | def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902 | ADA/USD, BNB/USD, DAI/USD, SOL/USD, XRP/USD, MATIC/USD, NEIRO/USD, LTC/USD, ARB/USD, XVG/USD, SHIB/USD, USDC/USD, DOGE/USD, ETH/USD, USDT/USD, BTC/USD |
 | client-test-02 | 02435906b5bf2ebac57a72d8d5609aa7f642b5e0e4d79666e0b1a293 | BTC/USD |
 
 ## Provider-usage monitoring
