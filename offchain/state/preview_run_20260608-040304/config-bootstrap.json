@@ -61,9 +61,9 @@
   },
   "paymentHookState": {
     "withdrawAddress": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
-    "accruedFeesLovelace": "93600000",
-    "lifetimeCollectedLovelace": "3705550000",
-    "lifetimeWithdrawnLovelace": "3611950000",
+    "accruedFeesLovelace": "62900000",
+    "lifetimeCollectedLovelace": "3801450000",
+    "lifetimeWithdrawnLovelace": "3738550000",
     "minUtxoLovelace": "5000000"
   },
   "compiledScripts": {
@@ -107,7 +107,7 @@
   },
   "datum": {
     "configCbor": "d8799f9f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dff9f582102d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531582103aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807582103c7d448ea95104a628945f43745f177f1e9895c6d4c8e43614d7b1c0395469b2dffd8799f4a444941204f7261636c6543312e3019274254f8c614a483a0427a13512f52ac72a576678be317ff1a000927c01a0003d090d8799fd8799f581c70bf934df3daefb7c19d20d06641528765bd02b761bb1e818f633bf6504449415f5041594d454e545f484f4f4bffffd8799fd87a9f581c583b9e5278b1bf6af1ab6da98f2ab123e3a402526f5087fee46970eeffff19012c1a004c4b40ff",
-    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a059439001adcde34b01ad749fbb01a004c4b40ff"
+    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a03bfc7201ae29586101aded5bef01a004c4b40ff"
   },
   "transactions": [
     {
@@ -473,6 +473,21 @@
     {
       "step": "preview:settle",
       "submittedTxHash": "f592c6bd8de7cbd44fc7b56de9d992e51efefb56c845aa40a12b06d04f0ca8c0",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "ed50d35ecc15d99fc18ab6bf3469284639d3d8ea4d5b8a64e46fadc43b60112b",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "a86b6351191564b5f8116d26dbe0b92a2a71b6c23fa5ea5a2270bce69d17bfea",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "395a3ac801597e02005318152c631682f70eca1eece9e2d06c176205ff412092",
       "confirmed": true
     }
   ]
