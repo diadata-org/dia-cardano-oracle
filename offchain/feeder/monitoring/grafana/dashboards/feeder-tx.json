@@ -66,17 +66,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -114,17 +114,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -162,17 +162,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -222,7 +222,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
+          "expr": "sum by (outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
           "legendFormat": "{{outcome}}",
           "refId": "A"
         }
@@ -280,7 +280,7 @@
       },
       "targets": [
         {
-          "expr": "100 * sum(increase(dia_bridge_transactions_total{network=~\"$network\", outcome=\"confirmed\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])) / sum(increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
+          "expr": "100 * sum(increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"confirmed\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])) / sum(increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
           "legendFormat": "success %",
           "refId": "A"
         }
@@ -318,7 +318,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (client_id) (increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
+          "expr": "sum by (client_id) (increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
           "legendFormat": "{{client_id}}",
           "refId": "A"
         }
@@ -368,17 +368,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -419,7 +419,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
+          "expr": "sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
           "legendFormat": "le={{le}}",
           "refId": "A",
           "format": "heatmap"
@@ -586,7 +586,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(dia_bridge_transactions_total{network=~\"$network\", outcome=\"confirmed\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range]))",
+          "expr": "sum(increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"confirmed\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range]))",
           "legendFormat": "confirmed",
           "refId": "A",
           "instant": true
@@ -596,7 +596,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(dia_bridge_transactions_total{network=~\"$network\", outcome=\"failed\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range]))",
+          "expr": "sum(increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"failed\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range]))",
           "legendFormat": "failed",
           "refId": "B",
           "instant": true
@@ -662,7 +662,7 @@
       },
       "targets": [
         {
-          "expr": "round(sum by (client_id, outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range])))",
+          "expr": "round(sum by (client_id, outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range])))",
           "legendFormat": "{{client_id}} · {{outcome}}",
           "refId": "A"
         }
@@ -1254,6 +1254,26 @@
         "query": {
           "query": "label_values(dia_bridge_tx_pair_membership_total{network=~\"$network\", customer_id=~\"$customer\", client_id=~\"$client\", router_id=~\"$router\"}, symbol)",
           "refId": "symbol"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Wallet",
+        "name": "wallet",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total, wallet)",
+          "refId": "wallet"
         },
         "refresh": 2,
         "type": "query"

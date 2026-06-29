@@ -193,29 +193,37 @@ infrastructure:
   #
   # wallet_pool — how the main tops up the pool wallets. Each key falls back to a
   # DEFAULT_* constant in config/constants.ts. Lovelace unless the name says ms.
-  # wallet_pool:
-  #   pool_wallet_low_lovelace: 50000000        # 50 ADA — below this a pool wallet is topped up
-  #   pool_wallet_target_lovelace: 200000000    # 200 ADA — fill the wallet up to this
-  #   main_wallet_reserve_lovelace: 100000000   # 100 ADA — the main never funds below this
-  #   pool_fund_min_interval_ms: 300000         # 5 min — per-wallet funding cooldown
+  # Active so PoolWalletLow / MainWalletCannotFundPool are drift-guarded; with no
+  # `wallets:` block (single main wallet) the funding loop simply has nothing to
+  # fund. PoolWalletLow only fires once pool wallets exist.
+  wallet_pool:
+    pool_wallet_low_lovelace: 50000000        # 50 ADA — below this a pool wallet is topped up
+    pool_wallet_target_lovelace: 200000000    # 200 ADA — fill the wallet up to this
+    main_wallet_reserve_lovelace: 100000000   # 100 ADA — the main never funds below this
+    pool_fund_min_interval_ms: 300000         # 5 min — per-wallet funding cooldown
 
   # --------------------------------------------------------------------------
-  # wallet_shape — target UTxO profile each wallet is reshaped toward (OPTIONAL).
+  # wallet_shape — target UTxO profile each wallet is split toward.
   #
   # The arbiter hands each parallel lane a disjoint UTxO subset, so even ONE
   # wallet backs many lanes — but only over the UTxOs it holds. A wallet drifts
   # toward a few large UTxOs (change accumulates), which caps it at one lane.
-  # The shaper periodically splits a large UTxO (and tops up missing pieces) into
-  # this profile: `working_utxo_count` working UTxOs plus `collateral_utxo_count`
-  # collateral-sized ones, so the wallet can back ~working_utxo_count lanes.
-  # Omit to use the DEFAULT_* constants. Lovelace except the counts.
+  # When a wallet is concentrated (a UTxO above `big_utxo_above_lovelace` AND
+  # fewer than `min_usable_utxos` usable UTxOs) the daemon splits that big UTxO
+  # into this profile: it fills the wallet up to `working_utxo_count` working +
+  # `collateral_utxo_count` collateral UTxOs, leaving the rest as one change UTxO.
+  # `working_utxo_count` (10) sits ABOVE the `min_usable_utxos` trigger (5) so a
+  # split leaves headroom and does not re-fire every tick (hysteresis). Collateral
+  # is returned on success (does not drain), so it stays at the base count (5).
+  # Active so WalletConcentrated is drift-guarded. Lovelace except the counts.
   # --------------------------------------------------------------------------
-  # wallet_shape:
-  #   working_utxo_count: 5
-  #   working_utxo_lovelace: 100000000      # 100 ADA each
-  #   collateral_utxo_count: 5
-  #   collateral_utxo_lovelace: 10000000    # 10 ADA each
-  #   split_above_lovelace: 550000000       # a pure-ADA UTxO larger than this is split
+  wallet_shape:
+    working_utxo_count: 10                # split fills working up to this (> min_usable_utxos)
+    working_utxo_lovelace: 100000000      # 100 ADA each
+    collateral_utxo_count: 5
+    collateral_utxo_lovelace: 10000000    # 10 ADA each
+    big_utxo_above_lovelace: 550000000    # a pure-ADA UTxO larger than this is "big" → split candidate
+    min_usable_utxos: 5                   # TRIGGER: split only when usable UTxOs fall below this
 
   # --------------------------------------------------------------------------
   # health_check — controls the /health/ready probe behaviour.
@@ -430,6 +438,10 @@ infrastructure:
     # Largest admin-wallet pure-ADA UTxO below this → daemon auto-runs
     # `wallet:consolidate` (< admin_wallet_min_collateral, so the alert fires first).
     auto_consolidate_below_lovelace: 7000000           # 7 ADA largest UTxO (alert at 10)
+    # When true → the daemon auto-runs `wallet:split` on a concentrated wallet (a
+    # UTxO above wallet_shape.big_utxo_above_lovelace AND fewer than min_usable_utxos
+    # usable UTxOs), so even a single wallet keeps enough UTxOs for parallel lanes.
+    auto_split: true
 
   # --------------------------------------------------------------------------
   # replica — Spectra parity, HA failover monitor.

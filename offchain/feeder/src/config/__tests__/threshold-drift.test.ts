@@ -88,6 +88,25 @@ const AUTO_REMEDIATION_ORDERING: Array<{
   { autoKey: "auto_consolidate_below_lovelace", alertKey: "admin_wallet_min_collateral_lovelace", direction: "below" },
 ];
 const AUTO_REMEDIATION_KEYS = new Set(AUTO_REMEDIATION_ORDERING.map((o) => o.autoKey));
+// Non-numeric auto-remediation toggles (booleans) — they enable an automatic
+// step but pair with no numeric alert, so they are exempt from the ordering test.
+const NON_NUMERIC_AUTO_KEYS = new Set(["auto_split"]);
+
+/** Load a non-alerting config block (lovelace/count thresholds the new wallet
+ *  alerts read). Both networks must agree, same as `alerting`. */
+function loadBlock(networkFile: string, block: "wallet_pool" | "wallet_shape"): Record<string, number> {
+  const doc = parseYaml(read(`config/${networkFile}`)) as {
+    infrastructure?: Record<string, Record<string, number> | undefined>;
+  };
+  const b = doc.infrastructure?.[block];
+  assert.ok(b, `${networkFile}: missing infrastructure.${block} block`);
+  return b;
+}
+
+/** Every numeric operand of a `<`/`>` comparison in an expr (for compound alerts). */
+function allThresholds(expr: string): number[] {
+  return [...expr.matchAll(/[<>]\s*([0-9.]+)/g)].map((m) => Number(m[1]));
+}
 
 /** Pull the threshold (the operand of the final `<`/`>` comparison) from a PromQL expr. */
 function thresholdFromExpr(expr: string): number {
@@ -154,7 +173,7 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     const mapped = new Set(Object.values(ALERT_TO_YAML).flatMap(specKeys));
     for (const key of Object.keys(yaml)) {
       assert.ok(
-        mapped.has(key) || AUTO_REMEDIATION_KEYS.has(key),
+        mapped.has(key) || AUTO_REMEDIATION_KEYS.has(key) || NON_NUMERIC_AUTO_KEYS.has(key),
         `alerting.${key} has no alert/dashboard binding and is not an auto-remediation threshold — wire it or remove it`,
       );
     }
@@ -194,6 +213,73 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
         `${alert} expr threshold drifted from alerting.${specKeys(spec).join(" × ")}`,
       );
     }
+  });
+
+  it("wallet_pool and wallet_shape are identical across networks", () => {
+    // The per-wallet alerts read these blocks, so (like alerting) both YAMLs must
+    // agree — alerts.yml is network-agnostic.
+    assert.deepEqual(
+      loadBlock("infrastructure.preview.yaml", "wallet_pool"),
+      loadBlock("infrastructure.mainnet.yaml", "wallet_pool"),
+    );
+    assert.deepEqual(
+      loadBlock("infrastructure.preview.yaml", "wallet_shape"),
+      loadBlock("infrastructure.mainnet.yaml", "wallet_shape"),
+    );
+  });
+
+  it("per-wallet alert expr thresholds match wallet_pool / wallet_shape", () => {
+    const pool = loadBlock("infrastructure.preview.yaml", "wallet_pool");
+    const shape = loadBlock("infrastructure.preview.yaml", "wallet_shape");
+    const rules = loadAlertRules();
+
+    const poolLow = rules.get("PoolWalletLow");
+    assert.ok(poolLow, "alerts.yml missing PoolWalletLow");
+    assert.equal(
+      thresholdFromExpr(poolLow.expr),
+      pool.pool_wallet_low_lovelace / 1_000_000,
+      "PoolWalletLow expr threshold drifted from wallet_pool.pool_wallet_low_lovelace",
+    );
+
+    // MainWalletCannotFundPool is compound: a pool below its low AND the main
+    // below its reserve. (The `> 0` from count(...) is structural, not a config
+    // threshold.)
+    const mainCannot = rules.get("MainWalletCannotFundPool");
+    assert.ok(mainCannot, "alerts.yml missing MainWalletCannotFundPool");
+    const mainCannotThresholds = new Set(allThresholds(mainCannot.expr));
+    assert.ok(
+      mainCannotThresholds.has(pool.pool_wallet_low_lovelace / 1_000_000),
+      "MainWalletCannotFundPool expr missing the wallet_pool.pool_wallet_low_lovelace threshold",
+    );
+    assert.ok(
+      mainCannotThresholds.has(pool.main_wallet_reserve_lovelace / 1_000_000),
+      "MainWalletCannotFundPool expr missing the wallet_pool.main_wallet_reserve_lovelace threshold",
+    );
+
+    // WalletConcentrated is compound: usable < min_usable_utxos AND max > big_utxo_above.
+    const concentrated = rules.get("WalletConcentrated");
+    assert.ok(concentrated, "alerts.yml missing WalletConcentrated");
+    assert.deepEqual(
+      new Set(allThresholds(concentrated.expr)),
+      new Set([shape.min_usable_utxos, shape.big_utxo_above_lovelace / 1_000_000]),
+      "WalletConcentrated expr thresholds drifted from wallet_shape.{min_usable_utxos, big_utxo_above_lovelace}",
+    );
+  });
+
+  it("per-wallet alert prose states the same ADA / count numbers", () => {
+    const pool = loadBlock("infrastructure.preview.yaml", "wallet_pool");
+    const shape = loadBlock("infrastructure.preview.yaml", "wallet_shape");
+    const rules = loadAlertRules();
+    const prose = (alert: string): string => {
+      const r = rules.get(alert)!;
+      return `${r.annotations?.summary ?? ""} ${r.annotations?.description ?? ""}`;
+    };
+    assert.match(prose("PoolWalletLow"), new RegExp(`\\b${pool.pool_wallet_low_lovelace / 1_000_000}\\s*ADA\\b`));
+    assert.match(
+      prose("MainWalletCannotFundPool"),
+      new RegExp(`\\b${pool.main_wallet_reserve_lovelace / 1_000_000}\\s*ADA\\b`),
+    );
+    assert.match(prose("WalletConcentrated"), new RegExp(`\\b${shape.big_utxo_above_lovelace / 1_000_000}\\s*ADA\\b`));
   });
 
   it("alerts.yml prose states the same ADA / percent numbers (operator-facing)", () => {
@@ -286,14 +372,33 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     };
     assert.deepEqual(
       dashboard.templating.list.map((v) => v.name),
-      ["datasource", "network", "customer", "client", "router", "symbol"],
+      ["datasource", "network", "customer", "client", "router", "symbol", "wallet"],
       "feeder-tx.json: remove unused template vars or wire them to a panel",
     );
     const exprs = dashboard.panels.flatMap((p) => (p.targets ?? []).map((t) => t.expr ?? ""));
-    for (const name of ["network", "customer", "client", "router", "symbol"]) {
+    for (const name of ["network", "customer", "client", "router", "symbol", "wallet"]) {
       assert.ok(
         exprs.some((e) => e.includes(`$${name}`)),
         `feeder-tx.json: template var $${name} is not referenced by any panel target expr`,
+      );
+    }
+  });
+
+  it("wallets dashboard (feeder-wallets.json) has no dead template variables", () => {
+    const dashboard = loadDashboard("feeder-wallets.json") as unknown as {
+      templating: { list: Array<{ name: string }> };
+      panels: Array<{ targets?: Array<{ expr?: string }> }>;
+    };
+    assert.deepEqual(
+      dashboard.templating.list.map((v) => v.name),
+      ["datasource", "network", "wallet"],
+      "feeder-wallets.json: remove unused template vars or wire them to a panel",
+    );
+    const exprs = dashboard.panels.flatMap((p) => (p.targets ?? []).map((t) => t.expr ?? ""));
+    for (const name of ["network", "wallet"]) {
+      assert.ok(
+        exprs.some((e) => e.includes(`$${name}`)),
+        `feeder-wallets.json: template var $${name} is not referenced by any panel target expr`,
       );
     }
   });

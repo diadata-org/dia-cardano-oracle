@@ -284,6 +284,27 @@ describe("createMetrics", () => {
     }
   });
 
+  it("per-transaction metrics carry the signer wallet label", async () => {
+    const metrics = await createMetrics({ namespace: "dia_bridge" });
+    const base = { client_id: "c1", customer_id: "acme", wallet: "pool-1" };
+    metrics.transactionsTotal.inc({ ...base, outcome: "confirmed" });
+    metrics.transactionPairs.observe({ ...base, outcome: "confirmed" }, 3);
+    metrics.txProcessingToSubmissionSeconds.observe(base, 1);
+    metrics.txSubmissionToConfirmationSeconds.observe(base, 5);
+    metrics.txEndToEndSeconds.observe(base, 6);
+    const text = await metrics.getMetricsText();
+    for (const name of [
+      "dia_bridge_transactions_total",
+      "dia_bridge_transaction_pairs_count",
+      "dia_bridge_tx_processing_to_submission_seconds_count",
+      "dia_bridge_tx_submission_to_confirmation_seconds_count",
+      "dia_bridge_tx_end_to_end_seconds_count",
+    ]) {
+      const sample = text.split("\n").find((line) => line.startsWith(name) && line.includes('wallet="pool-1"'));
+      assert.ok(sample, `per-transaction series ${name} must carry the wallet label`);
+    }
+  });
+
   it("does not emit a default 0 for label-less balance gauges until set (no spurious low-balance alert on restart)", async () => {
     const metrics = await createMetrics({
       defaultLabels: { destination_chain: "cardano", network: "Preview", source_chain_id: "10050" },

@@ -283,6 +283,76 @@ groups:
             usually covers it.
 
       # ---------------------------------------------------------------------
+      - alert: PoolWalletLow
+        expr: >
+          dia_bridge_cardano_wallet_spendable_lovelace{role="pool"} / 1000000 < 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pool signer wallet {{ $labels.wallet }} is low — auto-funding from the main"
+          description: >
+            Pool wallet {{ $labels.wallet }} holds {{ $value | printf "%.2f" }} ADA
+            spendable (alert fires below 50 ADA). Pool wallets pay tx fees +
+            collateral and drain over time; only the main wallet self-funds. The
+            daemon AUTO-FUNDS this wallet from the main up to
+            `wallet_pool.pool_wallet_target_lovelace` on the next balance tick, so
+            it usually self-heals. It persists only when the main cannot fund it
+            (see MainWalletCannotFundPool) — in that case refill the main by
+            collecting protocol revenue (settle each client, then
+            payment-hook:withdraw into the main).
+
+      # ---------------------------------------------------------------------
+      - alert: MainWalletCannotFundPool
+        expr: >
+          (count(dia_bridge_cardano_wallet_spendable_lovelace{role="pool"} / 1000000 < 50) > 0)
+          and on()
+          (dia_bridge_cardano_wallet_spendable_lovelace{role="main"} / 1000000 < 100)
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Main wallet cannot fund the pool — a pool wallet is draining"
+          description: >
+            A pool wallet is below its `wallet_pool.pool_wallet_low_lovelace` low
+            mark (50 ADA) AND the main signer wallet holds
+            {{ $value | printf "%.2f" }} ADA — below its
+            `wallet_pool.main_wallet_reserve_lovelace` reserve (100 ADA). The main
+            never funds the pool below its reserve, so the auto-funding is STUCK:
+            the low pool wallet can no longer be topped up and will drain, cutting
+            parallelism and eventually stalling lanes. (This is the escalation of
+            PoolWalletLow — a pool that cannot self-heal.)
+
+            WHAT TO DO: refill the main from protocol revenue. Per client id you
+            operate, sweep accrued fees into the PaymentHook, then withdraw them
+            into the main wallet:
+              Docker: cd offchain && make cli CMD="settle --protocol-state /app/offchain/state/{{ $labels.run_dir }}/config-bootstrap.json --client-state /app/offchain/state/{{ $labels.run_dir }}/clients/client-a.json"
+              then:   cd offchain && make cli CMD="payment-hook:withdraw --amount-lovelace 50000000 --protocol-state /app/offchain/state/{{ $labels.run_dir }}/config-bootstrap.json"
+            If there is no revenue to collect, fund the main from outside.
+
+      # ---------------------------------------------------------------------
+      - alert: WalletConcentrated
+        expr: >
+          (dia_bridge_cardano_wallet_usable_utxos < 5)
+          and on(wallet)
+          (dia_bridge_cardano_wallet_max_utxo_lovelace / 1000000 > 550)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Signer wallet {{ $labels.wallet }} is concentrated — split it for parallelism"
+          description: >
+            Wallet {{ $labels.wallet }} has fewer than 5 usable UTxOs but holds a
+            pure-ADA UTxO above 550 ADA. The arbiter hands each parallel lane a
+            disjoint UTxO, so too few usable UTxOs caps the wallet at one lane even
+            though it holds plenty of ADA. This is the OPPOSITE of fragmentation
+            (too few big UTxOs, not too many small ones). The daemon AUTO-SPLITS the
+            big UTxO into the `wallet_shape` profile when `alerting.auto_split` is
+            on, so it usually self-heals on the next balance tick. To force it:
+              Docker: cd offchain && make cli CMD="wallet:split"
+              npm:    cd offchain/cli && npm run cli -- wallet:split
+
+      # ---------------------------------------------------------------------
       - alert: PriceDeviationHigh
         expr: >
           histogram_quantile(0.95,
