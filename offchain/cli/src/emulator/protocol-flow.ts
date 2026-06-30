@@ -317,12 +317,12 @@ export async function runEmulatorProtocolFlow(
     });
     await runTxStep(steps, "deposit:merge", reportProgress, async () => {
       const { depositMerge } = await import("../transactions/deposit.js");
-      const state = await depositMerge({
+      const { artifact } = await depositMerge({
         clientStatePath,
         protocolStatePath,
         buildOnly: false,
       });
-      await writeStateJsonFile(clientStatePath, state);
+      await writeStateJsonFile(clientStatePath, artifact);
     });
 
     // ── Update + absorb side-deposit (combined "update + fold") ──────

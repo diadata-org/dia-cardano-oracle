@@ -52,6 +52,8 @@ export type PaymentHookWithdrawResult = {
   artifact: ConfigStateArtifact;
   consumedOutRefs: string[];
   producedUtxos: WalletChangeUtxo[];
+  /** Fee the built withdraw tx pays — the feeder meters admin-wallet refill cost. */
+  feePaidLovelace: bigint;
 };
 
 export async function paymentHookWithdraw(args: {
@@ -202,7 +204,7 @@ export async function paymentHookWithdraw(args: {
   };
 
   const txSignBuilder = await completeWithRetry(buildTx, reportProgress);
-  reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  const { feeLovelace } = reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   // Arbiter cache delta: the wallet inputs this tx consumes + the change it pays
@@ -269,6 +271,7 @@ export async function paymentHookWithdraw(args: {
     },
     consumedOutRefs,
     producedUtxos,
+    feePaidLovelace: feeLovelace,
   };
 }
 

@@ -55,6 +55,8 @@ export type ConsolidateWalletResult = {
   consumedOutRefs: string[];
   /** Change the tx paid back to the wallet — for the arbiter's cache delta. */
   producedUtxos: WalletChangeUtxo[];
+  /** Fee the built tx pays — the feeder meters defrag cost from it. */
+  feePaidLovelace: bigint;
 };
 
 /** Pure-ADA UTxOs (single `lovelace` asset), smallest first — the dust is
@@ -156,7 +158,7 @@ export async function consolidateWallet(args: {
   // Release any pin now the build is done, so confirmation + settlement reads hit
   // the live provider rather than the frozen reserved subset.
   lucid.overrideUTxOs([]);
-  reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  const { feeLovelace } = reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
 
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -194,6 +196,7 @@ export async function consolidateWallet(args: {
     confirmed,
     consumedOutRefs,
     producedUtxos,
+    feePaidLovelace: feeLovelace,
   };
 }
 

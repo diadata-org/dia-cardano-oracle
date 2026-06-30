@@ -41,6 +41,8 @@ export type SplitWalletResult = {
   consumedOutRefs: string[];
   /** The split pieces the tx paid back to the wallet (profile + change). */
   producedUtxos: WalletChangeUtxo[];
+  /** Fee the built tx pays — the feeder meters wallet-shaping cost from it. */
+  feePaidLovelace: bigint;
 };
 
 function reportProgress(message: string): void {
@@ -111,7 +113,7 @@ export async function splitWallet(args: {
   // provider rather than the frozen reserved subset.
   lucid.overrideUTxOs([]);
 
-  reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  const { feeLovelace } = reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   let submittedTxHash: string | null = null;
   let confirmed = false;
   if (!args.buildOnly) {
@@ -134,5 +136,5 @@ export async function splitWallet(args: {
       label: "split wallet",
     });
   }
-  return { address, submittedTxHash, confirmed, consumedOutRefs, producedUtxos };
+  return { address, submittedTxHash, confirmed, consumedOutRefs, producedUtxos, feePaidLovelace: feeLovelace };
 }

@@ -39,6 +39,8 @@ export type FundPoolWalletResult = {
   consumedOutRefs: string[];
   /** Change the tx paid back to the main wallet. */
   producedUtxos: WalletChangeUtxo[];
+  /** Fee the built tx pays — the feeder meters main-wallet funding cost from it. */
+  feePaidLovelace: bigint;
 };
 
 function reportProgress(message: string): void {
@@ -108,7 +110,7 @@ export async function fundPoolWallet(args: {
   // reads below query the live provider rather than the frozen reserved subset.
   lucid.overrideUTxOs([]);
 
-  reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  const { feeLovelace } = reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   let submittedTxHash: string | null = null;
   let confirmed = false;
   if (!args.buildOnly) {
@@ -131,5 +133,5 @@ export async function fundPoolWallet(args: {
       label: "fund pool wallet",
     });
   }
-  return { toAddress: args.toAddress, submittedTxHash, confirmed, consumedOutRefs, producedUtxos };
+  return { toAddress: args.toAddress, submittedTxHash, confirmed, consumedOutRefs, producedUtxos, feePaidLovelace: feeLovelace };
 }

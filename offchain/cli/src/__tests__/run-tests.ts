@@ -189,6 +189,7 @@ await run("testWalletSettlementWaitsForSpentInputs", testWalletSettlementWaitsFo
 await run("testComputeSpentWalletOutRefs", testComputeSpentWalletOutRefs);
 await run("testComputeWalletChangeOutputs", testComputeWalletChangeOutputs);
 await run("testFundPoolWalletRejectsNonPositiveAmount", testFundPoolWalletRejectsNonPositiveAmount);
+await run("testFundPoolWalletReportsFee", testFundPoolWalletReportsFee);
 await run("testSplitWalletRejectsInvalidPlan", testSplitWalletRejectsInvalidPlan);
 
 // --- Lucid emulator harness (smoke: pay + reference script genesis) ---------
@@ -579,6 +580,36 @@ async function testFundPoolWalletRejectsNonPositiveAmount(): Promise<void> {
       /outputLovelaces must all be positive/,
       `expected output ${bad} to be rejected`,
     );
+  }
+}
+
+// The feeder meters operational cost from the fee each management builder pays,
+// so the builder must surface the on-chain fee it computed. Build (no submit) a
+// funding tx against the emulator and confirm `feePaidLovelace` is the real,
+// positive fee of the built body.
+async function testFundPoolWalletReportsFee(): Promise<void> {
+  const { installEmulatorLucid, uninstallEmulatorLucid } = await import(
+    "../emulator/lucid-injection.js"
+  );
+  const ctx = await makeOracleEmulatorLucid();
+  try {
+    installEmulatorLucid({
+      lucid: ctx.lucid,
+      emulator: ctx.emulator,
+      walletSeedPhrase: ctx.accounts[0].seedPhrase,
+    });
+    const result = await fundPoolWallet({
+      signer: { kind: "seed", value: ctx.accounts[0].seedPhrase },
+      toAddress: ctx.accounts[1].address,
+      outputLovelaces: [100_000_000n, 10_000_000n],
+      buildOnly: true,
+    });
+    assert.ok(
+      result.feePaidLovelace > 0n,
+      `expected a positive fee on the built funding tx, got ${result.feePaidLovelace}`,
+    );
+  } finally {
+    uninstallEmulatorLucid();
   }
 }
 

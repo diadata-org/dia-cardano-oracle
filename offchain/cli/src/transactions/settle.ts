@@ -56,6 +56,8 @@ type SettleResult = {
    *  (only meaningful on the arbitrated `reservedOutRefs` path). */
   consumedOutRefs: string[];
   producedUtxos: WalletChangeUtxo[];
+  /** Fee the built settle tx pays — the feeder meters main-wallet settle cost. */
+  feePaidLovelace: bigint;
 };
 
 /**
@@ -242,7 +244,7 @@ export async function settleAccruedFees(args: {
       receivers.length === 1 ? "" : "s"
     } to payment hook`,
   );
-  reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  const { feeLovelace } = reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   const unsignedHash = txSignBuilder.toHash();
   // Arbiter cache delta: the wallet inputs this tx consumes + the change it pays
@@ -357,6 +359,7 @@ export async function settleAccruedFees(args: {
     }),
     consumedOutRefs,
     producedUtxos,
+    feePaidLovelace: feeLovelace,
   };
 }
 

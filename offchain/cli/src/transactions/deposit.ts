@@ -195,7 +195,7 @@ export async function depositFund(args: DepositArgs & {
 /** Sweep deposit UTxOs into the Receiver balance (reuses the TopUp redeemer). */
 export async function depositMerge(args: DepositArgs & {
   buildOnly: boolean;
-}): Promise<ClientStateArtifact> {
+}): Promise<{ artifact: ClientStateArtifact; feePaidLovelace: bigint }> {
   const { client: state, protocol } = await readClientContext({
     clientStatePath: args.clientStatePath,
     protocolStatePath: args.protocolStatePath,
@@ -330,7 +330,7 @@ export async function depositMerge(args: DepositArgs & {
   };
 
   const txSignBuilder = await completeWithRetry(buildTx, reportProgress);
-  reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
+  const { feeLovelace } = reportTxSignBuilderMetrics(txSignBuilder, reportProgress);
   logEffectiveOutputs(txSignBuilder, reportProgress);
   let submittedTxHash: string | null = null;
   let confirmed = false;
@@ -364,15 +364,18 @@ export async function depositMerge(args: DepositArgs & {
   }
 
   return {
-    ...state,
-    wallet: { source, address: walletAddress },
-    receiver: { ...state.receiver, receiverState: nextReceiverState },
-    datum: { ...state.datum, receiverCbor: receiverDatumCbor },
-    transactions: appendTransactionRecord(state.transactions, {
-      step: stepId("deposit:merge"),
-      submittedTxHash,
-      confirmed,
-    }),
+    artifact: {
+      ...state,
+      wallet: { source, address: walletAddress },
+      receiver: { ...state.receiver, receiverState: nextReceiverState },
+      datum: { ...state.datum, receiverCbor: receiverDatumCbor },
+      transactions: appendTransactionRecord(state.transactions, {
+        step: stepId("deposit:merge"),
+        submittedTxHash,
+        confirmed,
+      }),
+    },
+    feePaidLovelace: feeLovelace,
   };
 }
 

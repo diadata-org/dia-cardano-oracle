@@ -748,12 +748,12 @@ async function run(): Promise<void> {
     case "deposit:merge": {
       const { depositMerge } = await import("./transactions/deposit.js");
       getCliConfig();
-      const result = await depositMerge({
+      const { artifact } = await depositMerge({
         protocolStatePath: requireFlagValue("--protocol-state"),
         clientStatePath: requireFlagValue("--client-state"),
         buildOnly: hasBuildOnlyFlag(),
       });
-      printJson(result);
+      printJson(artifact);
       return;
     }
 
