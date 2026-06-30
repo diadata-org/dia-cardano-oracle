@@ -1931,12 +1931,16 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     // so the lane stays held for the whole build→submit→confirm lifecycle. We
     // do not await the returned promise here so the refresh tick is not
     // blocked; the dedup guard and lane queue keep subsequent ticks correct.
+    const mergeWalletId = bridge.walletStats().find((w) => w.role === "main")?.walletId ?? "main";
     void queueManager
       .enqueueLaneTask(dest.cardano, async () => {
         const merged = await bridge.mergeDeposits({
           clientStatePath: dest.clientStatePath,
           protocolStatePath: dest.protocolStatePath,
         });
+        if (merged.txHash !== null) {
+          metrics.recordManagementTx({ kind: "merge", wallet: merged.wallet, outcome: "confirmed", feeLovelace: merged.feePaidLovelace });
+        }
         report(
           `auto-merge: done client=${clientId} confirmed=${merged.confirmed} txHash=${merged.txHash ?? "(none)"}`,
         );
@@ -1944,6 +1948,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       .catch((err) => {
         // Non-fatal — log and retry on the next tick. A common cause is a race
         // where the deposits were already swept, or a transient provider error.
+        metrics.recordManagementTx({ kind: "merge", wallet: mergeWalletId, outcome: "failed", feeLovelace: null });
         report(`[warn] auto-merge: failed client=${clientId} — ${sanitizeLogLine((err as Error).message)}`);
       })
       .finally(() => {
@@ -1975,6 +1980,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       `auto-settle: enqueueing settle client=${clientId} accrued=${snapshot.receiverAccruedLovelace ?? "?"} ` +
       `threshold=${autoSettleLovelace}`,
     );
+    const settleWalletId = bridge.walletStats().find((w) => w.role === "main")?.walletId ?? "main";
     void queueManager
       .enqueueLaneTask(dest.cardano, async () => {
         const res = await bridge.settle({
@@ -1982,8 +1988,12 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           protocolStatePath: dest.protocolStatePath,
         });
         report(`auto-settle: done client=${clientId} confirmed=${res.confirmed} txHash=${res.txHash ?? "(none)"}`);
+        if (res.txHash !== null) {
+          metrics.recordManagementTx({ kind: "settle", wallet: res.wallet, outcome: "confirmed", feeLovelace: res.feePaidLovelace });
+        }
       })
       .catch((err) => {
+        metrics.recordManagementTx({ kind: "settle", wallet: settleWalletId, outcome: "failed", feeLovelace: null });
         report(`[warn] auto-settle: failed client=${clientId} — ${sanitizeLogLine((err as Error).message)}`);
       })
       .finally(() => {
@@ -2010,6 +2020,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
     // run it on this dest's lane so it serializes against that client's updates;
     // the process-wide `withdrawInProgress` guard keeps it single-flight across
     // all lanes.
+    const withdrawWalletId = bridge.walletStats().find((w) => w.role === "main")?.walletId ?? "main";
     void queueManager
       .enqueueLaneTask(dest.cardano, async () => {
         const res = await bridge.withdrawFromPaymentHook({
@@ -2017,8 +2028,12 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           amountLovelace: decision.amountLovelace,
         });
         report(`auto-withdraw: done confirmed=${res.confirmed} txHash=${res.txHash ?? "(none)"}`);
+        if (res.txHash !== null) {
+          metrics.recordManagementTx({ kind: "withdraw", wallet: res.wallet, outcome: "confirmed", feeLovelace: res.feePaidLovelace });
+        }
       })
       .catch((err) => {
+        metrics.recordManagementTx({ kind: "withdraw", wallet: withdrawWalletId, outcome: "failed", feeLovelace: null });
         report(`[warn] auto-withdraw: failed — ${sanitizeLogLine((err as Error).message)}`);
       })
       .finally(() => {
@@ -2047,10 +2062,16 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       );
       void bridge
         .consolidateWallet({ walletId: w.walletId, collateralLovelace: collateralUtxoLovelace })
-        .then((r) =>
-          report(`auto-consolidate: ${w.walletId} done consolidated=${r.consolidated} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`),
-        )
-        .catch((err) => report(`[warn] auto-consolidate: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`))
+        .then((r) => {
+          if (r.txHash !== null) {
+            metrics.recordManagementTx({ kind: "consolidate", wallet: r.wallet, outcome: "confirmed", feeLovelace: r.feePaidLovelace });
+          }
+          report(`auto-consolidate: ${w.walletId} done consolidated=${r.consolidated} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`);
+        })
+        .catch((err) => {
+          metrics.recordManagementTx({ kind: "consolidate", wallet: w.walletId, outcome: "failed", feeLovelace: null });
+          report(`[warn] auto-consolidate: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`);
+        })
         .finally(() => {
           consolidateInProgress.delete(w.walletId);
         });
@@ -2079,10 +2100,16 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       );
       void bridge
         .splitWallet({ walletId: w.walletId })
-        .then((r) =>
-          report(`auto-split: ${w.walletId} done split=${r.split} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`),
-        )
-        .catch((err) => report(`[warn] auto-split: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`))
+        .then((r) => {
+          if (r.txHash !== null) {
+            metrics.recordManagementTx({ kind: "split", wallet: r.wallet, outcome: "confirmed", feeLovelace: r.feePaidLovelace });
+          }
+          report(`auto-split: ${w.walletId} done split=${r.split} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`);
+        })
+        .catch((err) => {
+          metrics.recordManagementTx({ kind: "split", wallet: w.walletId, outcome: "failed", feeLovelace: null });
+          report(`[warn] auto-split: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`);
+        })
         .finally(() => {
           splitInProgress.delete(w.walletId);
         });
@@ -2117,15 +2144,22 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         `auto-fund: main → ${w.walletId} amount=${decision.amountLovelace} ` +
         `(spendable=${w.spendableLovelace} low=${poolFundLowLovelace} target=${poolFundTargetLovelace})`,
       );
+      const fundWalletId = main.walletId;
       void bridge
         .fundPoolWallet({ toWalletId: w.walletId, amountLovelace: decision.amountLovelace })
         .then((r) => {
           // Arm the cooldown only on a confirmed transfer; a failed/skipped fund
           // (no ADA moved) must be retriable on the next tick, not blocked.
           if (r.funded && r.confirmed) lastFundedAtMs.set(w.walletId, nowMs);
+          if (r.txHash !== null) {
+            metrics.recordManagementTx({ kind: "fund_pool", wallet: r.wallet, outcome: "confirmed", feeLovelace: r.feePaidLovelace });
+          }
           report(`auto-fund: ${w.walletId} done funded=${r.funded} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`);
         })
-        .catch((err) => report(`[warn] auto-fund: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`))
+        .catch((err) => {
+          metrics.recordManagementTx({ kind: "fund_pool", wallet: fundWalletId, outcome: "failed", feeLovelace: null });
+          report(`[warn] auto-fund: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`);
+        })
         .finally(() => {
           fundInProgress.delete(w.walletId);
         });
@@ -3087,33 +3121,33 @@ function makeDryRunBridge(report: (line: string) => void): OracleIntentBridge {
       report(
         `daemon: [dry-run bridge] mergeDeposits client=${params.clientStatePath} (no-op)`,
       );
-      return { txHash: null, confirmed: false };
+      return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" };
     },
     async settle(params) {
       report(`daemon: [dry-run bridge] settle client=${params.clientStatePath} (no-op)`);
-      return { txHash: null, confirmed: false };
+      return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" };
     },
     async withdrawFromPaymentHook(params) {
       report(
         `daemon: [dry-run bridge] withdrawFromPaymentHook amount=${params.amountLovelace} (no-op)`,
       );
-      return { txHash: null, confirmed: false };
+      return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" };
     },
     async consolidateWallet(params) {
       report(
         `daemon: [dry-run bridge] consolidateWallet ${params.walletId} collateral=${params.collateralLovelace} (no-op)`,
       );
-      return { txHash: null, confirmed: false, consolidated: false };
+      return { txHash: null, confirmed: false, consolidated: false, feePaidLovelace: null, wallet: params.walletId };
     },
     async fundPoolWallet(params) {
       report(
         `daemon: [dry-run bridge] fundPoolWallet → ${params.toWalletId} amount=${params.amountLovelace} (no-op)`,
       );
-      return { txHash: null, confirmed: false, funded: false };
+      return { txHash: null, confirmed: false, funded: false, feePaidLovelace: null, wallet: "" };
     },
     async splitWallet(params) {
       report(`daemon: [dry-run bridge] splitWallet ${params.walletId} (no-op)`);
-      return { txHash: null, confirmed: false, split: false };
+      return { txHash: null, confirmed: false, split: false, feePaidLovelace: null, wallet: params.walletId };
     },
     async refreshWalletPoolUtxos() {
       // Dry-run never touches chain and has no arbiter; nothing to refresh.

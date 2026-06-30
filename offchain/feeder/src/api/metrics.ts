@@ -207,7 +207,43 @@ export type FeederMetrics = {
    *  as one request (the provider's real quota consumption). outcome ∈
    *  {ok, rate_limited, quota_exceeded, error}; quota_exceeded is the 402 wall. */
   bridgeProviderRequests: FeedCounter;
+  /** One increment per OPERATIONAL (non-update) tx the feeder issues to keep
+   *  itself running — settle, payment-hook withdraw, main→pool funding, defrag
+   *  (consolidate), wallet shaping (split), standalone deposit merge — by `kind`,
+   *  the signer `wallet` that paid the fee, and `outcome`. Pure overhead: no
+   *  client reimburses these (unlike update txs, whose fee is covered by what
+   *  clients are charged). */
+  managementTxTotal: FeedCounter;
+  /** Total lovelace paid in fees by operational (non-update) txs, by `kind` and
+   *  signer `wallet`. Summed only over confirmed txs (fee guaranteed on-chain);
+   *  `sum(rate(...[1d]))*86400/1e6` is ADA/day of pure operational overhead. */
+  managementTxFeeLovelaceTotal: FeedCounter;
+  /** Record one operational tx: bumps `managementTxTotal`, and on a confirmed tx
+   *  adds its fee to `managementTxFeeLovelaceTotal`. */
+  recordManagementTx(record: ManagementTxRecord): void;
   getMetricsText(): Promise<string>;
+};
+
+/** The operational (non-update) tx kinds the feeder issues. `merge` is the
+ *  STANDALONE deposit:merge — the opportunistic merge folded into an update tx
+ *  carries no separate fee (it rides the update's), so only the standalone
+ *  fallback is metered here. */
+export type ManagementTxKind =
+  | "settle"
+  | "withdraw"
+  | "fund_pool"
+  | "consolidate"
+  | "split"
+  | "merge";
+
+export type ManagementTxRecord = {
+  kind: ManagementTxKind;
+  /** Signer wallet that paid the fee (main for settle/withdraw/fund_pool; the
+   *  target pool wallet for consolidate/split). */
+  wallet: string;
+  outcome: "confirmed" | "failed";
+  /** Fee the tx paid; null for a tx that never confirmed (no fee on-chain). */
+  feeLovelace: bigint | null;
 };
 
 const noopCounter: FeedCounter = {
@@ -295,6 +331,9 @@ export const noopMetrics: FeederMetrics = {
   bridgeProviderLastOkTimestampSeconds: noopGauge,
   bridgeRecoveryAttempts: noopCounter,
   bridgeProviderRequests: noopCounter,
+  managementTxTotal: noopCounter,
+  managementTxFeeLovelaceTotal: noopCounter,
+  recordManagementTx: () => {},
   getMetricsText: async () => "",
 };
 
@@ -371,6 +410,19 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       observe: (labels, value) => metric.observe(labels, value),
     };
   }
+
+  // Operational-cost meters. Declared as locals so `recordManagementTx` can bump
+  // both from one call site (count always, fee only when the tx confirmed).
+  const managementTxTotal = counter(
+    "management_tx_total",
+    "Operational (non-update) Cardano transactions the feeder issues to keep itself running — settle, payment-hook withdraw, main→pool funding, defrag (consolidate), wallet shaping (split), and standalone deposit merge — counted once per tx by `kind`, the signer `wallet` that paid the fee, and `outcome`. Pure overhead: no client reimburses them, unlike update txs whose fee is covered by client charges. (A deposit merge folded into an update tx is not counted here — it rides the update's fee.)",
+    ["kind", "wallet", "outcome"],
+  );
+  const managementTxFeeLovelaceTotal = counter(
+    "management_tx_fee_lovelace_total",
+    "Total lovelace paid in fees by operational (non-update) transactions, by `kind` and signer `wallet`. Summed only over confirmed txs (fee guaranteed on-chain). `sum(rate(...[1d]))*86400/1e6` reads ADA/day of operational overhead.",
+    ["kind", "wallet"],
+  );
 
   return {
     eventsDetected: counter(
@@ -762,6 +814,14 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "Cardano API provider requests by provider, method, and outcome. Each retry attempt is one request — this tracks the provider's actual quota consumption. outcome: ok | rate_limited (429 throttle) | quota_exceeded (Blockfrost 402 daily-quota wall) | error.",
       ["provider", "method", "outcome"],
     ),
+    managementTxTotal,
+    managementTxFeeLovelaceTotal,
+    recordManagementTx: ({ kind, wallet, outcome, feeLovelace }) => {
+      managementTxTotal.inc({ kind, wallet, outcome });
+      if (outcome === "confirmed" && feeLovelace !== null) {
+        managementTxFeeLovelaceTotal.inc({ kind, wallet }, Number(feeLovelace));
+      }
+    },
     getMetricsText: () => registry.metrics(),
   };
 }

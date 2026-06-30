@@ -73,15 +73,15 @@ describe("createCardanoWriteClient", () => {
 
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
-      async mergeDeposits() { return { txHash: null, confirmed: false }; },
-      async settle() { return { txHash: null, confirmed: false }; },
-      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
+      async mergeDeposits() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async settle() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false, feePaidLovelace: null, wallet: "" }; },
       async fundPoolWallet() {
-        return { txHash: null, confirmed: false, funded: false };
+        return { txHash: null, confirmed: false, funded: false, feePaidLovelace: null, wallet: "" };
       },
       async splitWallet() {
-        return { txHash: null, confirmed: false, split: false };
+        return { txHash: null, confirmed: false, split: false, feePaidLovelace: null, wallet: "" };
       },
       async refreshWalletPoolUtxos() {},
       walletStats() {
@@ -149,15 +149,15 @@ describe("createCardanoWriteClient", () => {
 
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
-      async mergeDeposits() { return { txHash: null, confirmed: false }; },
-      async settle() { return { txHash: null, confirmed: false }; },
-      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
+      async mergeDeposits() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async settle() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false, feePaidLovelace: null, wallet: "" }; },
       async fundPoolWallet() {
-        return { txHash: null, confirmed: false, funded: false };
+        return { txHash: null, confirmed: false, funded: false, feePaidLovelace: null, wallet: "" };
       },
       async splitWallet() {
-        return { txHash: null, confirmed: false, split: false };
+        return { txHash: null, confirmed: false, split: false, feePaidLovelace: null, wallet: "" };
       },
       async refreshWalletPoolUtxos() {},
       walletStats() {
@@ -225,15 +225,15 @@ describe("createCardanoWriteClient", () => {
 
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
-      async mergeDeposits() { return { txHash: null, confirmed: false }; },
-      async settle() { return { txHash: null, confirmed: false }; },
-      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
+      async mergeDeposits() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async settle() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false, feePaidLovelace: null, wallet: "" }; },
       async fundPoolWallet() {
-        return { txHash: null, confirmed: false, funded: false };
+        return { txHash: null, confirmed: false, funded: false, feePaidLovelace: null, wallet: "" };
       },
       async splitWallet() {
-        return { txHash: null, confirmed: false, split: false };
+        return { txHash: null, confirmed: false, split: false, feePaidLovelace: null, wallet: "" };
       },
       async refreshWalletPoolUtxos() {},
       walletStats() {
@@ -294,15 +294,15 @@ describe("createCardanoWriteClient", () => {
 
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
-      async mergeDeposits() { return { txHash: null, confirmed: false }; },
-      async settle() { return { txHash: null, confirmed: false }; },
-      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
+      async mergeDeposits() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async settle() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false, feePaidLovelace: null, wallet: "" }; },
       async fundPoolWallet() {
-        return { txHash: null, confirmed: false, funded: false };
+        return { txHash: null, confirmed: false, funded: false, feePaidLovelace: null, wallet: "" };
       },
       async splitWallet() {
-        return { txHash: null, confirmed: false, split: false };
+        return { txHash: null, confirmed: false, split: false, feePaidLovelace: null, wallet: "" };
       },
       async refreshWalletPoolUtxos() {},
       walletStats() {
@@ -348,15 +348,15 @@ describe("createCardanoWriteClient", () => {
   it("populates feePaidLovelace on success when bridge returns it", async () => {
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
-      async mergeDeposits() { return { txHash: null, confirmed: false }; },
-      async settle() { return { txHash: null, confirmed: false }; },
-      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
+      async mergeDeposits() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async settle() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false, feePaidLovelace: null, wallet: "" }; },
       async fundPoolWallet() {
-        return { txHash: null, confirmed: false, funded: false };
+        return { txHash: null, confirmed: false, funded: false, feePaidLovelace: null, wallet: "" };
       },
       async splitWallet() {
-        return { txHash: null, confirmed: false, split: false };
+        return { txHash: null, confirmed: false, split: false, feePaidLovelace: null, wallet: "" };
       },
       async refreshWalletPoolUtxos() {},
       walletStats() {
@@ -392,15 +392,15 @@ describe("createCardanoWriteClient", () => {
   it("leaves feePaidLovelace undefined when bridge omits it", async () => {
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
-      async mergeDeposits() { return { txHash: null, confirmed: false }; },
-      async settle() { return { txHash: null, confirmed: false }; },
-      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
+      async mergeDeposits() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async settle() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false, feePaidLovelace: null, wallet: "" }; },
       async fundPoolWallet() {
-        return { txHash: null, confirmed: false, funded: false };
+        return { txHash: null, confirmed: false, funded: false, feePaidLovelace: null, wallet: "" };
       },
       async splitWallet() {
-        return { txHash: null, confirmed: false, split: false };
+        return { txHash: null, confirmed: false, split: false, feePaidLovelace: null, wallet: "" };
       },
       async refreshWalletPoolUtxos() {},
       walletStats() {
@@ -439,15 +439,15 @@ describe("createCardanoWriteClient", () => {
 
     const bridge: OracleIntentBridge = {
       async snapshotBalances() { return {}; },
-      async mergeDeposits() { return { txHash: null, confirmed: false }; },
-      async settle() { return { txHash: null, confirmed: false }; },
-      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false }; },
-      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false }; },
+      async mergeDeposits() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async settle() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async withdrawFromPaymentHook() { return { txHash: null, confirmed: false, feePaidLovelace: null, wallet: "" }; },
+      async consolidateWallet() { return { txHash: null, confirmed: false, consolidated: false, feePaidLovelace: null, wallet: "" }; },
       async fundPoolWallet() {
-        return { txHash: null, confirmed: false, funded: false };
+        return { txHash: null, confirmed: false, funded: false, feePaidLovelace: null, wallet: "" };
       },
       async splitWallet() {
-        return { txHash: null, confirmed: false, split: false };
+        return { txHash: null, confirmed: false, split: false, feePaidLovelace: null, wallet: "" };
       },
       async refreshWalletPoolUtxos() {},
       walletStats() {

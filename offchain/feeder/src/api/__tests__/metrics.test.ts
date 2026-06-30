@@ -49,6 +49,29 @@ describe("createMetrics", () => {
     );
   });
 
+  // Operational (non-update) txs — settle, withdraw, fund, consolidate, split —
+  // are pure overhead no client reimburses, so the feeder meters them by `kind`
+  // and the signer `wallet` that paid. The fee meter accrues only on confirmed
+  // txs (a failed tx pays nothing on-chain), so ADA/day of overhead reads true.
+  it("meters operational (management) tx cost by kind and wallet", async () => {
+    const metrics = await createMetrics({ namespace: "dia_bridge" });
+    metrics.recordManagementTx({ kind: "fund_pool", wallet: "main", outcome: "confirmed", feeLovelace: 180_000n });
+    metrics.recordManagementTx({ kind: "split", wallet: "pool-1", outcome: "confirmed", feeLovelace: 200_000n });
+    metrics.recordManagementTx({ kind: "merge", wallet: "main", outcome: "confirmed", feeLovelace: 220_000n });
+    metrics.recordManagementTx({ kind: "settle", wallet: "main", outcome: "failed", feeLovelace: null });
+
+    const text = await metrics.getMetricsText();
+    // One increment per tx, labelled by kind/wallet/outcome.
+    assert.match(text, /dia_bridge_management_tx_total\{[^}]*kind="fund_pool"[^}]*wallet="main"[^}]*outcome="confirmed"[^}]*\}\s+1/);
+    assert.match(text, /dia_bridge_management_tx_total\{[^}]*kind="settle"[^}]*wallet="main"[^}]*outcome="failed"[^}]*\}\s+1/);
+    // Fee accrues for confirmed txs (fee guaranteed on-chain)...
+    assert.match(text, /dia_bridge_management_tx_fee_lovelace_total\{[^}]*kind="fund_pool"[^}]*wallet="main"[^}]*\}\s+180000/);
+    assert.match(text, /dia_bridge_management_tx_fee_lovelace_total\{[^}]*kind="split"[^}]*wallet="pool-1"[^}]*\}\s+200000/);
+    assert.match(text, /dia_bridge_management_tx_fee_lovelace_total\{[^}]*kind="merge"[^}]*wallet="main"[^}]*\}\s+220000/);
+    // ...but a failed tx must NOT move the fee meter (no ADA left the wallet).
+    assert.doesNotMatch(text, /dia_bridge_management_tx_fee_lovelace_total\{[^}]*kind="settle"/);
+  });
+
   it("honours a custom namespace override", async () => {
     const metrics = await createMetrics({ namespace: "custom_bridge" });
     metrics.eventsDuplicate.inc();
@@ -141,6 +164,7 @@ describe("createMetrics", () => {
     metrics.bridgeDbOperationDuration.observe({ table: "transaction_log", operation: "insert" }, 0.005);
     metrics.bridgeComponentHealth.set({ component: "scanner" }, 1);
     metrics.bridgeRecoveryAttempts.inc({ component: "scanner", reason: "rpc_error" });
+    metrics.recordManagementTx({ kind: "settle", wallet: "main", outcome: "confirmed", feeLovelace: 180_000n });
 
     const text = await metrics.getMetricsText();
 
@@ -190,6 +214,9 @@ describe("createMetrics", () => {
       "dia_bridge_tx_processing_to_submission_seconds",
       "dia_bridge_tx_submission_to_confirmation_seconds",
       "dia_bridge_tx_end_to_end_seconds",
+      // Operational-cost meters (settle/withdraw/fund/consolidate/split fees)
+      "dia_bridge_management_tx_total",
+      "dia_bridge_management_tx_fee_lovelace_total",
       // Core pipeline metrics
       "dia_bridge_events_detected_total",
       "dia_bridge_events_duplicate_total",
