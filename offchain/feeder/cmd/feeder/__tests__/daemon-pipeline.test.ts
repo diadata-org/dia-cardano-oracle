@@ -174,6 +174,8 @@ function makeInMemoryDb(): Db & { logs: TransactionLogInsert[] } {
     async upsertContractSymbolUpdate() {},
     async getContractSymbolUpdate() { return null; },
     async listContractSymbolUpdates() { return []; },
+    async bumpManagementTxTotal() {},
+    async listManagementTxTotals() { return []; },
     async recordPerformanceMetric() {},
     async queryPerformanceMetrics() { return []; },
     async recordAlert() { return 0; },

@@ -28,6 +28,8 @@ export {
   type FeedGauge,
   type FeedHistogram,
   type MetricsOptions,
+  type ManagementTxKind,
+  type ManagementTxTotal,
 } from "./metrics.js";
 export { buildStatusResponse, buildComponentsResponse, type StatusResponse, type ComponentStatus } from "./status.js";
 export { buildEventsResponse, buildEventNamesResponse, buildEventByHashResponse, type EventEntry, type EventsResponse } from "./events.js";

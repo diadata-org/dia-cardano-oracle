@@ -132,6 +132,8 @@ function makeDb(overrides: {
     async upsertContractSymbolUpdate() {},
     async getContractSymbolUpdate() { return null; },
     async listContractSymbolUpdates() { return []; },
+    async bumpManagementTxTotal() {},
+    async listManagementTxTotals() { return []; },
     async recordPerformanceMetric() {},
     async queryPerformanceMetrics() { return overrides.performanceMetrics ?? []; },
     async recordAlert() { return 0; },

@@ -132,6 +132,7 @@ import {
   createProviderHealthRecorder,
   probeProvider,
   type FeederMetrics,
+  type ManagementTxKind,
   type HealthState,
 } from "../../src/api/index.js";
 import { getCliConfig } from "@diadata-org/dia-cardano-oracle-cli/core/config";
@@ -819,6 +820,10 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // db_operation_duration_seconds). The few startup ops above (crash recovery)
   // run once and stay un-instrumented, which is fine for a steady-state load metric.
   db = instrumentDb(db, metrics);
+
+  // Hydrate the operational-cost gauges from the persisted `management_tx_totals`
+  // table, so the cost dashboard shows the cumulative totals from startup.
+  metrics.setManagementTxTotals(await db.listManagementTxTotals());
 
   // Crash-recovery attempts from the startup sweep above (counted now that the
   // metrics registry exists).
@@ -1890,6 +1895,32 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
   // from the snapshot rather than read from YAML.
   const loggedDepositAddrs = new Set<string>();
 
+  // Meter one operational (management) tx: persist it to the `management_tx_totals`
+  // table, then re-read the totals and set the cost gauges. The gauges are
+  // rehydrated from this table on boot — the same persistence pattern as the rest
+  // of the feeder's stateful data. Runs fire-and-forget so it does not block a
+  // lane; a DB hiccup is logged, not fatal.
+  function meterManagementTx(args: {
+    kind: ManagementTxKind;
+    wallet: string;
+    outcome: "confirmed" | "failed";
+    feeLovelace: bigint | null;
+  }): void {
+    void (async () => {
+      try {
+        await db.bumpManagementTxTotal({
+          kind: args.kind,
+          wallet: args.wallet,
+          outcome: args.outcome,
+          feeLovelace: args.feeLovelace !== null ? args.feeLovelace.toString() : null,
+        });
+        metrics.setManagementTxTotals(await db.listManagementTxTotals());
+      } catch (err) {
+        report(`[warn] meterManagementTx: ${args.kind} — ${sanitizeLogLine((err as Error).message)}`);
+      }
+    })();
+  }
+
   async function maybeAutoMergeDeposits(
     dest: { clientStatePath: string; protocolStatePath: string; cardano: CardanoDestinationConfig },
     snapshot: { depositPendingLovelace?: bigint; receiverBalanceLovelace?: bigint; receiverUnit?: string; depositAddress?: string; clientId?: string },
@@ -1939,7 +1970,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           protocolStatePath: dest.protocolStatePath,
         });
         if (merged.txHash !== null) {
-          metrics.recordManagementTx({ kind: "merge", wallet: merged.wallet, outcome: "confirmed", feeLovelace: merged.feePaidLovelace });
+          meterManagementTx({ kind: "merge", wallet: merged.wallet, outcome: "confirmed", feeLovelace: merged.feePaidLovelace });
         }
         report(
           `auto-merge: done client=${clientId} confirmed=${merged.confirmed} txHash=${merged.txHash ?? "(none)"}`,
@@ -1948,7 +1979,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
       .catch((err) => {
         // Non-fatal — log and retry on the next tick. A common cause is a race
         // where the deposits were already swept, or a transient provider error.
-        metrics.recordManagementTx({ kind: "merge", wallet: mergeWalletId, outcome: "failed", feeLovelace: null });
+        meterManagementTx({ kind: "merge", wallet: mergeWalletId, outcome: "failed", feeLovelace: null });
         report(`[warn] auto-merge: failed client=${clientId} — ${sanitizeLogLine((err as Error).message)}`);
       })
       .finally(() => {
@@ -1989,11 +2020,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         });
         report(`auto-settle: done client=${clientId} confirmed=${res.confirmed} txHash=${res.txHash ?? "(none)"}`);
         if (res.txHash !== null) {
-          metrics.recordManagementTx({ kind: "settle", wallet: res.wallet, outcome: "confirmed", feeLovelace: res.feePaidLovelace });
+          meterManagementTx({ kind: "settle", wallet: res.wallet, outcome: "confirmed", feeLovelace: res.feePaidLovelace });
         }
       })
       .catch((err) => {
-        metrics.recordManagementTx({ kind: "settle", wallet: settleWalletId, outcome: "failed", feeLovelace: null });
+        meterManagementTx({ kind: "settle", wallet: settleWalletId, outcome: "failed", feeLovelace: null });
         report(`[warn] auto-settle: failed client=${clientId} — ${sanitizeLogLine((err as Error).message)}`);
       })
       .finally(() => {
@@ -2029,11 +2060,11 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         });
         report(`auto-withdraw: done confirmed=${res.confirmed} txHash=${res.txHash ?? "(none)"}`);
         if (res.txHash !== null) {
-          metrics.recordManagementTx({ kind: "withdraw", wallet: res.wallet, outcome: "confirmed", feeLovelace: res.feePaidLovelace });
+          meterManagementTx({ kind: "withdraw", wallet: res.wallet, outcome: "confirmed", feeLovelace: res.feePaidLovelace });
         }
       })
       .catch((err) => {
-        metrics.recordManagementTx({ kind: "withdraw", wallet: withdrawWalletId, outcome: "failed", feeLovelace: null });
+        meterManagementTx({ kind: "withdraw", wallet: withdrawWalletId, outcome: "failed", feeLovelace: null });
         report(`[warn] auto-withdraw: failed — ${sanitizeLogLine((err as Error).message)}`);
       })
       .finally(() => {
@@ -2064,12 +2095,12 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         .consolidateWallet({ walletId: w.walletId, collateralLovelace: collateralUtxoLovelace })
         .then((r) => {
           if (r.txHash !== null) {
-            metrics.recordManagementTx({ kind: "consolidate", wallet: r.wallet, outcome: "confirmed", feeLovelace: r.feePaidLovelace });
+            meterManagementTx({ kind: "consolidate", wallet: r.wallet, outcome: "confirmed", feeLovelace: r.feePaidLovelace });
           }
           report(`auto-consolidate: ${w.walletId} done consolidated=${r.consolidated} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`);
         })
         .catch((err) => {
-          metrics.recordManagementTx({ kind: "consolidate", wallet: w.walletId, outcome: "failed", feeLovelace: null });
+          meterManagementTx({ kind: "consolidate", wallet: w.walletId, outcome: "failed", feeLovelace: null });
           report(`[warn] auto-consolidate: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`);
         })
         .finally(() => {
@@ -2102,12 +2133,12 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
         .splitWallet({ walletId: w.walletId })
         .then((r) => {
           if (r.txHash !== null) {
-            metrics.recordManagementTx({ kind: "split", wallet: r.wallet, outcome: "confirmed", feeLovelace: r.feePaidLovelace });
+            meterManagementTx({ kind: "split", wallet: r.wallet, outcome: "confirmed", feeLovelace: r.feePaidLovelace });
           }
           report(`auto-split: ${w.walletId} done split=${r.split} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`);
         })
         .catch((err) => {
-          metrics.recordManagementTx({ kind: "split", wallet: w.walletId, outcome: "failed", feeLovelace: null });
+          meterManagementTx({ kind: "split", wallet: w.walletId, outcome: "failed", feeLovelace: null });
           report(`[warn] auto-split: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`);
         })
         .finally(() => {
@@ -2152,12 +2183,12 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
           // (no ADA moved) must be retriable on the next tick, not blocked.
           if (r.funded && r.confirmed) lastFundedAtMs.set(w.walletId, nowMs);
           if (r.txHash !== null) {
-            metrics.recordManagementTx({ kind: "fund_pool", wallet: r.wallet, outcome: "confirmed", feeLovelace: r.feePaidLovelace });
+            meterManagementTx({ kind: "fund_pool", wallet: r.wallet, outcome: "confirmed", feeLovelace: r.feePaidLovelace });
           }
           report(`auto-fund: ${w.walletId} done funded=${r.funded} confirmed=${r.confirmed} txHash=${r.txHash ?? "(none)"}`);
         })
         .catch((err) => {
-          metrics.recordManagementTx({ kind: "fund_pool", wallet: fundWalletId, outcome: "failed", feeLovelace: null });
+          meterManagementTx({ kind: "fund_pool", wallet: fundWalletId, outcome: "failed", feeLovelace: null });
           report(`[warn] auto-fund: ${w.walletId} failed — ${sanitizeLogLine((err as Error).message)}`);
         })
         .finally(() => {

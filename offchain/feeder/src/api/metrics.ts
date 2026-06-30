@@ -207,22 +207,21 @@ export type FeederMetrics = {
    *  as one request (the provider's real quota consumption). outcome ∈
    *  {ok, rate_limited, quota_exceeded, error}; quota_exceeded is the 402 wall. */
   bridgeProviderRequests: FeedCounter;
-  /** One increment per OPERATIONAL (non-update) tx the feeder issues to keep
-   *  itself running — settle, payment-hook withdraw, main→pool funding, defrag
+  /** Number of OPERATIONAL (non-update) txs the feeder has issued to keep itself
+   *  running — settle, payment-hook withdraw, main→pool funding, defrag
    *  (consolidate), wallet shaping (split), standalone deposit merge — by `kind`,
-   *  the signer `wallet` that paid the fee, and `outcome`. Pure overhead: no
-   *  client reimburses these (unlike update txs, whose fee is covered by what
-   *  clients are charged). */
-  managementTxTotal: FeedCounter;
-  /** Total lovelace paid in fees by operational (non-update) txs, by `kind` and
-   *  signer `wallet`. Summed only over confirmed txs (fee guaranteed on-chain);
-   *  `sum(...)/1e6` is the cumulative ADA of operational overhead (resets on
-   *  restart). For sparse management txs read the counter directly, not
-   *  rate/increase — those mis-read a counter that resets to the same value. */
-  managementTxFeeLovelaceTotal: FeedCounter;
-  /** Record one operational tx: bumps `managementTxTotal`, and on a confirmed tx
-   *  adds its fee to `managementTxFeeLovelaceTotal`. */
-  recordManagementTx(record: ManagementTxRecord): void;
+   *  the signer `wallet` that paid, and `outcome`. A **gauge** set from the
+   *  `management_tx_totals` DB table, rehydrated on startup. */
+  managementTxCount: FeedGauge;
+  /** Cumulative lovelace paid in fees by operational (non-update) txs, by `kind`
+   *  and signer `wallet`. A **gauge** set from the DB (confirmed txs only — a
+   *  failed tx pays nothing on-chain); `sum(...)/1e6` is the true cumulative
+   *  ADA of operational overhead. */
+  managementTxFeeLovelace: FeedGauge;
+  /** Set both management gauges from the persisted `management_tx_totals` rows.
+   *  Called on startup (hydration) and after each management tx. `count` is per
+   *  (kind, wallet, outcome); `fee` is summed per (kind, wallet). */
+  setManagementTxTotals(totals: ReadonlyArray<ManagementTxTotal>): void;
   getMetricsText(): Promise<string>;
 };
 
@@ -238,14 +237,15 @@ export type ManagementTxKind =
   | "split"
   | "merge";
 
-export type ManagementTxRecord = {
-  kind: ManagementTxKind;
-  /** Signer wallet that paid the fee (main for settle/withdraw/fund_pool; the
-   *  target pool wallet for consolidate/split). */
+/** One persisted operational-cost row (mirrors `ManagementTxTotalRow` in the DB
+ *  layer; kept structural here so metrics stays decoupled from persistence). */
+export type ManagementTxTotal = {
+  kind: string;
   wallet: string;
-  outcome: "confirmed" | "failed";
-  /** Fee the tx paid; null for a tx that never confirmed (no fee on-chain). */
-  feeLovelace: bigint | null;
+  outcome: string;
+  txCount: number;
+  /** Cumulative fee in lovelace (stringified). */
+  feeLovelace: string;
 };
 
 const noopCounter: FeedCounter = {
@@ -333,9 +333,9 @@ export const noopMetrics: FeederMetrics = {
   bridgeProviderLastOkTimestampSeconds: noopGauge,
   bridgeRecoveryAttempts: noopCounter,
   bridgeProviderRequests: noopCounter,
-  managementTxTotal: noopCounter,
-  managementTxFeeLovelaceTotal: noopCounter,
-  recordManagementTx: () => {},
+  managementTxCount: noopGauge,
+  managementTxFeeLovelace: noopGauge,
+  setManagementTxTotals: () => {},
   getMetricsText: async () => "",
 };
 
@@ -413,16 +413,17 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
     };
   }
 
-  // Operational-cost meters. Declared as locals so `recordManagementTx` can bump
-  // both from one call site (count always, fee only when the tx confirmed).
-  const managementTxTotal = counter(
-    "management_tx_total",
-    "Operational (non-update) Cardano transactions the feeder issues to keep itself running — settle, payment-hook withdraw, main→pool funding, defrag (consolidate), wallet shaping (split), and standalone deposit merge — counted once per tx by `kind`, the signer `wallet` that paid the fee, and `outcome`. Pure overhead: no client reimburses them, unlike update txs whose fee is covered by client charges. (A deposit merge folded into an update tx is not counted here — it rides the update's fee.)",
+  // Operational-cost meters. GAUGES set from the persisted `management_tx_totals`
+  // DB table via `setManagementTxTotals`, rehydrated on startup. The cost
+  // dashboard reads them directly.
+  const managementTxCount = gauge(
+    "management_tx_count",
+    "Number of operational (non-update) Cardano transactions the feeder has issued to keep itself running — settle, payment-hook withdraw, main→pool funding, defrag (consolidate), wallet shaping (split), and standalone deposit merge — by `kind`, the signer `wallet` that paid, and `outcome`. Pure overhead: no client reimburses them, unlike update txs whose fee is covered by client charges. Cumulative, persisted in the DB and rehydrated on startup. (A deposit merge folded into an update tx is not counted here — it rides the update's fee.)",
     ["kind", "wallet", "outcome"],
   );
-  const managementTxFeeLovelaceTotal = counter(
-    "management_tx_fee_lovelace_total",
-    "Total lovelace paid in fees by operational (non-update) transactions, by `kind` and signer `wallet`. Summed only over confirmed txs (fee guaranteed on-chain). `sum(...)/1e6` reads the cumulative ADA of operational overhead since the feeder started (resets on restart); read the counter directly rather than rate/increase, which mis-read a sparse counter that resets to the same value.",
+  const managementTxFeeLovelace = gauge(
+    "management_tx_fee_lovelace",
+    "Cumulative lovelace paid in fees by operational (non-update) transactions, by `kind` and signer `wallet` (confirmed txs only — a failed tx pays nothing on-chain). `sum(...)/1e6` is the cumulative ADA of operational overhead; persisted in the DB and rehydrated on startup.",
     ["kind", "wallet"],
   );
 
@@ -816,12 +817,21 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
       "Cardano API provider requests by provider, method, and outcome. Each retry attempt is one request — this tracks the provider's actual quota consumption. outcome: ok | rate_limited (429 throttle) | quota_exceeded (Blockfrost 402 daily-quota wall) | error.",
       ["provider", "method", "outcome"],
     ),
-    managementTxTotal,
-    managementTxFeeLovelaceTotal,
-    recordManagementTx: ({ kind, wallet, outcome, feeLovelace }) => {
-      managementTxTotal.inc({ kind, wallet, outcome });
-      if (outcome === "confirmed" && feeLovelace !== null) {
-        managementTxFeeLovelaceTotal.inc({ kind, wallet }, Number(feeLovelace));
+    managementTxCount,
+    managementTxFeeLovelace,
+    setManagementTxTotals: (totals) => {
+      // Count is per (kind, wallet, outcome); fee is the cumulative lovelace
+      // per (kind, wallet) summed across outcomes (only confirmed carries fee).
+      const feeByKindWallet = new Map<string, { kind: string; wallet: string; fee: number }>();
+      for (const t of totals) {
+        managementTxCount.set({ kind: t.kind, wallet: t.wallet, outcome: t.outcome }, t.txCount);
+        const key = `${t.kind} ${t.wallet}`;
+        const acc = feeByKindWallet.get(key) ?? { kind: t.kind, wallet: t.wallet, fee: 0 };
+        acc.fee += Number(t.feeLovelace);
+        feeByKindWallet.set(key, acc);
+      }
+      for (const { kind, wallet, fee } of feeByKindWallet.values()) {
+        managementTxFeeLovelace.set({ kind, wallet }, fee);
       }
     },
     getMetricsText: () => registry.metrics(),

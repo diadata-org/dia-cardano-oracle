@@ -501,3 +501,43 @@ describe("Db.pruneOldRows", () => {
     assert.deepEqual(pruned, { processedEvents: 0, transactionLog: 0, alertLog: 0, performanceMetrics: 0 });
   });
 });
+
+describe("management_tx_totals", () => {
+  // The operational-cost meter is persisted here, the same pattern as
+  // contract_symbol_updates.total_fee_paid_lovelace for update fees. The cost
+  // gauges are rehydrated from this table on boot.
+
+  it("starts empty", async () => {
+    assert.deepEqual(await db.listManagementTxTotals(), []);
+  });
+
+  it("accumulates count and fee per (kind, wallet, outcome)", async () => {
+    await db.bumpManagementTxTotal({ kind: "settle", wallet: "main", outcome: "confirmed", feeLovelace: "180000" });
+    await db.bumpManagementTxTotal({ kind: "settle", wallet: "main", outcome: "confirmed", feeLovelace: "200000" });
+    await db.bumpManagementTxTotal({ kind: "split", wallet: "pool-1", outcome: "confirmed", feeLovelace: "150000" });
+    await db.bumpManagementTxTotal({ kind: "settle", wallet: "main", outcome: "failed", feeLovelace: null });
+
+    const rows = await db.listManagementTxTotals();
+    const find = (kind: string, wallet: string, outcome: string) =>
+      rows.find((r) => r.kind === kind && r.wallet === wallet && r.outcome === outcome);
+
+    // Two confirmed settles → count 2, fee accumulated.
+    assert.equal(find("settle", "main", "confirmed")?.txCount, 2);
+    assert.equal(find("settle", "main", "confirmed")?.feeLovelace, "380000");
+    // A failed tx → count 1, fee 0 (it paid nothing on-chain).
+    assert.equal(find("settle", "main", "failed")?.txCount, 1);
+    assert.equal(find("settle", "main", "failed")?.feeLovelace, "0");
+    // Distinct (kind, wallet) tracked separately.
+    assert.equal(find("split", "pool-1", "confirmed")?.txCount, 1);
+    assert.equal(find("split", "pool-1", "confirmed")?.feeLovelace, "150000");
+  });
+
+  it("reads totals back from the table on a fresh listing", async () => {
+    await db.bumpManagementTxTotal({ kind: "withdraw", wallet: "main", outcome: "confirmed", feeLovelace: "383579" });
+    const before = await db.listManagementTxTotals();
+    assert.equal(before.length, 1);
+    assert.equal(before[0]!.feeLovelace, "383579");
+    // A fresh listing — what hydration does on boot — returns the same totals.
+    assert.deepEqual(await db.listManagementTxTotals(), before);
+  });
+});

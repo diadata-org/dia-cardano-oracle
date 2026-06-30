@@ -152,6 +152,19 @@ export type ContractSymbolUpdateRow = {
   totalFeePaidLovelace?: string;
 };
 
+/** Cumulative operational-cost totals for the management (non-update) txs —
+ *  settle / withdraw / fund_pool / consolidate / split / merge. The cost gauges
+ *  are rehydrated from this table on boot. One row per (kind, wallet, outcome). */
+export type ManagementTxTotalRow = {
+  kind: string;
+  wallet: string;
+  outcome: string;
+  /** Number of txs counted (confirmed or failed). */
+  txCount: number;
+  /** Total fee paid in lovelace (stringified; 0 for failed-only rows). */
+  feeLovelace: string;
+};
+
 export type PerformanceMetricRow = {
   id: number;
   metricName: string;
@@ -235,6 +248,10 @@ export type Db = {
   upsertContractSymbolUpdate(row: ContractSymbolUpdateRow): Promise<void>;
   getContractSymbolUpdate(chainId: number, contractAddress: string, symbol: string): Promise<ContractSymbolUpdateRow | null>;
   listContractSymbolUpdates(): Promise<ContractSymbolUpdateRow[]>;
+
+  // management_tx_totals — cumulative operational-cost meter (DB-persisted)
+  bumpManagementTxTotal(args: { kind: string; wallet: string; outcome: string; feeLovelace: string | null }): Promise<void>;
+  listManagementTxTotals(): Promise<ManagementTxTotalRow[]>;
 
   // performance_metrics
   recordPerformanceMetric(args: { name: string; value: number; labels?: Record<string, string> }): Promise<void>;
@@ -363,6 +380,15 @@ CREATE TABLE IF NOT EXISTS alert_log (
 );
 CREATE INDEX IF NOT EXISTS idx_alert_log_active ON alert_log(resolved_at_ms) WHERE resolved_at_ms IS NULL;
 CREATE INDEX IF NOT EXISTS idx_alert_log_name_time ON alert_log(alert_name, fired_at_ms);
+
+CREATE TABLE IF NOT EXISTS management_tx_totals (
+  kind            TEXT    NOT NULL,
+  wallet          TEXT    NOT NULL,
+  outcome         TEXT    NOT NULL,
+  tx_count        INTEGER NOT NULL DEFAULT 0,
+  fee_lovelace    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (kind, wallet, outcome)
+);
 `;
 
 export const POSTGRES_SCHEMA = `
@@ -468,6 +494,15 @@ CREATE TABLE IF NOT EXISTS alert_log (
 );
 CREATE INDEX IF NOT EXISTS idx_alert_log_active ON alert_log(resolved_at_ms) WHERE resolved_at_ms IS NULL;
 CREATE INDEX IF NOT EXISTS idx_alert_log_name_time ON alert_log(alert_name, fired_at_ms);
+
+CREATE TABLE IF NOT EXISTS management_tx_totals (
+  kind            TEXT    NOT NULL,
+  wallet          TEXT    NOT NULL,
+  outcome         TEXT    NOT NULL,
+  tx_count        INTEGER NOT NULL DEFAULT 0,
+  fee_lovelace    BIGINT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (kind, wallet, outcome)
+);
 `;
 
 
@@ -775,6 +810,30 @@ async function createSqliteDb(filePath: string): Promise<Db> {
         "SELECT * FROM contract_symbol_updates ORDER BY chain_id ASC, contract_address ASC, symbol ASC",
       ).all() as unknown as SqliteContractSymbolUpdateRow[];
       return rows.map(fromSqliteContractSymbolUpdateRow);
+    },
+
+    async bumpManagementTxTotal({ kind, wallet, outcome, feeLovelace }) {
+      db.prepare(`
+        INSERT INTO management_tx_totals (kind, wallet, outcome, tx_count, fee_lovelace)
+        VALUES (?,?,?,1,?)
+        ON CONFLICT(kind, wallet, outcome)
+        DO UPDATE SET
+          tx_count     = tx_count + 1,
+          fee_lovelace = fee_lovelace + excluded.fee_lovelace
+      `).run(kind, wallet, outcome, feeLovelace !== null ? Number(feeLovelace) : 0);
+    },
+
+    async listManagementTxTotals() {
+      const rows = db.prepare(
+        "SELECT kind, wallet, outcome, tx_count, fee_lovelace FROM management_tx_totals ORDER BY kind ASC, wallet ASC, outcome ASC",
+      ).all() as Array<{ kind: string; wallet: string; outcome: string; tx_count: number; fee_lovelace: number }>;
+      return rows.map((r) => ({
+        kind: r.kind,
+        wallet: r.wallet,
+        outcome: r.outcome,
+        txCount: r.tx_count,
+        feeLovelace: String(r.fee_lovelace),
+      }));
     },
 
     async recordPerformanceMetric({ name, value, labels }) {
@@ -1205,6 +1264,31 @@ async function createPostgresDb(dsn: string): Promise<Db> {
         "SELECT * FROM contract_symbol_updates ORDER BY chain_id ASC, contract_address ASC, symbol ASC",
       );
       return (r.rows as PgContractSymbolUpdateRow[]).map(fromPgContractSymbolUpdateRow);
+    },
+
+    async bumpManagementTxTotal({ kind, wallet, outcome, feeLovelace }) {
+      await pool.query(
+        `INSERT INTO management_tx_totals (kind, wallet, outcome, tx_count, fee_lovelace)
+         VALUES ($1,$2,$3,1,$4)
+         ON CONFLICT (kind, wallet, outcome)
+         DO UPDATE SET
+           tx_count     = management_tx_totals.tx_count + 1,
+           fee_lovelace = management_tx_totals.fee_lovelace + EXCLUDED.fee_lovelace`,
+        [kind, wallet, outcome, feeLovelace !== null ? feeLovelace : "0"],
+      );
+    },
+
+    async listManagementTxTotals() {
+      const r = await pool.query(
+        "SELECT kind, wallet, outcome, tx_count, fee_lovelace FROM management_tx_totals ORDER BY kind ASC, wallet ASC, outcome ASC",
+      );
+      return (r.rows as Array<{ kind: string; wallet: string; outcome: string; tx_count: number; fee_lovelace: string }>).map((row) => ({
+        kind: row.kind,
+        wallet: row.wallet,
+        outcome: row.outcome,
+        txCount: Number(row.tx_count),
+        feeLovelace: String(row.fee_lovelace),
+      }));
     },
 
     async recordPerformanceMetric({ name, value, labels }) {
