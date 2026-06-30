@@ -954,8 +954,8 @@ metric-family reference.
 | `tx_pair_membership_total{client_id,customer_id,router_id,destination_index,symbol,outcome}` | One increment per (tx, pair). | Transactions |
 | `transaction_router_membership_total{client_id,customer_id,router_id,outcome}` | One increment per (tx, router). | Overview + Transactions |
 | `transaction_fee_lovelace{symbol,client_id,customer_id}` | Network fee per update tx (per-customer billing — the productive cost). | Overview |
-| `management_tx_total{kind,wallet,outcome}` | Operational (non-update) txs — settle/withdraw/fund_pool/consolidate/split/merge — counted by kind, signer wallet, and outcome. | Operational Cost |
-| `management_tx_fee_lovelace_total{kind,wallet}` | ADA fees of those operational txs (confirmed only) — the pure running-cost meter, by kind and signer wallet. | Operational Cost |
+| `management_tx_count{kind,wallet,outcome}` | Operational (non-update) txs — settle/withdraw/fund_pool/consolidate/split/merge — counted by kind, signer wallet, and outcome. A gauge set from the `management_tx_totals` DB table. | Operational Cost |
+| `management_tx_fee_lovelace{kind,wallet}` | Cumulative ADA fees of those operational txs (confirmed only) — the running-cost meter, by kind and signer wallet. A gauge set from the `management_tx_totals` DB table. | Operational Cost |
 
 ### Event / intent funnel
 
@@ -1250,19 +1250,20 @@ So the honest answer to *"how much does it cost to run this?"* is:
 
 > **Net cost ≈ Σ management fees + max(0, Σ update fees − Σ client charges)**
 
-Each confirmed automatic step is metered the moment it confirms: the daemon calls
-`metrics.recordManagementTx({ kind, wallet, outcome, feeLovelace })`, bumping two
-**low-cardinality** counters — `dia_bridge_management_tx_total{kind,wallet,outcome}` (count) and
-`dia_bridge_management_tx_fee_lovelace_total{kind,wallet}` (fee, summed only over confirmed txs).
-The fee is the real on-chain fee of the built tx, surfaced by each CLI builder (`feePaidLovelace`,
-computed from the tx body — the same value the update path already records into
+Each automatic step is metered the moment it resolves: the daemon **persists** it to the
+`management_tx_totals` DB table (`bumpManagementTxTotal` — `tx_count + 1`, `fee_lovelace +` the tx's
+fee) and then sets two **low-cardinality** gauges from the table —
+`dia_bridge_management_tx_count{kind,wallet,outcome}` (count) and
+`dia_bridge_management_tx_fee_lovelace{kind,wallet}` (cumulative fee, confirmed txs only). On startup
+the daemon rehydrates the gauges from the table — the same persistence pattern the feeder uses for the
+rest of its stateful data. The fee is the real on-chain fee of the built tx, surfaced by each CLI builder
+(`feePaidLovelace`, computed from the tx body — the same value the update path records into
 `dia_bridge_transaction_fee_lovelace`). The signer `wallet` is whoever paid: the **main** for
 settle/withdraw/fund_pool/merge, the **pool wallet** being reshaped for consolidate/split. There is no
-`symbol`/`client` axis — a tx that moves ADA main→pool belongs to no symbol; per-symbol fee
-attribution for the margin side lives in SQLite, where cardinality is cheap.
+`symbol`/`client` axis — a tx that moves ADA main→pool belongs to no symbol.
 
 The **Operational Cost** Grafana dashboard (`feeder-cost`) renders all of this — cumulative ADA of
-overhead, cost by kind, cost by wallet, and the update fees alongside; see
+overhead, cost by kind, cost by wallet; see
 [`grafana-dashboards.md` → Dashboard 5](./grafana-dashboards.md#8-dashboard-5--operational-cost-feeder-cost).
 
 ## Signer-wallet pool & per-wallet parallelism

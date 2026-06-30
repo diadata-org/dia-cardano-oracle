@@ -373,11 +373,11 @@ describe("threshold drift — YAML alerting.* is the single source of truth", ()
     };
     assert.deepEqual(
       dashboard.templating.list.map((v) => v.name),
-      ["datasource", "network", "customer", "client", "router", "symbol", "wallet"],
+      ["datasource", "network", "customer", "client", "router", "symbol", "wallet", "kind"],
       "feeder-tx.json: remove unused template vars or wire them to a panel",
     );
     const exprs = dashboard.panels.flatMap((p) => (p.targets ?? []).map((t) => t.expr ?? ""));
-    for (const name of ["network", "customer", "client", "router", "symbol", "wallet"]) {
+    for (const name of ["network", "customer", "client", "router", "symbol", "wallet", "kind"]) {
       assert.ok(
         exprs.some((e) => e.includes(`$${name}`)),
         `feeder-tx.json: template var $${name} is not referenced by any panel target expr`,

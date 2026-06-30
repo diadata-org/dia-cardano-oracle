@@ -50,8 +50,10 @@ shown as `{…}`). Dashboard PNG snapshots are rendered by `make evidence3` (the
 
 The **Operational Cost** dashboard isolates the system's running cost: the fees of the
 **management** transactions (settle, payment-hook withdraw, main→pool funding, defrag, wallet
-shaping, standalone deposit merge) that no client reimburses, in ADA, by `kind` and signer `wallet`. Update-tx fees are
-shown alongside as the productive cost (offset by client charges), so the dashboard reads as
+shaping, standalone deposit merge) that no client reimburses, in ADA, by `kind` and signer `wallet`.
+Its metrics are **DB-backed gauges** (persisted in `management_tx_totals`, rehydrated on startup), with
+the fee and the count read from the same rows. The productive cost —
+update-tx fees, offset by client charges — lives on the Overview billing row;
 *net cost ≈ operational overhead + max(0, update fees − client charges)*.
 
 The **Signer Wallets** dashboard (filter: `$wallet`) shows the multi-wallet pool's
@@ -647,15 +649,15 @@ the next batch in the coalescer while it is *submitting* the current one:
 The rows above count **update** txs (writing prices). This row counts the **operational** txs the
 feeder issues to keep itself running — `settle`, `withdraw`, `fund_pool`, `consolidate`, `split`,
 `merge` — so background maintenance is visible next to update throughput, by `kind` and `outcome`.
-Both panels read the **cumulative counter** directly (not a `rate`/`increase` window — same reason as
-the Operational Cost dashboard: management txs are sparse and the counter resets on restart, so
-`increase()` mis-reads them). The counts are cumulative since the feeder started and reset on a restart.
-Filtered by `$network` and `$wallet` **only**: management txs carry no symbol/client/router (a tx that
-moves ADA main→pool belongs to no symbol), so the Customer/Client/Router/Symbol filters do not apply
-here. Their **ADA cost** lives on the dedicated [Operational Cost dashboard](#8-dashboard-5--operational-cost-feeder-cost);
-this row is the **count** view.
+Both panels read the **DB-backed gauge** `dia_bridge_management_tx_count` directly — a cumulative total
+persisted in the `management_tx_totals` table and rehydrated on startup (same design as the Operational
+Cost dashboard). Filtered by `$network`, `$wallet`, and `$kind` (Operation) — the same three as the cost
+dashboard. The Customer/Client/Router/Symbol filters do not apply: management txs carry no
+symbol/client/router (a tx that moves ADA main→pool belongs to no symbol). Their **ADA cost** lives on
+the dedicated [Operational Cost dashboard](#8-dashboard-5--operational-cost-feeder-cost); this row is the
+**count** view.
 
-**Management txs confirmed — by kind (cumulative)** · `stat` — `sum by (kind) (dia_bridge_management_tx_total{network=~"$network", wallet=~"$wallet", outcome="confirmed"})`
+**Management txs confirmed — by kind (cumulative)** · `stat` — `sum by (kind) (dia_bridge_management_tx_count{network=~"$network", wallet=~"$wallet", kind=~"$kind", outcome="confirmed"})`
 
 ![Management txs confirmed — by kind (cumulative)](img/tx-panel-351.png)
 
@@ -663,7 +665,7 @@ this row is the **count** view.
   A folded deposit merge is not a `merge` here (it rides the update; see Operational Cost). Agrees with
   the same by-kind count on the cost dashboard.
 
-**Management txs failed — by kind (cumulative)** · `stat` — `sum by (kind) (dia_bridge_management_tx_total{network=~"$network", wallet=~"$wallet", outcome="failed"})`
+**Management txs failed — by kind (cumulative)** · `stat` — `sum by (kind) (dia_bridge_management_tx_count{network=~"$network", wallet=~"$wallet", kind=~"$kind", outcome="failed"})`
 
 ![Management txs failed — by kind (cumulative)](img/tx-panel-352.png)
 
@@ -902,90 +904,92 @@ section for enabling pool wallets.
 
 The one place to answer the question a client always asks: **"what does it cost to run this?"**
 
-The feeder issues two families of transaction. **Update** txs write prices on-chain — their fee is
-the *productive* cost, and it is offset by what clients are charged through the PaymentHook.
-**Management** txs keep the system itself healthy — `settle` (drain accrued fees to the admin
-wallet), `withdraw` (PaymentHook → admin wallet), `fund_pool` (main → pool top-up), `consolidate`
-(defrag dust), `split` (shape a wallet into more lanes), and `merge` (the **standalone** deposit→Receiver
-sweep). **Nobody reimburses the management fees** — they are pure operational overhead. This dashboard
-meters that overhead in ADA, by `kind` and by the signer `wallet` that paid, and shows the update fees
-alongside for the full picture:
+The feeder issues two families of transaction. **Update** txs write prices on-chain — their fee is the
+*productive* cost, offset by what clients are charged through the PaymentHook (it lives on the Overview
+dashboard's billing row). **Management** txs keep the system itself healthy — `settle` (drain accrued
+fees to the admin wallet), `withdraw` (PaymentHook → admin wallet), `fund_pool` (main → pool top-up),
+`consolidate` (defrag dust), `split` (shape a wallet into more lanes), and `merge` (the **standalone**
+deposit→Receiver sweep). **Nobody reimburses the management fees** — they are pure operational overhead,
+and this dashboard meters that overhead in ADA, by `kind` and by the signer `wallet` that paid.
 
-> **`merge` caveat:** a deposit merge that is *folded into* an update tx carries **no separate fee** —
-> it rides the update's fee and so is already inside the update-fee figure, not here. Only the
-> standalone `deposit:merge` fallback (when deposits outpace the fold) is a tx of its own, and that is
-> what `kind="merge"` meters. So the two never double-count.
+> **`merge` caveat:** a deposit merge *folded into* an update tx carries **no separate fee** — it rides
+> the update's fee, so it is not counted here. Only the standalone `deposit:merge` fallback (when
+> deposits outpace the fold) is a tx of its own, and that is what `kind="merge"` meters.
 
 > **Net cost ≈ Σ management fees + max(0, Σ update fees − Σ client charges)**
 
-The two counters behind it — `dia_bridge_management_tx_total{kind,wallet,outcome}` and
-`dia_bridge_management_tx_fee_lovelace_total{kind,wallet}` — are deliberately **low-cardinality**
-(no `symbol`/`client`): a tx that moves ADA main→pool belongs to no symbol. The fee counter sums
-**only confirmed** txs (a failed tx pays nothing on-chain), so every ADA shown really left a wallet.
-Per-symbol / per-client fee attribution for the *margin* side lives in the feeder's SQLite, where
-high cardinality is cheap — Prometheus is for the aggregate cost only.
+The two metrics behind it — `dia_bridge_management_tx_count{kind,wallet,outcome}`
+and `dia_bridge_management_tx_fee_lovelace{kind,wallet}` — are **gauges set from a persisted DB table**
+(`management_tx_totals`). Each confirmed/failed management tx bumps the row, and the
+gauges are rehydrated from the table on every startup — the same persistence the feeder uses for the rest
+of its stateful data. The fee and the count are read from the **same rows** (one settle that cost 0.79 ADA
+reads as count 1, fee 0.79). They are deliberately **low-cardinality** (no `symbol`/`client`): a tx that
+moves ADA main→pool belongs to no symbol.
 
 Three filters: **`$network`**, **`$wallet`**, and **`$kind`** (Operation) — all multi-value, default
-`.*` = all. `$wallet` scopes every management panel to one or more signer wallets (e.g. `main` for the
-cost the main bears on settle/withdraw/fund, or a pool wallet for its shaping cost). `$kind` scopes to
-one or more operations — `settle`, `withdraw`, `fund_pool`, `consolidate`, `split`, `merge` — so you
-can read, say, *only* what funding the pool costs, or *only* the settle/withdraw recycling. The **Update-tx
-fees** panel is keyed by symbol/client, not by `wallet`/`kind`, so it ignores both of those filters
-(it is the margin side, not per-wallet/per-operation overhead).
+`.*` = all. `$wallet` scopes to one or more signer wallets (e.g. `main` for the cost the main bears on
+settle/withdraw/fund/merge, or a pool wallet for its shaping cost); `$kind` scopes to one or more
+operations — `settle`, `withdraw`, `fund_pool`, `consolidate`, `split`, `merge`.
 
-Every panel reads the **cumulative counter directly** (`sum(...)`), not a `rate`/`increase` window.
-That is deliberate: management txs are sparse, and the in-process counters reset to zero on a feeder
-restart. `increase()` cannot recover a count when a counter resets to the *same* small value each run —
-it sees a flat line and returns 0 — which is exactly how a count and its fee drift apart on a near-idle
-feeder (the fee resets to a *different* value, so its reset is visible and counted; the count resets to
-the same `1`, so its reset is invisible and dropped). Reading the raw counter keeps the count and the
-fee **always in agreement** (one settle that cost 0.79 ADA reads as count 1, fee 0.79). The trade-off:
-the totals are cumulative **since the feeder process started** and reset on restart — on Mainnet (rare
-restarts) that is the lifetime cost; in Preview, frequent restarts mean it reads the totals since the
-last boot.
-
-**Operational fees — ADA (cumulative)** · `stat` — `sum(dia_bridge_management_tx_fee_lovelace_total{network=~"$network", wallet=~"$wallet", kind=~"$kind"}) / 1e6`
+**Operational fees — ADA (cumulative)** · `stat` — `sum(dia_bridge_management_tx_fee_lovelace{network=~"$network", wallet=~"$wallet", kind=~"$kind"}) / 1e6`
 
 ![Operational fees — ADA (cumulative)](img/cost-panel-1.png)
 
-- **What it shows** — the headline: total ADA spent in management fees since the feeder started (update
-  fees excluded). Sums the by-kind and by-wallet panels below.
+- **What it shows** — the headline: total ADA spent in management fees. Sums the by-kind and by-wallet
+  panels below; always agrees with the count beside it (same DB source).
 
-**Management txs — confirmed (cumulative)** · `stat` — `sum(dia_bridge_management_tx_total{…, outcome="confirmed"})`
+**Management txs — confirmed (cumulative)** · `stat` — `sum(dia_bridge_management_tx_count{…, outcome="confirmed"})`
 
 ![Management txs — confirmed (cumulative)](img/cost-panel-2.png)
 
-- **What it shows** — the count companion of the headline fee: how many confirmed management txs ran.
-  Same counter source, so it always agrees with the fee on its left.
+- **What it shows** — the count companion of the headline fee: how many confirmed management txs have run.
 
-**Update-tx fees — ADA (cumulative)** · `stat` — `sum(dia_bridge_transaction_fee_lovelace_sum{network=~"$network"}) / 1e6`
+**Operational fees by kind — ADA (cumulative)** · `stat` — `sum by (kind) (dia_bridge_management_tx_fee_lovelace{…}) / 1e6`
 
-![Update-tx fees — ADA (cumulative)](img/cost-panel-3.png)
-
-- **What it shows** — the productive cost (writing prices), for the net-cost equation above. Offset by
-  what clients pay, so it is **not** added to the overhead — the margin side. Keyed by symbol/client,
-  so `$wallet`/`$kind` do not apply to it.
-
-**Operational fees by kind — ADA (cumulative)** · `stat` — `sum by (kind) (dia_bridge_management_tx_fee_lovelace_total{…}) / 1e6`
-
-![Operational fees by kind — ADA (cumulative)](img/cost-panel-4.png)
+![Operational fees by kind — ADA (cumulative)](img/cost-panel-3.png)
 
 - **What it shows** — which activity drove the overhead, per kind. Lines up row-for-row with the count
   panel on its right, and sums to the headline.
 
-**Management txs by kind — confirmed (cumulative)** · `stat` — `sum by (kind) (dia_bridge_management_tx_total{…, outcome="confirmed"})`
+**Management txs by kind — confirmed (cumulative)** · `stat` — `sum by (kind) (dia_bridge_management_tx_count{…, outcome="confirmed"})`
 
-![Management txs by kind — confirmed (cumulative)](img/cost-panel-5.png)
+![Management txs by kind — confirmed (cumulative)](img/cost-panel-4.png)
 
 - **What it shows** — the count per kind, beside its fee. Read them together: a frequent-but-cheap kind
   (often `split`) vs a rare-but-pricey one (`settle`) shape the bill differently.
 
-**Operational fees by wallet — ADA (cumulative)** · `stat` — `sum by (wallet) (dia_bridge_management_tx_fee_lovelace_total{…}) / 1e6`
+**Operational fees by wallet — ADA (cumulative)** · `stat` — `sum by (wallet) (dia_bridge_management_tx_fee_lovelace{…}) / 1e6`
 
-![Operational fees by wallet — ADA (cumulative)](img/cost-panel-6.png)
+![Operational fees by wallet — ADA (cumulative)](img/cost-panel-5.png)
 
 - **What it shows** — the same spend attributed to the signer wallet that paid: `settle` / `withdraw` /
   `fund_pool` / `merge` by the **main**, `consolidate` / `split` by the **pool wallet** being reshaped.
+
+The five panels above are the snapshot — the cumulative totals **right now**. Below them, three
+**time-series** panels add the temporal view: each is a stepped line where every step up is one confirmed
+tx (timestamped on hover) and the step height is its fee. They answer *when* a settle ran, *when* fees
+were incurred, and how the running total grew; narrowing the dashboard time range zooms into any window.
+
+**Operational fees over time by kind — ADA (cumulative)** · `timeseries` — `sum by (kind) (dia_bridge_management_tx_fee_lovelace{network=~"$network", wallet=~"$wallet", kind=~"$kind"}) / 1e6`
+
+![Operational fees over time by kind — ADA (cumulative)](img/cost-panel-6.png)
+
+- **What it shows** — the by-kind fee climb over time, one line per kind. Flat between events, a step up at
+  each confirmed tx. The temporal companion of the by-kind fee stat.
+
+**Management txs over time by kind — confirmed (cumulative)** · `timeseries` — `sum by (kind) (dia_bridge_management_tx_count{network=~"$network", wallet=~"$wallet", kind=~"$kind", outcome="confirmed"}) `
+
+![Management txs over time by kind — confirmed (cumulative)](img/cost-panel-7.png)
+
+- **What it shows** — when each management tx ran, one stepped line per kind. Every step marks one tx, so
+  the cadence of settles/funds/splits is visible at a glance.
+
+**Operational fees over time by wallet — ADA (cumulative)** · `timeseries` — `sum by (wallet) (dia_bridge_management_tx_fee_lovelace{network=~"$network", wallet=~"$wallet", kind=~"$kind"}) / 1e6`
+
+![Operational fees over time by wallet — ADA (cumulative)](img/cost-panel-8.png)
+
+- **What it shows** — the same fee climb attributed to the signer wallet over time: when and from which
+  wallet (main vs a pool being reshaped) the overhead left.
 
 ## 9. How alerts surface visually
 
@@ -1097,5 +1101,5 @@ point-in-time set with `make evidence3` (which also writes dashboard PNGs into t
 pack's `dashboards/` directory).
 
 The `feeder-cost` dashboard (uid `feeder-cost`) and the management-tx panels on `feeder-tx` (panel ids
-351/352) render the same way — `img/cost-full.png`, `img/cost-panel-1..6.png`, `img/tx-panel-351.png`,
+351/352) render the same way — `img/cost-full.png`, `img/cost-panel-1..8.png`, `img/tx-panel-351.png`,
 and `img/tx-panel-352.png`.
