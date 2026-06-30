@@ -1146,43 +1146,38 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Operational (non-update) txs per 5-minute window, by kind and outcome — settle / withdraw / fund_pool / consolidate / split / merge, confirmed vs failed. These are the maintenance txs metered on the Operational Cost dashboard; shown here next to update throughput so background activity is visible in the same view. A skipped no-op is not counted (no tx ran); a folded deposit merge is not a `merge` here (it rides an update). Filtered by $network and $wallet only — management txs carry no symbol/client/router.",
-      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } }, "overrides": [] },
+      "description": "Confirmed management txs by kind since the feeder started — settle / withdraw / fund_pool / consolidate / split / merge. The operational (non-update) txs that keep the system running, shown next to update throughput. Reads the cumulative counter directly (so it agrees with the Operational Cost dashboard, where the ADA fee of these lives); resets to zero on a feeder restart. A folded deposit merge is not a `merge` here (it rides an update). Filtered by $network and $wallet only — management txs carry no symbol/client/router.",
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "custom": {} }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 70 },
       "id": 351,
-      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [ "lastNotNull" ] } },
+      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "value", "graphMode": "none" },
       "targets": [
         {
-          "expr": "sum by (kind, outcome) (increase(dia_bridge_management_tx_total{network=~\"$network\", wallet=~\"$wallet\"}[5m]))",
-          "legendFormat": "{{kind}} · {{outcome}}",
-          "refId": "A"
+          "expr": "sum by (kind) (dia_bridge_management_tx_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"confirmed\"})",
+          "legendFormat": "{{kind}}",
+          "refId": "A",
+          "instant": true
         }
       ],
-      "title": "Management tx confirmed vs failed (5m, by kind)",
-      "type": "timeseries"
+      "title": "Management txs confirmed — by kind (cumulative)",
+      "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
-      "description": "Raw COUNT of operational (management) txs over the selected time range, by kind — confirmed and failed. settle / withdraw / fund_pool / consolidate / split / merge. failed = a build/submit/confirm error on that maintenance tx (a skipped no-op is not counted). Filtered by $network and $wallet only.",
+      "description": "Failed management txs by kind since the feeder started — a build/submit/confirm error on a maintenance tx (a skipped no-op is not counted, it ran no tx). Reads the cumulative counter directly; resets to zero on a feeder restart. Filtered by $network and $wallet only.",
       "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "custom": {} }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 70 },
       "id": 352,
       "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "value", "graphMode": "none" },
       "targets": [
         {
-          "expr": "sum by (kind) (increase(dia_bridge_management_tx_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"confirmed\"}[$__range]))",
-          "legendFormat": "{{kind}} · confirmed",
+          "expr": "sum by (kind) (dia_bridge_management_tx_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"failed\"})",
+          "legendFormat": "{{kind}}",
           "refId": "A",
-          "instant": true
-        },
-        {
-          "expr": "sum by (kind) (increase(dia_bridge_management_tx_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"failed\"}[$__range]))",
-          "legendFormat": "{{kind}} · failed",
-          "refId": "B",
           "instant": true
         }
       ],
-      "title": "Management tx counts by kind (selected range)",
+      "title": "Management txs failed — by kind (cumulative)",
       "type": "stat"
     }
   ],

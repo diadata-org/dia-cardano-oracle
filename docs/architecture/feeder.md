@@ -1261,7 +1261,7 @@ settle/withdraw/fund_pool/merge, the **pool wallet** being reshaped for consolid
 `symbol`/`client` axis — a tx that moves ADA main→pool belongs to no symbol; per-symbol fee
 attribution for the margin side lives in SQLite, where cardinality is cheap.
 
-The **Operational Cost** Grafana dashboard (`feeder-cost`) renders all of this — ADA/day of
+The **Operational Cost** Grafana dashboard (`feeder-cost`) renders all of this — cumulative ADA of
 overhead, cost by kind, cost by wallet, and the update fees alongside; see
 [`grafana-dashboards.md` → Dashboard 5](./grafana-dashboards.md#8-dashboard-5--operational-cost-feeder-cost).
 

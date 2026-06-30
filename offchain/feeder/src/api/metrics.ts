@@ -216,7 +216,9 @@ export type FeederMetrics = {
   managementTxTotal: FeedCounter;
   /** Total lovelace paid in fees by operational (non-update) txs, by `kind` and
    *  signer `wallet`. Summed only over confirmed txs (fee guaranteed on-chain);
-   *  `sum(rate(...[1d]))*86400/1e6` is ADA/day of pure operational overhead. */
+   *  `sum(...)/1e6` is the cumulative ADA of operational overhead (resets on
+   *  restart). For sparse management txs read the counter directly, not
+   *  rate/increase — those mis-read a counter that resets to the same value. */
   managementTxFeeLovelaceTotal: FeedCounter;
   /** Record one operational tx: bumps `managementTxTotal`, and on a confirmed tx
    *  adds its fee to `managementTxFeeLovelaceTotal`. */
@@ -420,7 +422,7 @@ export async function createMetrics(options: MetricsOptions = {}): Promise<Feede
   );
   const managementTxFeeLovelaceTotal = counter(
     "management_tx_fee_lovelace_total",
-    "Total lovelace paid in fees by operational (non-update) transactions, by `kind` and signer `wallet`. Summed only over confirmed txs (fee guaranteed on-chain). `sum(rate(...[1d]))*86400/1e6` reads ADA/day of operational overhead.",
+    "Total lovelace paid in fees by operational (non-update) transactions, by `kind` and signer `wallet`. Summed only over confirmed txs (fee guaranteed on-chain). `sum(...)/1e6` reads the cumulative ADA of operational overhead since the feeder started (resets on restart); read the counter directly rather than rate/increase, which mis-read a sparse counter that resets to the same value.",
     ["kind", "wallet"],
   );
 
