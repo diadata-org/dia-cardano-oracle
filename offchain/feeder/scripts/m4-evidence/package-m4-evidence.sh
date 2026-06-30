@@ -11,7 +11,7 @@
 #   - the end-to-end consumer demo on the emulator (run here, output captured);
 #   - the on-chain consumer demo output (embedded when you point it at a log);
 #   - the published Pair policy ids + addresses for the live feeds;
-#   - live PNG renders of the four Grafana dashboards (Overview, Transactions,
+#   - live PNG renders of the five Grafana dashboards (Overview, Transactions,
 #     Internals, Signer Wallets), captured from the renderer when it is up.
 #
 # Read-only: it never writes a transaction. The feeder/indexer may keep running.
@@ -124,8 +124,8 @@ if [[ -n "${EVIDENCE_ONCHAIN_LOG:-}" && -f "${EVIDENCE_ONCHAIN_LOG}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Dashboard snapshots — a full render of each of the four Grafana dashboards
-#    (Overview, Transactions, Internals, Signer Wallets). One full render shows
+# 4. Dashboard snapshots — a full render of each of the five Grafana dashboards
+#    (Overview, Transactions, Internals, Signer Wallets, Operational Cost). One full render shows
 #    every panel; the panel-by-panel reference lives in the dashboards guide
 #    (docs/architecture/grafana-dashboards.md). Needs the monitoring profile up
 #    (make up MONITORING=1).
@@ -147,6 +147,8 @@ if curl -fsS --max-time 5 "$GRAFANA_URL/api/health" >/dev/null 2>&1; then
     && DASHBOARDS_MD+=$'\n### Internals dashboard\n\n![Internals — full dashboard](dashboards/internals-full.png)\n\n_Feeder-internal observability: pipeline-phase latency, scanner, worker pools, DB, cron/recovery, provider health._\n'
   render_dashboard "feeder-wallets" "feeder-signer-wallets" "$OUT_DIR/dashboards/wallets-full.png" 2>/dev/null \
     && DASHBOARDS_MD+=$'\n### Signer Wallets dashboard\n\n![Signer Wallets — full dashboard](dashboards/wallets-full.png)\n\n_Per signer-wallet health for the multi-wallet pool: spendable balance, collateral floor (largest UTxO), usable-UTxO count, and active arbiter reservations. With no pool configured this shows the single `main` wallet._\n'
+  render_dashboard "feeder-cost" "feeder-operational-cost" "$OUT_DIR/dashboards/cost-full.png" 2>/dev/null \
+    && DASHBOARDS_MD+=$'\n### Operational Cost dashboard\n\n![Operational Cost — full dashboard](dashboards/cost-full.png)\n\n_What it costs to run the system: ADA fees of the management txs (settle, withdraw, main→pool funding, defrag, wallet shaping, standalone deposit merge) by kind and signer wallet, with update fees alongside for the net-cost picture. Preview values are illustrative; Mainnet carries the real numbers._\n'
   if [[ -z "$DASHBOARDS_MD" ]]; then
     DASHBOARDS_MD="_Grafana was reachable but the image renderer was not responding — no PNGs captured. Bring up the monitoring profile (\`cd offchain && make up MONITORING=1\`) and re-run._"
   fi
@@ -302,9 +304,10 @@ daily quota is exhausted. The indexer's own usage is in
 
 ## Dashboards
 
-The four Grafana dashboards the feeder ships, rendered live: **Overview**,
-**Transactions**, **Internals**, and **Signer Wallets** (new with the multi-wallet
-signer pool). A full render of each shows every panel; the panel-by-panel
+The five Grafana dashboards the feeder ships, rendered live: **Overview**,
+**Transactions**, **Internals**, **Signer Wallets** (the multi-wallet signer
+pool), and **Operational Cost** (the ADA cost of the management txs). A full
+render of each shows every panel; the panel-by-panel
 reference is the dashboards guide,
 [\`docs/architecture/grafana-dashboards.md\`](../../../architecture/grafana-dashboards.md).
 
@@ -335,7 +338,7 @@ bash offchain/indexer/src/examples/run-consumer-demo-onchain.sh
 | \`indexer/metrics.txt\`      | The indexer's chain-provider request counts. |
 | \`consumer-demo/emulator.txt\` | The offline end-to-end consumer demo run. |
 | \`consumer-demo/onchain.txt\`  | The on-chain consumer demo run (when embedded). |
-| \`dashboards/*.png\`           | The four Grafana dashboards rendered live (Overview, Transactions, Internals, Signer Wallets). |
+| \`dashboards/*.png\`           | The five Grafana dashboards rendered live (Overview, Transactions, Internals, Signer Wallets, Operational Cost). |
 EOF
 
 echo "[package-m4] done."

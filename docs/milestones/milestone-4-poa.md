@@ -23,8 +23,8 @@ Primary evidence:
   `[PLACEHOLDER: evidence/m4-mainnet-<stamp>/]`
 - **Preview integration evidence pack** (full consume loop — indexer responses,
   the example consumer contract accepting/rejecting on price, the on-chain demo):
-  [`evidence/m4-preview-20260608-040304-02/`](evidence/m4-preview-20260608-040304-02/) —
-  [`milestone-4-preview-evidence.md`](evidence/m4-preview-20260608-040304-02/milestone-4-preview-evidence.md).
+  [`evidence/m4-preview-20260608-040304-03/`](evidence/m4-preview-20260608-040304-03/) —
+  [`milestone-4-preview-evidence.md`](evidence/m4-preview-20260608-040304-03/milestone-4-preview-evidence.md).
 
 ---
 
@@ -116,7 +116,7 @@ Headline mainnet transaction for immediate verification:
 | On-chain contracts deployed + publishing updates (the live Pair UTxOs) | [`contracts/aiken/`](../../contracts/aiken/); indexer [`Published contract addresses`](../../offchain/indexer/README.md#published-contract-addresses) |
 | Feeder publishing DIA prices to Cardano | [`offchain/feeder/`](../../offchain/feeder/); confirmed updates in the evidence packs |
 | Monitoring tracking the deployment (dashboards + alerts + provider-quota panel) | [`offchain/feeder/monitoring/`](../../offchain/feeder/monitoring/) |
-| **Consumer reading a live feed end-to-end** — query the indexer, reference the Pair UTxO, the example contract accepts/rejects on price | preview pack [consume demo](evidence/m4-preview-20260608-040304-02/milestone-4-preview-evidence.md); [`consumer-demo-onchain.ts`](../../offchain/indexer/src/examples/consumer-demo-onchain.ts) |
+| **Consumer reading a live feed end-to-end** — query the indexer, reference the Pair UTxO, the example contract accepts/rejects on price | preview pack [consume demo](evidence/m4-preview-20260608-040304-03/milestone-4-preview-evidence.md); [`consumer-demo-onchain.ts`](../../offchain/indexer/src/examples/consumer-demo-onchain.ts) |
 | Indexer serving the live on-chain state (pairs, balances, fees) | [`offchain/indexer/`](../../offchain/indexer/); `/v1/pairs`, `/v1/clients`, `/v1/protocol/fees` |
 | Test suites — feeder + CLI + indexer, all green | run `npm test` in [`offchain/feeder`](../../offchain/feeder/), [`offchain/cli`](../../offchain/cli/), [`offchain/indexer`](../../offchain/indexer/) |
 
@@ -238,7 +238,7 @@ and the published addresses — no hand-edited numbers.
 - Closeout video: `[PLACEHOLDER: link]`
 - DIA documentation publication: `[PLACEHOLDER: link]`
 - Mainnet evidence pack: `[PLACEHOLDER: evidence/m4-mainnet-<stamp>/]`
-- Preview evidence pack: [`evidence/m4-preview-20260608-040304-02/milestone-4-preview-evidence.md`](evidence/m4-preview-20260608-040304-02/milestone-4-preview-evidence.md)
+- Preview evidence pack: [`evidence/m4-preview-20260608-040304-03/milestone-4-preview-evidence.md`](evidence/m4-preview-20260608-040304-03/milestone-4-preview-evidence.md)
 - Indexer (consumer service): [`offchain/indexer/README.md`](../../offchain/indexer/README.md)
 - Example consumer contract: [`contracts/aiken/validators/example_oracle_consumer.ak`](../../contracts/aiken/validators/example_oracle_consumer.ak)
 - Consumer workflow (read a feed, pay, request a feed): [`README.md`](../../README.md#consumer-workflow)
