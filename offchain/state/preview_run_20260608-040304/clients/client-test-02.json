@@ -45,7 +45,7 @@
     }
   },
   "datum": {
-    "receiverCbor": "d8799f1b000000024ae42400001a004c4b40ff"
+    "receiverCbor": "d8799f1b00000002491138c0001a004c4b40ff"
   },
   "wallet": {
     "source": "seed",
@@ -65,7 +65,7 @@
     "depositValidatorHash": "7a62816c90f97ea6e36c60594b5b70f778ce2147a50f27437412bf97",
     "depositValidatorAddress": "addr_test1wpax9qtvjruhafhrd3s9jj6mwrmh3n3pg7js7f6rwsftl9c8qfrwf",
     "receiverState": {
-      "balanceLovelace": "9846400000",
+      "balanceLovelace": "9815800000",
       "accruedToHookLovelace": "0",
       "minUtxoLovelace": "5000000"
     }
@@ -109,6 +109,11 @@
     {
       "step": "preview:settle",
       "submittedTxHash": "d2b16142bfff731012408d329ed8dfefd7db2d6e7f1735fbeeca5273e5f1b89c",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "0a83bd2fc75f97e40e8dfe70a17612fe26f272dc84587145e17dd44b7e36326d",
       "confirmed": true
     }
   ]
