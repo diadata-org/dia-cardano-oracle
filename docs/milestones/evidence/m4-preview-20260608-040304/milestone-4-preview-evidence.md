@@ -12,6 +12,7 @@ Everything here is read-only: querying the chain and reading published values.
 - [Consuming a feed — end-to-end](#consuming-a-feed--end-to-end)
 - [Published feeds — policy ids](#published-feeds--policy-ids)
 - [Provider-usage monitoring](#provider-usage-monitoring)
+- [Dashboards](#dashboards)
 - [How to reproduce](#how-to-reproduce)
 - [Files in this pack](#files-in-this-pack)
 
@@ -23,7 +24,7 @@ a transaction that references that output and is allowed or denied based on the
 price. This pack shows both: the indexer answering live, and a real contract
 accepting a fresh price and rejecting one that does not meet its threshold.
 
-- **Indexer:** reachable; chain tip height 4415224; 17 live pair(s).
+- **Indexer:** reachable; chain tip height 4427833; 17 live pair(s).
 - **API reference:** captured (DIA Cardano Oracle Indexer API, 10 paths) — interactive UI at http://localhost:3001/docs.
 - **Consumer demo (emulator):** PASSED.
 - **Consumer demo (on-chain):** embedded below.
@@ -35,23 +36,23 @@ consumer references:
 
 | Symbol | Price | Age (s) | Client | Pair UTxO (TxIn) |
 | --- | --- | --- | --- | --- |
-| ADA/USD | 751000000 | 1481061 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#0 |
-| BNB/USD | 61510000000 | 1481052 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#1 |
-| DAI/USD | 100100345 | 1481052 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#2 |
-| SOL/USD | 18510000000 | 1481052 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#3 |
-| XRP/USD | 521000000 | 1481052 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#7 |
-| MATIC/USD | 981000000 | 1481052 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#8 |
-| LTC/USD | 41635365000000004096 | 653 | client-test-01 | 720d4f1bcd7f44438dfe1d0da2f497019707e586b303a637f30334ab9ee3c5e7#1 |
-| SHIB/USD | 4420041965393 | 641 | client-test-01 | 720d4f1bcd7f44438dfe1d0da2f497019707e586b303a637f30334ab9ee3c5e7#4 |
-| NEIRO/USD | 61105140000000 | 620 | client-test-01 | 720d4f1bcd7f44438dfe1d0da2f497019707e586b303a637f30334ab9ee3c5e7#7 |
-| ARB/USD | 77030004296226968 | 589 | client-test-01 | 720d4f1bcd7f44438dfe1d0da2f497019707e586b303a637f30334ab9ee3c5e7#8 |
-| XVG/USD | 2351325861881437 | 611 | client-test-01 | 720d4f1bcd7f44438dfe1d0da2f497019707e586b303a637f30334ab9ee3c5e7#9 |
-| USDC/USD | 999638155500000000 | 338 | client-test-01 | 43c4d28d37d53dbe9133c9d459602ca981efe618cb31526cdfb1256eb6dbb855#0 |
-| DOGE/USD | 77121133553489040 | 334 | client-test-01 | 43c4d28d37d53dbe9133c9d459602ca981efe618cb31526cdfb1256eb6dbb855#1 |
-| ETH/USD | 1653045256557150076928 | 343 | client-test-01 | 43c4d28d37d53dbe9133c9d459602ca981efe618cb31526cdfb1256eb6dbb855#2 |
-| USDT/USD | 998459999999999936 | 301 | client-test-01 | 43c4d28d37d53dbe9133c9d459602ca981efe618cb31526cdfb1256eb6dbb855#3 |
-| BTC/USD | 61703925235468256411648 | 344 | client-test-01 | 43c4d28d37d53dbe9133c9d459602ca981efe618cb31526cdfb1256eb6dbb855#4 |
-| BTC/USD | 61745721050668237586432 | 652 | client-test-02 | a4516fbcd5b2a209700181bd15cf0e8d7dd5d052ee387c18f48471609de5490c#0 |
+| ADA/USD | 751000000 | 1901556 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#0 |
+| BNB/USD | 61510000000 | 1901547 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#1 |
+| DAI/USD | 100100345 | 1901547 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#2 |
+| SOL/USD | 18510000000 | 1901547 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#3 |
+| XRP/USD | 521000000 | 1901547 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#7 |
+| MATIC/USD | 981000000 | 1901547 | client-test-01 | 1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee#8 |
+| LTC/USD | 42478887000000000000 | 1690 | client-test-01 | 9ada311dfab616f1fd85c2ad41e4216a01e5cb3caddf89932293fbbd64e1bd31#0 |
+| ARB/USD | 75882113175000008 | 1705 | client-test-01 | 9ada311dfab616f1fd85c2ad41e4216a01e5cb3caddf89932293fbbd64e1bd31#3 |
+| SHIB/USD | 4247131503875 | 1676 | client-test-01 | b73d6a0c5ff587e27b6cb0e3022ad36df18d12005a18a2bc2ff30da82c6ee8b0#2 |
+| NEIRO/USD | 63058803837500 | 1651 | client-test-01 | b73d6a0c5ff587e27b6cb0e3022ad36df18d12005a18a2bc2ff30da82c6ee8b0#4 |
+| XVG/USD | 2189310277500000 | 1640 | client-test-01 | b73d6a0c5ff587e27b6cb0e3022ad36df18d12005a18a2bc2ff30da82c6ee8b0#5 |
+| USDC/USD | 999567900000000128 | 197 | client-test-01 | 822f29ec44b7ccab52e70fefc8e8fbe30ec576b94021b1cd712e407faaa39467#0 |
+| DOGE/USD | 72327921750000008 | 194 | client-test-01 | 822f29ec44b7ccab52e70fefc8e8fbe30ec576b94021b1cd712e407faaa39467#1 |
+| ETH/USD | 1586241776727478239232 | 203 | client-test-01 | 822f29ec44b7ccab52e70fefc8e8fbe30ec576b94021b1cd712e407faaa39467#2 |
+| BTC/USD | 59394387518750002774016 | 204 | client-test-01 | 822f29ec44b7ccab52e70fefc8e8fbe30ec576b94021b1cd712e407faaa39467#3 |
+| USDT/USD | 998332500000000000 | 153 | client-test-01 | 8e36f05bcf2786f69075cbe5148a022b830f7ac672327608cfb8cc4ec3ae1459#0 |
+| BTC/USD | 59414839712959816531968 | 482 | client-test-02 | 1fbce834c9e913856c7dc367baf7f77c2457ac0cf8b9f0701ce9024b791d5e7b#0 |
 
 Health response: [`indexer/health.json`](indexer/health.json) ·
 all pairs: [`indexer/pairs.json`](indexer/pairs.json).
@@ -76,7 +77,7 @@ consumer uses to verify the feed is genuine, and the output to reference:
     "txHash": "1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee",
     "outputIndex": 0
   },
-  "ageSeconds": 1481063,
+  "ageSeconds": 1901558,
   "clientId": "client-test-01"
 }
 ```
@@ -96,7 +97,7 @@ meets the configured minimum. Two runs prove both directions.
    Generating project's blueprint (./plutus.json)
 ==> [2/2] Running the end-to-end consumer demo (Lucid emulator + indexer)…
 1. Publishing the Pair UTxO (mint NFT + inline PairDatum)…
-2. Indexer reports BTC/USD: price=65000000000 at ec5f6faa6fab2907ef45d2cd363a730860f1e7481c7c4d353ee6a58de59a119c#0
+2. Indexer reports BTC/USD: price=65000000000 at 9cc8363dd6d66cedfc7782c08ee7f397dd508b0c801fd129384bcd4b3a9e4683#0
 3. Trying to spend (min_price < feed price)…
 3. Trying to spend (min_price > feed price)…
    → rejected: { Complete: "failed script execution Spend[0] the validator crashed / exited prematurely" }
@@ -144,7 +145,7 @@ The public identifiers a consumer needs, grouped by client:
 
 | Client | Pair policy id | Symbols |
 | --- | --- | --- |
-| client-test-01 | def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902 | ADA/USD, BNB/USD, DAI/USD, SOL/USD, XRP/USD, MATIC/USD, LTC/USD, SHIB/USD, NEIRO/USD, ARB/USD, XVG/USD, USDC/USD, DOGE/USD, ETH/USD, USDT/USD, BTC/USD |
+| client-test-01 | def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902 | ADA/USD, BNB/USD, DAI/USD, SOL/USD, XRP/USD, MATIC/USD, LTC/USD, ARB/USD, SHIB/USD, NEIRO/USD, XVG/USD, USDC/USD, DOGE/USD, ETH/USD, BTC/USD, USDT/USD |
 | client-test-02 | 02435906b5bf2ebac57a72d8d5609aa7f642b5e0e4d79666e0b1a293 | BTC/USD |
 
 ## Provider-usage monitoring
@@ -154,6 +155,46 @@ tracked on one metric and shown on the Internals dashboard panel **Requests in
 last 24h vs daily quota (per provider)**, with an alert that fires before the
 daily quota is exhausted. The indexer's own usage is in
 [`indexer/metrics.txt`](indexer/metrics.txt) (series `dia_bridge_provider_requests_total`).
+
+## Dashboards
+
+The five Grafana dashboards the feeder ships, rendered live: **Overview**,
+**Transactions**, **Internals**, **Signer Wallets** (the multi-wallet signer
+pool), and **Operational Cost** (the ADA cost of the management txs). A full
+render of each shows every panel; the panel-by-panel
+reference is the dashboards guide,
+[`docs/architecture/grafana-dashboards.md`](../../../architecture/grafana-dashboards.md).
+
+### Overview dashboard
+
+![Overview — full dashboard](dashboards/overview-full.png)
+
+_Is each price feed alive, fresh, accurate and funded? A batch of N pairs counts as N symbol updates here._
+
+### Transactions dashboard
+
+![Transactions — full dashboard](dashboards/tx-full.png)
+
+_The per-transaction view: a batch of N pairs is ONE transaction. Stage latency, confirmed-vs-failed throughput, success ratio, batch size._
+
+### Internals dashboard
+
+![Internals — full dashboard](dashboards/internals-full.png)
+
+_Feeder-internal observability: pipeline-phase latency, scanner, worker pools, DB, cron/recovery, provider health._
+
+### Signer Wallets dashboard
+
+![Signer Wallets — full dashboard](dashboards/wallets-full.png)
+
+_Per signer-wallet health for the multi-wallet pool: spendable balance, collateral floor (largest UTxO), usable-UTxO count, and active arbiter reservations. With no pool configured this shows the single `main` wallet._
+
+### Operational Cost dashboard
+
+![Operational Cost — full dashboard](dashboards/cost-full.png)
+
+_What it costs to run the system: ADA fees of the management txs (settle, withdraw, main→pool funding, defrag, wallet shaping, standalone deposit merge) by kind and signer wallet. The top row is the cumulative snapshot; the time-series row below shows when each tx ran and how the cost grew._
+
 
 ## How to reproduce
 
@@ -180,3 +221,4 @@ bash offchain/indexer/src/examples/run-consumer-demo-onchain.sh
 | `indexer/metrics.txt`      | The indexer's chain-provider request counts. |
 | `consumer-demo/emulator.txt` | The offline end-to-end consumer demo run. |
 | `consumer-demo/onchain.txt`  | The on-chain consumer demo run (when embedded). |
+| `dashboards/*.png`           | The five Grafana dashboards rendered live (Overview, Transactions, Internals, Signer Wallets, Operational Cost). |
