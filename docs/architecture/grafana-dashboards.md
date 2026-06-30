@@ -654,12 +654,16 @@ this row is the **count** view.
 
 **Management tx confirmed vs failed (5m, by kind)** · `timeseries` — `sum by (kind, outcome) (increase(dia_bridge_management_tx_total{network=~"$network", wallet=~"$wallet"}[5m]))`
 
+![Management tx confirmed vs failed (5m, by kind)](img/tx-panel-351.png)
+
 - **What it shows** — operational txs per 5-minute window, one line per `kind · outcome`. The trend
   view: a burst of `fund_pool`/`split` after adding a pool wallet, steady `settle`/`withdraw` recycling.
 - **When to worry** — a rising `… · failed` line → a maintenance step keeps erroring (e.g. provider
   quota, a starved wallet); cross-check `make logs` and the wallet dashboard.
 
 **Management tx counts by kind (selected range)** · `stat` — `sum by (kind) (increase(dia_bridge_management_tx_total{network=~"$network", wallet=~"$wallet", outcome="confirmed"|"failed"}[$__range]))`
+
+![Management tx counts by kind (selected range)](img/tx-panel-352.png)
 
 - **What it shows** — the raw count of each operational kind over the selected window, confirmed and
   failed. A skipped no-op (e.g. nothing to settle) is **not** counted — only real txs that ran. A
@@ -893,6 +897,8 @@ section for enabling pool wallets.
 
 ## 8. Dashboard 5 — Operational Cost (`feeder-cost`)
 
+![Operational Cost dashboard — full dashboard](img/cost-full.png)
+
 The one place to answer the question a client always asks: **"what does it cost to run this?"**
 
 The feeder issues two families of transaction. **Update** txs write prices on-chain — their fee is
@@ -928,6 +934,8 @@ fees** panel is keyed by symbol/client, not by `wallet`/`kind`, so it ignores bo
 
 **Operational overhead — ADA/day** · `stat` — `sum(rate(dia_bridge_management_tx_fee_lovelace_total{network=~"$network", wallet=~"$wallet", kind=~"$kind"}[24h])) * 86400 / 1e6`
 
+![Operational overhead — ADA/day](img/cost-panel-1.png)
+
 - **What it shows** — the headline number: the last-24h management-fee rate extrapolated to a full
   day, in ADA. This is the running cost of keeping the system alive, update fees excluded.
 - **How to read it** — a steady-state figure; spikes track funding/shaping bursts (e.g. after adding
@@ -935,16 +943,22 @@ fees** panel is keyed by symbol/client, not by `wallet`/`kind`, so it ignores bo
 
 **Operational cost rate — ADA/day by kind** · `timeseries` (stacked) — `sum by (kind) (rate(dia_bridge_management_tx_fee_lovelace_total{network=~"$network", wallet=~"$wallet", kind=~"$kind"}[6h])) * 86400 / 1e6`
 
+![Operational cost rate — ADA/day by kind](img/cost-panel-2.png)
+
 - **What it shows** — the same ADA/day rate split by management kind, stacked to the headline total.
   Tells you *which* activity drives the bill — usually `fund_pool` + `split` early on (shaping the
   pool), `settle` + `withdraw` in steady state (recycling fees through the admin wallet).
 
 **Cumulative operational fees — ADA by kind** · `timeseries` — `sum by (kind) (dia_bridge_management_tx_fee_lovelace_total{network=~"$network", wallet=~"$wallet", kind=~"$kind"}) / 1e6`
 
+![Cumulative operational fees — ADA by kind](img/cost-panel-3.png)
+
 - **What it shows** — total ADA each kind has spent since the counter started; the lifetime overhead
   ledger. Monotonic (a counter), so the slope is the cost rate.
 
 **Cumulative operational fees — ADA by wallet** · `timeseries` — `sum by (wallet) (dia_bridge_management_tx_fee_lovelace_total{network=~"$network", wallet=~"$wallet", kind=~"$kind"}) / 1e6`
+
+![Cumulative operational fees — ADA by wallet](img/cost-panel-4.png)
 
 - **What it shows** — the same lifetime spend attributed to the signer wallet that paid:
   `settle` / `withdraw` / `fund_pool` are paid by the **main** (it settles and funds the pool);
@@ -953,20 +967,25 @@ fees** panel is keyed by symbol/client, not by `wallet`/`kind`, so it ignores bo
 
 **Confirmed management tx count — by kind** · `timeseries` — `sum by (kind) (dia_bridge_management_tx_total{network=~"$network", wallet=~"$wallet", kind=~"$kind", outcome="confirmed"})`
 
+![Confirmed management tx count — by kind](img/cost-panel-5.png)
+
 - **What it shows** — how many confirmed management txs of each kind have run (failed ones excluded —
   they paid no fee). Pair it with the cost panels: a frequent-but-cheap kind (often `split`) vs a
   rare-but-pricey one shape the bill differently.
 
 **Update-tx fees — ADA/day (covered by client charges)** · `timeseries` — `sum(rate(dia_bridge_transaction_fee_lovelace_sum{network=~"$network"}[6h])) * 86400 / 1e6`
 
+![Update-tx fees — ADA/day](img/cost-panel-6.png)
+
 - **What it shows** — the productive cost (writing prices), extrapolated to ADA/day. Shown for the
   net-cost equation above: unlike the overhead, this is the part offset by what clients pay, so it is
   **not** added to the running-cost figure — it is the margin side.
 
-> The `feeder-cost` panels need the metrics to have accrued — i.e. a feeder build with the
-> operational-cost counters running, with some management txs already confirmed. Render the
-> screenshots (see [§ 12](#12-screenshots)) once a window has produced real `fund_pool` / `split` /
-> `settle` activity; before that the panels are correctly empty (no overhead spent yet).
+> The screenshots above are live **Preview** renders: the overhead/settle figures are whatever this
+> Preview window happened to spend (e.g. a `settle` recycling fees), so the absolute ADA is illustrative,
+> not a production cost — Mainnet carries the real numbers. Each `kind`/`wallet` series appears as soon as
+> that operation first runs, so the `$kind`/`$wallet` dropdowns and the by-kind/by-wallet panels fill in
+> over time; a kind that has not fired yet simply has no line, which is correct, not a wiring gap.
 
 ## 9. How alerts surface visually
 
@@ -1077,7 +1096,8 @@ re-render each panel via the renderer endpoint
 point-in-time set with `make evidence3` (which also writes dashboard PNGs into the M3 evidence
 pack's `dashboards/` directory).
 
-The `feeder-cost` dashboard (uid `feeder-cost`) renders the same way, but only after a window has
-produced real management-tx activity — its `management_tx_*` series are empty until the first
-confirmed `settle` / `withdraw` / `fund_pool` / `consolidate` / `split` / `merge`. Render it once the
-operational-cost counters have accrued, so the panels carry data rather than a flat zero.
+The `feeder-cost` dashboard (uid `feeder-cost`) and the management-tx panels on `feeder-tx` (panel ids
+351/352) render the same way — `img/cost-full.png`, `img/cost-panel-1..6.png`, `img/tx-panel-351.png`,
+`img/tx-panel-352.png` above are live Preview captures. A `kind`/`wallet` series only appears once that
+operation has run, so re-render after more management activity (or on Mainnet) to fill in kinds that
+were idle when these were taken.
