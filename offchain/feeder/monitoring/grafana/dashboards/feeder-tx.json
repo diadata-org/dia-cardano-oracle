@@ -1135,6 +1135,55 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "type": "row",
+      "title": "Management transactions (operational)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 69 },
+      "id": 350,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Operational (non-update) txs per 5-minute window, by kind and outcome — settle / withdraw / fund_pool / consolidate / split / merge, confirmed vs failed. These are the maintenance txs metered on the Operational Cost dashboard; shown here next to update throughput so background activity is visible in the same view. A skipped no-op is not counted (no tx ran); a folded deposit merge is not a `merge` here (it rides an update). Filtered by $network and $wallet only — management txs carry no symbol/client/router.",
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 70 },
+      "id": 351,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [ "lastNotNull" ] } },
+      "targets": [
+        {
+          "expr": "sum by (kind, outcome) (increase(dia_bridge_management_tx_total{network=~\"$network\", wallet=~\"$wallet\"}[5m]))",
+          "legendFormat": "{{kind}} · {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Management tx confirmed vs failed (5m, by kind)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Raw COUNT of operational (management) txs over the selected time range, by kind — confirmed and failed. settle / withdraw / fund_pool / consolidate / split / merge. failed = a build/submit/confirm error on that maintenance tx (a skipped no-op is not counted). Filtered by $network and $wallet only.",
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "custom": {} }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 70 },
+      "id": 352,
+      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "value", "graphMode": "none" },
+      "targets": [
+        {
+          "expr": "sum by (kind) (increase(dia_bridge_management_tx_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"confirmed\"}[$__range]))",
+          "legendFormat": "{{kind}} · confirmed",
+          "refId": "A",
+          "instant": true
+        },
+        {
+          "expr": "sum by (kind) (increase(dia_bridge_management_tx_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"failed\"}[$__range]))",
+          "legendFormat": "{{kind}} · failed",
+          "refId": "B",
+          "instant": true
+        }
+      ],
+      "title": "Management tx counts by kind (selected range)",
+      "type": "stat"
     }
   ],
   "refresh": "30s",

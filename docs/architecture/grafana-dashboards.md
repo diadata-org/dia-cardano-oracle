@@ -18,7 +18,7 @@ Thresholds quoted here are the canonical values from `infrastructure.<network>.y
 enforced by the `threshold-drift` test. PromQL exprs use the dashboard's `$network / $customer /
 $client / $router / $symbol` filter variables (omitted from the snippets below for readability,
 shown as `{…}`). Dashboard PNG snapshots are rendered by `make evidence3` (the Grafana renderer)
-— see [§ 11](#11-screenshots).
+— see [§ 12](#12-screenshots).
 
 ## Contents
 
@@ -32,10 +32,11 @@ shown as `{…}`). Dashboard PNG snapshots are rendered by `make evidence3` (the
 - [5. Dashboard 2 — Transactions (`dia-cardano-feeder-tx`)](#5-dashboard-2--transactions-dia-cardano-feeder-tx)
 - [6. Dashboard 3 — Internals (`dia-cardano-feeder-internals`)](#6-dashboard-3--internals-dia-cardano-feeder-internals)
 - [7. Dashboard 4 — Signer Wallets (`feeder-wallets`)](#7-dashboard-4--signer-wallets-feeder-wallets)
-- [8. How alerts surface visually](#8-how-alerts-surface-visually)
-- [9. When to panic — one-page cheat sheet](#9-when-to-panic--one-page-cheat-sheet)
-- [10. Concepts the charts assume](#10-concepts-the-charts-assume)
-- [11. Screenshots](#11-screenshots)
+- [8. Dashboard 5 — Operational Cost (`feeder-cost`)](#8-dashboard-5--operational-cost-feeder-cost)
+- [9. How alerts surface visually](#9-how-alerts-surface-visually)
+- [10. When to panic — one-page cheat sheet](#10-when-to-panic--one-page-cheat-sheet)
+- [11. Concepts the charts assume](#11-concepts-the-charts-assume)
+- [12. Screenshots](#12-screenshots)
 
 ## 1. The dashboards at a glance
 
@@ -45,6 +46,13 @@ shown as `{…}`). Dashboard PNG snapshots are rendered by `make evidence3` (the
 | **Transactions** | `dia-cardano-feeder-tx` | **transactions** | "How are the Cardano transactions themselves performing?" |
 | **Internals** | `dia-cardano-feeder-internals` | feeder internals | "Where is time/work going inside the feeder, and where do intents drop off?" |
 | **Signer Wallets** | `feeder-wallets` | per signer wallet | "Is each signer wallet funded, collateral-capable, and split enough to feed parallel lanes?" |
+| **Operational Cost** | `feeder-cost` | ADA spent on overhead | "What does it COST to run this — fees on settle/withdraw/funding/shaping/merge, by kind and wallet?" |
+
+The **Operational Cost** dashboard isolates the system's running cost: the fees of the
+**management** transactions (settle, payment-hook withdraw, main→pool funding, defrag, wallet
+shaping, standalone deposit merge) that no client reimburses, in ADA, by `kind` and signer `wallet`. Update-tx fees are
+shown alongside as the productive cost (offset by client charges), so the dashboard reads as
+*net cost ≈ operational overhead + max(0, update fees − client charges)*.
 
 The **Signer Wallets** dashboard (filter: `$wallet`) shows the multi-wallet pool's
 per-wallet `cardano_wallet_*{wallet,role}` gauges — total balance, spendable balance,
@@ -67,6 +75,7 @@ The monitoring stack runs under Docker (`make up MONITORING=1`).
 | Transactions | <http://localhost:3000/d/dia-cardano-feeder-tx> | — |
 | Internals | <http://localhost:3000/d/dia-cardano-feeder-internals> | — |
 | Signer Wallets | <http://localhost:3000/d/feeder-wallets> | — |
+| Operational Cost | <http://localhost:3000/d/feeder-cost> | — |
 
 All auto-refresh every 30 s; the time picker (top-right) controls the window for every panel
 at once. Dashboards are provisioned from the JSON files, so edit the JSON and reload Grafana —
@@ -633,6 +642,31 @@ the next batch in the coalescer while it is *submitting* the current one:
 - **When to worry** — a sustained value > a few → submissions arrive faster than the lane confirms;
   pair it with the per-stage latency panels (Row T1).
 
+### Row T6 — Management transactions (operational)
+
+The rows above count **update** txs (writing prices). This row counts the **operational** txs the
+feeder issues to keep itself running — `settle`, `withdraw`, `fund_pool`, `consolidate`, `split`,
+`merge` — so background maintenance is visible next to update throughput, by `kind` and `outcome`.
+Filtered by `$network` and `$wallet` **only**: management txs carry no symbol/client/router (a tx that
+moves ADA main→pool belongs to no symbol), so the Customer/Client/Router/Symbol filters do not apply
+here. Their **ADA cost** lives on the dedicated [Operational Cost dashboard](#8-dashboard-5--operational-cost-feeder-cost);
+this row is the **count** view.
+
+**Management tx confirmed vs failed (5m, by kind)** · `timeseries` — `sum by (kind, outcome) (increase(dia_bridge_management_tx_total{network=~"$network", wallet=~"$wallet"}[5m]))`
+
+- **What it shows** — operational txs per 5-minute window, one line per `kind · outcome`. The trend
+  view: a burst of `fund_pool`/`split` after adding a pool wallet, steady `settle`/`withdraw` recycling.
+- **When to worry** — a rising `… · failed` line → a maintenance step keeps erroring (e.g. provider
+  quota, a starved wallet); cross-check `make logs` and the wallet dashboard.
+
+**Management tx counts by kind (selected range)** · `stat` — `sum by (kind) (increase(dia_bridge_management_tx_total{network=~"$network", wallet=~"$wallet", outcome="confirmed"|"failed"}[$__range]))`
+
+- **What it shows** — the raw count of each operational kind over the selected window, confirmed and
+  failed. A skipped no-op (e.g. nothing to settle) is **not** counted — only real txs that ran. A
+  deposit merge folded into an update is not a `merge` here (it rides the update; see Operational Cost).
+- **How to read it** — `$__range` follows the time picker, so these are window totals; pair with the
+  cost dashboard to turn a count into ADA.
+
 ## 6. Dashboard 3 — Internals (`dia-cardano-feeder-internals`)
 
 ![Internals dashboard — full dashboard](img/internals-full.png)
@@ -855,9 +889,86 @@ section for enabling pool wallets.
   a pool wallet) so lanes stop contending.
 
 > The `img/wallets-*.png` snapshots are produced by the Grafana renderer the same way as the other
-> dashboards (see [§ 11](#11-screenshots)); run a feeder window with `MONITORING=1`, then render.
+> dashboards (see [§ 12](#12-screenshots)); run a feeder window with `MONITORING=1`, then render.
 
-## 8. How alerts surface visually
+## 8. Dashboard 5 — Operational Cost (`feeder-cost`)
+
+The one place to answer the question a client always asks: **"what does it cost to run this?"**
+
+The feeder issues two families of transaction. **Update** txs write prices on-chain — their fee is
+the *productive* cost, and it is offset by what clients are charged through the PaymentHook.
+**Management** txs keep the system itself healthy — `settle` (drain accrued fees to the admin
+wallet), `withdraw` (PaymentHook → admin wallet), `fund_pool` (main → pool top-up), `consolidate`
+(defrag dust), `split` (shape a wallet into more lanes), and `merge` (the **standalone** deposit→Receiver
+sweep). **Nobody reimburses the management fees** — they are pure operational overhead. This dashboard
+meters that overhead in ADA, by `kind` and by the signer `wallet` that paid, and shows the update fees
+alongside for the full picture:
+
+> **`merge` caveat:** a deposit merge that is *folded into* an update tx carries **no separate fee** —
+> it rides the update's fee and so is already inside the update-fee figure, not here. Only the
+> standalone `deposit:merge` fallback (when deposits outpace the fold) is a tx of its own, and that is
+> what `kind="merge"` meters. So the two never double-count.
+
+> **Net cost ≈ Σ management fees + max(0, Σ update fees − Σ client charges)**
+
+The two counters behind it — `dia_bridge_management_tx_total{kind,wallet,outcome}` and
+`dia_bridge_management_tx_fee_lovelace_total{kind,wallet}` — are deliberately **low-cardinality**
+(no `symbol`/`client`): a tx that moves ADA main→pool belongs to no symbol. The fee counter sums
+**only confirmed** txs (a failed tx pays nothing on-chain), so every ADA shown really left a wallet.
+Per-symbol / per-client fee attribution for the *margin* side lives in the feeder's SQLite, where
+high cardinality is cheap — Prometheus is for the aggregate cost only.
+
+Three filters: **`$network`**, **`$wallet`**, and **`$kind`** (Operation) — all multi-value, default
+`.*` = all. `$wallet` scopes every management panel to one or more signer wallets (e.g. `main` for the
+cost the main bears on settle/withdraw/fund, or a pool wallet for its shaping cost). `$kind` scopes to
+one or more operations — `settle`, `withdraw`, `fund_pool`, `consolidate`, `split`, `merge` — so you
+can read, say, *only* what funding the pool costs, or *only* the settle/withdraw recycling. The **Update-tx
+fees** panel is keyed by symbol/client, not by `wallet`/`kind`, so it ignores both of those filters
+(it is the margin side, not per-wallet/per-operation overhead).
+
+**Operational overhead — ADA/day** · `stat` — `sum(rate(dia_bridge_management_tx_fee_lovelace_total{network=~"$network", wallet=~"$wallet", kind=~"$kind"}[24h])) * 86400 / 1e6`
+
+- **What it shows** — the headline number: the last-24h management-fee rate extrapolated to a full
+  day, in ADA. This is the running cost of keeping the system alive, update fees excluded.
+- **How to read it** — a steady-state figure; spikes track funding/shaping bursts (e.g. after adding
+  a pool wallet, when funding + split fees cluster) that then settle.
+
+**Operational cost rate — ADA/day by kind** · `timeseries` (stacked) — `sum by (kind) (rate(dia_bridge_management_tx_fee_lovelace_total{network=~"$network", wallet=~"$wallet", kind=~"$kind"}[6h])) * 86400 / 1e6`
+
+- **What it shows** — the same ADA/day rate split by management kind, stacked to the headline total.
+  Tells you *which* activity drives the bill — usually `fund_pool` + `split` early on (shaping the
+  pool), `settle` + `withdraw` in steady state (recycling fees through the admin wallet).
+
+**Cumulative operational fees — ADA by kind** · `timeseries` — `sum by (kind) (dia_bridge_management_tx_fee_lovelace_total{network=~"$network", wallet=~"$wallet", kind=~"$kind"}) / 1e6`
+
+- **What it shows** — total ADA each kind has spent since the counter started; the lifetime overhead
+  ledger. Monotonic (a counter), so the slope is the cost rate.
+
+**Cumulative operational fees — ADA by wallet** · `timeseries` — `sum by (wallet) (dia_bridge_management_tx_fee_lovelace_total{network=~"$network", wallet=~"$wallet", kind=~"$kind"}) / 1e6`
+
+- **What it shows** — the same lifetime spend attributed to the signer wallet that paid:
+  `settle` / `withdraw` / `fund_pool` are paid by the **main** (it settles and funds the pool);
+  `consolidate` / `split` are paid by the **pool wallet** being reshaped. Shows where overhead
+  actually leaves the wallets.
+
+**Confirmed management tx count — by kind** · `timeseries` — `sum by (kind) (dia_bridge_management_tx_total{network=~"$network", wallet=~"$wallet", kind=~"$kind", outcome="confirmed"})`
+
+- **What it shows** — how many confirmed management txs of each kind have run (failed ones excluded —
+  they paid no fee). Pair it with the cost panels: a frequent-but-cheap kind (often `split`) vs a
+  rare-but-pricey one shape the bill differently.
+
+**Update-tx fees — ADA/day (covered by client charges)** · `timeseries` — `sum(rate(dia_bridge_transaction_fee_lovelace_sum{network=~"$network"}[6h])) * 86400 / 1e6`
+
+- **What it shows** — the productive cost (writing prices), extrapolated to ADA/day. Shown for the
+  net-cost equation above: unlike the overhead, this is the part offset by what clients pay, so it is
+  **not** added to the running-cost figure — it is the margin side.
+
+> The `feeder-cost` panels need the metrics to have accrued — i.e. a feeder build with the
+> operational-cost counters running, with some management txs already confirmed. Render the
+> screenshots (see [§ 12](#12-screenshots)) once a window has produced real `fund_pool` / `split` /
+> `settle` activity; before that the panels are correctly empty (no overhead spent yet).
+
+## 9. How alerts surface visually
 
 An alert condition shows up in three places, all from one pipeline (feeder metrics → Prometheus
 rules → Alertmanager → feeder webhook → `alert_log`):
@@ -882,11 +993,11 @@ The 20 rules in `monitoring/alerts.yml` cover six areas: **feed health** (`Oracl
 (`AdminWalletLow`, `AdminWalletFragmented`), **signer-wallet pool** (`PoolWalletLow`,
 `MainWalletCannotFundPool`, `WalletConcentrated`), **chain** (`ReorgRateHigh`), and **providers**
 (`PrimaryProviderDown`, `SecondaryProviderDown`, `ProviderQuotaWall`, `ProviderErrorRateHigh`,
-`ProviderRequestQuotaHigh{Blockfrost,Koios}`). The next section (§ 9) is the authoritative
+`ProviderRequestQuotaHigh{Blockfrost,Koios}`). The next section (§ 10) is the authoritative
 one-line-per-alert list with thresholds and first actions; every rule's full remediation lives in
 `alerts.yml` itself.
 
-## 9. When to panic — one-page cheat sheet
+## 10. When to panic — one-page cheat sheet
 
 Thresholds are the canonical values from `infrastructure.<network>.yaml::alerting` (mirrored into the
 Prometheus rules and the Grafana panel colours; kept in sync by the threshold-drift test).
@@ -920,7 +1031,7 @@ All 20 alert rules in `monitoring/alerts.yml`, grouped by area. Severity: 🔴 c
 
 The three **Signer Wallets** alerts are on the [Signer Wallets dashboard](#7-dashboard-4--signer-wallets-feeder-wallets); the provider-quota alerts surface on the Internals dashboard's provider panels. The wallet maintenance (`wallet:consolidate`, `wallet:split`) and the main-refill (`settle` + `payment-hook:withdraw`) usually run automatically — the alert fires first as a heads-up.
 
-## 10. Concepts the charts assume
+## 11. Concepts the charts assume
 
 **Symbol updates vs transactions (the batch factor).** One transaction can carry many pairs.
 Overview counts in **symbol updates**; the Transactions dashboard counts in **transactions**. A
@@ -953,7 +1064,7 @@ no collateral-capable UTxO → builds trap (`AdminWalletFragmented`, auto-`conso
 (`WalletConcentrated`, auto-`split`, which carves the largest UTxO into more lanes). Architecture
 deep-dive: [`feeder.md` → Signer-wallet pool](./feeder.md#signer-wallet-pool--per-wallet-parallelism).
 
-## 11. Screenshots
+## 12. Screenshots
 
 The images embedded above (`img/`) were rendered by the Grafana image renderer from a live
 multi-customer Preview deployment (two customers, two clients, three routers — including the same
@@ -965,3 +1076,8 @@ re-render each panel via the renderer endpoint
 (`/render/d-solo/<uid>/x?panelId=<id>&width=1200&height=400&tz=UTC`) into `img/`, or capture a
 point-in-time set with `make evidence3` (which also writes dashboard PNGs into the M3 evidence
 pack's `dashboards/` directory).
+
+The `feeder-cost` dashboard (uid `feeder-cost`) renders the same way, but only after a window has
+produced real management-tx activity — its `management_tx_*` series are empty until the first
+confirmed `settle` / `withdraw` / `fund_pool` / `consolidate` / `split` / `merge`. Render it once the
+operational-cost counters have accrued, so the panels carry data rather than a flat zero.

@@ -336,14 +336,19 @@ make fresh             # code changed? rebuild image + wipe volumes/DB/logs + re
   webhook (→ `alert_log`) and, when enabled, Telegram/email; its UI shows active
   alerts and lets you silence them.
 - Grafana: `http://localhost:3000` — login `admin` / value of
-  `GRAFANA_ADMIN_PASSWORD` in `.env` (defaults to `admin`). Three dashboards are
+  `GRAFANA_ADMIN_PASSWORD` in `.env` (defaults to `admin`). Five dashboards are
   pre-provisioned: **DIA Cardano Oracle Feeder** (operational overview, balances,
   per-symbol throughput), **DIA Cardano Oracle Feeder — Transactions**
-  (per-transaction view: stage latency, confirmed-vs-failed, batch size), and
+  (per-transaction view: stage latency, confirmed-vs-failed, batch size),
   **DIA Cardano Oracle Feeder — Internals** (pipeline-phase latency, scanner, worker
-  pool, DB, cron/recovery — for troubleshooting the feeder itself). The first two
-  filter by **network → customer → client → router → symbol** (cascading); Internals
-  is feeder-wide (network only). A batch tx of N pairs counts as one transaction in
+  pool, DB, cron/recovery — for troubleshooting the feeder itself), **Feeder — Signer
+  Wallets** (per-wallet balance, collateral floor, usable-UTxO count, reservations
+  for the multi-wallet pool), and **Feeder — Operational Cost** (`feeder-cost`: the
+  ADA cost of running the system — fees of settle/withdraw/funding/defrag/shaping by
+  kind and by wallet, with update fees alongside for the net-cost picture). The first
+  two filter by **network → customer → client → router → symbol** (cascading);
+  Internals, Signer Wallets, and Operational Cost are feeder-wide (network, plus
+  `$wallet` on Signer Wallets). A batch tx of N pairs counts as one transaction in
   the tx view and as N symbol updates in the overview.
 - Renderer: a `grafana/grafana-image-renderer` sidecar that produces PNG
   snapshots of the dashboard for Grafana. No exposed port; intra-compose only.

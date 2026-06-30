@@ -33,6 +33,7 @@
 - [19. Metric coverage](#19-metric-coverage)
 - [20. lucid WASM build resilience (submission/finality hardening)](#20-lucid-wasm-build-resilience-submissionfinality-hardening)
 - [Fee loop & automatic maintenance (settle / withdraw / consolidate)](#fee-loop--automatic-maintenance-settle--withdraw--consolidate)
+  - [Operational cost: what it costs to run this](#operational-cost-what-it-costs-to-run-this)
 - [Signer-wallet pool & per-wallet parallelism](#signer-wallet-pool--per-wallet-parallelism)
 - [Alerts & automatic remediation — at a glance](#alerts--automatic-remediation--at-a-glance)
   - [Cardano API provider health (primary vs secondary)](#cardano-api-provider-health-primary-vs-secondary)
@@ -928,14 +929,17 @@ prerequisites, env vars, and the full output description.
 
 ## 19. Metric coverage
 
-The feeder emits **~66 `dia_bridge_*` families** at `/metrics`, across **three** dashboards:
+The feeder emits **~68 `dia_bridge_*` families** at `/metrics`, across **five** dashboards:
 `monitoring/grafana/dashboards/feeder.json` (operational overview),
-`feeder-tx.json` (the per-transaction axis — see §6), and `feeder-internals.json`
+`feeder-tx.json` (the per-transaction axis — see §6), `feeder-internals.json`
 (feeder internals — per-phase latency, scanner, worker pools, DB, cron/recovery, the
-event/intent funnel, per-client lane state & queues). **58 families are on a dashboard;
-8 are deliberately not** — listed in [Not on a dashboard](#not-on-a-dashboard-and-why) at the
-end. Every declared metric is emitted by production code. The panel-by-panel
-reading guide is [`grafana-dashboards.md`](./grafana-dashboards.md); the catalog below is the
+event/intent funnel, per-client lane state & queues), `feeder-wallets.json` (the
+multi-wallet signer pool — per-wallet balance, collateral floor, usable-UTxO count,
+reservations), and `feeder-cost.json` (operational cost — the ADA fees of the management
+txs that keep the system running). Most families are on a dashboard; a few are deliberately
+not — listed in [Not on a dashboard](#not-on-a-dashboard-and-why) at the end. Every declared
+metric is emitted by production code. The panel-by-panel reading guide is
+[`grafana-dashboards.md`](./grafana-dashboards.md); the catalog below is the
 metric-family reference.
 
 ### Oracle updates & transactions
@@ -949,7 +953,9 @@ metric-family reference.
 | `transaction_pairs{client_id,customer_id,outcome}` | Batch size — pairs per transaction. | Transactions |
 | `tx_pair_membership_total{client_id,customer_id,router_id,destination_index,symbol,outcome}` | One increment per (tx, pair). | Transactions |
 | `transaction_router_membership_total{client_id,customer_id,router_id,outcome}` | One increment per (tx, router). | Overview + Transactions |
-| `transaction_fee_lovelace{symbol,client_id,customer_id}` | Network fee per tx (per-customer billing). | Overview |
+| `transaction_fee_lovelace{symbol,client_id,customer_id}` | Network fee per update tx (per-customer billing — the productive cost). | Overview |
+| `management_tx_total{kind,wallet,outcome}` | Operational (non-update) txs — settle/withdraw/fund_pool/consolidate/split/merge — counted by kind, signer wallet, and outcome. | Operational Cost |
+| `management_tx_fee_lovelace_total{kind,wallet}` | ADA fees of those operational txs (confirmed only) — the pure running-cost meter, by kind and signer wallet. | Operational Cost |
 
 ### Event / intent funnel
 
@@ -1226,6 +1232,38 @@ collateral-capable UTxO so the wallet never collapses. The WASM self-exit (§20)
 *recovery* — if a hard trap poisons the in-process WASM module anyway, the daemon exits
 17 and the supervisor hands it a fresh process. Together they mean a wedged feeder neither
 happens (prevention) nor needs a human restart (recovery).
+
+### Operational cost: what it costs to run this
+
+These five automatic steps each broadcast a Cardano tx that **pays a network fee**, and those
+fees are the system's running cost. They split into two buckets that answer different questions:
+
+- **Management overhead (pure cost, nobody reimburses it):** `settle`, `withdraw`, `fund_pool`,
+  `consolidate`, `split`, `merge`. These keep the wallets funded and in shape; no client pays for them.
+  (`merge` is only the **standalone** `deposit:merge` fallback — a merge folded into an update tx
+  carries no separate fee, so it is part of the update fee, not counted here.)
+- **Update fees (productive cost, offset by client charges):** the price-writing txs, whose fee
+  is covered by what clients are charged through the PaymentHook (`settle` → `withdraw` recycles
+  those charges into the admin wallet that pays the fees).
+
+So the honest answer to *"how much does it cost to run this?"* is:
+
+> **Net cost ≈ Σ management fees + max(0, Σ update fees − Σ client charges)**
+
+Each confirmed automatic step is metered the moment it confirms: the daemon calls
+`metrics.recordManagementTx({ kind, wallet, outcome, feeLovelace })`, bumping two
+**low-cardinality** counters — `dia_bridge_management_tx_total{kind,wallet,outcome}` (count) and
+`dia_bridge_management_tx_fee_lovelace_total{kind,wallet}` (fee, summed only over confirmed txs).
+The fee is the real on-chain fee of the built tx, surfaced by each CLI builder (`feePaidLovelace`,
+computed from the tx body — the same value the update path already records into
+`dia_bridge_transaction_fee_lovelace`). The signer `wallet` is whoever paid: the **main** for
+settle/withdraw/fund_pool/merge, the **pool wallet** being reshaped for consolidate/split. There is no
+`symbol`/`client` axis — a tx that moves ADA main→pool belongs to no symbol; per-symbol fee
+attribution for the margin side lives in SQLite, where cardinality is cheap.
+
+The **Operational Cost** Grafana dashboard (`feeder-cost`) renders all of this — ADA/day of
+overhead, cost by kind, cost by wallet, and the update fees alongside; see
+[`grafana-dashboards.md` → Dashboard 5](./grafana-dashboards.md#8-dashboard-5--operational-cost-feeder-cost).
 
 ## Signer-wallet pool & per-wallet parallelism
 
