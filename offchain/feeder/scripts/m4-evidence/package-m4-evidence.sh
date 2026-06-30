@@ -148,7 +148,7 @@ if curl -fsS --max-time 5 "$GRAFANA_URL/api/health" >/dev/null 2>&1; then
   render_dashboard "feeder-wallets" "feeder-signer-wallets" "$OUT_DIR/dashboards/wallets-full.png" 2>/dev/null \
     && DASHBOARDS_MD+=$'\n### Signer Wallets dashboard\n\n![Signer Wallets — full dashboard](dashboards/wallets-full.png)\n\n_Per signer-wallet health for the multi-wallet pool: spendable balance, collateral floor (largest UTxO), usable-UTxO count, and active arbiter reservations. With no pool configured this shows the single `main` wallet._\n'
   render_dashboard "feeder-cost" "feeder-operational-cost" "$OUT_DIR/dashboards/cost-full.png" 2>/dev/null \
-    && DASHBOARDS_MD+=$'\n### Operational Cost dashboard\n\n![Operational Cost — full dashboard](dashboards/cost-full.png)\n\n_What it costs to run the system: ADA fees of the management txs (settle, withdraw, main→pool funding, defrag, wallet shaping, standalone deposit merge) by kind and signer wallet, with update fees alongside for the net-cost picture. Preview values are illustrative; Mainnet carries the real numbers._\n'
+    && DASHBOARDS_MD+=$'\n### Operational Cost dashboard\n\n![Operational Cost — full dashboard](dashboards/cost-full.png)\n\n_What it costs to run the system: ADA fees of the management txs (settle, withdraw, main→pool funding, defrag, wallet shaping, standalone deposit merge) by kind and signer wallet, with update fees alongside for the net-cost picture._\n'
   if [[ -z "$DASHBOARDS_MD" ]]; then
     DASHBOARDS_MD="_Grafana was reachable but the image renderer was not responding — no PNGs captured. Bring up the monitoring profile (\`cd offchain && make up MONITORING=1\`) and re-run._"
   fi

@@ -981,12 +981,6 @@ fees** panel is keyed by symbol/client, not by `wallet`/`kind`, so it ignores bo
   net-cost equation above: unlike the overhead, this is the part offset by what clients pay, so it is
   **not** added to the running-cost figure — it is the margin side.
 
-> The screenshots above are live **Preview** renders: the overhead/settle figures are whatever this
-> Preview window happened to spend (e.g. a `settle` recycling fees), so the absolute ADA is illustrative,
-> not a production cost — Mainnet carries the real numbers. Each `kind`/`wallet` series appears as soon as
-> that operation first runs, so the `$kind`/`$wallet` dropdowns and the by-kind/by-wallet panels fill in
-> over time; a kind that has not fired yet simply has no line, which is correct, not a wiring gap.
-
 ## 9. How alerts surface visually
 
 An alert condition shows up in three places, all from one pipeline (feeder metrics → Prometheus
@@ -1098,6 +1092,4 @@ pack's `dashboards/` directory).
 
 The `feeder-cost` dashboard (uid `feeder-cost`) and the management-tx panels on `feeder-tx` (panel ids
 351/352) render the same way — `img/cost-full.png`, `img/cost-panel-1..6.png`, `img/tx-panel-351.png`,
-`img/tx-panel-352.png` above are live Preview captures. A `kind`/`wallet` series only appears once that
-operation has run, so re-render after more management activity (or on Mainnet) to fill in kinds that
-were idle when these were taken.
+and `img/tx-panel-352.png`.

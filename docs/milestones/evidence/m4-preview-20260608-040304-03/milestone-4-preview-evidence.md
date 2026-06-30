@@ -166,7 +166,7 @@ _Per signer-wallet health for the multi-wallet pool: spendable balance, collater
 
 ![Operational Cost — full dashboard](dashboards/cost-full.png)
 
-_What it costs to run the system: ADA fees of the management txs (settle, withdraw, main→pool funding, defrag, wallet shaping, standalone deposit merge) by kind and signer wallet, with update fees alongside for the net-cost picture. Preview values are illustrative; Mainnet carries the real numbers._
+_What it costs to run the system: ADA fees of the management txs (settle, withdraw, main→pool funding, defrag, wallet shaping, standalone deposit merge) by kind and signer wallet, with update fees alongside for the net-cost picture._
 
 
 ## How to reproduce
