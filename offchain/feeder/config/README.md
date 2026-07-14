@@ -163,7 +163,7 @@ check judges a feed against the same bounds the feeder guarantees.
 Where Alertmanager delivery is turned on and addressed. Off by default → alerts reach
 the logs + database (via the feeder webhook) only. The SECRETS live in `feeder/.env`,
 never in this file; the generator writes these channels into the generated
-`monitoring/alertmanager.yml`.
+`monitoring/<network>/alertmanager.yml`.
 
 | Key | Role |
 | --- | --- |
@@ -172,6 +172,6 @@ never in this file; the generator writes these channels into the generated
 | `notifications.email.enabled` | Deliver alerts by email. |
 | `notifications.email.to` / `from` / `smarthost` | Recipients, sender, and SMTP `host:port` (password → `.env` `ALERTMANAGER_SMTP_PASSWORD`). |
 
-`monitoring/alerts.yml` and `monitoring/alertmanager.yml` are generated from this YAML
-by `make generate-monitoring` (automatic on `make up`) — edit the YAML, not the
-generated files.
+`monitoring/<network>/alerts.yml` and `monitoring/<network>/alertmanager.yml` are
+generated per network from this YAML by `make generate-monitoring` (automatic on
+`make up`) — edit the YAML, not the generated files.

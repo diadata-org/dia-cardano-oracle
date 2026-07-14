@@ -146,6 +146,23 @@ browser. All are published on `localhost`.
 | **Indexer** (consumer-facing on-chain queries) | <http://localhost:3001/v1/health>, `/v1/pairs` | `make up` |
 | **Indexer** API reference (Swagger UI) + metrics | <http://localhost:3001/docs>, `/v1/openapi.json`, `/metrics` | `make up` |
 
+**Changing the host ports.** The ports above are the defaults. To avoid a clash
+with another local server, remap the host side in `feeder/.env` (the only `.env`
+docker reads) and re-run `make up` / `make restart-latest`:
+
+```
+FEEDER_HOST_PORT=8080        # feeder API + metrics
+INDEXER_HOST_PORT=3001       # indexer HTTP API
+GRAFANA_HOST_PORT=3000       # Grafana UI
+PROMETHEUS_HOST_PORT=9090    # Prometheus
+ALERTMANAGER_HOST_PORT=9093  # Alertmanager
+PUSHGATEWAY_HOST_PORT=9091   # Pushgateway
+```
+
+Only the host side changes; the URLs' paths stay the same on the new port. The
+preview and mainnet stacks share these host ports, so only one network's stack
+can be up at a time.
+
 Feeder HTTP API (all under `http://localhost:8080`):
 
 | Endpoint | Shows |
@@ -360,7 +377,7 @@ Alert rules, thresholds and the Alertmanager config are **generated** from
 `infrastructure.<network>.yaml` (see *Alert thresholds — single source of truth*).
 To change a threshold or a notification channel, edit that YAML and run
 `make generate-monitoring` (automatic on `make up`) — do not hand-edit
-`monitoring/alerts.yml` or `monitoring/alertmanager.yml`.
+`monitoring/<network>/alerts.yml` or `monitoring/<network>/alertmanager.yml`.
 
 ### Capturing an operational snapshot
 
@@ -951,7 +968,7 @@ Every alert flows through a single path, so a firing condition reaches both the
 queryable record and (optionally) a human:
 
 ```
-feeder emits metrics → Prometheus evaluates monitoring/alerts.yml
+feeder emits metrics → Prometheus evaluates monitoring/<network>/alerts.yml
   → Alertmanager (groups · deduplicates · silences)
       ├─ webhook → feeder POST /api/v1/alerts/ingest → alert_log (GET /api/v1/alerts) + logs   [always on]
       └─ Telegram / email                                                                        [off by default]
@@ -966,8 +983,8 @@ automatically; the log + DB path needs no configuration.
 `infrastructure.<network>.yaml::notifications` (`enabled: true` + chat id /
 recipients) and put its secret in `feeder/.env`
 (`ALERTMANAGER_TELEGRAM_BOT_TOKEN` / `ALERTMANAGER_SMTP_PASSWORD`); the generator
-writes it into the generated `monitoring/alertmanager.yml`. Until then, alerts go
-only to the logs + DB.
+writes it into the generated `monitoring/<network>/alertmanager.yml`. Until then,
+alerts go only to the logs + DB.
 
 **Fire an alert on demand (testing / demo).** With the stack up
 (`make up MONITORING=1`), `scripts/monitoring/trigger-alert.sh <AlertName>` makes one
@@ -990,10 +1007,13 @@ scripts/monitoring/trigger-alert.sh clear                # remove the pushed val
 ### Alert thresholds — single source of truth
 
 Operational thresholds live in ONE place: `infrastructure.<network>.yaml::alerting.<key>`,
-which the feeder code reads directly. `monitoring/alerts.yml` (Prometheus rules),
-`monitoring/alertmanager.yml`, and the Grafana panel thresholds are **generated
-from that YAML** by `make generate-monitoring` (run automatically before
-`make up`). Do **not** hand-edit the generated files — change the YAML and
+which the feeder code reads directly. Each network has its OWN generated
+monitoring directory — `monitoring/<network>/alerts.yml` (Prometheus rules),
+`monitoring/<network>/alertmanager.yml`, and its Grafana dashboards — **generated
+from that network's YAML** by `make generate-monitoring` (run automatically before
+`make up`, for the active `CARDANO_NETWORK`). So preview and mainnet can carry
+different thresholds and neither overwrites the other. Do **not** hand-edit the
+generated files — change the YAML and
 regenerate.
 
 **Enforced — they cannot drift silently.** `src/config/__tests__/threshold-drift.test.ts`

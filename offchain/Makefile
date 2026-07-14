@@ -17,6 +17,9 @@ UID ?= $(shell id -u)
 GID ?= $(shell id -g)
 export UID
 export GID
+# Exported so docker-compose interpolates the active network into the per-network
+# monitoring mounts (./monitoring/${NET_TAG}/alerts.yml, dashboards, alertmanager).
+export NET_TAG
 
 # RUN_ID selects the per-run state dir (state/<network>_run_<RUN_ID>/), the same
 # id the CLI deployment used. Exported so `make up RUN_ID=...` (and every feeder
@@ -74,11 +77,12 @@ build: ## Build the unified feeder + CLI image
 	$(COMPOSE) --profile sqlite build
 
 # Write the monitoring thresholds from infrastructure.<network>.yaml::alerting.*
-# into monitoring/alerts.yml + the Grafana dashboard. NET_TAG (= CARDANO_NETWORK
-# from feeder/.env, lowercased) selects the source YAML. Run by hand to refresh
-# the files, and automatically as a prerequisite of `up` / `up-postgres` so
-# Prometheus + Grafana always load values that match the YAML. It is a fast,
-# host-side tsx run (no Docker) and a no-op when the files are already current.
+# into that network's own directory (monitoring/<network>/alerts.yml, its Grafana
+# dashboards, and alertmanager.yml). NET_TAG (= CARDANO_NETWORK from feeder/.env,
+# lowercased) selects both the source YAML and the target directory. Run by hand
+# to refresh the files, and automatically as a prerequisite of `up` / `up-postgres`
+# so Prometheus + Grafana always load values that match the active network's YAML.
+# It is a fast, host-side tsx run (no Docker) and a no-op when files are current.
 .PHONY: generate-monitoring
 generate-monitoring: ## Write monitoring thresholds from infrastructure.<network>.yaml::alerting.* (idempotent)
 	cd feeder && node --import tsx/esm scripts/monitoring/generate-monitoring.ts --network $(NET_TAG)
@@ -304,9 +308,9 @@ evidence4: ## Build the M4 evidence pack (indexer + consumer demo + the 4 Grafan
 	if [ -n "$(RUN_ID)" ]; then sdir=state/$${net}_run_$(RUN_ID); \
 	else sdir=$$(ls -d state/$${net}_run_*/ 2>/dev/null | sort | tail -1); sdir=$${sdir%/}; sdir=$${sdir:-state/$$net}; fi; \
 	runid=$${sdir##*_run_}; [ "$$runid" = "$$sdir" ] && runid=$$(date -u +%Y%m%d-%H%M%S); \
-	echo "Building $(EVIDENCE_NETWORK) M4 evidence pack — stamp=$$runid indexer=$${INDEXER_URL:-http://localhost:3001}"; \
+	echo "Building $(EVIDENCE_NETWORK) M4 evidence pack — stamp=$$runid (indexer URL resolved by the packager from feeder/.env)"; \
 	EVIDENCE_STAMP=$$runid EVIDENCE_NETWORK=$$net \
-	  INDEXER_URL=$${INDEXER_URL:-http://localhost:3001} \
+	  INDEXER_URL=$(INDEXER_URL) \
 	  GRAFANA_ADMIN_PASSWORD=$${GRAFANA_ADMIN_PASSWORD:-admin} \
 	  EVIDENCE_ONCHAIN_LOG=$${EVIDENCE_ONCHAIN_LOG:-} RUN_ID=$(RUN_ID) \
 	  feeder/scripts/m4-evidence/package-m4-evidence.sh

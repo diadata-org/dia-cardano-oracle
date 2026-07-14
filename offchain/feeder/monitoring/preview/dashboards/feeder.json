@@ -1,0 +1,1461 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "description": "DIA Cardano Oracle Feeder — operational overview",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 200,
+      "title": "Oracle Feed Liveness (confirmed updates per pair)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Confirmed Cardano oracle updates per price pair over the selected time range. A non-zero count means the feed is live in the window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "green",
+                "value": 5
+              }
+            ]
+          },
+          "custom": {},
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "id": 11,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "round(sum by (symbol, client_id) (increase(dia_bridge_transactions_confirmed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[$__range])))",
+          "legendFormat": "{{symbol}} · {{client_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Confirmed oracle updates (selected range, per pair)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "95th-percentile age of incoming DIA price data at the moment it was processed (1-hour window), recorded ONLY for the pairs this feeder routes (not the hundreds of other symbols the source feed carries). Values above 600 s indicate the DIA source is publishing stale prices for a routed pair and may trigger the PriceAgeHigh alert.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              },
+              {
+                "color": "red",
+                "value": 600
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "id": 12,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, symbol) (rate(dia_bridge_price_age_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", router_id=~\"$router\"}[1h])))",
+          "legendFormat": "{{symbol}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Price data age p95 — 1 h window (per routed pair)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 100,
+      "title": "Row 1 — Balances & Staleness",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Seconds since each pair was last confirmed on-chain. Values above 3600 s (alerting.oracle_pair_stale_seconds) trigger the OraclePairStale alert.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1800
+              },
+              {
+                "color": "red",
+                "value": 3600
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
+      "id": 1,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "time() - dia_bridge_cardano_oracle_last_confirmed_timestamp_seconds{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}",
+          "legendFormat": "{{symbol}} · {{client_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Pair staleness (per symbol)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Receiver prepaid balance in ADA. Below 2 ADA (alerting.receiver_balance_low_lovelace) triggers ReceiverBalanceLow. The backing metric labels include receiver_address and deposit_address; fund the deposit address, not the Receiver script address.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ADA",
+          "decimals": 2,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "green",
+                "value": 10
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 10
+      },
+      "id": 2,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_cardano_receiver_balance_lovelace{network=~\"$network\", client_id=~\"$client\"} / 1000000",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Receiver balance — ADA (per client)",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Operational wallet balances in ADA (all clients). Admin (signer) wallet — fires AdminWalletLow below 5 ADA. PaymentHook accrued — fires PaymentHookWithdrawReady above 50 ADA. Receiver accrued (sum) — fires SettleOverdue above 10 ADA.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ADA",
+          "decimals": 2,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 5
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "PaymentHook accrued"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 50
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Receiver accrued (sum)"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 10
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Receiver accrued — .*"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 10
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 10
+      },
+      "id": 3,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_cardano_admin_wallet_lovelace{network=~\"$network\"} / 1000000",
+          "legendFormat": "Admin wallet",
+          "refId": "A"
+        },
+        {
+          "expr": "dia_bridge_cardano_payment_hook_accrued_lovelace{network=~\"$network\"} / 1000000",
+          "legendFormat": "PaymentHook accrued",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(dia_bridge_cardano_receiver_accrued_lovelace{network=~\"$network\"}) / 1000000",
+          "legendFormat": "Receiver accrued (sum)",
+          "refId": "C"
+        },
+        {
+          "expr": "sum by (client_id) (dia_bridge_cardano_receiver_accrued_lovelace{network=~\"$network\", client_id=~\"$client\"}) / 1000000",
+          "legendFormat": "Receiver accrued — {{client_id}}",
+          "refId": "D"
+        }
+      ],
+      "title": "Admin wallet • PaymentHook • Receiver accrued — ADA",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Largest single pure-ADA UTxO in the admin/signer wallet (all clients). A script tx needs a collateral UTxO distinct from its fee inputs, so THIS — not the total — determines whether the wallet can build. Below the collateral floor the wallet is fragmented (AdminWalletFragmented, critical) even if the total looks healthy; the daemon auto-consolidates below auto_consolidate_below_lovelace.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ADA",
+          "decimals": 2,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 10
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 18
+      },
+      "id": 201,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "dia_bridge_cardano_admin_wallet_max_utxo_lovelace{network=~\"$network\"} / 1000000",
+          "legendFormat": "Largest UTxO",
+          "refId": "A"
+        }
+      ],
+      "title": "Admin wallet — largest UTxO — ADA (collateral floor)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Un-merged client deposits (side-deposit funding) waiting at the per-client deposit address, in ADA. Above 5 ADA (alerting.deposit_pending_merge_lovelace) triggers the ReceiverDepositsPending alert — run `deposit:merge` to fold the deposits into the Receiver balance.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ADA",
+          "decimals": 2,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 18
+      },
+      "id": 15,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_cardano_deposit_pending_lovelace{network=~\"$network\", client_id=~\"$client\"} / 1000000",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Deposit pending — ADA (per client)",
+      "type": "gauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 101,
+      "title": "Row 2 — Symbol Throughput & Latency",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Per-symbol pipeline latency (processing start to confirmation), p50/p95/p99 over a 5-minute window, aggregated across all pairs. For TRANSACTION-level latency per stage, see the 'Feeder — Transactions' dashboard.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 27
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_end_to_end_latency_seconds_bucket{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Symbol-update latency (p50/p95/p99)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Confirmed symbol updates in each 5-minute window, per pair (a batch tx of N pairs adds 1 to each of its N symbols). A count, not a rate. For pure per-TRANSACTION counts see 'Tx confirmed vs failed'.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 27
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (symbol, client_id) (increase(dia_bridge_transactions_confirmed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{symbol}} · {{client_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Symbol updates confirmed (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Failed symbol updates in each 5-minute window grouped by error code (a count, not a rate). REAL failures only — superseded intents (NonMonotonicNonce, no tx, no fee) are counted separately in dia_bridge_intents_superseded_total{reason}, not here.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 27
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (error_code) (increase(dia_bridge_transactions_failed_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", error_code=~\"$error_code\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{error_code}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Symbol-update failures (5m, by error code)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "id": 105,
+      "title": "Row 2b — Transactions (per tx)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Cardano TRANSACTIONS in each 5-minute window, counted once per tx (a batch of N pairs is ONE tx), by outcome. Condemned no-ops are excluded — these are real transactions only.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx confirmed vs failed (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Batch size distribution: how many pairs travel in each transaction, p50/p95 over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "title": "Pairs per tx (p50/p95)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "id": 102,
+      "title": "Row 3 — Chain & Scanner Health",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Total reorgs detected in the last hour. Non-zero values indicate chain instability.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 45
+      },
+      "id": 7,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(dia_bridge_transactions_reorg_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", router_id=~\"$router\"}[1h]))",
+          "legendFormat": "reorgs / 1h",
+          "refId": "A"
+        }
+      ],
+      "title": "Reorg counter",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Blocks behind the chain tip. High values indicate the scanner is falling behind (all clients).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 9,
+        "x": 6,
+        "y": 45
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_scanner_block_lag{network=~\"$network\"}",
+          "legendFormat": "block lag",
+          "refId": "A"
+        }
+      ],
+      "title": "Scanner block lag",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Intents suppressed before routing in each 5-minute window grouped by filter reason (a count, not a rate). High counts are normal: the deviation/time-threshold policy suppresses most intents by design.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 9,
+        "x": 15,
+        "y": 45
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (increase(dia_bridge_intents_filtered_total{network=~\"$network\", symbol=~\"$symbol\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Intents filtered (5m, by reason)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Intents the feeder DECLINED to submit because a newer one already won on-chain (NonMonotonicNonce) — no tx, no fee. Correct no-ops, kept out of the failure counters. High is normal under fast price movement; pair with 'Symbol updates confirmed'.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 53
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (increase(dia_bridge_intents_superseded_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"}[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Intents superseded (5m, by reason)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 61
+      },
+      "id": 103,
+      "title": "Row 4 — Price Quality & Anomaly Detection",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "95th-percentile price deviation per symbol over the last hour. Values above 5% trigger the PriceDeviationHigh alert (potential misreport). Green = within normal bounds.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 62
+      },
+      "id": 13,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, symbol, router_id) (rate(dia_bridge_price_deviation_percent_bucket{network=~\"$network\", symbol=~\"$symbol\", router_id=~\"$router\"}[1h])))",
+          "legendFormat": "{{symbol}} · {{router_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Price deviation p95 — 1 h window (per pair)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Distribution of price deviation (|new − last on-chain price| ÷ last × 100) measured at policy-gating time for every evaluated intent — both submitted and gate-suppressed. Healthy feeds cluster near 0%; bright bands at high deviation indicate large price moves or possible source anomalies.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 70
+      },
+      "id": 10,
+      "options": {
+        "calculate": false,
+        "yAxis": {
+          "unit": "short"
+        },
+        "color": {
+          "mode": "scheme",
+          "scheme": "Spectral"
+        },
+        "cellGap": 1
+      },
+      "targets": [
+        {
+          "expr": "sum by (le, symbol, router_id) (rate(dia_bridge_price_deviation_percent_bucket{network=~\"$network\", symbol=~\"$symbol\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{symbol}} {{router_id}} le={{le}}",
+          "refId": "A",
+          "format": "heatmap"
+        }
+      ],
+      "title": "Price deviation distribution (heatmap)",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Per-feed sanity verdict from the periodic feed-sanity check: the live on-chain value vs the latest DIA source value, judged against that feed's push-policy thresholds. 0 = ok, 1 = suspect, 2 = broken. A value of 2 sustained triggers the FeedAccuracyFail alert. Inspect with `npm run sanity:feeds`.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 78
+      },
+      "id": 20,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "max by (symbol, client_id) (dia_bridge_feed_sanity_status{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\"})",
+          "legendFormat": "{{symbol}} · {{client_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Feed sanity verdict (per pair)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 86
+      },
+      "id": 104,
+      "title": "Row 5 — Billing (per client / customer)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Average Cardano transaction fee (lovelace) paid per oracle update, by customer — total fees paid divided by the number of confirmed updates. A true mean, so it is unaffected by histogram-bucket resolution. Filter with $client, $symbol, and $customer.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 87
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (customer_id) (dia_bridge_transaction_fee_lovelace_sum{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\", router_id=~\"$router\"}) / sum by (customer_id) (dia_bridge_transaction_fee_lovelace_count{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\", router_id=~\"$router\"})",
+          "legendFormat": "{{customer_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx fee avg — lovelace (per customer)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Transactions that involved each router per 5-minute window, by outcome. A coalesced batch can mix routers on one shared lane, so this is tx↔router membership (one tx can credit several routers), not a pure tx count. Filter with $network / $customer / $client / $router.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 95
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (router_id, outcome) (increase(dia_bridge_transaction_router_membership_total{network=~\"$network\", customer_id=~\"$customer\", client_id=~\"$client\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{router_id}} · {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx involving router (5m, by router & outcome)",
+      "type": "timeseries"
+    },
+    {
+      "type": "row",
+      "title": "Row 6 — Provider Health (primary vs secondary)",
+      "collapsed": false,
+      "id": 202,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 103
+      },
+      "panels": []
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Health of the two Cardano API providers, by role. PRIMARY is the lucid build/submit provider (selected by CARDANO_PROVIDER) — if it is down NOTHING can be built and every pair freezes together (e.g. a Blockfrost 402 quota wall) → PrimaryProviderDown (critical). SECONDARY backs confirmation/reorg redundancy — losing it is a warning, not an outage → SecondaryProviderDown. 1 = up, 0 = down.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 104
+      },
+      "id": 203,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "dia_bridge_component_health{component=~\"blockfrost|koios\",network=~\"$network\"}",
+          "legendFormat": "{{component}} ({{role}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Cardano provider health — primary vs secondary (1 = up)",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "dia",
+    "cardano",
+    "oracle"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Network",
+        "name": "network",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total, network)",
+          "refId": "network"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Customer",
+        "name": "customer",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total{network=~\"$network\"}, customer_id)",
+          "refId": "customer"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Client",
+        "name": "client",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total{network=~\"$network\", customer_id=~\"$customer\"}, client_id)",
+          "refId": "client"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Router",
+        "name": "router",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transaction_router_membership_total{network=~\"$network\", customer_id=~\"$customer\", client_id=~\"$client\"}, router_id)",
+          "refId": "router"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Symbol",
+        "name": "symbol",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_tx_pair_membership_total{network=~\"$network\", customer_id=~\"$customer\", client_id=~\"$client\", router_id=~\"$router\"}, symbol)",
+          "refId": "symbol"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Error code",
+        "name": "error_code",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_failed_total{client_id=~\"$client\"}, error_code)",
+          "refId": "error_code"
+        },
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DIA Cardano Oracle Feeder",
+  "uid": "dia-cardano-feeder",
+  "version": 4
+}

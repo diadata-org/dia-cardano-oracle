@@ -1479,7 +1479,7 @@ cron drops it instead of wasting a pipeline pass and a fee.
 
 All operational conditions — staleness, price deviation, price age, balances, fee-loop,
 reorgs, on-chain-vs-source feed accuracy, and Cardano API provider health — are evaluated
-by the Prometheus rules in `offchain/feeder/monitoring/alerts.yml` (PromQL) against the
+by the Prometheus rules in `offchain/feeder/monitoring/<network>/alerts.yml` (PromQL) against the
 canonical `alerting.*` thresholds. Prometheus delivers firing/resolved alerts to
 Alertmanager, which groups, deduplicates, and silences them, then posts to the feeder
 webhook `POST /api/v1/alerts/ingest`; the feeder records each alert (keyed by its

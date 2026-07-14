@@ -343,7 +343,7 @@ infrastructure:
   #   with `enabled: true` here and put its SECRET in `.env` (never here):
   #   Telegram bot token → ALERTMANAGER_TELEGRAM_BOT_TOKEN; SMTP password →
   #   ALERTMANAGER_SMTP_PASSWORD. The generator writes these into
-  #   monitoring/alertmanager.yml on `make up`.
+  #   monitoring/<network>/alertmanager.yml on `make up`.
   # --------------------------------------------------------------------------
   notifications:
     telegram:
@@ -357,8 +357,8 @@ infrastructure:
 
   # --------------------------------------------------------------------------
   # alerting — canonical thresholds for both feeder-emitted warnings and
-  #   Prometheus alert rules in monitoring/alerts.yml. Every alert rule in
-  #   alerts.yml carries an inline comment naming the YAML key here; values
+  #   Prometheus alert rules in monitoring/<network>/alerts.yml. Every alert rule
+  #   in alerts.yml carries an inline comment naming the YAML key here; values
   #   must stay in sync. The feeder code reads these too (e.g. to emit
   #   `dia_bridge_cardano_receiver_topup_warnings_total` when the balance
   #   drops below `receiver_balance_low_lovelace`).

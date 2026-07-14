@@ -1,0 +1,1413 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "description": "DIA Cardano Oracle Feeder — per-TRANSACTION view: stage latency, throughput by outcome, batch size. Counts are per tx (a batch of N pairs is one tx), not per symbol or intent.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 300,
+      "title": "Transaction latency — by stage (p50/p95/p99)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Tx-level seconds from processing start to submission (build + queue + sign), one observation per confirmed tx. p50/p95/p99 over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "id": 301,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_processing_to_submission_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Stage 1 — processing → submission",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Tx-level seconds from broadcast to on-chain confirmation (chain settlement), one observation per confirmed tx. p50/p95/p99 over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "id": 302,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_submission_to_confirmation_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Stage 2 — submission → confirmation",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Tx-level total seconds from feeder processing start to on-chain confirmation, one observation per confirmed tx. p50/p95/p99 over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "id": 303,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_tx_end_to_end_seconds_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "End-to-end — processing → confirmation",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 310,
+      "title": "Transaction throughput & outcome",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Transactions per 5-minute window, counted once per tx (a batch of N pairs is ONE tx), by outcome. Condemned no-ops excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
+      "id": 311,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx confirmed vs failed (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Confirmed transactions as a percentage of all real attempts (confirmed + failed) over a 5-minute window. Superseded no-ops are excluded. Shows \"No data\" when no transactions were sent in the window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 10
+      },
+      "id": 312,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"confirmed\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])) / sum(increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
+          "legendFormat": "success %",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx success ratio (5m)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Transactions per 5-minute window grouped by client (receiver identity). Counted once per tx.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 10
+      },
+      "id": 313,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (client_id) (increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx by client (5m)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 320,
+      "title": "Batch size & pair membership",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Batch size distribution: pairs per transaction, p50/p95/p99 over a 5-minute window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 19
+      },
+      "id": 321,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Pairs per tx (p50/p95/p99)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Distribution of pairs-per-transaction (batch size) over time. Bright bands show the typical batch size.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 19
+      },
+      "id": 322,
+      "options": {
+        "calculate": false,
+        "yAxis": {
+          "unit": "short"
+        },
+        "color": {
+          "mode": "scheme",
+          "scheme": "Spectral"
+        },
+        "cellGap": 1
+      },
+      "targets": [
+        {
+          "expr": "sum by (le) (rate(dia_bridge_transaction_pairs_bucket{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[5m]))",
+          "legendFormat": "le={{le}}",
+          "refId": "A",
+          "format": "heatmap"
+        }
+      ],
+      "title": "Batch size distribution (heatmap)",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Transactions that included each pair per 5-minute window, split by outcome. Filter by $symbol to see the txs that touched a given pair (their batch size is in 'Pairs per tx'); filter by $customer to scope to one customer. Unlike a plain symbol-update count this carries confirmed vs failed and the customer dimension.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 19
+      },
+      "id": 323,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (symbol, client_id, outcome) (increase(dia_bridge_tx_pair_membership_total{network=~\"$network\", symbol=~\"$symbol\", client_id=~\"$client\", customer_id=~\"$customer\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{symbol}} · {{client_id}} · {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx touching pair (5m, by symbol & outcome)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Transactions that involved each router per 5-minute window, by outcome. A coalesced batch can mix routers on one shared lane, so this counts tx↔router membership (one tx can credit several routers) — not a pure tx count. Filter by $network / $customer / $client / $router.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 27
+      },
+      "id": 324,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (router_id, outcome) (increase(dia_bridge_transaction_router_membership_total{network=~\"$network\", customer_id=~\"$customer\", client_id=~\"$client\", router_id=~\"$router\"}[5m]))",
+          "legendFormat": "{{router_id}} · {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tx involving router (5m, by router & outcome)",
+      "type": "timeseries"
+    },
+    {
+      "type": "row",
+      "title": "Real transaction counts",
+      "collapsed": false,
+      "id": 330,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "panels": []
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Raw COUNT of real Cardano transactions over the selected time range — confirmed and failed, counted once per tx (a batch of N pairs is ONE tx). No averages, no ratios. Superseded no-ops (NonMonotonicNonce) and crash-recovery rows are not transactions and are not counted here.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {}
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "confirmed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "id": 331,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"confirmed\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range]))",
+          "legendFormat": "confirmed",
+          "refId": "A",
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", outcome=\"failed\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range]))",
+          "legendFormat": "failed",
+          "refId": "B",
+          "instant": true
+        }
+      ],
+      "title": "Tx counts — confirmed vs failed (selected range)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "id": 340,
+      "title": "Per-client queues & state",
+      "type": "row"
+    },
+    {
+      "type": "stat",
+      "id": 341,
+      "title": "Tx counts per client (confirmed/failed, selected range)",
+      "description": "Real number of Cardano transactions per client over the selected time range, by outcome — counted once per tx. Not an average: the integer total in the window.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 45
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "round(sum by (client_id, outcome) (increase(dia_bridge_transactions_total{network=~\"$network\", wallet=~\"$wallet\", client_id=~\"$client\", customer_id=~\"$customer\"}[$__range])))",
+          "legendFormat": "{{client_id}} · {{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 345,
+      "title": "Submission state — now (per client)",
+      "description": "What each client's submit pipeline is doing RIGHT NOW: idle / building / submitting / awaiting-confirmation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 45
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "idle",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "building",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "submitting",
+                  "color": "orange",
+                  "index": 2
+                },
+                "3": {
+                  "text": "awaiting-confirm",
+                  "color": "purple",
+                  "index": 3
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_submission_state{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 347,
+      "title": "Coalescer state — now (per client)",
+      "description": "What each client's coalescer is doing RIGHT NOW: idle / accumulating (buffering intents) / in-flight (flushed to submit).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 45
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "idle",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "accumulating",
+                  "color": "blue",
+                  "index": 1
+                },
+                "2": {
+                  "text": "in-flight",
+                  "color": "orange",
+                  "index": 2
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_coalescer_state{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "state-timeline",
+      "id": 342,
+      "title": "Submission state per client (history)",
+      "description": "Submit-pipeline phase over time per client (0 idle / 1 building / 2 submitting / 3 awaiting-confirmation). Serial per batch; read how long each phase took.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 53
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "idle",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "building",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "submitting",
+                  "color": "orange",
+                  "index": 2
+                },
+                "3": {
+                  "text": "awaiting-confirm",
+                  "color": "purple",
+                  "index": 3
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "unit": "short",
+          "min": 0,
+          "max": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "auto",
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_submission_state{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "state-timeline",
+      "id": 346,
+      "title": "Coalescer state per client (history)",
+      "description": "Coalescer lane lifecycle over time per client (0 idle / 1 accumulating / 2 in-flight). Independent of the submit pipeline — a lane can accumulate the next batch while submitting the current one.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 53
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "idle",
+                  "color": "green",
+                  "index": 0
+                },
+                "1": {
+                  "text": "accumulating",
+                  "color": "blue",
+                  "index": 1
+                },
+                "2": {
+                  "text": "in-flight",
+                  "color": "orange",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "unit": "short",
+          "min": 0,
+          "max": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "auto",
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_coalescer_state{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"}",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 348,
+      "title": "Intents in coalescer queue — now (per client)",
+      "description": "Current number of intents buffered in the coalescer for each client, waiting for the flush that batches them into one transaction.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 0,
+        "y": 61
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "sum by (client_id) (dia_bridge_coalescer_buffered{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"})",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 343,
+      "title": "Coalescer buffered per client",
+      "description": "Intents buffered in the coalescer over time, per client. Sawtooths: climbs as intents accumulate, drops to 0 on each flush.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 4,
+        "y": 61
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (client_id) (dia_bridge_coalescer_buffered{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"})",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 349,
+      "title": "Tx in submit queue — now (per client)",
+      "description": "Tasks waiting in each client's serial submit queue. Usually 0; rises when submissions arrive faster than they confirm.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 12,
+        "y": 61
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "sum by (client_id) (dia_bridge_submit_queue_pending{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"})",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 344,
+      "title": "Submit queue pending per client",
+      "description": "Tasks waiting in each client's serial submit queue over time. Usually 0 (the lane drains each batch immediately); a sustained value means submissions arrive faster than they confirm.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 61
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (client_id) (dia_bridge_submit_queue_pending{network=~\"$network\", client_id=~\"$client\", customer_id=~\"$customer\"})",
+          "legendFormat": "{{client_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Management transactions (operational)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 69
+      },
+      "id": 350,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Confirmed management txs by kind since the feeder started — settle / withdraw / fund_pool / consolidate / split / merge. The operational (non-update) txs that keep the system running, shown next to update throughput. Reads the cumulative counter directly (so it agrees with the Operational Cost dashboard, where the ADA fee of these lives); resets to zero on a feeder restart. A folded deposit merge is not a `merge` here (it rides an update). Filtered by $network and $wallet only — management txs carry no symbol/client/router.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {},
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 70
+      },
+      "id": 351,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "sum by (kind) (dia_bridge_management_tx_count{network=~\"$network\", wallet=~\"$wallet\", kind=~\"$kind\", outcome=\"confirmed\"})",
+          "legendFormat": "{{kind}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Management txs confirmed — by kind (cumulative)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Failed management txs by kind since the feeder started — a build/submit/confirm error on a maintenance tx (a skipped no-op is not counted, it ran no tx). Reads the cumulative counter directly; resets to zero on a feeder restart. Filtered by $network and $wallet only.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {},
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 70
+      },
+      "id": 352,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "expr": "sum by (kind) (dia_bridge_management_tx_count{network=~\"$network\", wallet=~\"$wallet\", kind=~\"$kind\", outcome=\"failed\"})",
+          "legendFormat": "{{kind}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Management txs failed — by kind (cumulative)",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "dia",
+    "cardano",
+    "oracle",
+    "transactions"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Network",
+        "name": "network",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total, network)",
+          "refId": "network"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Customer",
+        "name": "customer",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total{network=~\"$network\"}, customer_id)",
+          "refId": "customer"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Client",
+        "name": "client",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total{network=~\"$network\", customer_id=~\"$customer\"}, client_id)",
+          "refId": "client"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Router",
+        "name": "router",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transaction_router_membership_total{network=~\"$network\", customer_id=~\"$customer\", client_id=~\"$client\"}, router_id)",
+          "refId": "router"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Symbol",
+        "name": "symbol",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_tx_pair_membership_total{network=~\"$network\", customer_id=~\"$customer\", client_id=~\"$client\", router_id=~\"$router\"}, symbol)",
+          "refId": "symbol"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Wallet",
+        "name": "wallet",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_transactions_total, wallet)",
+          "refId": "wallet"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Operation",
+        "name": "kind",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_management_tx_count, kind)",
+          "refId": "kind"
+        },
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DIA Cardano Oracle Feeder — Transactions",
+  "uid": "dia-cardano-feeder-tx",
+  "version": 2
+}

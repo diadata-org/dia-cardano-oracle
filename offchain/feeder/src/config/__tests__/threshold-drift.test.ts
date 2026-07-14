@@ -1,75 +1,64 @@
-// Threshold drift guard — enforces that `infrastructure.<network>.yaml::alerting.*`
-// is the SINGLE SOURCE OF TRUTH for every operational threshold. It fails when a
-// Prometheus rule (monitoring/alerts.yml) or a Grafana panel
-// (monitoring/grafana/dashboards/feeder.json) carries a threshold that has
-// drifted from the YAML, and when the two network YAMLs disagree (the alerts +
-// dashboard are network-agnostic, so both must match the one file).
+// Threshold drift guard — enforces that `infrastructure.<network>.yaml` is the
+// SINGLE SOURCE OF TRUTH for every operational threshold, PER NETWORK.
 //
-// This is the mechanism that lets the README say "edit the YAML, nothing else
-// is the source of truth": any hand-edit that diverges turns this test red.
+// Each network has its OWN committed monitoring directory (monitoring/preview/,
+// monitoring/mainnet/), rendered from that network's YAML by
+// scripts/monitoring/generate-monitoring.ts (which drives the transforms in
+// src/alerting/monitoring-rendering.ts). This test reads EACH network's
+// committed files and asserts every threshold matches that network's YAML.
+// Because each network is checked against its own YAML, preview and mainnet
+// carry independent threshold values — there is no requirement that the two
+// networks agree, and neither directory can overwrite the other.
+//
+// A hand-edit to any committed monitoring file that diverges from its network's
+// YAML turns this test red; fix it by editing the YAML and running
+// `make generate-monitoring` (which rewrites that network's directory). Values
+// that only drive feeder BEHAVIOUR and never appear in a monitoring file (e.g.
+// wallet_shape.working_utxo_lovelace / collateral_utxo_lovelace) are not
+// constrained here and are free to differ per network.
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
+import {
+  type Alerting,
+  type WalletBlock,
+  type ThresholdSpec,
+  ALERT_TO_YAML,
+  specKeys,
+  resolveSpec,
+} from "../../alerting/monitoring-rendering.js";
 
 // src/config/__tests__ -> feeder root
 const FEEDER_ROOT = path.join(import.meta.dirname, "../../..");
 const read = (rel: string): string => readFileSync(path.join(FEEDER_ROOT, rel), "utf8");
 
-type Alerting = Record<string, number>;
+const NETWORKS = ["preview", "mainnet"] as const;
+// Network-agnostic dashboard STRUCTURE (template variables, panel encodings, the
+// fixed feed-sanity verdict codes) is identical across networks; the structural
+// checks read this canonical network's dashboards once.
+const CANONICAL_NETWORK = "preview";
 
-function loadAlerting(networkFile: string): Alerting {
-  const doc = parseYaml(read(`config/${networkFile}`)) as {
+function loadAlerting(network: string): Alerting {
+  const doc = parseYaml(read(`config/infrastructure.${network}.yaml`)) as {
     infrastructure?: { alerting?: Alerting };
   };
   const alerting = doc.infrastructure?.alerting;
-  assert.ok(alerting, `${networkFile}: missing infrastructure.alerting block`);
+  assert.ok(alerting, `infrastructure.${network}.yaml: missing infrastructure.alerting block`);
   return alerting;
 }
 
-// alert name -> { yamlKey, divisor }. divisor 1e6 = the expr divides lovelace
-// by 1_000_000 and compares in ADA; divisor 1 = the value is used verbatim.
-// A threshold operand is either one YAML key (÷ divisor) or the PRODUCT of two
-// keys (a per-provider daily quota × a warn ratio). Mirror of the generator map.
-type ThresholdSpec =
-  | { yamlKey: string; divisor: number }
-  | { product: [string, string]; divisor: number };
-
-const ALERT_TO_YAML: Record<string, ThresholdSpec> = {
-  OraclePairStale: { yamlKey: "oracle_pair_stale_seconds", divisor: 1 },
-  ReceiverBalanceLow: { yamlKey: "receiver_balance_low_lovelace", divisor: 1_000_000 },
-  SettleOverdue: { yamlKey: "settle_overdue_lovelace", divisor: 1_000_000 },
-  PaymentHookWithdrawReady: { yamlKey: "payment_hook_withdraw_ready_lovelace", divisor: 1_000_000 },
-  AdminWalletLow: { yamlKey: "admin_wallet_low_lovelace", divisor: 1_000_000 },
-  AdminWalletFragmented: { yamlKey: "admin_wallet_min_collateral_lovelace", divisor: 1_000_000 },
-  PriceDeviationHigh: { yamlKey: "price_deviation_high_percent", divisor: 1 },
-  PriceAgeHigh: { yamlKey: "price_age_high_seconds", divisor: 1 },
-  ReorgRateHigh: { yamlKey: "reorg_rate_high_per_hour", divisor: 1 },
-  ReceiverDepositsPending: { yamlKey: "deposit_pending_merge_lovelace", divisor: 1_000_000 },
-  PrimaryProviderDown: { yamlKey: "provider_primary_unhealthy_seconds", divisor: 1 },
-  SecondaryProviderDown: { yamlKey: "provider_secondary_unhealthy_seconds", divisor: 1 },
-  ProviderErrorRateHigh: { yamlKey: "provider_error_rate_warn_ratio", divisor: 1 },
-  ProviderRequestQuotaHighBlockfrost: {
-    product: ["provider_request_quota_per_day_blockfrost", "provider_request_quota_warn_ratio"],
-    divisor: 1,
-  },
-  ProviderRequestQuotaHighKoios: {
-    product: ["provider_request_quota_per_day_koios", "provider_request_quota_warn_ratio"],
-    divisor: 1,
-  },
-};
-
-/** The YAML keys a spec reads (one, or the two product factors). */
-function specKeys(spec: ThresholdSpec): string[] {
-  return "yamlKey" in spec ? [spec.yamlKey] : spec.product;
-}
-
-/** Resolve a spec to its numeric operand from the alerting block. */
-function resolveSpec(spec: ThresholdSpec, alerting: Alerting): number {
-  if ("yamlKey" in spec) return alerting[spec.yamlKey]! / spec.divisor;
-  return (alerting[spec.product[0]]! * alerting[spec.product[1]]!) / spec.divisor;
+/** Load a non-alerting config block (the lovelace/count thresholds the per-wallet
+ *  alerts read). */
+function loadBlock(network: string, block: "wallet_pool" | "wallet_shape"): WalletBlock {
+  const doc = parseYaml(read(`config/infrastructure.${network}.yaml`)) as {
+    infrastructure?: Record<string, WalletBlock | undefined>;
+  };
+  const b = doc.infrastructure?.[block];
+  assert.ok(b, `infrastructure.${network}.yaml: missing infrastructure.${block} block`);
+  return b;
 }
 
 // Automatic-remediation thresholds. These drive FEEDER BEHAVIOUR (auto settle /
@@ -92,35 +81,19 @@ const AUTO_REMEDIATION_KEYS = new Set(AUTO_REMEDIATION_ORDERING.map((o) => o.aut
 // step but pair with no numeric alert, so they are exempt from the ordering test.
 const NON_NUMERIC_AUTO_KEYS = new Set(["auto_split"]);
 
-/** Load a non-alerting config block (lovelace/count thresholds the new wallet
- *  alerts read). Both networks must agree, same as `alerting`. */
-function loadBlock(networkFile: string, block: "wallet_pool" | "wallet_shape"): Record<string, number> {
-  const doc = parseYaml(read(`config/${networkFile}`)) as {
-    infrastructure?: Record<string, Record<string, number> | undefined>;
-  };
-  const b = doc.infrastructure?.[block];
-  assert.ok(b, `${networkFile}: missing infrastructure.${block} block`);
-  return b;
-}
+// ---------------------------------------------------------------------------
+// Read a network's committed monitoring files (monitoring/<network>/...).
+// ---------------------------------------------------------------------------
+const readAlerts = (network: string): string => read(`monitoring/${network}/alerts.yml`);
+const readDashboard = (network: string, file: string): string => read(`monitoring/${network}/dashboards/${file}`);
 
-/** Every numeric operand of a `<`/`>` comparison in an expr (for compound alerts). */
-function allThresholds(expr: string): number[] {
-  return [...expr.matchAll(/[<>]\s*([0-9.]+)/g)].map((m) => Number(m[1]));
-}
-
-/** Pull the threshold (the operand of the final `<`/`>` comparison) from a PromQL expr. */
-function thresholdFromExpr(expr: string): number {
-  const matches = [...expr.matchAll(/[<>]\s*([0-9.]+)/g)];
-  assert.ok(matches.length > 0, `no comparison operator found in expr: ${expr}`);
-  return Number(matches[matches.length - 1]![1]);
-}
-
+// ---------------------------------------------------------------------------
+// Parsers.
+// ---------------------------------------------------------------------------
 type AlertRule = { alert: string; expr: string; annotations?: { summary?: string; description?: string } };
 
-function loadAlertRules(): Map<string, AlertRule> {
-  const doc = parseYaml(read("monitoring/alerts.yml")) as {
-    groups: Array<{ rules: AlertRule[] }>;
-  };
+function parseAlertRules(text: string): Map<string, AlertRule> {
+  const doc = parseYaml(text) as { groups: Array<{ rules: AlertRule[] }> };
   const map = new Map<string, AlertRule>();
   for (const group of doc.groups) for (const rule of group.rules) if (rule.alert) map.set(rule.alert, rule);
   return map;
@@ -137,11 +110,18 @@ type Panel = {
     }>;
   };
 };
+type Dashboard = { panels: Panel[]; templating: { list: Array<{ name: string }> } };
 
-function loadDashboard(
-  file = "feeder.json",
-): { panels: Panel[]; templating: { list: Array<{ name: string }> } } {
-  return JSON.parse(read(`monitoring/grafana/dashboards/${file}`));
+/** Every numeric operand of a `<`/`>` comparison in an expr (for compound alerts). */
+function allThresholds(expr: string): number[] {
+  return [...expr.matchAll(/[<>]\s*([0-9.]+)/g)].map((m) => Number(m[1]));
+}
+
+/** Pull the threshold (the operand of the final `<`/`>` comparison) from a PromQL expr. */
+function thresholdFromExpr(expr: string): number {
+  const matches = [...expr.matchAll(/[<>]\s*([0-9.]+)/g)];
+  assert.ok(matches.length > 0, `no comparison operator found in expr: ${expr}`);
+  return Number(matches[matches.length - 1]![1]);
 }
 
 const panelByTitle = (panels: Panel[], title: string): Panel => {
@@ -162,179 +142,163 @@ const overrideStep = (panel: Panel, byName: string, color: string): number => {
   return s.value as number;
 };
 
-describe("threshold drift — YAML alerting.* is the single source of truth", () => {
-  it("both network YAMLs declare identical alerting thresholds", () => {
-    // alerts.yml + the dashboard are network-agnostic, so both YAMLs must agree.
-    assert.deepEqual(loadAlerting("infrastructure.preview.yaml"), loadAlerting("infrastructure.mainnet.yaml"));
-  });
+describe("threshold drift — infrastructure.<network>.yaml is the source of truth, per network", () => {
+  for (const network of NETWORKS) {
+    describe(`network ${network} (monitoring/${network}/)`, () => {
+      const alerting = loadAlerting(network);
+      const pool = loadBlock(network, "wallet_pool");
+      const shape = loadBlock(network, "wallet_shape");
+      const rules = parseAlertRules(readAlerts(network));
+      const dashboard = JSON.parse(readDashboard(network, "feeder.json")) as Dashboard;
+      const internals = JSON.parse(readDashboard(network, "feeder-internals.json")) as Dashboard;
 
-  it("every alerting key is consumed by an alert mapping or an auto-remediation threshold (no orphan keys)", () => {
-    const yaml = loadAlerting("infrastructure.preview.yaml");
-    const mapped = new Set(Object.values(ALERT_TO_YAML).flatMap(specKeys));
-    for (const key of Object.keys(yaml)) {
-      assert.ok(
-        mapped.has(key) || AUTO_REMEDIATION_KEYS.has(key) || NON_NUMERIC_AUTO_KEYS.has(key),
-        `alerting.${key} has no alert/dashboard binding and is not an auto-remediation threshold — wire it or remove it`,
-      );
-    }
-  });
+      it("every alerting key is consumed by an alert mapping or an auto-remediation threshold (no orphan keys)", () => {
+        const mapped = new Set(Object.values(ALERT_TO_YAML).flatMap(specKeys));
+        for (const key of Object.keys(alerting)) {
+          assert.ok(
+            mapped.has(key) || AUTO_REMEDIATION_KEYS.has(key) || NON_NUMERIC_AUTO_KEYS.has(key),
+            `alerting.${key} has no alert/dashboard binding and is not an auto-remediation threshold — wire it or remove it`,
+          );
+        }
+      });
 
-  it("auto-remediation thresholds sit BEYOND their paired alert (alert fires first, automatic follows)", () => {
-    const yaml = loadAlerting("infrastructure.preview.yaml");
-    for (const { autoKey, alertKey, direction } of AUTO_REMEDIATION_ORDERING) {
-      const auto = yaml[autoKey];
-      const alert = yaml[alertKey];
-      assert.ok(auto !== undefined, `alerting.${autoKey} is missing`);
-      assert.ok(alert !== undefined, `alerting.${alertKey} is missing`);
-      if (direction === "above") {
-        assert.ok(
-          auto > alert,
-          `alerting.${autoKey} (${auto}) must be > alerting.${alertKey} (${alert}) so the alert fires before the auto step`,
+      it("auto-remediation thresholds sit BEYOND their paired alert (alert fires first, automatic follows)", () => {
+        for (const { autoKey, alertKey, direction } of AUTO_REMEDIATION_ORDERING) {
+          const auto = alerting[autoKey];
+          const alert = alerting[alertKey];
+          assert.ok(auto !== undefined, `alerting.${autoKey} is missing`);
+          assert.ok(alert !== undefined, `alerting.${alertKey} is missing`);
+          if (direction === "above") {
+            assert.ok(
+              auto > alert,
+              `alerting.${autoKey} (${auto}) must be > alerting.${alertKey} (${alert}) so the alert fires before the auto step`,
+            );
+          } else {
+            assert.ok(
+              auto < alert,
+              `alerting.${autoKey} (${auto}) must be < alerting.${alertKey} (${alert}) so the alert fires before the auto step`,
+            );
+          }
+        }
+      });
+
+      it("alerts.yml expr thresholds match alerting.*", () => {
+        for (const [alert, spec] of Object.entries(ALERT_TO_YAML)) {
+          const rule = rules.get(alert);
+          assert.ok(rule, `alerts.yml missing alert: ${alert}`);
+          assert.equal(
+            thresholdFromExpr(rule.expr),
+            resolveSpec(spec, alerting),
+            `${alert} expr threshold drifted from alerting.${specKeys(spec).join(" × ")}`,
+          );
+        }
+      });
+
+      it("per-wallet alert expr thresholds match wallet_pool / wallet_shape", () => {
+        const poolLow = rules.get("PoolWalletLow");
+        assert.ok(poolLow, "alerts.yml missing PoolWalletLow");
+        assert.equal(
+          thresholdFromExpr(poolLow.expr),
+          pool.pool_wallet_low_lovelace / 1_000_000,
+          "PoolWalletLow expr threshold drifted from wallet_pool.pool_wallet_low_lovelace",
         );
-      } else {
+
+        // MainWalletCannotFundPool is compound: a pool below its low AND the main
+        // below its reserve. (The `> 0` from count(...) is structural, not a config
+        // threshold.)
+        const mainCannot = rules.get("MainWalletCannotFundPool");
+        assert.ok(mainCannot, "alerts.yml missing MainWalletCannotFundPool");
+        const mainCannotThresholds = new Set(allThresholds(mainCannot.expr));
         assert.ok(
-          auto < alert,
-          `alerting.${autoKey} (${auto}) must be < alerting.${alertKey} (${alert}) so the alert fires before the auto step`,
+          mainCannotThresholds.has(pool.pool_wallet_low_lovelace / 1_000_000),
+          "MainWalletCannotFundPool expr missing the wallet_pool.pool_wallet_low_lovelace threshold",
         );
-      }
-    }
-  });
+        assert.ok(
+          mainCannotThresholds.has(pool.main_wallet_reserve_lovelace / 1_000_000),
+          "MainWalletCannotFundPool expr missing the wallet_pool.main_wallet_reserve_lovelace threshold",
+        );
 
-  it("monitoring/alerts.yml expr thresholds match the YAML", () => {
-    const yaml = loadAlerting("infrastructure.preview.yaml");
-    const rules = loadAlertRules();
-    for (const [alert, spec] of Object.entries(ALERT_TO_YAML)) {
-      const rule = rules.get(alert);
-      assert.ok(rule, `alerts.yml missing alert: ${alert}`);
-      const expected = resolveSpec(spec, yaml);
-      assert.equal(
-        thresholdFromExpr(rule.expr),
-        expected,
-        `${alert} expr threshold drifted from alerting.${specKeys(spec).join(" × ")}`,
-      );
-    }
-  });
+        // WalletConcentrated fires purely on the usable-UTxO count (no balance gate).
+        const concentrated = rules.get("WalletConcentrated");
+        assert.ok(concentrated, "alerts.yml missing WalletConcentrated");
+        assert.deepEqual(
+          new Set(allThresholds(concentrated.expr)),
+          new Set([shape.min_usable_utxos]),
+          "WalletConcentrated expr threshold drifted from wallet_shape.min_usable_utxos",
+        );
+      });
 
-  it("wallet_pool and wallet_shape are identical across networks", () => {
-    // The per-wallet alerts read these blocks, so (like alerting) both YAMLs must
-    // agree — alerts.yml is network-agnostic.
-    assert.deepEqual(
-      loadBlock("infrastructure.preview.yaml", "wallet_pool"),
-      loadBlock("infrastructure.mainnet.yaml", "wallet_pool"),
-    );
-    assert.deepEqual(
-      loadBlock("infrastructure.preview.yaml", "wallet_shape"),
-      loadBlock("infrastructure.mainnet.yaml", "wallet_shape"),
-    );
-  });
+      it("per-wallet alert prose states the same ADA / count numbers", () => {
+        const prose = (alert: string): string => {
+          const r = rules.get(alert)!;
+          return `${r.annotations?.summary ?? ""} ${r.annotations?.description ?? ""}`;
+        };
+        assert.match(prose("PoolWalletLow"), new RegExp(`\\b${pool.pool_wallet_low_lovelace / 1_000_000}\\s*ADA\\b`));
+        assert.match(
+          prose("MainWalletCannotFundPool"),
+          new RegExp(`\\b${pool.main_wallet_reserve_lovelace / 1_000_000}\\s*ADA\\b`),
+        );
+        // WalletConcentrated prose states the usable-UTxO count (its only threshold).
+        assert.match(prose("WalletConcentrated"), new RegExp(`\\b${shape.min_usable_utxos}\\b`));
+      });
 
-  it("per-wallet alert expr thresholds match wallet_pool / wallet_shape", () => {
-    const pool = loadBlock("infrastructure.preview.yaml", "wallet_pool");
-    const shape = loadBlock("infrastructure.preview.yaml", "wallet_shape");
-    const rules = loadAlertRules();
+      it("alerts.yml prose states the same ADA / percent numbers (operator-facing)", () => {
+        const prose = (alert: string): string => {
+          const r = rules.get(alert)!;
+          return `${r.annotations?.summary ?? ""} ${r.annotations?.description ?? ""}`;
+        };
+        // ADA-denominated alerts must mention "<N> ADA" in their text.
+        for (const alert of ["ReceiverBalanceLow", "SettleOverdue", "PaymentHookWithdrawReady", "AdminWalletLow", "AdminWalletFragmented", "ReceiverDepositsPending"]) {
+          const yamlKey = specKeys(ALERT_TO_YAML[alert] as ThresholdSpec)[0]!;
+          const ada = alerting[yamlKey]! / 1_000_000;
+          assert.match(prose(alert), new RegExp(`\\b${ada}\\s*ADA\\b`), `${alert} prose missing "${ada} ADA"`);
+        }
+        assert.match(prose("PriceDeviationHigh"), new RegExp(`\\b${alerting.price_deviation_high_percent}%`));
+      });
 
-    const poolLow = rules.get("PoolWalletLow");
-    assert.ok(poolLow, "alerts.yml missing PoolWalletLow");
-    assert.equal(
-      thresholdFromExpr(poolLow.expr),
-      pool.pool_wallet_low_lovelace / 1_000_000,
-      "PoolWalletLow expr threshold drifted from wallet_pool.pool_wallet_low_lovelace",
-    );
+      it("Grafana panel thresholds match alerting.*", () => {
+        const { panels } = dashboard;
+        assert.equal(step(panelByTitle(panels, "Pair staleness (per symbol)"), "red"), alerting.oracle_pair_stale_seconds);
+        assert.equal(step(panelByTitle(panels, "Price data age p95 — 1 h window (per routed pair)"), "red"), alerting.price_age_high_seconds);
+        assert.equal(step(panelByTitle(panels, "Price deviation p95 — 1 h window (per pair)"), "red"), alerting.price_deviation_high_percent);
+        assert.equal(step(panelByTitle(panels, "Reorg counter"), "red"), alerting.reorg_rate_high_per_hour);
+        assert.equal(step(panelByTitle(panels, "Receiver balance — ADA (per client)"), "yellow"), alerting.receiver_balance_low_lovelace / 1_000_000);
+        assert.equal(step(panelByTitle(panels, "Deposit pending — ADA (per client)"), "yellow"), alerting.deposit_pending_merge_lovelace / 1_000_000);
 
-    // MainWalletCannotFundPool is compound: a pool below its low AND the main
-    // below its reserve. (The `> 0` from count(...) is structural, not a config
-    // threshold.)
-    const mainCannot = rules.get("MainWalletCannotFundPool");
-    assert.ok(mainCannot, "alerts.yml missing MainWalletCannotFundPool");
-    const mainCannotThresholds = new Set(allThresholds(mainCannot.expr));
-    assert.ok(
-      mainCannotThresholds.has(pool.pool_wallet_low_lovelace / 1_000_000),
-      "MainWalletCannotFundPool expr missing the wallet_pool.pool_wallet_low_lovelace threshold",
-    );
-    assert.ok(
-      mainCannotThresholds.has(pool.main_wallet_reserve_lovelace / 1_000_000),
-      "MainWalletCannotFundPool expr missing the wallet_pool.main_wallet_reserve_lovelace threshold",
-    );
+        const wallets = panelByTitle(panels, "Admin wallet • PaymentHook • Receiver accrued — ADA");
+        assert.equal(step(wallets, "green"), alerting.admin_wallet_low_lovelace / 1_000_000);
+        assert.equal(overrideStep(wallets, "PaymentHook accrued", "yellow"), alerting.payment_hook_withdraw_ready_lovelace / 1_000_000);
+        assert.equal(overrideStep(wallets, "Receiver accrued (sum)", "yellow"), alerting.settle_overdue_lovelace / 1_000_000);
+        // Per-client accrued series (byRegexp override) use the same settle-overdue boundary.
+        assert.equal(overrideStep(wallets, "Receiver accrued — .*", "yellow"), alerting.settle_overdue_lovelace / 1_000_000);
 
-    // WalletConcentrated fires purely on the usable-UTxO count (no balance gate).
-    const concentrated = rules.get("WalletConcentrated");
-    assert.ok(concentrated, "alerts.yml missing WalletConcentrated");
-    assert.deepEqual(
-      new Set(allThresholds(concentrated.expr)),
-      new Set([shape.min_usable_utxos]),
-      "WalletConcentrated expr threshold drifted from wallet_shape.min_usable_utxos",
-    );
-  });
+        // Fragmentation panel — largest pure-ADA UTxO vs the collateral floor.
+        // Floor convention (same as the admin-wallet panel above): green AT the
+        // floor value, red below it.
+        assert.equal(
+          step(panelByTitle(panels, "Admin wallet — largest UTxO — ADA (collateral floor)"), "green"),
+          alerting.admin_wallet_min_collateral_lovelace / 1_000_000,
+        );
+      });
 
-  it("per-wallet alert prose states the same ADA / count numbers", () => {
-    const pool = loadBlock("infrastructure.preview.yaml", "wallet_pool");
-    const shape = loadBlock("infrastructure.preview.yaml", "wallet_shape");
-    const rules = loadAlertRules();
-    const prose = (alert: string): string => {
-      const r = rules.get(alert)!;
-      return `${r.annotations?.summary ?? ""} ${r.annotations?.description ?? ""}`;
-    };
-    assert.match(prose("PoolWalletLow"), new RegExp(`\\b${pool.pool_wallet_low_lovelace / 1_000_000}\\s*ADA\\b`));
-    assert.match(
-      prose("MainWalletCannotFundPool"),
-      new RegExp(`\\b${pool.main_wallet_reserve_lovelace / 1_000_000}\\s*ADA\\b`),
-    );
-    // WalletConcentrated prose states the usable-UTxO count (its only threshold).
-    assert.match(prose("WalletConcentrated"), new RegExp(`\\b${shape.min_usable_utxos}\\b`));
-  });
+      it("internals provider-quota panel red line matches the ProviderRequestQuotaHigh* warn level", () => {
+        const warn = alerting.provider_request_quota_per_day_blockfrost * alerting.provider_request_quota_warn_ratio;
+        assert.equal(
+          step(panelByTitle(internals.panels, "Requests in last 24h vs daily quota (per provider)"), "red"),
+          warn,
+          "the 24h-vs-quota panel's red line must equal daily quota × warn ratio (= the alert threshold)",
+        );
+      });
+    });
+  }
 
-  it("alerts.yml prose states the same ADA / percent numbers (operator-facing)", () => {
-    const yaml = loadAlerting("infrastructure.preview.yaml");
-    const rules = loadAlertRules();
-    const prose = (alert: string): string => {
-      const r = rules.get(alert)!;
-      return `${r.annotations?.summary ?? ""} ${r.annotations?.description ?? ""}`;
-    };
-    // ADA-denominated alerts must mention "<N> ADA" in their text.
-    for (const alert of ["ReceiverBalanceLow", "SettleOverdue", "PaymentHookWithdrawReady", "AdminWalletLow", "AdminWalletFragmented", "ReceiverDepositsPending"]) {
-      const yamlKey = specKeys(ALERT_TO_YAML[alert]!)[0]!;
-      const ada = yaml[yamlKey]! / 1_000_000;
-      assert.match(prose(alert), new RegExp(`\\b${ada}\\s*ADA\\b`), `${alert} prose missing "${ada} ADA"`);
-    }
-    assert.match(prose("PriceDeviationHigh"), new RegExp(`\\b${yaml.price_deviation_high_percent}%`));
-  });
-
-  it("Grafana panel thresholds match the YAML", () => {
-    const yaml = loadAlerting("infrastructure.preview.yaml");
-    const { panels } = loadDashboard();
-    assert.equal(step(panelByTitle(panels, "Pair staleness (per symbol)"), "red"), yaml.oracle_pair_stale_seconds);
-    assert.equal(step(panelByTitle(panels, "Price data age p95 — 1 h window (per routed pair)"), "red"), yaml.price_age_high_seconds);
-    assert.equal(step(panelByTitle(panels, "Price deviation p95 — 1 h window (per pair)"), "red"), yaml.price_deviation_high_percent);
-    assert.equal(step(panelByTitle(panels, "Reorg counter"), "red"), yaml.reorg_rate_high_per_hour);
-    assert.equal(step(panelByTitle(panels, "Receiver balance — ADA (per client)"), "yellow"), yaml.receiver_balance_low_lovelace / 1_000_000);
-    assert.equal(step(panelByTitle(panels, "Deposit pending — ADA (per client)"), "yellow"), yaml.deposit_pending_merge_lovelace / 1_000_000);
-
-    const wallets = panelByTitle(panels, "Admin wallet • PaymentHook • Receiver accrued — ADA");
-    assert.equal(step(wallets, "green"), yaml.admin_wallet_low_lovelace / 1_000_000);
-    assert.equal(overrideStep(wallets, "PaymentHook accrued", "yellow"), yaml.payment_hook_withdraw_ready_lovelace / 1_000_000);
-    assert.equal(overrideStep(wallets, "Receiver accrued (sum)", "yellow"), yaml.settle_overdue_lovelace / 1_000_000);
-    // Per-client accrued series (byRegexp override) use the same settle-overdue boundary.
-    assert.equal(overrideStep(wallets, "Receiver accrued — .*", "yellow"), yaml.settle_overdue_lovelace / 1_000_000);
-
-    // Fragmentation panel — largest pure-ADA UTxO vs the collateral floor.
-    // Floor convention (same as the admin-wallet panel above): green AT the
-    // floor value, red below it.
-    assert.equal(
-      step(panelByTitle(panels, "Admin wallet — largest UTxO — ADA (collateral floor)"), "green"),
-      yaml.admin_wallet_min_collateral_lovelace / 1_000_000,
-    );
-  });
-
-  it("internals provider-quota panel red line matches the ProviderRequestQuotaHigh* warn level", () => {
-    const yaml = loadAlerting("infrastructure.preview.yaml");
-    const { panels } = loadDashboard("feeder-internals.json");
-    const warn = yaml.provider_request_quota_per_day_blockfrost * yaml.provider_request_quota_warn_ratio;
-    assert.equal(
-      step(panelByTitle(panels, "Requests in last 24h vs daily quota (per provider)"), "red"),
-      warn,
-      "the 24h-vs-quota panel's red line must equal daily quota × warn ratio (= the alert threshold)",
-    );
-  });
+  // -------------------------------------------------------------------------
+  // Network-agnostic structural checks — the fixed verdict codes, dead template
+  // variables, and count-vs-rate panel encodings do not depend on any threshold,
+  // so they run once against the canonical network's dashboards.
+  // -------------------------------------------------------------------------
+  const loadDashboard = (file = "feeder.json"): Dashboard =>
+    JSON.parse(readDashboard(CANONICAL_NETWORK, file));
 
   it("feed-sanity panel verdict colours match the FeedAccuracyFail boundary", () => {
     // The verdict codes (0 ok / 1 suspect / 2 broken) are fixed, not a YAML threshold,

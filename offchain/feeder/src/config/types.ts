@@ -77,7 +77,7 @@ export type InfrastructureConfig = {
    *  the cadence and naming never get conflated with those. */
   feed_sanity?: FeedSanityConfig;
   /** Alertmanager delivery channels (Telegram / email). Off by default; the
-   *  monitoring generator writes these into `monitoring/alertmanager.yml`. */
+   *  monitoring generator writes these into `monitoring/<network>/alertmanager.yml`. */
   notifications?: NotificationsConfig;
   /** Signer-wallet pool. Each entry references a seed/key env var. Omit for the
    *  single-wallet default (the wallet from `CARDANO_WALLET_SEED_<NETWORK>`). */
@@ -278,14 +278,14 @@ export type CardanoRuntimeConfig = {
 /**
  * Operational alert thresholds. Canonical source for every numeric
  * threshold used either by the feeder code (e.g. low-balance warnings)
- * or by the Prometheus alerting rules in `monitoring/alerts.yml`.
+ * or by the Prometheus alerting rules in `monitoring/<network>/alerts.yml`.
  *
  * Units convention:
  *   - `*_lovelace` fields are lovelace (1 ADA = 1_000_000 lovelace).
  *   - `*_seconds` fields are seconds.
  *   - `*_percent` fields are percent (0–100).
  *
- * Any value here MUST also be mirrored in `monitoring/alerts.yml` (each
+ * Any value here MUST also be mirrored in `monitoring/<network>/alerts.yml` (each
  * alert rule carries an inline comment pointing back at the YAML key).
  */
 export type AlertingConfig = {
@@ -452,7 +452,7 @@ export type FeedSanityConfig = {
  * Alertmanager delivery channels. Off by default — alerts reach only the logs +
  * database (via the feeder webhook). Recipients / on-off live here; the SECRETS
  * (Telegram bot token, SMTP password) live in `.env`, never in this file. The
- * monitoring generator writes these into `monitoring/alertmanager.yml`.
+ * monitoring generator writes these into `monitoring/<network>/alertmanager.yml`.
  */
 export type NotificationsConfig = {
   telegram?: {

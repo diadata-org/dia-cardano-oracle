@@ -11,8 +11,8 @@ This is the living companion to:
 - the **operator manual** — [`offchain/feeder/README.md`](../../offchain/feeder/README.md)
   (§ Thresholds and alerts, § Service URLs, § HTTP API);
 - the **feeder architecture** — [`feeder.md`](./feeder.md) (the metric catalog, § 19);
-- the **dashboards themselves** —
-  [`offchain/feeder/monitoring/grafana/dashboards/`](../../offchain/feeder/monitoring/grafana/dashboards/).
+- the **dashboards themselves** — per network under
+  [`offchain/feeder/monitoring/<network>/dashboards/`](../../offchain/feeder/monitoring/preview/dashboards/).
 
 Thresholds quoted here are the canonical values from `infrastructure.<network>.yaml::alerting`,
 enforced by the `threshold-drift` test. PromQL exprs use the dashboard's `$network / $customer /
@@ -1010,7 +1010,7 @@ To see an alert fire on demand without waiting for a real incident, the
 `client_id="trigger"`, so it is filterable and distinct from real feeds). See the feeder README →
 *How alerts work*.
 
-The 20 rules in `monitoring/alerts.yml` cover six areas: **feed health** (`OraclePairStale`,
+The 20 rules in `monitoring/<network>/alerts.yml` cover six areas: **feed health** (`OraclePairStale`,
 `PriceAgeHigh`, `FeedAccuracyFail`, `PriceDeviationHigh`), **client funding** (`ReceiverBalanceLow`,
 `ReceiverDepositsPending`, `SettleOverdue`, `PaymentHookWithdrawReady`), **admin wallet**
 (`AdminWalletLow`, `AdminWalletFragmented`), **signer-wallet pool** (`PoolWalletLow`,
@@ -1025,7 +1025,7 @@ one-line-per-alert list with thresholds and first actions; every rule's full rem
 Thresholds are the canonical values from `infrastructure.<network>.yaml::alerting` (mirrored into the
 Prometheus rules and the Grafana panel colours; kept in sync by the threshold-drift test).
 
-All 20 alert rules in `monitoring/alerts.yml`, grouped by area. Severity: 🔴 critical · 🟡 warning · ⚪ info.
+All 20 alert rules in `monitoring/<network>/alerts.yml`, grouped by area. Severity: 🔴 critical · 🟡 warning · ⚪ info.
 
 | Panel | Alert | Fires when | Default | First action |
 | --- | --- | --- | --- | --- |

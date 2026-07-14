@@ -1,0 +1,875 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "description": "DIA Cardano Oracle Feeder — internals: pipeline latency by phase, scanner, the submission worker pool, HTTP API, database, cron and recovery. For oracle health/balances use the 'Feeder' overview; for per-transaction detail use 'Feeder — Transactions'.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "title": "Pipeline latency — per-symbol phases",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "95th-percentile time spent in each stage of the per-symbol pipeline, over a 5-minute window. From a DIA intent appearing on the source chain (intent → registration), the scanner delivering it (registration → scan), the feeder picking it up (scan → processing), building + submitting the Cardano tx (processing → submission), to on-chain confirmation (submission → confirmation). Add them up for the end-to-end time.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_intent_to_registration_seconds_bucket{network=~\"$network\"}[5m])))",
+          "legendFormat": "intent → registration",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_registration_to_scan_seconds_bucket{network=~\"$network\"}[5m])))",
+          "legendFormat": "registration → scan",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_scan_to_processing_seconds_bucket{network=~\"$network\"}[5m])))",
+          "legendFormat": "scan → processing",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_processing_to_submission_seconds_bucket{network=~\"$network\"}[5m])))",
+          "legendFormat": "processing → submission",
+          "refId": "D"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(dia_bridge_submission_to_confirmation_seconds_bucket{network=~\"$network\"}[5m])))",
+          "legendFormat": "submission → confirmation",
+          "refId": "E"
+        }
+      ],
+      "title": "Per-phase latency (p95)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 200,
+      "title": "Scanner (source chain)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Failed JSON-RPC calls to the DIA source chain in each 5-minute window, grouped by error type. Occasional errors are normal (the scanner retries); a sustained climb points to a degraded RPC endpoint.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (error_type) (increase(dia_bridge_scanner_rpc_errors_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "{{error_type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Scanner RPC errors (5m, by type)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Gap-recovery backfill activity in each 5-minute window: blocks re-scanned and the number of chunked getLogs requests used. Non-zero means the scanner detected and filled a gap (e.g. after a reconnect). Steady zero is the healthy idle state.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum (increase(dia_bridge_scanner_backfill_blocks_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "blocks backfilled",
+          "refId": "A"
+        },
+        {
+          "expr": "sum (increase(dia_bridge_scanner_backfill_chunks_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "getLogs chunks",
+          "refId": "B"
+        }
+      ],
+      "title": "Scanner backfill (5m)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 300,
+      "title": "Submission worker pool",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "The per-router submission pool that sends oracle updates (always running). Active = workers currently submitting; capacity = configured max; queue = tasks waiting. The parallel event-enrichment pool, when enabled, appears here too (labelled by pool type).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 19
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "dia_bridge_active_workers{network=~\"$network\"}",
+          "legendFormat": "active — {{pool_type}}",
+          "refId": "A"
+        },
+        {
+          "expr": "dia_bridge_worker_pool_size{network=~\"$network\"}",
+          "legendFormat": "capacity — {{pool_type}}",
+          "refId": "B"
+        },
+        {
+          "expr": "dia_bridge_worker_queue_size{network=~\"$network\"}",
+          "legendFormat": "queue — {{pool_type}}",
+          "refId": "C"
+        }
+      ],
+      "title": "Workers — active / capacity / queue",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Worker task outcomes in each 5-minute window: tasks completed successfully, failed, dropped because the queue was full, and retried. A healthy feeder shows completions with few or no drops.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum (increase(dia_bridge_worker_tasks_completed_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "completed",
+          "refId": "A"
+        },
+        {
+          "expr": "sum (increase(dia_bridge_worker_tasks_failed_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "failed",
+          "refId": "B"
+        },
+        {
+          "expr": "sum (increase(dia_bridge_worker_tasks_dropped_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "dropped (queue full)",
+          "refId": "C"
+        },
+        {
+          "expr": "sum (increase(dia_bridge_worker_task_retries_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "retries",
+          "refId": "D"
+        }
+      ],
+      "title": "Worker tasks (5m)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "id": 400,
+      "title": "HTTP API & database",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "95th-percentile latency of the feeder's HTTP API per endpoint, over a 5-minute window (the /api/v1, /health and /metrics handlers).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 28
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(dia_bridge_http_request_duration_seconds_bucket{network=~\"$network\"}[5m])))",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP request latency p95 (by endpoint)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Database operations in each 5-minute window, grouped by table. Shows where the feeder's DB load goes (transaction_log, processed_events, alert_log, …).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 28
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (table) (increase(dia_bridge_db_operations_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "{{table}}",
+          "refId": "A"
+        }
+      ],
+      "title": "DB operations (5m, by table)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "95th-percentile database operation latency by operation type (insert / update / select / delete), over a 5-minute window. A rising select/insert latency is an early sign of DB pressure.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 28
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(dia_bridge_db_operation_duration_seconds_bucket{network=~\"$network\"}[5m])))",
+          "legendFormat": "{{operation}}",
+          "refId": "A"
+        }
+      ],
+      "title": "DB operation latency p95 (by operation)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "id": 500,
+      "title": "Cron, recovery & providers",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Cron heartbeat re-submissions in each 5-minute window, by outcome: submitted (a flat pair refreshed on schedule), or skipped because it was already fresh, had no cached intent, or the pair was uninitialised. Mostly 'submitted'/'skipped_already_fresh' is healthy.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 37
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (increase(dia_bridge_cron_resubmissions_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Cron resubmissions (5m, by outcome)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Recovery attempts in each 5-minute window, by reason — e.g. crash recovery on startup re-failing in-flight transactions so the event flow can re-process them. Spikes coincide with restarts; a steady stream points to instability.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 37
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (increase(dia_bridge_recovery_attempts_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Recovery attempts (5m, by reason)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Time since the last successful call to each Cardano API provider (primary builds/submits; secondary covers confirmation/reorg). Climbing means that provider has gone quiet; the PrimaryProviderDown / SecondaryProviderDown alerts fire when it crosses their thresholds.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 37
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "time() - dia_bridge_provider_last_ok_timestamp_seconds{network=~\"$network\"}",
+          "legendFormat": "{{provider}} ({{role}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Provider — time since last OK",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
+      "id": 600,
+      "title": "Pipeline funnel & HTTP",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Inbound event flow over 5 min: raw events the scanner detected, those dropped as duplicates (seen on both HTTP and WS, or re-scan), and those rejected as invalid at decode/enrich.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 46
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(dia_bridge_events_detected_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "detected",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(dia_bridge_events_duplicate_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "duplicate",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(increase(dia_bridge_events_invalid_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "invalid",
+          "refId": "C"
+        }
+      ],
+      "title": "Event funnel (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Where intents drop off over 5 min: scanned (entered routing) -> routed (accepted by a destination) -> submitted (broadcast to Cardano) -> confirmed / failed on-chain.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 46
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(dia_bridge_intents_scanned_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "scanned",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(dia_bridge_intents_routed_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "routed",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(increase(dia_bridge_transactions_submitted_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "submitted",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(increase(dia_bridge_transactions_confirmed_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "confirmed",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(increase(dia_bridge_transactions_failed_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "failed",
+          "refId": "E"
+        }
+      ],
+      "title": "Intent funnel (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "API requests served over 5 min, grouped by HTTP status code. Counts requests; the HTTP latency panel shows how long they take.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 46
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (increase(dia_bridge_http_requests_total{network=~\"$network\"}[5m]))",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP requests (5m, by status)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
+      "id": 700,
+      "title": "Provider request volume (shared key)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Live request rate to Blockfrost / Koios, split by service (feeder = build/submit, indexer = getUtxos + tip). Shows who is hitting the shared API key right now.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 55
+      },
+      "id": 701,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (provider, job) (rate(dia_bridge_provider_requests_total{job=~\"$job\"}[5m]))",
+          "legendFormat": "{{provider}} / {{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Provider request rate (by provider + service)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Requests to each provider over the trailing 24 h — the exact quantity the ProviderRequestQuotaHigh* alert compares to the daily quota. Sums the feeder + indexer (they share the key). The red line is the warn threshold (daily quota × warn ratio); when a provider's line crosses it the alert fires. Rotate/upgrade the key before it reaches the full quota.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 40000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 55
+      },
+      "id": 702,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (provider) (increase(dia_bridge_provider_requests_total[24h]))",
+          "legendFormat": "{{provider}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Requests in last 24h vs daily quota (per provider)",
+      "type": "timeseries"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Network",
+        "name": "network",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_db_operations_total, network)",
+          "refId": "network"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Job",
+        "name": "job",
+        "description": "Prometheus scrape job — feeder vs indexer. Only the provider-request panels split by it; every other metric here is feeder-only.",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_provider_requests_total, job)",
+          "refId": "job"
+        },
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DIA Cardano Oracle Feeder — Internals",
+  "uid": "dia-cardano-feeder-internals",
+  "version": 1
+}

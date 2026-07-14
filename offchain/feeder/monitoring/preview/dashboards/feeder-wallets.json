@@ -1,0 +1,180 @@
+{
+  "annotations": { "list": [] },
+  "description": "Per signer-wallet health for the multi-wallet pool: total balance, spendable balance, collateral floor (largest UTxO), usable-UTxO count, and active arbiter reservations. Filter by the $wallet variable. The main wallet is wallet=\"main\"; pool wallets pay tx fees + collateral alongside it.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Total lovelace per signer wallet across every live UTxO at that address, including locked/reserved and token-bearing UTxOs. This is the gross balance view; compare it with the spendable panel below to see how much of the wallet is actually available for a new tx right now.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "lineWidth": 2, "fillOpacity": 5 }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "dia_bridge_cardano_wallet_total_lovelace{network=~\"$network\", wallet=~\"$wallet\"} / 1000000",
+          "legendFormat": "{{wallet}} ({{role}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Total balance per wallet — ADA",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Spendable lovelace (unlocked pure-ADA UTxOs) per signer wallet — what a new tx can actually draw on. A pool wallet below 150 ADA (wallet_pool.pool_wallet_low_lovelace) is auto-funded from the main up to its 550 ADA shape; the main below its 100 ADA reserve fires MainWalletCannotFundPool.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 150 } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "dia_bridge_cardano_wallet_spendable_lovelace{network=~\"$network\", wallet=~\"$wallet\"} / 1000000",
+          "legendFormat": "{{wallet}} ({{role}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Spendable per wallet — ADA",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Largest pure-ADA UTxO per signer wallet. A script tx needs a collateral UTxO distinct from its fee inputs, so THIS — not the total — gates whether the wallet can build. Below the 10 ADA collateral floor the wallet is fragmented (WalletFragmented). Concentration (WalletConcentrated, auto-split) is judged on the usable-UTxO COUNT instead (next panel), not this size.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 10 } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "dia_bridge_cardano_wallet_max_utxo_lovelace{network=~\"$network\", wallet=~\"$wallet\"} / 1000000",
+          "legendFormat": "{{wallet}} ({{role}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Largest UTxO per wallet — ADA (collateral floor)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Count of pure-ADA UTxOs at or above the collateral floor per wallet — how many disjoint inputs the arbiter can hand to concurrent lanes. This is the split TRIGGER: below 5 (wallet_shape.min_usable_utxos), regardless of balance, the wallet is concentrated (WalletConcentrated) and auto-split carves its largest UTxO into more lanes.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 5 } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 3,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "dia_bridge_cardano_wallet_usable_utxos{network=~\"$network\", wallet=~\"$wallet\"}",
+          "legendFormat": "{{wallet}} ({{role}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Usable UTxOs per wallet",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Active arbiter reservations per wallet — how many lanes are currently building against each wallet. A persistently high value next to a low usable-UTxO count is the signature of a wallet that should be split or funded.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "lineWidth": 2, "fillOpacity": 5 }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "id": 4,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "dia_bridge_cardano_wallet_reservations{network=~\"$network\", wallet=~\"$wallet\"}",
+          "legendFormat": "{{wallet}} ({{role}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Active reservations per wallet",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [ "dia", "feeder", "cardano", "wallets" ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Network",
+        "name": "network",
+        "options": [],
+        "query": { "query": "label_values(dia_bridge_cardano_wallet_total_lovelace, network)", "refId": "network" },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Wallet",
+        "name": "wallet",
+        "options": [],
+        "query": { "query": "label_values(dia_bridge_cardano_wallet_total_lovelace, wallet)", "refId": "wallet" },
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Feeder — Signer Wallets",
+  "uid": "feeder-wallets",
+  "version": 1
+}

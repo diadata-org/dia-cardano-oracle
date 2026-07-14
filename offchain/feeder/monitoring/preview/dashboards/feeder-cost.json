@@ -1,0 +1,489 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "What it costs to RUN the system: the ADA fees of the operational (management) transactions — settle, payment-hook withdraw, main→pool funding, defrag (consolidate), wallet shaping (split), and standalone deposit merge — that no client reimburses. Every panel reads a GAUGE set from the persisted `management_tx_totals` DB table, rehydrated from that table on startup; the fee and the count are read from the same rows. A deposit merge folded into an update tx is not counted here (it rides the update's fee). The PRODUCTIVE cost — update-tx fees, offset by what clients are charged — lives on the Overview dashboard's billing row; net cost ≈ this operational overhead + max(0, update fees − client charges).",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Total ADA spent in fees by ALL management txs (settle/withdraw/fund/consolidate/split/merge). The headline operational overhead. A gauge set from the persisted DB table, rehydrated on startup; read from the same rows as the count panel beside it.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 4,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "expr": "sum(dia_bridge_management_tx_fee_lovelace{network=~\"$network\", wallet=~\"$wallet\", kind=~\"$kind\"}) / 1000000",
+          "legendFormat": "ADA",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Operational fees — ADA (cumulative)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Total number of confirmed management txs (settle/withdraw/fund/consolidate/split/merge). The count companion of the fee panel on the left, from the same DB-backed source. Failed txs are excluded (they paid no fee).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "expr": "sum(dia_bridge_management_tx_count{network=~\"$network\", wallet=~\"$wallet\", kind=~\"$kind\", outcome=\"confirmed\"})",
+          "legendFormat": "txs",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Management txs — confirmed (cumulative)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "ADA spent in fees per management kind — settle/withdraw/fund_pool/consolidate/split/merge. Shows WHICH activity drove the overhead. Sums to the headline 'Operational fees' panel, and lines up row-for-row with the count panel on the right. A kind that has not run has no row. Set from the persisted DB table.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 4,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 6
+      },
+      "id": 3,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "expr": "sum by (kind) (dia_bridge_management_tx_fee_lovelace{network=~\"$network\", wallet=~\"$wallet\", kind=~\"$kind\"}) / 1000000",
+          "legendFormat": "{{kind}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Operational fees by kind — ADA (cumulative)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Count of confirmed management txs per kind. The count companion of the by-kind fee panel on the left, from the same DB-backed source — read them together (e.g. many cheap splits vs few pricey settles). Failed txs excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 6
+      },
+      "id": 4,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "expr": "sum by (kind) (dia_bridge_management_tx_count{network=~\"$network\", wallet=~\"$wallet\", kind=~\"$kind\", outcome=\"confirmed\"})",
+          "legendFormat": "{{kind}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Management txs by kind — confirmed (cumulative)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "ADA spent in fees per SIGNER wallet. settle/withdraw/fund/merge are paid by the main wallet (it funds the pool, settles, and runs the standalone deposit merge); consolidate/split are paid by the pool wallet being reshaped. Shows where the overhead leaves the wallets. Set from the persisted DB table.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 4,
+          "noValue": "0",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 6
+      },
+      "id": 5,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "expr": "sum by (wallet) (dia_bridge_management_tx_fee_lovelace{network=~\"$network\", wallet=~\"$wallet\", kind=~\"$kind\"}) / 1000000",
+          "legendFormat": "{{wallet}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Operational fees by wallet — ADA (cumulative)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Cumulative ADA in fees over time, one stepped line per management kind. Each step is a confirmed tx of that kind; the step height is its fee. Read it for WHEN cost is incurred (a settle, a fund, a split) and how the running total grows. Narrow the time range to zoom into a window.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 4,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "pointSize": 6,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (kind) (dia_bridge_management_tx_fee_lovelace{network=~\"$network\", wallet=~\"$wallet\", kind=~\"$kind\"}) / 1000000",
+          "legendFormat": "{{kind}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Operational fees over time by kind — ADA (cumulative)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Cumulative count of confirmed management txs over time, one stepped line per kind. Each step up marks one tx of that kind, so the timing of every settle/withdraw/fund/consolidate/split/merge is visible.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "pointSize": 6,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (kind) (dia_bridge_management_tx_count{network=~\"$network\", wallet=~\"$wallet\", kind=~\"$kind\", outcome=\"confirmed\"})",
+          "legendFormat": "{{kind}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Management txs over time by kind — confirmed (cumulative)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Cumulative ADA in fees over time per signer wallet — main (settle/withdraw/fund/merge) vs the pool wallets being reshaped (consolidate/split). Shows when and from which wallet the overhead leaves.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 4,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "pointSize": 6,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (wallet) (dia_bridge_management_tx_fee_lovelace{network=~\"$network\", wallet=~\"$wallet\", kind=~\"$kind\"}) / 1000000",
+          "legendFormat": "{{wallet}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Operational fees over time by wallet — ADA (cumulative)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "dia",
+    "feeder",
+    "cardano",
+    "cost"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Network",
+        "name": "network",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_cardano_wallet_total_lovelace, network)",
+          "refId": "network"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Wallet",
+        "name": "wallet",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_cardano_wallet_total_lovelace, wallet)",
+          "refId": "wallet"
+        },
+        "refresh": 2,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "label": "Operation",
+        "name": "kind",
+        "options": [],
+        "query": {
+          "query": "label_values(dia_bridge_management_tx_count, kind)",
+          "refId": "kind"
+        },
+        "refresh": 2,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Feeder — Operational Cost",
+  "uid": "feeder-cost",
+  "version": 1
+}

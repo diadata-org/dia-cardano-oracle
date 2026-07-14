@@ -154,9 +154,9 @@ infrastructure:
   # --------------------------------------------------------------------------
   wallet_shape:
     working_utxo_count: 5                 # up to this many working (lane) UTxOs
-    working_utxo_lovelace: 100000000      # 100 ADA each
+    working_utxo_lovelace: 10000000       # 10 ADA each
     collateral_utxo_count: 5              # collateral, minted only once lanes are full
-    collateral_utxo_lovelace: 10000000    # 10 ADA each
+    collateral_utxo_lovelace: 5000000     # 5 ADA each
     min_usable_utxos: 5                   # TRIGGER: split when usable UTxOs fall below this
 
   # --------------------------------------------------------------------------
@@ -231,7 +231,7 @@ infrastructure:
   #   only to logs + the database. Turn a channel on with `enabled: true` and
   #   put its SECRET in `.env` (Telegram → ALERTMANAGER_TELEGRAM_BOT_TOKEN;
   #   SMTP password → ALERTMANAGER_SMTP_PASSWORD). The generator writes these
-  #   into monitoring/alertmanager.yml on `make up`.
+  #   into monitoring/<network>/alertmanager.yml on `make up`.
   # --------------------------------------------------------------------------
   notifications:
     telegram:

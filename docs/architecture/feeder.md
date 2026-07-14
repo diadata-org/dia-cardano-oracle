@@ -538,7 +538,7 @@ and kept out of BOTH the per-symbol `transactions_failed_total` / `bridge_intent
 AND the per-tx `transactions_total` counts (`isNoTransactionFailure`), so the failure counters
 reflect only real failures.
 
-The dedicated **`monitoring/grafana/dashboards/feeder-tx.json`** dashboard ("DIA Cardano
+The dedicated **`monitoring/<network>/dashboards/feeder-tx.json`** dashboard ("DIA Cardano
 Oracle Feeder — Transactions") renders this axis: tx-stage latency (p50/p95/p99),
 confirmed-vs-failed throughput, success ratio, and batch-size distribution. The main
 dashboard's "Row 2b — Transactions (per tx)" carries a condensed view.
@@ -930,7 +930,7 @@ prerequisites, env vars, and the full output description.
 ## 19. Metric coverage
 
 The feeder emits **~68 `dia_bridge_*` families** at `/metrics`, across **five** dashboards:
-`monitoring/grafana/dashboards/feeder.json` (operational overview),
+`monitoring/<network>/dashboards/feeder.json` (operational overview),
 `feeder-tx.json` (the per-transaction axis — see §6), `feeder-internals.json`
 (feeder internals — per-phase latency, scanner, worker pools, DB, cron/recovery, the
 event/intent funnel, per-client lane state & queues), `feeder-wallets.json` (the
@@ -1335,9 +1335,11 @@ on the **Feeder — Signer Wallets** dashboard.
 
 Every operational threshold lives in **one** place —
 `infrastructure.<network>.yaml::alerting.*` — and `make generate-monitoring` writes it
-into `monitoring/alerts.yml` (Prometheus rules), `monitoring/alertmanager.yml`, and the
-Grafana panels, with the `threshold-drift` test failing the build on any divergence.
-Preview and Mainnet carry **identical values** (the alerts/dashboard are network-agnostic).
+into that network's own `monitoring/<network>/alerts.yml` (Prometheus rules),
+`monitoring/<network>/alertmanager.yml`, and its Grafana panels, with the
+`threshold-drift` test failing the build on any divergence. Each network renders from
+its own YAML into its own directory, so Preview and Mainnet can carry **different
+values** and neither ever overwrites the other.
 Prometheus evaluates the rules and hands firing alerts to **Alertmanager**, which records
 them all in `alert_log` through the feeder's `POST /api/v1/alerts/ingest` webhook and
 delivers to Telegram/email when those channels are enabled

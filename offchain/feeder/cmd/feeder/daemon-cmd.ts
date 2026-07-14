@@ -944,7 +944,7 @@ export async function runDaemon(options: DaemonCmdOptions): Promise<number> {
 
   // Alerting thresholds — validated as required at config load. The
   // values come from `infrastructure.<network>.yaml::alerting` and are
-  // the canonical source mirrored by `monitoring/alerts.yml`. See the
+  // the canonical source mirrored by `monitoring/<network>/alerts.yml`. See the
   // README "Thresholds and alerts" section for the full table.
   const alerting = infra.alerting;
   if (!alerting) {

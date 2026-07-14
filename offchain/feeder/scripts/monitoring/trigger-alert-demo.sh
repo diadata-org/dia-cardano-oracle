@@ -105,7 +105,7 @@ cat > "$TIMELINE" <<EOF
 
 Each alert below was fired by pushing a synthetic value for its metric to the
 Pushgateway (\`trigger-alert.sh\`). The value crosses the real threshold from
-\`monitoring/alerts.yml\`, so the genuine rule fires and flows through the live
+\`monitoring/${NETWORK}/alerts.yml\`, so the genuine rule fires and flows through the live
 pipeline (Prometheus → Alertmanager → feeder webhook → \`alert_log\`). Only the
 input metric is synthetic; the rules, routing, and recording are production.
 
