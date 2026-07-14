@@ -1,0 +1,16 @@
+==> [1/2] Compiling the example consumer validator (aiken build)…
+    Compiling diadata-org/dia-cardano-oracle 0.0.0 (.)
+    Compiling aiken-lang/stdlib v3.0.0 (./build/packages/aiken-lang-stdlib)
+    Compiling aiken-lang/fuzz v2.2.0 (./build/packages/aiken-lang-fuzz)
+   Generating project's blueprint (./plutus.json)
+==> [2/2] Running the end-to-end consumer demo (Lucid emulator + indexer)…
+1. Publishing the Pair UTxO (mint NFT + inline PairDatum)…
+2. Indexer reports BTC/USD: price=65000000000 at f49047f581725d778402be0f96f1523286c487b478890f0bcea9dad70eb77522#0
+3. Trying to spend (min_price < feed price)…
+3. Trying to spend (min_price > feed price)…
+   → rejected: { Complete: "failed script execution Spend[0] the validator crashed / exited prematurely" }
+
+=== RESULT ===
+  spend with min_price < feed price → ACCEPTED ✓
+  spend with min_price > feed price → REJECTED ✓
+DEMO PASSED — the validator consumed our oracle price correctly.

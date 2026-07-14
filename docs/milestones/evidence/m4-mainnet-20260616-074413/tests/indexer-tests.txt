@@ -1,0 +1,468 @@
+
+> @diadata-org/dia-cardano-oracle-indexer@0.1.0 test
+> node --import tsx/esm --test $(find src -path '*/__tests__/*.test.ts' | tr '\n' ' ')
+
+TAP version 13
+# Subtest: createProviderChainReader
+    # Subtest: maps provider UTxOs to the indexer shape (datum preserved)
+    ok 1 - maps provider UTxOs to the indexer shape (datum preserved)
+      ---
+      duration_ms: 2.080887
+      ...
+    # Subtest: normalises a missing datum to null
+    ok 2 - normalises a missing datum to null
+      ---
+      duration_ms: 0.550989
+      ...
+    # Subtest: delegates tip() to the injected fetcher
+    ok 3 - delegates tip() to the injected fetcher
+      ---
+      duration_ms: 0.365198
+      ...
+    1..3
+ok 1 - createProviderChainReader
+  ---
+  duration_ms: 4.44663
+  type: 'suite'
+  ...
+# Subtest: parseBlockfrostTip
+    # Subtest: parses a /blocks/latest body
+    ok 1 - parses a /blocks/latest body
+      ---
+      duration_ms: 0.332569
+      ...
+    # Subtest: throws on an unexpected shape
+    ok 2 - throws on an unexpected shape
+      ---
+      duration_ms: 0.614085
+      ...
+    1..2
+ok 2 - parseBlockfrostTip
+  ---
+  duration_ms: 1.241767
+  type: 'suite'
+  ...
+# Subtest: parseKoiosTip
+    # Subtest: parses the first row of a /tip array
+    ok 1 - parses the first row of a /tip array
+      ---
+      duration_ms: 0.364227
+      ...
+    # Subtest: throws on an empty array or bad shape
+    ok 2 - throws on an empty array or bad shape
+      ---
+      duration_ms: 0.256058
+      ...
+    1..2
+ok 3 - parseKoiosTip
+  ---
+  duration_ms: 0.984206
+  type: 'suite'
+  ...
+# Subtest: countedTip
+    # Subtest: records an ok call and returns the tip
+    ok 1 - records an ok call and returns the tip
+      ---
+      duration_ms: 0.604778
+      ...
+    # Subtest: records error and rethrows on a generic failure
+    ok 2 - records error and rethrows on a generic failure
+      ---
+      duration_ms: 0.966253
+      ...
+    # Subtest: classifies a 402 quota wall as quota_exceeded
+    ok 3 - classifies a 402 quota wall as quota_exceeded
+      ---
+      duration_ms: 1.74968
+      ...
+    # Subtest: classifies a 429 throttle as rate_limited
+    ok 4 - classifies a 429 throttle as rate_limited
+      ---
+      duration_ms: 0.532799
+      ...
+    # Subtest: passes through unchanged when no observer is supplied
+    ok 5 - passes through unchanged when no observer is supplied
+      ---
+      duration_ms: 2.132278
+      ...
+    1..5
+ok 4 - countedTip
+  ---
+  duration_ms: 6.561162
+  type: 'suite'
+  ...
+# Subtest: readIndexerConfig
+    # Subtest: reads a Blockfrost config using the feeder env conventions (Mainnet → _MAINNET)
+    ok 1 - reads a Blockfrost config using the feeder env conventions (Mainnet → _MAINNET)
+      ---
+      duration_ms: 5.120758
+      ...
+    # Subtest: reads a Koios config (Preview → _TESTNET suffix)
+    ok 2 - reads a Koios config (Preview → _TESTNET suffix)
+      ---
+      duration_ms: 0.469262
+      ...
+    # Subtest: defaults to Preview + Blockfrost + port 3001, reading the _TESTNET vars
+    ok 3 - defaults to Preview + Blockfrost + port 3001, reading the _TESTNET vars
+      ---
+      duration_ms: 0.351467
+      ...
+    # Subtest: passes through INDEXER_REGISTRY_FILE
+    ok 4 - passes through INDEXER_REGISTRY_FILE
+      ---
+      duration_ms: 0.213205
+      ...
+    # Subtest: rejects an invalid network
+    ok 5 - rejects an invalid network
+      ---
+      duration_ms: 0.71889
+      ...
+    # Subtest: rejects an invalid provider
+    ok 6 - rejects an invalid provider
+      ---
+      duration_ms: 0.364275
+      ...
+    # Subtest: rejects an invalid port
+    ok 7 - rejects an invalid port
+      ---
+      duration_ms: 0.304337
+      ...
+    # Subtest: requires the suffixed Blockfrost url + project id
+    ok 8 - requires the suffixed Blockfrost url + project id
+      ---
+      duration_ms: 1.191544
+      ...
+    # Subtest: requires the suffixed Koios url
+    ok 9 - requires the suffixed Koios url
+      ---
+      duration_ms: 0.587254
+      ...
+    1..9
+ok 5 - readIndexerConfig
+  ---
+  duration_ms: 12.345227
+  type: 'suite'
+  ...
+# Subtest: routeRequest
+    # Subtest: GET /v1/health → 200 health
+    ok 1 - GET /v1/health → 200 health
+      ---
+      duration_ms: 2.943418
+      ...
+    # Subtest: GET /v1/pairs → 200 { pairs }
+    ok 2 - GET /v1/pairs → 200 { pairs }
+      ---
+      duration_ms: 0.487804
+      ...
+    # Subtest: GET /v1/pairs/{symbol} (URL-encoded) → 200 pair
+    ok 3 - GET /v1/pairs/{symbol} (URL-encoded) → 200 pair
+      ---
+      duration_ms: 0.532729
+      ...
+    # Subtest: GET /v1/pairs/{symbol}/utxo → 200 utxoRef only
+    ok 4 - GET /v1/pairs/{symbol}/utxo → 200 utxoRef only
+      ---
+      duration_ms: 0.82279
+      ...
+    # Subtest: GET an unknown pair → 404
+    ok 5 - GET an unknown pair → 404
+      ---
+      duration_ms: 0.345743
+      ...
+    # Subtest: GET an unknown pair's utxo → 404
+    ok 6 - GET an unknown pair's utxo → 404
+      ---
+      duration_ms: 0.451899
+      ...
+    # Subtest: GET /v1/protocol/fees → 200 fee params + formula + worked example
+    ok 7 - GET /v1/protocol/fees → 200 fee params + formula + worked example
+      ---
+      duration_ms: 0.442187
+      ...
+    # Subtest: GET /v1/protocol/fees → 404 when the deployment is not bootstrapped
+    ok 8 - GET /v1/protocol/fees → 404 when the deployment is not bootstrapped
+      ---
+      duration_ms: 0.454023
+      ...
+    # Subtest: GET /v1/clients → 200 { clients }
+    ok 9 - GET /v1/clients → 200 { clients }
+      ---
+      duration_ms: 0.562446
+      ...
+    # Subtest: GET /v1/clients/{id} → 200 client
+    ok 10 - GET /v1/clients/{id} → 200 client
+      ---
+      duration_ms: 0.50544
+      ...
+    # Subtest: GET an unknown client → 404
+    ok 11 - GET an unknown client → 404
+      ---
+      duration_ms: 0.304117
+      ...
+    # Subtest: a non-GET method → 405
+    ok 12 - a non-GET method → 405
+      ---
+      duration_ms: 0.307781
+      ...
+    # Subtest: an unknown path → 404
+    ok 13 - an unknown path → 404
+      ---
+      duration_ms: 0.374462
+      ...
+    1..13
+ok 6 - routeRequest
+  ---
+  duration_ms: 10.977595
+  type: 'suite'
+  ...
+# Subtest: createIndexService.listPairs
+    # Subtest: decodes every Pair UTxO into the consumer shape with utxoRef + ageSeconds
+    ok 1 - decodes every Pair UTxO into the consumer shape with utxoRef + ageSeconds
+      ---
+      duration_ms: 9.001685
+      ...
+    # Subtest: ignores UTxOs without a Pair NFT or without a datum
+    ok 2 - ignores UTxOs without a Pair NFT or without a datum
+      ---
+      duration_ms: 1.384257
+      ...
+    # Subtest: clamps ageSeconds to 0 for a future timestamp
+    ok 3 - clamps ageSeconds to 0 for a future timestamp
+      ---
+      duration_ms: 0.930169
+      ...
+    1..3
+ok 7 - createIndexService.listPairs
+  ---
+  duration_ms: 12.666719
+  type: 'suite'
+  ...
+# Subtest: createIndexService.getPair
+    # Subtest: returns the matching pair
+    ok 1 - returns the matching pair
+      ---
+      duration_ms: 0.867251
+      ...
+    # Subtest: returns null for an unknown symbol
+    ok 2 - returns null for an unknown symbol
+      ---
+      duration_ms: 0.487445
+      ...
+    1..2
+ok 8 - createIndexService.getPair
+  ---
+  duration_ms: 1.517282
+  type: 'suite'
+  ...
+# Subtest: createIndexService.getClient
+    # Subtest: returns receiver balance + the client's subscribed pairs
+    ok 1 - returns receiver balance + the client's subscribed pairs
+      ---
+      duration_ms: 1.331095
+      ...
+    # Subtest: returns null for an unknown client
+    ok 2 - returns null for an unknown client
+      ---
+      duration_ms: 0.270406
+      ...
+    # Subtest: returns null when the Receiver UTxO is absent
+    ok 3 - returns null when the Receiver UTxO is absent
+      ---
+      duration_ms: 0.20015
+      ...
+    1..3
+ok 9 - createIndexService.getClient
+  ---
+  duration_ms: 2.189727
+  type: 'suite'
+  ...
+# Subtest: createIndexService.listClients
+    # Subtest: lists every client whose Receiver UTxO is on-chain
+    ok 1 - lists every client whose Receiver UTxO is on-chain
+      ---
+      duration_ms: 1.049083
+      ...
+    # Subtest: omits clients whose Receiver UTxO is absent (empty list, not nulls)
+    ok 2 - omits clients whose Receiver UTxO is absent (empty list, not nulls)
+      ---
+      duration_ms: 0.288001
+      ...
+    1..2
+ok 10 - createIndexService.listClients
+  ---
+  duration_ms: 1.489108
+  type: 'suite'
+  ...
+# Subtest: createIndexService.getProtocolFees
+    # Subtest: decodes the fee formula inputs from the on-chain Config UTxO
+    ok 1 - decodes the fee formula inputs from the on-chain Config UTxO
+      ---
+      duration_ms: 1.322081
+      ...
+    # Subtest: ignores a UTxO at the config address that lacks the Config NFT
+    ok 2 - ignores a UTxO at the config address that lacks the Config NFT
+      ---
+      duration_ms: 0.384391
+      ...
+    # Subtest: returns null when the registry has no Config (published-from-clients registry)
+    ok 3 - returns null when the registry has no Config (published-from-clients registry)
+      ---
+      duration_ms: 0.390121
+      ...
+    1..3
+ok 11 - createIndexService.getProtocolFees
+  ---
+  duration_ms: 2.314358
+  type: 'suite'
+  ...
+# Subtest: createIndexService.health
+    # Subtest: reports the tip and the live pair count
+    ok 1 - reports the tip and the live pair count
+      ---
+      duration_ms: 0.893472
+      ...
+    1..1
+ok 12 - createIndexService.health
+  ---
+  duration_ms: 1.032328
+  type: 'suite'
+  ...
+# Subtest: loadRegistry (from the shared state tree)
+    # Subtest: derives the Preview registry from offchain/state (same source as CLI/feeder)
+    ok 1 - derives the Preview registry from offchain/state (same source as CLI/feeder)
+      ---
+      duration_ms: 17.280141
+      ...
+    # Subtest: derives the Mainnet registry (addr1 addresses)
+    ok 2 - derives the Mainnet registry (addr1 addresses)
+      ---
+      duration_ms: 5.36606
+      ...
+    # Subtest: returns an empty registry with no Config for a not-yet-bootstrapped deployment
+    ok 3 - returns an empty registry with no Config for a not-yet-bootstrapped deployment
+      ---
+      duration_ms: 4.588515
+      ...
+    1..3
+ok 13 - loadRegistry (from the shared state tree)
+  ---
+  duration_ms: 28.95266
+  type: 'suite'
+  ...
+# Subtest: loadRegistry (explicit file override — running from a published registry JSON)
+    # Subtest: loads a published registry JSON via the override
+    ok 1 - loads a published registry JSON via the override
+      ---
+      duration_ms: 2.81213
+      ...
+    # Subtest: throws when the override file cannot be read
+    ok 2 - throws when the override file cannot be read
+      ---
+      duration_ms: 0.971482
+      ...
+    # Subtest: throws on invalid JSON in the override file
+    ok 3 - throws on invalid JSON in the override file
+      ---
+      duration_ms: 1.896728
+      ...
+    # Subtest: throws on a structurally invalid override file
+    ok 4 - throws on a structurally invalid override file
+      ---
+      duration_ms: 1.949829
+      ...
+    1..4
+ok 14 - loadRegistry (explicit file override — running from a published registry JSON)
+  ---
+  duration_ms: 8.42787
+  type: 'suite'
+  ...
+# Subtest: createIndexerServer operational endpoints
+    # Subtest: GET /v1/openapi.json → a 3.0 doc titled for the indexer
+    ok 1 - GET /v1/openapi.json → a 3.0 doc titled for the indexer
+      ---
+      duration_ms: 51.878416
+      ...
+    # Subtest: GET /docs → Swagger UI HTML pointing at the spec
+    ok 2 - GET /docs → Swagger UI HTML pointing at the spec
+      ---
+      duration_ms: 6.569377
+      ...
+    # Subtest: GET /metrics → Prometheus text
+    ok 3 - GET /metrics → Prometheus text
+      ---
+      duration_ms: 5.15452
+      ...
+    # Subtest: GET /public/swagger-ui.css → the vendored stylesheet
+    ok 4 - GET /public/swagger-ui.css → the vendored stylesheet
+      ---
+      duration_ms: 4.265048
+      ...
+    # Subtest: GET /v1/health → still serves the JSON v1 API
+    ok 5 - GET /v1/health → still serves the JSON v1 API
+      ---
+      duration_ms: 3.933125
+      ...
+    # Subtest: GET /metrics with metrics disabled → 404
+    ok 6 - GET /metrics with metrics disabled → 404
+      ---
+      duration_ms: 11.399707
+      ...
+    1..6
+ok 15 - createIndexerServer operational endpoints
+  ---
+  duration_ms: 86.637351
+  type: 'suite'
+  ...
+# Subtest: createIndexerMetrics
+    # Subtest: exposes dia_bridge_provider_requests_total with provider/method/outcome labels
+    ok 1 - exposes dia_bridge_provider_requests_total with provider/method/outcome labels
+      ---
+      duration_ms: 105.29529
+      ...
+    # Subtest: returns parseable Prometheus text even before any call is recorded
+    ok 2 - returns parseable Prometheus text even before any call is recorded
+      ---
+      duration_ms: 5.252843
+      ...
+    # Subtest: stamps the default labels (network) on every series, like the feeder
+    ok 3 - stamps the default labels (network) on every series, like the feeder
+      ---
+      duration_ms: 6.024151
+      ...
+    1..3
+ok 16 - createIndexerMetrics
+  ---
+  duration_ms: 119.142746
+  type: 'suite'
+  ...
+# Subtest: indexerRoutes
+    # Subtest: documents every served endpoint in the OpenAPI doc
+    ok 1 - documents every served endpoint in the OpenAPI doc
+      ---
+      duration_ms: 2.440278
+      ...
+    # Subtest: marks {symbol} as a required path parameter
+    ok 2 - marks {symbol} as a required path parameter
+      ---
+      duration_ms: 0.757226
+      ...
+    # Subtest: has unique route kinds
+    ok 3 - has unique route kinds
+      ---
+      duration_ms: 0.222486
+      ...
+    1..3
+ok 17 - indexerRoutes
+  ---
+  duration_ms: 5.022763
+  type: 'suite'
+  ...
+1..17
+# tests 67
+# suites 17
+# pass 67
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2709.932724

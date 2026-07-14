@@ -1,0 +1,21 @@
+{
+  "pairs": [
+    {
+      "symbol": "ARS/USDT",
+      "pairId": "4152532f55534454",
+      "pairPolicyId": "b1b933a7b08ebdee6d957b4ae3d027ac4a13f9d319dbd8a2b95e052f",
+      "price": "645161290322580",
+      "timestamp": "1784051983",
+      "nonce": "1784041295981524051",
+      "signer": "63c1d82a81aa86ae2421ee82ea0ddf216bb66609",
+      "intentHash": "77894df60be6bfd4c50ec9f8c5883da1072517cdbcc9c262f1d66a2fab032212",
+      "minUtxoLovelace": "5000000",
+      "utxoRef": {
+        "txHash": "b958628bc54c2aeccb25401ca841653d643a28dd77dcae08343087b035917f72",
+        "outputIndex": 0
+      },
+      "ageSeconds": 1768,
+      "clientId": "client-test-01"
+    }
+  ]
+}

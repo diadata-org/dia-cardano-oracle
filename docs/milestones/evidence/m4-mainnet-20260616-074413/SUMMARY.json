@@ -1,0 +1,29 @@
+{
+  "network": "Mainnet",
+  "pack_stamp": "20260616-074413",
+  "run": "mainnet_run_20260616-074413",
+  "window": {
+    "first_confirmed_iso": "2026-07-13T09:45:16.709000Z",
+    "last_confirmed_iso": "2026-07-14T18:01:27.595000Z"
+  },
+  "totals": {
+    "tx_confirmed": 40,
+    "tx_failed": 1,
+    "tx_condemned": 1,
+    "reorgs": 0
+  },
+  "tests": {
+    "feeder": {
+      "result": "PASS",
+      "total": 790,
+      "pass": 790,
+      "fail": 0
+    },
+    "cli": {
+      "result": "PASS"
+    },
+    "indexer": {
+      "result": "PASS"
+    }
+  }
+}

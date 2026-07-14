@@ -1,0 +1,17 @@
+{
+  "network": "Mainnet",
+  "generatedAtSec": 1784053725,
+  "total": 1,
+  "pass": 1,
+  "warn": 0,
+  "fail": 0,
+  "feeds": [
+    {
+      "symbol": "ARS/USDT",
+      "status": "PASS",
+      "deviationPct": 0,
+      "stalenessSec": 1680,
+      "reasons": []
+    }
+  ]
+}

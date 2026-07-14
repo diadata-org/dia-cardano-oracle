@@ -1,0 +1,1007 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "DIA Cardano Oracle Indexer API",
+    "version": "0.1.0",
+    "description": "Read-only HTTP API over the live on-chain DIA oracle Pair/Receiver UTxOs. Generated from the in-code route table; cannot drift from the implementation."
+  },
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "summary": "Provider reachable, chain tip, and live pair count.",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "tip",
+                    "pairCount"
+                  ],
+                  "properties": {
+                    "tip": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "slot",
+                        "height",
+                        "hash"
+                      ],
+                      "properties": {
+                        "slot": {
+                          "type": "integer"
+                        },
+                        "height": {
+                          "type": "integer"
+                        },
+                        "hash": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "pairCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pairs": {
+      "get": {
+        "summary": "Every published pair with its latest on-chain value and UTxO ref.",
+        "operationId": "pairs",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "pairs"
+                  ],
+                  "properties": {
+                    "pairs": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "symbol",
+                          "pairId",
+                          "pairPolicyId",
+                          "price",
+                          "timestamp",
+                          "nonce",
+                          "signer",
+                          "intentHash",
+                          "minUtxoLovelace",
+                          "utxoRef",
+                          "ageSeconds",
+                          "clientId"
+                        ],
+                        "properties": {
+                          "symbol": {
+                            "type": "string"
+                          },
+                          "pairId": {
+                            "description": "Hex-encoded pair id.",
+                            "type": "string"
+                          },
+                          "pairPolicyId": {
+                            "description": "Policy id of the Pair NFT — authenticate the reference input with it.",
+                            "type": "string"
+                          },
+                          "price": {
+                            "description": "Integer price (DIA fixed-point) as a decimal string.",
+                            "type": "string"
+                          },
+                          "timestamp": {
+                            "description": "Unix seconds as a decimal string.",
+                            "type": "string"
+                          },
+                          "nonce": {
+                            "type": "string"
+                          },
+                          "signer": {
+                            "type": "string"
+                          },
+                          "intentHash": {
+                            "type": "string"
+                          },
+                          "minUtxoLovelace": {
+                            "type": "string"
+                          },
+                          "utxoRef": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "txHash",
+                              "outputIndex"
+                            ],
+                            "properties": {
+                              "txHash": {
+                                "description": "Transaction hash of the Pair UTxO.",
+                                "type": "string"
+                              },
+                              "outputIndex": {
+                                "description": "Output index within that transaction.",
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "ageSeconds": {
+                            "description": "now − timestamp at query time.",
+                            "type": "integer"
+                          },
+                          "clientId": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pairs/{symbol}": {
+      "get": {
+        "summary": "One pair's latest on-chain value.",
+        "operationId": "pair-by-symbol",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "description": "Pair symbol, URL-encoded (BTC/USD → BTC%2FUSD).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "symbol",
+                    "pairId",
+                    "pairPolicyId",
+                    "price",
+                    "timestamp",
+                    "nonce",
+                    "signer",
+                    "intentHash",
+                    "minUtxoLovelace",
+                    "utxoRef",
+                    "ageSeconds",
+                    "clientId"
+                  ],
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "pairId": {
+                      "description": "Hex-encoded pair id.",
+                      "type": "string"
+                    },
+                    "pairPolicyId": {
+                      "description": "Policy id of the Pair NFT — authenticate the reference input with it.",
+                      "type": "string"
+                    },
+                    "price": {
+                      "description": "Integer price (DIA fixed-point) as a decimal string.",
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "description": "Unix seconds as a decimal string.",
+                      "type": "string"
+                    },
+                    "nonce": {
+                      "type": "string"
+                    },
+                    "signer": {
+                      "type": "string"
+                    },
+                    "intentHash": {
+                      "type": "string"
+                    },
+                    "minUtxoLovelace": {
+                      "type": "string"
+                    },
+                    "utxoRef": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "txHash",
+                        "outputIndex"
+                      ],
+                      "properties": {
+                        "txHash": {
+                          "description": "Transaction hash of the Pair UTxO.",
+                          "type": "string"
+                        },
+                        "outputIndex": {
+                          "description": "Output index within that transaction.",
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "ageSeconds": {
+                      "description": "now − timestamp at query time.",
+                      "type": "integer"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid path or query parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pairs/{symbol}/utxo": {
+      "get": {
+        "summary": "Just the TxIn (txHash + outputIndex) to use as a reference input.",
+        "operationId": "pair-utxo",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "description": "Pair symbol, URL-encoded (BTC/USD → BTC%2FUSD).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "txHash",
+                    "outputIndex"
+                  ],
+                  "properties": {
+                    "txHash": {
+                      "description": "Transaction hash of the Pair UTxO.",
+                      "type": "string"
+                    },
+                    "outputIndex": {
+                      "description": "Output index within that transaction.",
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid path or query parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/clients": {
+      "get": {
+        "summary": "Every client publishing feeds, with receiver balance and subscribed pairs.",
+        "operationId": "clients",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "clients"
+                  ],
+                  "properties": {
+                    "clients": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "clientId",
+                          "receiverBalanceLovelace",
+                          "accruedToHookLovelace",
+                          "subscribedPairs"
+                        ],
+                        "properties": {
+                          "clientId": {
+                            "type": "string"
+                          },
+                          "receiverBalanceLovelace": {
+                            "type": "string"
+                          },
+                          "accruedToHookLovelace": {
+                            "type": "string"
+                          },
+                          "subscribedPairs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/clients/{clientId}": {
+      "get": {
+        "summary": "Receiver balance, accrued-to-hook, and subscribed pairs for a client.",
+        "operationId": "client-by-id",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "description": "Client id, e.g. client-test-01.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "clientId",
+                    "receiverBalanceLovelace",
+                    "accruedToHookLovelace",
+                    "subscribedPairs"
+                  ],
+                  "properties": {
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "receiverBalanceLovelace": {
+                      "type": "string"
+                    },
+                    "accruedToHookLovelace": {
+                      "type": "string"
+                    },
+                    "subscribedPairs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid path or query parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/protocol/fees": {
+      "get": {
+        "summary": "The on-chain protocol fee parameters a client pays per update (base + N × per-pair).",
+        "operationId": "protocol-fees",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "baseFeeLovelace",
+                    "perPairFeeLovelace",
+                    "feeFormula",
+                    "exampleSinglePairFeeLovelace"
+                  ],
+                  "properties": {
+                    "baseFeeLovelace": {
+                      "description": "Constant component of the fee formula (lovelace).",
+                      "type": "string"
+                    },
+                    "perPairFeeLovelace": {
+                      "description": "Per-pair component of the fee formula (lovelace).",
+                      "type": "string"
+                    },
+                    "feeFormula": {
+                      "description": "Human-readable formula: base + N × perPair.",
+                      "type": "string"
+                    },
+                    "exampleSinglePairFeeLovelace": {
+                      "description": "What a 1-pair update costs (base + perPair).",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openapi.json": {
+      "get": {
+        "summary": "This OpenAPI 3.0 document, generated from the route table.",
+        "operationId": "openapi",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/docs": {
+      "get": {
+        "summary": "Interactive API reference (Swagger UI) rendering this spec — with Try it out.",
+        "operationId": "docs",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Prometheus exposition (text/plain) — provider request counts.",
+        "operationId": "metrics",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

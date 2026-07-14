@@ -1,0 +1,68 @@
+
+> @diadata-org/dia-cardano-oracle-cli@0.1.0 test
+> tsx src/__tests__/run-tests.ts
+
+[pass] testCardanoWalletCreate
+[pass] testEthereumWalletCreate
+[pass] testCliConfigAllowsCardanoOnlyModeWithoutDiaSourceEnv
+[pass] testIntentSigning
+[pass] testBatchSnapshotRefresh
+[pass] testCompatibleBatchRules
+[pass] testBatchUpdatesSortByPairTokenName
+[pass] testBatchUpdatesSortMatchesBytewiseCompare
+[pass] testBatchUpdatesSortRejectsNonNormalizedTokenName
+[pass] testPairApplyUpdateRedeemerHasNoFields
+[pass] testProtocolStateInit
+[pass] testProtocolInitAuthorizedKeysFromEnv
+[pass] testClientStateInit
+[pass] testDepositFundReadsFloorFromConfigState
+[pass] testDepositMergeSelectionFiltersAndCaps
+[pass] testConsolidationUtxoSelection
+[pass] testPlanWalletSplit
+[pass] testRunStateResolution
+[pass] testPrimitivesPureHelpers
+[pass] testReceiverDatumRoundTrip
+[pass] testReceiverDatumExactlyThreeIntegerFields
+[pass] testPaymentHookDatumRoundTrip
+[pass] testPaymentHookDatumWithdrawAddressRoundTrip
+[pass] testConfigDatumRoundTrip
+[pass] testConfigDatumFieldOrderAndArity
+[pass] testPairDatumRoundTrip
+[pass] testDatumDecodersModuleMatchesReExport
+[pass] testAddressToPlutusDataKeyAndStake
+[pass] testReceiverWithdrawDoesNotTouchAccrued
+[pass] testSettleDeltaInvariant
+[pass] testMultiClientSettleSumAccrued
+[pass] testBatchRejectsDuplicatePair
+[pass] testBatchRejectsForeignReceiver
+[pass] testSettleManifestPreChecks
+[pass] testHookCoordinatorConsistencyPure
+[pass] testReferenceScriptMissingHelper
+[pass] testClientReclaimUtxoRefsIncludesDeposit
+[pass] testClientReclaimUtxoRefsSkipsDepositWhenAbsent
+[pass] testWithdrawAmountPreflightHelpers
+[pass] testReceiverTransactionPreflightGuards
+[pass] testConfigUpdateAndInitArtifactPreflight
+[pass] testBootstrapNftPayPreflight
+[pass] testSettleAndPaymentHookPreflight
+[pass] testOracleUpdatePreflightPureGuards
+[pass] testCompleteWithRetryRebuildsFreshBuilderOnRetry
+[pass] testCompleteWithRetryRethrowsRealErrorImmediately
+[pass] testProviderRetryClassifiers
+[pass] testProviderRetryRetriesTransientThenSucceeds
+[pass] testProviderRetryRethrowsNonTransientImmediately
+[pass] testProviderRetryExhaustsThenRethrows
+[pass] testProviderRetryReportsOutcomesToObserver
+[pass] testProviderRetryPreservesThisAndNonFunctionProps
+[pass] testWalletSettlementWaitsForSpentInputs
+[pass] testComputeSpentWalletOutRefs
+[pass] testComputeWalletChangeOutputs
+[pass] testFundPoolWalletRejectsNonPositiveAmount
+[fund-pool-wallet] Connecting and selecting the main wallet (kind=seed)
+[fund-pool-wallet] Paying 110000000 lovelace to pool wallet addr_test1qrarm23q3hpqh5a6hem3rvng3w47mpa7w08ly7pzfzmf765xt6lupa96zgu43809reczhpu272njwqt37ml6u7nz874qfje03s as 2 UTxO(s)
+[fund-pool-wallet] Tx resources: fee=0.171353 ADA (171353 lovelace), cpu=0, mem=0
+[pass] testFundPoolWalletReportsFee
+[pass] testSplitWalletRejectsInvalidPlan
+[skip] testEmulatorProtocolFlowConfigBootstrap: set DIA_AUTHORIZED_PRIVATE_KEY to run
+[pass] runLucidEmulatorHarnessSmokeTests
+CLI tests passed (59 tests)
