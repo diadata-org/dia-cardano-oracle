@@ -137,10 +137,6 @@ evidence lineage for the verified runs.
 | Preview | `20260608-040304` | `offchain/state/preview_run_20260608-040304/` | `client-test-01`, `client-test-02` |
 | Mainnet | `20260616-074413` | `offchain/state/mainnet_run_20260616-074413/` | `client-test-01` |
 
-The older retained runs are `preview_run_20260516-090057` and
-`mainnet_run_20260517-063917`. Use the preferred IDs above unless a reviewer is
-specifically reproducing an older evidence set.
-
 For Preview reuse from a clean clone:
 
 ```sh
