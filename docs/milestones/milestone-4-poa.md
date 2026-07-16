@@ -9,8 +9,9 @@
 > indexer, deployment scripts, developer documentation, sample feeds) are
 > complete and verifiable now. The items still marked `[PLACEHOLDER]` are the
 > externally-produced deliverables — the final close-out report, the close-out
-> video, the end-to-end install/access demo, and publication on DIA's developer
-> documentation website — to be filled in at submission.
+> video, and the end-to-end install/access demo — to be filled in at submission.
+> Publication on DIA's developer documentation website is explicitly deferred to
+> DIA's independent marketing timeline and is not a submission dependency.
 
 Primary evidence:
 
@@ -187,10 +188,9 @@ deployment AC#1 measures. Preview carries **16 distinct live feeds** — `ADA/US
 same contracts, indexer, and consumer path as mainnet. This is why the preview
 pack is load-bearing evidence for M4, not a redundant copy of the mainnet pack.
 
-**Publication on the DIA main developer documentation website:**
-`[PLACEHOLDER: link to the published DIA documentation]` — the consolidated
-publication deferred from M1/M2/M3 (per the accepted M1 PoA), published once
-against the final stable M4 surface.
+**Publication on the DIA main developer documentation website:** deferred to
+DIA's independent marketing timeline. The consolidated publication follows the
+same accepted M1/M2/M3 approach and is not a requirement for this M4 submission.
 
 The publication date itself is DIA's decision, not a gap in delivered work: DIA
 has indicated it prefers to publish the documentation once the integration is
@@ -215,7 +215,7 @@ the moment DIA schedules that announcement.
 | Deployment scripts | Delivered | [`offchain/Makefile`](../../offchain/Makefile), [`offchain/cli/README.md`](../../offchain/cli/README.md) |
 | Sample live feeds | Delivered | served by the indexer (`GET /v1/pairs`); addresses table in the indexer README |
 | Contract addresses | Delivered | [indexer README — published contract addresses](../../offchain/indexer/README.md#published-contract-addresses) |
-| Supporting developer documentation (incl. request 2,500+/10,000+ feeds) | Delivered (in repo; DIA-site publication — see AC #4) | See AC #4 table |
+| Supporting developer documentation (incl. request 2,500+/10,000+ feeds) | Delivered in repository; DIA-site publication deferred to DIA marketing timing | See AC #4 table |
 | Final close-out report | `[PLACEHOLDER]` | `[PLACEHOLDER: link]` |
 | Final closeout video | `[PLACEHOLDER]` | `[PLACEHOLDER: link]` |
 
@@ -282,7 +282,7 @@ and the published addresses — no hand-edited numbers.
 
 - Close-out report: `[PLACEHOLDER: link]`
 - Closeout video: `[PLACEHOLDER: link]`
-- DIA documentation publication: `[PLACEHOLDER: link]`
+- DIA documentation publication: deferred to DIA marketing timing
 - Mainnet evidence pack: [`evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md`](evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md)
 - Preview evidence pack: [`evidence/m4-preview-20260608-040304/milestone-4-preview-evidence.md`](evidence/m4-preview-20260608-040304/milestone-4-preview-evidence.md)
 - Indexer (consumer service): [`offchain/indexer/README.md`](../../offchain/indexer/README.md)

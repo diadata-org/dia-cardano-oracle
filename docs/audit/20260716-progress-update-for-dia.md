@@ -70,7 +70,7 @@ This is a status note, not a remediation document.
 
 ## What we need from DIA
 
-**The close-out report** needs six inputs only DIA can supply — we're not
+**The close-out report** needs five inputs only DIA can supply — we're not
 guessing at these:
 
 1. The project manager name.
@@ -79,8 +79,6 @@ guessing at these:
 3. Any current or committed dApp integrations using the live feed, if any.
 4. Any TVL, partnership, or ecosystem-adoption figures you want reported.
 5. The maintenance/support arrangement and revenue model going forward.
-6. When to publish the developer documentation on DIA's website (already
-   noted in the PoA as timed to your marketing announcement).
 
 **Two videos are still missing:**
 
@@ -96,11 +94,13 @@ For the formal M4 submission, DIA needs to:
    published, then send its final URL.
 2. Publish the close-out video and send its URL.
 3. Publish the end-to-end install/access demo and send its URL.
-4. Publish the developer documentation on the DIA website when the marketing
-   announcement is scheduled, then send its URL.
-5. Replace the corresponding `[PLACEHOLDER]` values in
+4. Replace the corresponding `[PLACEHOLDER]` values in
    [`milestone-4-poa.md`](../milestones/milestone-4-poa.md) with those URLs and
    the final submission commit.
+
+Publication on the DIA developer documentation website is explicitly deferred to
+DIA's independent marketing timeline. It is not an M4 submission dependency and
+requires no action from DIA for this handoff.
 
 ## Where to read more
 
