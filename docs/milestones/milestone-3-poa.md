@@ -79,7 +79,7 @@ The Acceptance Criteria of Milestone 3 are quoted verbatim and mapped to evidenc
 | Evidence | Where |
 | --- | --- |
 | Monitoring library source (metrics, dashboards, alerts, sanity check) | [`offchain/feeder/monitoring/`](../../offchain/feeder/monitoring/), [`offchain/feeder/src/api/metrics.ts`](../../offchain/feeder/src/api/metrics.ts) |
-| Real-time dashboards (overview, transactions, internals) | mainnet pack [`Dashboards`](evidence/m3-mainnet-20260616-074413/milestone-3-mainnet-evidence.md#dashboards) (rendered panel PNGs); source JSON in [`offchain/feeder/monitoring/grafana/dashboards/`](../../offchain/feeder/monitoring/grafana/dashboards/) |
+| Real-time dashboards (overview, transactions, internals) | mainnet pack [`Dashboards`](evidence/m3-mainnet-20260616-074413/milestone-3-mainnet-evidence.md#dashboards) (rendered panel PNGs); source JSON in [`offchain/feeder/monitoring/mainnet/dashboards/`](../../offchain/feeder/monitoring/mainnet/dashboards/) |
 | Live mainnet run — 7 confirmed on-chain oracle updates (`ARS/USDT`, 0 failed, 0 reorgs) | mainnet pack — [`Confirmed Cardano tx count per pair`](evidence/m3-mainnet-20260616-074413/milestone-3-mainnet-evidence.md#confirmed-cardano-tx-count-per-pair), [`Sample Cardano tx hashes`](evidence/m3-mainnet-20260616-074413/milestone-3-mainnet-evidence.md#sample-cardano-tx-hashes-one-per-pair-first-observed), [`SUMMARY.json`](evidence/m3-mainnet-20260616-074413/SUMMARY.json) |
 | Provider health, staleness, latency surfaced in real time | mainnet pack panels (`Cardano provider health`, `Pair staleness`, `Symbol-update latency`) |
 | Living Grafana guide (every panel documented) | [`docs/architecture/grafana-dashboards.md`](../architecture/grafana-dashboards.md) |
@@ -98,10 +98,10 @@ Headline mainnet transaction for immediate verification:
 
 | Evidence | Where |
 | --- | --- |
-| Alert rules (13) over deviation, price-age/staleness, reorg, feed-sanity, balances, providers | [`offchain/feeder/monitoring/alerts.yml`](../../offchain/feeder/monitoring/alerts.yml); canonical thresholds in `infrastructure.<network>.yaml::alerting.*` |
-| End-to-end alert pipeline (Prometheus rule → Alertmanager routing → feeder webhook) | [`offchain/feeder/monitoring/alertmanager.yml`](../../offchain/feeder/monitoring/alertmanager.yml), [`offchain/feeder/src/api/routes.ts`](../../offchain/feeder/src/api/routes.ts) |
+| Alert rules (13) over deviation, price-age/staleness, reorg, feed-sanity, balances, providers | [`offchain/feeder/monitoring/mainnet/alerts.yml`](../../offchain/feeder/monitoring/mainnet/alerts.yml); canonical thresholds in `infrastructure.<network>.yaml::alerting.*` |
+| End-to-end alert pipeline (Prometheus rule → Alertmanager routing → feeder webhook) | [per-network monitoring configuration](../../offchain/feeder/monitoring/), [`offchain/feeder/src/api/routes.ts`](../../offchain/feeder/src/api/routes.ts) |
 | **Auditable alert log exposed by API** (`GET /api/v1/alerts`, `…/{id}/ack`) — each fired alert persisted, queryable, acknowledgeable | [`offchain/feeder/src/api/routes.ts`](../../offchain/feeder/src/api/routes.ts) |
-| Config-driven notification channels (Telegram / email one flag away; secrets stay in `.env`) | `infrastructure.<network>.yaml::notifications`, generated [`monitoring/alertmanager.yml`](../../offchain/feeder/monitoring/alertmanager.yml) |
+| Config-driven notification channels (Telegram / email one flag away; secrets stay in `.env`) | `infrastructure.<network>.yaml::notifications`, generated per-network Alertmanager configuration in [`monitoring/`](../../offchain/feeder/monitoring/) |
 | **Mainnet** — `OraclePairStale` fired → resolved live through the pipeline | mainnet pack [`alert-trigger/`](evidence/m3-mainnet-20260616-074413/alert-trigger/) (Prometheus state + `alert_log` + PNG) |
 | **Preview** — every alert fired → resolved by hand (timeline + Prometheus state + `alert_log` + PNGs) | [`evidence/m3-preview-20260608-040304/alert-trigger/`](evidence/m3-preview-20260608-040304/alert-trigger/timeline.md) |
 | Threshold ↔ config drift guard (alerts can never silently diverge from the YAML) | [`offchain/feeder/src/config/__tests__/threshold-drift.test.ts`](../../offchain/feeder/src/config/__tests__/threshold-drift.test.ts) |
@@ -148,7 +148,7 @@ requirements of AC #4.
 | Official output | Status | Evidence |
 | --- | --- | --- |
 | QA validation report | Delivered | 665 integration tests + per-feed sanity (ARS/USDT PASS) + alert-trigger logs — see AC #3 (assembled in the mainnet pack) |
-| Anomaly detection | Delivered | [`monitoring/alerts.yml`](../../offchain/feeder/monitoring/alerts.yml) — 13 rules over deviation, staleness/price-age, reorg, on-chain-vs-source feed-sanity |
+| Anomaly detection | Delivered | [`monitoring/mainnet/alerts.yml`](../../offchain/feeder/monitoring/mainnet/alerts.yml) — 13 rules over deviation, staleness/price-age, reorg, on-chain-vs-source feed-sanity |
 | Uptime and accuracy reports | Delivered | 7 confirmed ARS/USDT updates (0 failed, 0 reorgs) + latency + per-feed accuracy — see AC #3 |
 | Automated alerts | Delivered | Prometheus → Alertmanager → feeder webhook → `alert_log` (API-exposed); mainnet (`OraclePairStale`) + preview alert-trigger runs |
 | Developer documentation | Delivered (in repo; DIA-site publication deferred to M4 — see AC #4) | See AC #4 table |

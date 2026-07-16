@@ -168,7 +168,7 @@ fi
 echo "[package-m3] step 4/6 — rendering Grafana dashboard"
 
 # Panels to snapshot, in dashboard reading order: "id|title|description".
-# IDs, titles and PromQL come from monitoring/grafana/dashboards/feeder.json —
+# IDs, titles and PromQL come from monitoring/<network>/dashboards/feeder.json —
 # keep in sync with it. The description is rendered under each PNG in the
 # report and explains the metric (NOT the data). Single-quoted so the literal
 # backticks survive into the markdown unevaluated.
@@ -199,7 +199,7 @@ PANELS=(
 
 # Transactions dashboard (feeder-tx.json, uid dia-cardano-feeder-tx) — the
 # per-TRANSACTION axis: a batch of N pairs is ONE tx. Same "id|title|description"
-# shape; keep in sync with monitoring/grafana/dashboards/feeder-tx.json.
+# shape; keep in sync with monitoring/<network>/dashboards/feeder-tx.json.
 GRAFANA_TX_DASHBOARD_UID="dia-cardano-feeder-tx"
 PANELS_TX=(
   '301|Stage 1 — processing → submission|Metric `histogram_quantile(0.50 / 0.95 / 0.99, rate(dia_bridge_tx_processing_to_submission_seconds_bucket[5m]))`, in seconds, one observation per confirmed tx. Time to build, queue and sign a transaction before broadcast.'
@@ -307,7 +307,7 @@ the monitoring profile (which includes the renderer sidecar):
     cd offchain && make up MONITORING=1
 
 Then re-run this script, or drop manual PNG screenshots into this folder.
-The dashboard JSON lives at offchain/feeder/monitoring/grafana/dashboards/feeder.json.
+The dashboard JSON lives at offchain/feeder/monitoring/$NETWORK/dashboards/feeder.json.
 EOF
     DASHBOARDS_MD="_Grafana was reachable but the image renderer was not responding when this pack was assembled — no PNGs captured. See \`dashboards/README.txt\`._"
     echo "[package-m3]   Grafana up but render failed — wrote dashboards/README.txt"
@@ -320,7 +320,7 @@ screenshots into this folder:
 
     cd offchain && make up MONITORING=1
 
-The dashboard JSON lives at offchain/feeder/monitoring/grafana/dashboards/feeder.json.
+The dashboard JSON lives at offchain/feeder/monitoring/$NETWORK/dashboards/feeder.json.
 EOF
   DASHBOARDS_MD="_Grafana was not reachable at $GRAFANA_URL when this pack was assembled — no PNGs captured. See \`dashboards/README.txt\`._"
   echo "[package-m3]   Grafana NOT reachable — wrote dashboards/README.txt"
@@ -457,10 +457,11 @@ else
   echo "[package-m3]   Prometheus not reachable — alerts-active.json marked unavailable" >&2
 fi
 ALERTS_MD="$(cd "$REPO_ROOT/offchain/feeder" \
-  && node --import tsx/esm scripts/m3-evidence/build-alerts.ts "$ALERTS_ACTIVE_JSON" 2>/dev/null)" || true
+  && EVIDENCE_NETWORK="$NETWORK" node --import tsx/esm scripts/m3-evidence/build-alerts.ts "$ALERTS_ACTIVE_JSON" 2>/dev/null)" || true
 if [ -z "$ALERTS_MD" ]; then
   echo "[package-m3]   build-alerts.ts unavailable — falling back to static catalog" >&2
-  ALERTS_MD=$'Source of truth: [`offchain/feeder/monitoring/alerts.yml`](../../../../offchain/feeder/monitoring/alerts.yml).\nCanonical thresholds: `infrastructure.<network>.yaml::alerting.*`.\n\nThe 13 alert rules (OraclePairStale, ReceiverBalanceLow, SettleOverdue, PaymentHookWithdrawReady, AdminWalletLow, AdminWalletFragmented, PriceDeviationHigh, PriceAgeHigh, FeedAccuracyFail, ReorgRateHigh, ReceiverDepositsPending, PrimaryProviderDown, SecondaryProviderDown) and their exact remediation commands are defined in `alerts.yml`; the live snapshot is in `alerts-active.json`.'
+  ALERTS_MD="Source of truth: [per-network alert rules](../../../../offchain/feeder/monitoring/$NETWORK/alerts.yml)."
+  ALERTS_MD+=$'\nCanonical thresholds: `infrastructure.<network>.yaml::alerting.*`.\n\nThe 13 alert rules (OraclePairStale, ReceiverBalanceLow, SettleOverdue, PaymentHookWithdrawReady, AdminWalletLow, AdminWalletFragmented, PriceDeviationHigh, PriceAgeHigh, FeedAccuracyFail, ReorgRateHigh, ReceiverDepositsPending, PrimaryProviderDown, SecondaryProviderDown) and their exact remediation commands are defined in `alerts.yml`; the live snapshot is in `alerts-active.json`.'
 fi
 
 # ---------------------------------------------------------------------------
@@ -646,11 +647,11 @@ Evidence pack location: this directory.
 | Official output | Repository status |
 | --- | --- |
 | QA validation report | This pack: integration-test results (below) + per-feed sanity checks + alert-trigger logs. |
-| Anomaly detection | Complete: \`offchain/feeder/monitoring/alerts.yml\` (13 alert rules) over price-deviation, price-age/staleness, reorg, and on-chain-vs-source feed-sanity signals; canonical thresholds in \`infrastructure.<network>.yaml::alerting.*\`. |
+| Anomaly detection | Complete: \`offchain/feeder/monitoring/$NETWORK/alerts.yml\` (13 alert rules) over price-deviation, price-age/staleness, reorg, and on-chain-vs-source feed-sanity signals; canonical thresholds in \`infrastructure.<network>.yaml::alerting.*\`. |
 | Uptime and accuracy reports | This pack: per-pair confirmed counts + latency + reorg stats; per-feed accuracy from the sanity check. |
 | Automated alerts | Complete: Prometheus rules → Alertmanager → feeder webhook → \`alert_log\` (single pipeline; Telegram/email one config flip away). |
 | Test coverage | Feeder \`npm test\`: **$stat_feeder_pass / $stat_feeder_tests passing**, $stat_feeder_fail failed ($stat_feeder_suites suites) — **$feeder_result**. CLI \`npm test\`: **$cli_result**. Full output captured in [\`tests/\`](tests/). See [Test results](#test-results). |
-| Real-time dashboards | Complete: \`dashboards/\` (PNG snapshots taken at pack time). Source JSON in [\`offchain/feeder/monitoring/grafana/dashboards/\`](../../../../offchain/feeder/monitoring/grafana/dashboards/). |
+| Real-time dashboards | Complete: \`dashboards/\` (PNG snapshots taken at pack time). Source JSON in [\`offchain/feeder/monitoring/$NETWORK/dashboards/\`](../../../../offchain/feeder/monitoring/$NETWORK/dashboards/). |
 | Developer documentation | Complete: [feeder README](../../../../offchain/feeder/README.md), [CLI README](../../../../offchain/cli/README.md), [architecture](../../../architecture/cardano-oracle-architecture.md). |
 
 ## Test results
@@ -745,7 +746,7 @@ $PUSH_MD
 
 Grafana dashboard \`DIA Cardano Oracle Feeder\` (UID \`dia-cardano-feeder\`) —
 PNG snapshots taken at pack time over a \`now-3h\` window. Source JSON:
-[\`offchain/feeder/monitoring/grafana/dashboards/feeder.json\`](../../../../offchain/feeder/monitoring/grafana/dashboards/feeder.json).
+[\`offchain/feeder/monitoring/$NETWORK/dashboards/feeder.json\`](../../../../offchain/feeder/monitoring/$NETWORK/dashboards/feeder.json).
 
 $DASHBOARDS_MD
 

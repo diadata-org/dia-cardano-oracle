@@ -5,7 +5,7 @@
 //   node --import tsx/esm scripts/m3-evidence/build-alerts.ts <alerts-active.json>
 //
 // Inputs:
-//   monitoring/alerts.yml            — canonical alert rules (catalog + remediation)
+//   monitoring/<network>/alerts.yml  — canonical alert rules (catalog + remediation)
 //   <alerts-active.json> (argv[2])   — Prometheus /api/v1/alerts snapshot captured at pack time
 //
 // Output: the markdown section is printed to stdout (the shell captures it).
@@ -17,7 +17,8 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
 const FEEDER_ROOT = path.join(import.meta.dirname, "../..");
-const ALERTS_YML = path.join(FEEDER_ROOT, "monitoring", "alerts.yml");
+const NETWORK = process.env["EVIDENCE_NETWORK"]?.trim().toLowerCase() === "mainnet" ? "mainnet" : "preview";
+const ALERTS_YML = path.join(FEEDER_ROOT, "monitoring", NETWORK, "alerts.yml");
 
 type Rule = {
   alert?: string;
@@ -76,7 +77,7 @@ const active = loadActive(process.argv[2]);
 
 const out: string[] = [];
 out.push(
-  "Source of truth: [`offchain/feeder/monitoring/alerts.yml`](../../../../offchain/feeder/monitoring/alerts.yml).",
+  `Source of truth: [\`offchain/feeder/monitoring/${NETWORK}/alerts.yml\`](../../../../offchain/feeder/monitoring/${NETWORK}/alerts.yml).`,
   "Canonical thresholds: `infrastructure.<network>.yaml::alerting.*`. Per-alert operator",
   "remediation lives in `alerts.yml` and the [feeder README](../../../../offchain/feeder/README.md).",
   "",

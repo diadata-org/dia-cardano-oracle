@@ -8,7 +8,7 @@
 //   KOIOS_API_URL_<SFX>
 // Only the HTTP port and an optional registry-file override are indexer-specific:
 //   INDEXER_PORT               default from constants
-//   INDEXER_REGISTRY_FILE      path to a registry JSON (else the bundled one)
+//   INDEXER_REGISTRY_FILE      path to a registry JSON (else shared run state)
 //
 // It reads the provider endpoint/key and the target network. Every default,
 // allow-list, and suffix mapping comes from constants.ts.
@@ -38,7 +38,7 @@ export interface IndexerConfig {
   koiosUrl?: string;
   /** TCP port the HTTP API listens on. */
   port: number;
-  /** Explicit registry config file; when unset the bundled per-network file is used. */
+  /** Explicit registry config file; when unset, the registry is resolved from shared run state. */
   registryFile?: string;
 }
 

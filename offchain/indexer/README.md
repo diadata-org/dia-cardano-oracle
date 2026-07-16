@@ -97,7 +97,7 @@ npm run indexer:dev
 | `BLOCKFROST_API_URL_<SFX>` / `BLOCKFROST_PROJECT_ID_<SFX>` | — | required for Blockfrost; `SFX` = `MAINNET` (Mainnet) or `TESTNET` (Preview). |
 | `KOIOS_API_URL_<SFX>` | — | required for Koios. |
 | `INDEXER_PORT` | `3001` | HTTP listen port (indexer-specific). |
-| `INDEXER_REGISTRY_FILE` | bundled | path to a registry JSON, overriding `config/registry.<network>.json`. |
+| `INDEXER_REGISTRY_FILE` | shared state | path to a registry JSON, overriding the registry derived from the active shared-state run. |
 
 ## Try it locally (end-to-end demo)
 
@@ -199,12 +199,14 @@ and the `ProviderRequestQuotaHigh*` alerts).
 
 ## Published contract addresses
 
-The registry lives in per-network JSON config files
-([`config/registry.mainnet.json`](config/registry.mainnet.json) /
-[`config/registry.preview.json`](config/registry.preview.json)), loaded by
-[`src/registry-config.ts`](src/registry-config.ts) and overridable wholesale via
-`INDEXER_REGISTRY_FILE`. These are public on-chain identifiers. This table
-doubles as the M4 "contract addresses" deliverable.
+By default, the registry is derived from the active shared-state run:
+`offchain/state/<network>_run_<id>/clients/*.json`, plus the corresponding
+`config-bootstrap.json` for protocol fees. The
+[`src/registry-config.ts`](src/registry-config.ts) loader can instead read an
+explicit published registry JSON through `INDEXER_REGISTRY_FILE`, allowing a
+third party to run the indexer without the shared state tree. These are public
+on-chain identifiers. This table doubles as the M4 "contract addresses"
+deliverable.
 
 ### Mainnet
 
@@ -219,7 +221,8 @@ doubles as the M4 "contract addresses" deliverable.
 | `client-test-01` | `def5c14b…1c1bd902` | `addr_test1wr00ts2tu67wa7u4w6g3pgxgcl2nvtjch7830dhwrsdajqszug5ju` | `addr_test1wrn8y8773tm7gzhvh4h3g6cywrxzqu3wqknpey3s5pffqrgn9jphd` |
 | `client-test-02` | `02435906…e0b1a293` | `addr_test1wqpyxkgxkkljawk90fed34tqn2nlvs44urjd09nxuzc69ycc26zxz` | `addr_test1wzrzrh36g9s9qdj7rrm6yq9entwn23zfr6maguw04kpez0qjwg4dt` |
 
-Full untruncated values are in the JSON config files above.
+The table contains the published deployment identifiers; local operators can
+inspect the full values in their active shared-state client artifacts.
 
 ## For client dApps: paying for the service
 

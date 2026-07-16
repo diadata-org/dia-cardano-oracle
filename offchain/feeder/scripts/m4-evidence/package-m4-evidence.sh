@@ -6,7 +6,7 @@
 #   (A) Reliability — the sustained-run uptime/accuracy evidence: confirmed /
 #       failed / condemned / reorg tallies, per-pair confirmed counts + sample
 #       Cardano tx hashes, the per-feed sanity (accuracy) check, the test suites
-#       (feeder + CLI + indexer), all summarised in SUMMARY.json. This is the
+#       (Aiken + feeder + CLI + indexer), all summarised in SUMMARY.json. This is the
 #       same reliability machinery the M2/M3 packs use, read from the run's
 #       logs + SQLite + live feeder metrics.
 #
@@ -246,32 +246,40 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# A5. Run the test suites (feeder + CLI + indexer) and capture the REAL result.
+# A5. Run the test suites and capture the real result.
 # ---------------------------------------------------------------------------
+AIKEN_TEST_LOG="$OUT_DIR/tests/aiken-tests.txt"
 FEEDER_TEST_LOG="$OUT_DIR/tests/feeder-tests.txt"
 CLI_TEST_LOG="$OUT_DIR/tests/cli-tests.txt"
 INDEXER_TEST_LOG="$OUT_DIR/tests/indexer-tests.txt"
+stat_aiken_tests=0; stat_aiken_pass=0; stat_aiken_fail=0
 stat_feeder_tests=0; stat_feeder_pass=0; stat_feeder_fail=0; stat_feeder_suites=0
-feeder_result="skipped"; cli_result="skipped"; indexer_result="skipped"
+aiken_result="skipped"; feeder_result="skipped"; cli_result="skipped"; indexer_result="skipped"
 if [[ "${EVIDENCE_SKIP_TESTS:-0}" == "1" ]]; then
   echo "[package-m4] A5 — tests SKIPPED (EVIDENCE_SKIP_TESTS=1)"
-  echo "skipped (EVIDENCE_SKIP_TESTS=1)" | tee "$FEEDER_TEST_LOG" "$CLI_TEST_LOG" "$INDEXER_TEST_LOG" >/dev/null
+  echo "skipped (EVIDENCE_SKIP_TESTS=1)" | tee "$AIKEN_TEST_LOG" "$FEEDER_TEST_LOG" "$CLI_TEST_LOG" "$INDEXER_TEST_LOG" >/dev/null
 else
-  echo "[package-m4] A5 — running + capturing test suites (feeder + CLI + indexer)"
+  echo "[package-m4] A5 — running + capturing test suites (Aiken + feeder + CLI + indexer)"
   set +e
+  ( cd "$REPO_ROOT/contracts/aiken"   && aiken check ) > "$AIKEN_TEST_LOG"  2>&1; aiken_exit=$?
   ( cd "$REPO_ROOT/offchain/feeder"  && npm test ) > "$FEEDER_TEST_LOG"  2>&1; feeder_exit=$?
   ( cd "$REPO_ROOT/offchain/cli"     && npm test ) > "$CLI_TEST_LOG"     2>&1; cli_exit=$?
   ( cd "$REPO_ROOT/offchain/indexer" && npm test ) > "$INDEXER_TEST_LOG" 2>&1; indexer_exit=$?
   set -e
+  stat_aiken_tests=$(grep -m1 '"total"' "$AIKEN_TEST_LOG" | grep -oE '[0-9]+' | head -1)
+  stat_aiken_pass=$(grep -m1 '"passed"' "$AIKEN_TEST_LOG" | grep -oE '[0-9]+' | head -1)
+  stat_aiken_fail=$(grep -m1 '"failed"' "$AIKEN_TEST_LOG" | grep -oE '[0-9]+' | head -1)
   stat_feeder_tests=$(grep -E '^# tests '  "$FEEDER_TEST_LOG" | grep -oE '[0-9]+' | head -1)
   stat_feeder_pass=$(grep  -E '^# pass '    "$FEEDER_TEST_LOG" | grep -oE '[0-9]+' | head -1)
   stat_feeder_fail=$(grep  -E '^# fail '    "$FEEDER_TEST_LOG" | grep -oE '[0-9]+' | head -1)
   stat_feeder_suites=$(grep -E '^# suites ' "$FEEDER_TEST_LOG" | grep -oE '[0-9]+' | head -1)
+  : "${stat_aiken_tests:=0}" "${stat_aiken_pass:=0}" "${stat_aiken_fail:=0}"
   : "${stat_feeder_tests:=0}" "${stat_feeder_pass:=0}" "${stat_feeder_fail:=0}" "${stat_feeder_suites:=0}"
+  aiken_result=$([ "$aiken_exit" = "0" ] && echo "PASS" || echo "FAIL")
   feeder_result=$([ "$feeder_exit" = "0" ] && echo "PASS" || echo "FAIL")
   cli_result=$([ "$cli_exit" = "0" ] && echo "PASS" || echo "FAIL")
   indexer_result=$([ "$indexer_exit" = "0" ] && echo "PASS" || echo "FAIL")
-  echo "[package-m4]   feeder: $feeder_result ($stat_feeder_pass/$stat_feeder_tests) — cli: $cli_result — indexer: $indexer_result"
+  echo "[package-m4]   aiken: $aiken_result ($stat_aiken_pass/$stat_aiken_tests) — feeder: $feeder_result ($stat_feeder_pass/$stat_feeder_tests) — cli: $cli_result — indexer: $indexer_result"
 fi
 
 # ===========================================================================
@@ -451,10 +459,14 @@ jq -n \
   --argjson failed     "$stat_total_failed" \
   --argjson condemned  "$stat_total_condemned" \
   --argjson reorgs     "$stat_total_reorgs" \
+  --argjson aiken_tests  "$stat_aiken_tests" \
+  --argjson aiken_pass   "$stat_aiken_pass" \
+  --argjson aiken_fail   "$stat_aiken_fail" \
   --argjson feeder_tests "$stat_feeder_tests" \
   --argjson feeder_pass  "$stat_feeder_pass" \
   --argjson feeder_fail  "$stat_feeder_fail" \
   --arg     feeder_result  "$feeder_result" \
+  --arg     aiken_result   "$aiken_result" \
   --arg     cli_result     "$cli_result" \
   --arg     indexer_result "$indexer_result" \
   '{
@@ -469,6 +481,7 @@ jq -n \
       reorgs:       $reorgs
     },
     tests: {
+      aiken:   { result: $aiken_result, total: $aiken_tests, pass: $aiken_pass, fail: $aiken_fail },
       feeder:  { result: $feeder_result, total: $feeder_tests, pass: $feeder_pass, fail: $feeder_fail },
       cli:     { result: $cli_result },
       indexer: { result: $indexer_result }
@@ -542,10 +555,12 @@ Machine-readable totals: [\`SUMMARY.json\`](SUMMARY.json).
 | Condemned intents (superseded or aged out before submission — no tx, no fee) | ${stat_total_condemned} |
 | Chain reorgs that dropped a tx | ${stat_total_reorgs} |
 
-The uptime figure against the 99.99% bar is derived from the confirmed count vs
-the expected heartbeats over the window (window ÷ push cadence); over this window
-the feeder recorded ${stat_total_failed} real transaction failure(s) and
-${stat_total_reorgs} reorg(s).
+Operational publication reliability is measured from broadcast Cardano
+transactions: ${stat_total_confirmed} confirmed, ${stat_total_failed} real
+on-chain failure(s), and ${stat_total_reorgs} reorg(s). A strict confirmed-freshness
+observation should be reported separately from this operational outcome measure,
+because it includes normal scheduling and confirmation latency after a configured
+freshness boundary.
 
 ## Confirmed Cardano tx count per pair
 
@@ -576,11 +591,12 @@ ${SANITY_MD}
 
 ## Test results
 
-All three suites were run when this pack was assembled; full console output is saved
+All four suites are captured in this evidence pack; full console output is saved
 under [\`tests/\`](tests/).
 
 | Suite | Result | Tests | Output |
 | --- | --- | ---: | --- |
+| Aiken contracts (\`contracts/aiken\`, \`aiken check\`) | **${aiken_result}** | ${stat_aiken_pass} / ${stat_aiken_tests} passing (${stat_aiken_fail} failed) | [\`tests/aiken-tests.txt\`](tests/aiken-tests.txt) |
 | Feeder (\`offchain/feeder\`, \`npm test\`) | **${feeder_result}** | ${stat_feeder_pass} / ${stat_feeder_tests} passing (${stat_feeder_fail} failed) | [\`tests/feeder-tests.txt\`](tests/feeder-tests.txt) |
 | CLI (\`offchain/cli\`, \`npm test\`) | **${cli_result}** | — (custom runner; pass/fail by exit code) | [\`tests/cli-tests.txt\`](tests/cli-tests.txt) |
 | Indexer (\`offchain/indexer\`, \`npm test\`) | **${indexer_result}** | — (custom runner; pass/fail by exit code) | [\`tests/indexer-tests.txt\`](tests/indexer-tests.txt) |
@@ -667,7 +683,7 @@ make evidence4                          # add EVIDENCE_ONCHAIN_LOG=… to embed 
 | \`db/*.csv\`                 | processed_events, chain_state, contract_symbol_updates dumps. |
 | \`stats/\`                   | Intermediate TSV files + the feeder \`/metrics\` snapshot this report was built from. |
 | \`sanity/feed-sanity.{md,json}\` | Per-feed accuracy: on-chain value vs latest DIA source, per symbol. |
-| \`tests/*.txt\`              | Full \`npm test\` console output for feeder, CLI and indexer. |
+| \`tests/*.txt\`              | Full \`aiken check\` and \`npm test\` console output for contracts, feeder, CLI and indexer. |
 | \`indexer/health.json\`      | Indexer health: chain tip + live pair count. |
 | \`indexer/pairs.json\`       | Every published pair (latest value + reference output). |
 | \`indexer/sample-pair.json\` | One pair in full (price, policy id, reference output). |

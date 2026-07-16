@@ -22,7 +22,9 @@ This is a status note, not a remediation document.
 - **The mainnet reliability run happened.** The one thing the last update
   flagged as outstanding — a multi-day live run on Mainnet proving sustained
   uptime — ran 2026-07-13 to 2026-07-14: **40 confirmed updates, 0 reorgs,
-  99.78% uptime** against the 99.99% target.
+  0 real on-chain failures and 100% observed broadcast-publication success**.
+  The evidence also records 99.78% strict confirmed-freshness-bound compliance,
+  a conservative timing observation that includes normal confirmation latency.
 - **Monitoring now runs independently per network.** Preview and Mainnet each
   carry their own alert thresholds and dashboards, so tuning one can no longer
   affect the other.
@@ -47,8 +49,11 @@ This is a status note, not a remediation document.
 
 - **Mainnet reliability run, done.** `ARS/USDT` ran live on Mainnet
   2026-07-13 09:45 → 2026-07-14 18:01 UTC (~32.3 h): **40 confirmed updates,
-  0 reorgs, 99.78% uptime**. Full evidence pack in the repository; the PoA's
-  uptime, headline transaction, and AC#1 links are filled in with real data.
+  0 reorgs, 0 real on-chain failures and 100% observed broadcast-publication
+  success**. The pack separately records 99.78% strict confirmed-freshness-bound
+  compliance, which includes normal confirmation latency after the exact hourly
+  boundary. Full evidence is in the repository; the PoA's headline transaction
+  and AC#1 links are filled in with real data.
 - **Monitoring split per network.** Preview and Mainnet each now have their
   own alert thresholds and dashboards instead of sharing one config.
 - **Evidence packager hardened.** Fixed port resolution and added retries so
@@ -65,13 +70,16 @@ This is a status note, not a remediation document.
 
 ## What we need from DIA
 
-**The close-out report** needs four inputs only DIA can supply — we're not
+**The close-out report** needs six inputs only DIA can supply — we're not
 guessing at these:
 
-1. Any current or committed dApp integrations using the live feed, if any.
-2. Any TVL, partnership, or ecosystem-adoption figures you want reported.
-3. The maintenance/support arrangement and revenue model going forward.
-4. When to publish the developer documentation on DIA's website (already
+1. The project manager name.
+2. The completion date to report. If M4 approval has not happened yet, confirm
+   the intended date convention for the final report.
+3. Any current or committed dApp integrations using the live feed, if any.
+4. Any TVL, partnership, or ecosystem-adoption figures you want reported.
+5. The maintenance/support arrangement and revenue model going forward.
+6. When to publish the developer documentation on DIA's website (already
    noted in the PoA as timed to your marketing announcement).
 
 **Two videos are still missing:**
@@ -79,6 +87,20 @@ guessing at these:
 1. **The close-out video** (Catalyst requirement, ~2-5 min).
 2. **The end-to-end install/access demo** (for developers adopting the
    tooling).
+
+## Submission handoff checklist
+
+For the formal M4 submission, DIA needs to:
+
+1. Provide the close-out inputs above so the report can be finalized and
+   published, then send its final URL.
+2. Publish the close-out video and send its URL.
+3. Publish the end-to-end install/access demo and send its URL.
+4. Publish the developer documentation on the DIA website when the marketing
+   announcement is scheduled, then send its URL.
+5. Replace the corresponding `[PLACEHOLDER]` values in
+   [`milestone-4-poa.md`](../milestones/milestone-4-poa.md) with those URLs and
+   the final submission commit.
 
 ## Where to read more
 

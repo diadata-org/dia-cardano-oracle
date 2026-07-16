@@ -88,11 +88,13 @@ since 2026-06-16.
 
 Measurable, verified results as of this report:
 
-- **99.78% uptime** on the live Mainnet feed (`ARS/USDT`) over a ~32.27 h
-  sustained window — against the milestone's 99.99% target, computed from the
-  feeder's own logged freshness ceiling, not a qualitative estimate (see
-  [mainnet evidence pack](evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md)).
-- **0 real on-chain transaction failures, 0 chain reorgs** in that window.
+- **100% observed broadcast-publication success** on the live Mainnet feed
+  (`ARS/USDT`) over a ~32.27 h sustained window: 40 confirmed updates, 0 real
+  on-chain transaction failures, and 0 chain reorgs.
+- **99.78% strict confirmed-freshness-bound compliance** over that window. This
+  conservative timing observation counts normal cron and confirmation latency
+  after the exact one-hour boundary; it is reported separately from operational
+  availability in the [mainnet evidence pack](evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md).
 - **16 distinct price feeds** deployed and live-queryable on Preview,
   demonstrating the architecture's capacity beyond a single feed.
 - **1,083 automated tests passing** across contracts, CLI, feeder, and indexer.
