@@ -88,5 +88,4 @@ guessing at these:
 - **Close-out report (draft, DIA inputs needed):** [`../milestones/close-out-report.md`](../milestones/close-out-report.md)
 - **Indexer:** [`../../offchain/indexer/README.md`](../../offchain/indexer/README.md)
 - **Dashboards:** [`../architecture/grafana-dashboards.md`](../architecture/grafana-dashboards.md)
-- **Plans:** [`../plans/m4-plan.md`](../plans/m4-plan.md)
 - **Previous update:** [`20260701-progress-update-for-dia.md`](./20260701-progress-update-for-dia.md)
