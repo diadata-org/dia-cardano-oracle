@@ -80,10 +80,6 @@ guessing at these:
 2. **The end-to-end install/access demo** (for developers adopting the
    tooling).
 
-Neither blocks us from continuing to prepare the rest of the submission.
-
-Details: [`../plans/m4-plan.md`](../plans/m4-plan.md).
-
 ## Where to read more
 
 - **Milestone 4 PoA:** [`../milestones/milestone-4-poa.md`](../milestones/milestone-4-poa.md)
