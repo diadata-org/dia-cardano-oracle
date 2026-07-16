@@ -260,21 +260,46 @@ if [[ "${EVIDENCE_SKIP_TESTS:-0}" == "1" ]]; then
   echo "skipped (EVIDENCE_SKIP_TESTS=1)" | tee "$AIKEN_TEST_LOG" "$FEEDER_TEST_LOG" "$CLI_TEST_LOG" "$INDEXER_TEST_LOG" >/dev/null
 else
   echo "[package-m4] A5 — running + capturing test suites (Aiken + feeder + CLI + indexer)"
-  set +e
-  ( cd "$REPO_ROOT/contracts/aiken"   && aiken check ) > "$AIKEN_TEST_LOG"  2>&1; aiken_exit=$?
-  ( cd "$REPO_ROOT/offchain/feeder"  && npm test ) > "$FEEDER_TEST_LOG"  2>&1; feeder_exit=$?
-  ( cd "$REPO_ROOT/offchain/cli"     && npm test ) > "$CLI_TEST_LOG"     2>&1; cli_exit=$?
-  ( cd "$REPO_ROOT/offchain/indexer" && npm test ) > "$INDEXER_TEST_LOG" 2>&1; indexer_exit=$?
-  set -e
-  stat_aiken_tests=$(grep -m1 '"total"' "$AIKEN_TEST_LOG" | grep -oE '[0-9]+' | head -1)
-  stat_aiken_pass=$(grep -m1 '"passed"' "$AIKEN_TEST_LOG" | grep -oE '[0-9]+' | head -1)
-  stat_aiken_fail=$(grep -m1 '"failed"' "$AIKEN_TEST_LOG" | grep -oE '[0-9]+' | head -1)
-  stat_feeder_tests=$(grep -E '^# tests '  "$FEEDER_TEST_LOG" | grep -oE '[0-9]+' | head -1)
-  stat_feeder_pass=$(grep  -E '^# pass '    "$FEEDER_TEST_LOG" | grep -oE '[0-9]+' | head -1)
-  stat_feeder_fail=$(grep  -E '^# fail '    "$FEEDER_TEST_LOG" | grep -oE '[0-9]+' | head -1)
-  stat_feeder_suites=$(grep -E '^# suites ' "$FEEDER_TEST_LOG" | grep -oE '[0-9]+' | head -1)
-  : "${stat_aiken_tests:=0}" "${stat_aiken_pass:=0}" "${stat_aiken_fail:=0}"
-  : "${stat_feeder_tests:=0}" "${stat_feeder_pass:=0}" "${stat_feeder_fail:=0}" "${stat_feeder_suites:=0}"
+  if ( cd "$REPO_ROOT/contracts/aiken" && env -u RUN_ID aiken check ) > "$AIKEN_TEST_LOG" 2>&1; then
+    aiken_exit=0
+  else
+    aiken_exit=$?
+  fi
+  # Unit suites create isolated state trees. They must not inherit the pack's
+  # active deployment selector, which would redirect those fixtures to a run
+  # directory that does not exist under their temporary root.
+  if ( cd "$REPO_ROOT/offchain/feeder" && env -u RUN_ID npm test ) > "$FEEDER_TEST_LOG" 2>&1; then
+    feeder_exit=0
+  else
+    feeder_exit=$?
+  fi
+  if ( cd "$REPO_ROOT/offchain/cli" && env -u RUN_ID npm test ) > "$CLI_TEST_LOG" 2>&1; then
+    cli_exit=0
+  else
+    cli_exit=$?
+  fi
+  if ( cd "$REPO_ROOT/offchain/indexer" && env -u RUN_ID npm test ) > "$INDEXER_TEST_LOG" 2>&1; then
+    indexer_exit=0
+  else
+    indexer_exit=$?
+  fi
+  first_count() {
+    local pattern="$1" file="$2" value
+    value="$(grep -m1 -E "$pattern" "$file" 2>/dev/null | grep -oE '[0-9]+' | head -1 || true)"
+    printf '%s' "${value:-0}"
+  }
+  stat_aiken_tests="$(first_count '"total"' "$AIKEN_TEST_LOG")"
+  stat_aiken_pass="$(first_count '"passed"' "$AIKEN_TEST_LOG")"
+  stat_aiken_fail="$(first_count '"failed"' "$AIKEN_TEST_LOG")"
+  if [[ "$stat_aiken_tests" == 0 ]]; then
+    stat_aiken_pass="$(grep -c '"status": "pass"' "$AIKEN_TEST_LOG" || true)"
+    stat_aiken_fail="$(grep -c '"status": "fail"' "$AIKEN_TEST_LOG" || true)"
+    stat_aiken_tests=$((stat_aiken_pass + stat_aiken_fail))
+  fi
+  stat_feeder_tests="$(first_count '^# tests ' "$FEEDER_TEST_LOG")"
+  stat_feeder_pass="$(first_count '^# pass ' "$FEEDER_TEST_LOG")"
+  stat_feeder_fail="$(first_count '^# fail ' "$FEEDER_TEST_LOG")"
+  stat_feeder_suites="$(first_count '^# suites ' "$FEEDER_TEST_LOG")"
   aiken_result=$([ "$aiken_exit" = "0" ] && echo "PASS" || echo "FAIL")
   feeder_result=$([ "$feeder_exit" = "0" ] && echo "PASS" || echo "FAIL")
   cli_result=$([ "$cli_exit" = "0" ] && echo "PASS" || echo "FAIL")
@@ -660,8 +685,8 @@ ${DASHBOARDS_MD}
 
 \`\`\`sh
 cd offchain && make up MONITORING=1    # feeder + indexer + Grafana
-curl -s localhost:3001/v1/pairs | jq   # the pairs table above
-#  open http://localhost:3001/docs     # the API reference
+curl -s ${INDEXER_URL}/v1/pairs | jq   # the pairs table above
+#  open ${INDEXER_URL}/docs             # the API reference
 
 # the consumption demo (offline):
 bash offchain/indexer/src/examples/run-consumer-demo-emulator.sh

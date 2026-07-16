@@ -125,7 +125,10 @@ services:
       - ../state:/app/offchain/state
       - ../../contracts/aiken:/app/contracts/aiken
       - ../../docs/milestones/evidence:/app/docs/milestones/evidence
-    env_file: [.env]
+    # The CLI needs its own deployment/signing configuration in addition to
+    # feeder/.env. The private demo signer remains unavailable to long-lived
+    # feeder and indexer services.
+    env_file: [.env, ../cli/.env]
     stdin_open: true
     tty: true
 

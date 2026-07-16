@@ -110,4 +110,5 @@ requires no action from DIA for this handoff.
 - **Close-out report (draft, DIA inputs needed):** [`../milestones/close-out-report.md`](../milestones/close-out-report.md)
 - **Indexer:** [`../../offchain/indexer/README.md`](../../offchain/indexer/README.md)
 - **Dashboards:** [`../architecture/grafana-dashboards.md`](../architecture/grafana-dashboards.md)
+- **Docker runbook (fresh deployment or verified-state reuse):** [`20260716-docker-runbook-for-dia.md`](./20260716-docker-runbook-for-dia.md)
 - **Previous update:** [`20260701-progress-update-for-dia.md`](./20260701-progress-update-for-dia.md)

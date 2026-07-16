@@ -1,0 +1,35 @@
+{
+  "network": "Preview",
+  "pack_stamp": "20260608-040304",
+  "run": "preview_run_20260608-040304",
+  "window": {
+    "first_confirmed_iso": "2026-07-16T12:03:54.122000Z",
+    "last_confirmed_iso": "2026-07-16T16:55:27.372000Z"
+  },
+  "totals": {
+    "tx_confirmed": 283,
+    "tx_failed": 0,
+    "tx_condemned": 49,
+    "reorgs": 0
+  },
+  "tests": {
+    "aiken": {
+      "result": "PASS",
+      "total": 167,
+      "pass": 167,
+      "fail": 0
+    },
+    "feeder": {
+      "result": "PASS",
+      "total": 790,
+      "pass": 790,
+      "fail": 0
+    },
+    "cli": {
+      "result": "PASS"
+    },
+    "indexer": {
+      "result": "PASS"
+    }
+  }
+}

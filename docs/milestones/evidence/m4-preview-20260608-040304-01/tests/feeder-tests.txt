@@ -1,0 +1,5176 @@
+
+> @diadata-org/dia-cardano-oracle-feeder@0.1.0 test
+> node --import tsx/esm --test $(find src cmd -path '*/__tests__/*.test.ts' | tr '\n' ' ')
+
+TAP version 13
+# Subtest: parseArgs — defaults
+    # Subtest: returns defaults when argv is empty
+    ok 1 - returns defaults when argv is empty
+      ---
+      duration_ms: 1.261261
+      ...
+    1..1
+ok 1 - parseArgs — defaults
+  ---
+  duration_ms: 2.458346
+  type: 'suite'
+  ...
+# Subtest: parseArgs — --help
+    # Subtest: sets showHelp for --help
+    ok 1 - sets showHelp for --help
+      ---
+      duration_ms: 3.523709
+      ...
+    # Subtest: sets showHelp for -h
+    ok 2 - sets showHelp for -h
+      ---
+      duration_ms: 0.328518
+      ...
+    1..2
+ok 2 - parseArgs — --help
+  ---
+  duration_ms: 4.133815
+  type: 'suite'
+  ...
+# Subtest: parseArgs — --config
+    # Subtest: sets configPath
+    ok 1 - sets configPath
+      ---
+      duration_ms: 0.183764
+      ...
+    # Subtest: throws when value is missing
+    ok 2 - throws when value is missing
+      ---
+      duration_ms: 0.456752
+      ...
+    1..2
+ok 3 - parseArgs — --config
+  ---
+  duration_ms: 0.794377
+  type: 'suite'
+  ...
+# Subtest: parseArgs — --log-level
+    # Subtest: accepts debug
+    ok 1 - accepts debug
+      ---
+      duration_ms: 1.43649
+      ...
+    # Subtest: accepts info
+    ok 2 - accepts info
+      ---
+      duration_ms: 0.355205
+      ...
+    # Subtest: accepts warn
+    ok 3 - accepts warn
+      ---
+      duration_ms: 0.263489
+      ...
+    # Subtest: accepts error
+    ok 4 - accepts error
+      ---
+      duration_ms: 0.22011
+      ...
+    # Subtest: throws on invalid value
+    ok 5 - throws on invalid value
+      ---
+      duration_ms: 0.841627
+      ...
+    # Subtest: throws when value is missing
+    ok 6 - throws when value is missing
+      ---
+      duration_ms: 0.397119
+      ...
+    1..6
+ok 4 - parseArgs — --log-level
+  ---
+  duration_ms: 4.042859
+  type: 'suite'
+  ...
+# Subtest: parseArgs — --transport
+    # Subtest: accepts http
+    ok 1 - accepts http
+      ---
+      duration_ms: 0.471503
+      ...
+    # Subtest: accepts ws
+    ok 2 - accepts ws
+      ---
+      duration_ms: 0.57123
+      ...
+    # Subtest: throws on invalid value
+    ok 3 - throws on invalid value
+      ---
+      duration_ms: 0.344162
+      ...
+    # Subtest: throws when value is missing
+    ok 4 - throws when value is missing
+      ---
+      duration_ms: 0.225383
+      ...
+    1..4
+ok 5 - parseArgs — --transport
+  ---
+  duration_ms: 2.578434
+  type: 'suite'
+  ...
+# Subtest: parseArgs — --dry-run
+    # Subtest: sets dryRun via flag
+    ok 1 - sets dryRun via flag
+      ---
+      duration_ms: 0.204837
+      ...
+    # Subtest: sets dryRun via DRY_RUN=true env var
+    ok 2 - sets dryRun via DRY_RUN=true env var
+      ---
+      duration_ms: 0.23731
+      ...
+    # Subtest: ignores DRY_RUN=false
+    ok 3 - ignores DRY_RUN=false
+      ---
+      duration_ms: 0.302397
+      ...
+    1..3
+ok 6 - parseArgs — --dry-run
+  ---
+  duration_ms: 0.922282
+  type: 'suite'
+  ...
+# Subtest: parseArgs — modes
+    # Subtest: defaults to daemon mode
+    ok 1 - defaults to daemon mode
+      ---
+      duration_ms: 3.983233
+      ...
+    # Subtest: --validate-only sets mode=validate
+    ok 2 - --validate-only sets mode=validate
+      ---
+      duration_ms: 0.324426
+      ...
+    # Subtest: --scan sets mode=scan
+    ok 3 - --scan sets mode=scan
+      ---
+      duration_ms: 0.256892
+      ...
+    # Subtest: --scan twice is idempotent
+    ok 4 - --scan twice is idempotent
+      ---
+      duration_ms: 0.191196
+      ...
+    # Subtest: throws when --scan and --validate-only are combined
+    ok 5 - throws when --scan and --validate-only are combined
+      ---
+      duration_ms: 0.226906
+      ...
+    # Subtest: throws when --validate-only and --scan are combined
+    ok 6 - throws when --validate-only and --scan are combined
+      ---
+      duration_ms: 0.3442
+      ...
+    1..6
+ok 7 - parseArgs — modes
+  ---
+  duration_ms: 8.463277
+  type: 'suite'
+  ...
+# Subtest: parseArgs — unknown flags
+    # Subtest: throws on unknown flag
+    ok 1 - throws on unknown flag
+      ---
+      duration_ms: 0.263331
+      ...
+    1..1
+ok 8 - parseArgs — unknown flags
+  ---
+  duration_ms: 0.654229
+  type: 'suite'
+  ...
+# Subtest: parseArgs — combined flags
+    # Subtest: parses all flags together
+    ok 1 - parses all flags together
+      ---
+      duration_ms: 0.2454
+      ...
+    1..1
+ok 9 - parseArgs — combined flags
+  ---
+  duration_ms: 0.37606
+  type: 'suite'
+  ...
+# Subtest: parseArgs — init router
+    # Subtest: sets mode=init and subCommand=router
+    ok 1 - sets mode=init and subCommand=router
+      ---
+      duration_ms: 0.36695
+      ...
+    # Subtest: --help inside init sets showHelp
+    ok 2 - --help inside init sets showHelp
+      ---
+      duration_ms: 0.169607
+      ...
+    # Subtest: throws on unknown flag inside init router
+    ok 3 - throws on unknown flag inside init router
+      ---
+      duration_ms: 0.200037
+      ...
+    # Subtest: --from and --force together
+    ok 4 - --from and --force together
+      ---
+      duration_ms: 0.156728
+      ...
+    # Subtest: does not accept init client
+    ok 5 - does not accept init client
+      ---
+      duration_ms: 0.355626
+      ...
+    1..5
+ok 10 - parseArgs — init router
+  ---
+  duration_ms: 6.033853
+  type: 'suite'
+  ...
+# Subtest: parseArgs — init errors
+    # Subtest: throws when no sub-command given
+    ok 1 - throws when no sub-command given
+      ---
+      duration_ms: 0.220034
+      ...
+    # Subtest: throws on unknown init sub-command
+    ok 2 - throws on unknown init sub-command
+      ---
+      duration_ms: 0.21743
+      ...
+    1..2
+ok 11 - parseArgs — init errors
+  ---
+  duration_ms: 0.591408
+  type: 'suite'
+  ...
+# Subtest: parseArgs — --from-block
+    # Subtest: sets fromBlock to the string value
+    ok 1 - sets fromBlock to the string value
+      ---
+      duration_ms: 0.31011
+      ...
+    # Subtest: accepts block 0
+    ok 2 - accepts block 0
+      ---
+      duration_ms: 0.219465
+      ...
+    # Subtest: throws when value is missing
+    ok 3 - throws when value is missing
+      ---
+      duration_ms: 0.235698
+      ...
+    # Subtest: throws on non-integer value
+    ok 4 - throws on non-integer value
+      ---
+      duration_ms: 0.191513
+      ...
+    # Subtest: throws on negative value
+    ok 5 - throws on negative value
+      ---
+      duration_ms: 0.158928
+      ...
+    # Subtest: throws on decimal value
+    ok 6 - throws on decimal value
+      ---
+      duration_ms: 0.173841
+      ...
+    1..6
+ok 12 - parseArgs — --from-block
+  ---
+  duration_ms: 1.552176
+  type: 'suite'
+  ...
+# Subtest: parseArgs — --from-latest
+    # Subtest: sets fromLatest to true
+    ok 1 - sets fromLatest to true
+      ---
+      duration_ms: 6.228797
+      ...
+    1..1
+ok 13 - parseArgs — --from-latest
+  ---
+  duration_ms: 6.510652
+  type: 'suite'
+  ...
+# Subtest: parseArgs — --from-block and --from-latest mutual exclusion
+    # Subtest: throws when --from-block comes before --from-latest
+    ok 1 - throws when --from-block comes before --from-latest
+      ---
+      duration_ms: 0.346441
+      ...
+    # Subtest: throws when --from-latest comes before --from-block
+    ok 2 - throws when --from-latest comes before --from-block
+      ---
+      duration_ms: 0.208197
+      ...
+    1..2
+ok 14 - parseArgs — --from-block and --from-latest mutual exclusion
+  ---
+  duration_ms: 0.720812
+  type: 'suite'
+  ...
+# Subtest: parseArgs — checkpoint flags combined with other flags
+    # Subtest: --clean --from-latest parses correctly
+    ok 1 - --clean --from-latest parses correctly
+      ---
+      duration_ms: 0.229487
+      ...
+    # Subtest: --clean --from-block N parses correctly
+    ok 2 - --clean --from-block N parses correctly
+      ---
+      duration_ms: 0.260826
+      ...
+    # Subtest: --scan --from-latest parses correctly
+    ok 3 - --scan --from-latest parses correctly
+      ---
+      duration_ms: 0.253894
+      ...
+    1..3
+ok 15 - parseArgs — checkpoint flags combined with other flags
+  ---
+  duration_ms: 0.998585
+  type: 'suite'
+  ...
+# Subtest: parseArgs — reset sub-command
+    # Subtest: parses bare 'reset' into reset mode
+    ok 1 - parses bare 'reset' into reset mode
+      ---
+      duration_ms: 0.369528
+      ...
+    # Subtest: throws on unknown flags after reset
+    ok 2 - throws on unknown flags after reset
+      ---
+      duration_ms: 0.213501
+      ...
+    1..2
+ok 16 - parseArgs — reset sub-command
+  ---
+  duration_ms: 5.823182
+  type: 'suite'
+  ...
+# Subtest: parseArgs — prune sub-command
+    # Subtest: parses bare 'prune' into prune mode
+    ok 1 - parses bare 'prune' into prune mode
+      ---
+      duration_ms: 0.224491
+      ...
+    # Subtest: parses --max-age
+    ok 2 - parses --max-age
+      ---
+      duration_ms: 0.076424
+      ...
+    # Subtest: parses --dry-run
+    ok 3 - parses --dry-run
+      ---
+      duration_ms: 0.078825
+      ...
+    # Subtest: throws on unknown flags after prune
+    ok 4 - throws on unknown flags after prune
+      ---
+      duration_ms: 0.12502
+      ...
+    1..4
+ok 17 - parseArgs — prune sub-command
+  ---
+  duration_ms: 0.634273
+  type: 'suite'
+  ...
+# Subtest: parseArgs — sub-commands preceded by global flags (Docker invocation)
+    # Subtest: detects reset after --config <dir>
+    ok 1 - detects reset after --config <dir>
+      ---
+      duration_ms: 0.146437
+      ...
+    # Subtest: detects prune after --config <dir> and keeps prune flags
+    ok 2 - detects prune after --config <dir> and keeps prune flags
+      ---
+      duration_ms: 0.11451
+      ...
+    # Subtest: detects init router after --config <dir>
+    ok 3 - detects init router after --config <dir>
+      ---
+      duration_ms: 0.097845
+      ...
+    # Subtest: detects checkpoint after --config <dir> and --log-level
+    ok 4 - detects checkpoint after --config <dir> and --log-level
+      ---
+      duration_ms: 0.221896
+      ...
+    1..4
+ok 18 - parseArgs — sub-commands preceded by global flags (Docker invocation)
+  ---
+  duration_ms: 0.724376
+  type: 'suite'
+  ...
+# Subtest: seedCheckpointIfNeeded — no flags
+    # Subtest: does not save when both fromBlock and fromLatest are falsy
+    ok 1 - does not save when both fromBlock and fromLatest are falsy
+      ---
+      duration_ms: 2.346421
+      ...
+    # Subtest: does not call getLatestBlock when neither flag is set
+    ok 2 - does not call getLatestBlock when neither flag is set
+      ---
+      duration_ms: 0.555478
+      ...
+    1..2
+ok 19 - seedCheckpointIfNeeded — no flags
+  ---
+  duration_ms: 4.699105
+  type: 'suite'
+  ...
+# Subtest: seedCheckpointIfNeeded — fromLatest
+    # Subtest: saves the chain tip block
+    ok 1 - saves the chain tip block
+      ---
+      duration_ms: 0.476932
+      ...
+    # Subtest: logs the tip block
+    ok 2 - logs the tip block
+      ---
+      duration_ms: 0.246153
+      ...
+    # Subtest: calls getLatestBlock exactly once
+    ok 3 - calls getLatestBlock exactly once
+      ---
+      duration_ms: 0.148188
+      ...
+    1..3
+ok 20 - seedCheckpointIfNeeded — fromLatest
+  ---
+  duration_ms: 1.237854
+  type: 'suite'
+  ...
+# Subtest: seedCheckpointIfNeeded — fromBlock
+    # Subtest: saves N-1 for block N > 0
+    ok 1 - saves N-1 for block N > 0
+      ---
+      duration_ms: 0.353526
+      ...
+    # Subtest: saves 0 when fromBlock is '0' (clamps at 0)
+    ok 2 - saves 0 when fromBlock is '0' (clamps at 0)
+      ---
+      duration_ms: 0.285172
+      ...
+    # Subtest: saves 0 when fromBlock is '1'
+    ok 3 - saves 0 when fromBlock is '1'
+      ---
+      duration_ms: 0.283953
+      ...
+    # Subtest: logs both the save target and the scan-from block
+    ok 4 - logs both the save target and the scan-from block
+      ---
+      duration_ms: 0.249264
+      ...
+    # Subtest: does not call getLatestBlock
+    ok 5 - does not call getLatestBlock
+      ---
+      duration_ms: 0.350978
+      ...
+    1..5
+ok 21 - seedCheckpointIfNeeded — fromBlock
+  ---
+  duration_ms: 1.842003
+  type: 'suite'
+  ...
+# Subtest: seedCheckpointIfNeeded — fromLatest checked first
+    # Subtest: uses fromLatest when both are set (caller's responsibility to prevent this)
+    ok 1 - uses fromLatest when both are set (caller's responsibility to prevent this)
+      ---
+      duration_ms: 0.212924
+      ...
+    1..1
+ok 22 - seedCheckpointIfNeeded — fromLatest checked first
+  ---
+  duration_ms: 0.371289
+  type: 'suite'
+  ...
+# Subtest: cleanFeederState
+    # Subtest: removes logs directory
+    ok 1 - removes logs directory
+      ---
+      duration_ms: 13.758495
+      ...
+    # Subtest: removes feeder.sqlite and WAL files
+    ok 2 - removes feeder.sqlite and WAL files
+      ---
+      duration_ms: 3.031638
+      ...
+    # Subtest: removes pair state files
+    ok 3 - removes pair state files
+      ---
+      duration_ms: 2.081873
+      ...
+    # Subtest: preserves config-bootstrap.json
+    ok 4 - preserves config-bootstrap.json
+      ---
+      duration_ms: 1.399292
+      ...
+    # Subtest: preserves clients/<name>.json bootstrap state file
+    ok 5 - preserves clients/<name>.json bootstrap state file
+      ---
+      duration_ms: 0.805651
+      ...
+    # Subtest: does not throw when state dir is already empty
+    ok 6 - does not throw when state dir is already empty
+      ---
+      duration_ms: 5.573455
+      ...
+    1..6
+ok 23 - cleanFeederState
+  ---
+  duration_ms: 60.057932
+  type: 'suite'
+  ...
+# Subtest: checkBootstrapStateFiles
+    # Subtest: returns false and reports hint when config-bootstrap.json is missing
+    ok 1 - returns false and reports hint when config-bootstrap.json is missing
+      ---
+      duration_ms: 2.446653
+      ...
+    # Subtest: returns false and reports hint when client state is missing
+    ok 2 - returns false and reports hint when client state is missing
+      ---
+      duration_ms: 2.639286
+      ...
+    # Subtest: returns true when all state files are present
+    ok 3 - returns true when all state files are present
+      ---
+      duration_ms: 4.301626
+      ...
+    # Subtest: skips destinations without a cardano block
+    ok 4 - skips destinations without a cardano block
+      ---
+      duration_ms: 2.259617
+      ...
+    1..4
+ok 24 - checkBootstrapStateFiles
+  ---
+  duration_ms: 17.164614
+  type: 'suite'
+  ...
+# Subtest: daemon pipeline — crash recovery
+    # Subtest: marks pending rows as failed on startup
+    ok 1 - marks pending rows as failed on startup
+      ---
+      duration_ms: 2.804249
+      ...
+    # Subtest: marks submitted rows as failed on startup
+    ok 2 - marks submitted rows as failed on startup
+      ---
+      duration_ms: 0.735648
+      ...
+    # Subtest: leaves confirmed rows untouched during crash recovery
+    ok 3 - leaves confirmed rows untouched during crash recovery
+      ---
+      duration_ms: 0.794638
+      ...
+    1..3
+ok 25 - daemon pipeline — crash recovery
+  ---
+  duration_ms: 6.598154
+  type: 'suite'
+  ...
+# Subtest: daemon pipeline — dedup
+    # Subtest: processes the first event and skips the duplicate
+    ok 1 - processes the first event and skips the duplicate
+      ---
+      duration_ms: 64.934623
+      ...
+    1..1
+ok 26 - daemon pipeline — dedup
+  ---
+  duration_ms: 65.255028
+  type: 'suite'
+  ...
+# Subtest: daemon pipeline — routing
+    # Subtest: skips submission when no router matches the event
+    ok 1 - skips submission when no router matches the event
+      ---
+      duration_ms: 52.058136
+      ...
+    # Subtest: skips cardano submission when destination has no cardano block
+    ok 2 - skips cardano submission when destination has no cardano block
+      ---
+      duration_ms: 51.780534
+      ...
+    1..2
+ok 27 - daemon pipeline — routing
+  ---
+  duration_ms: 104.375418
+  type: 'suite'
+  ...
+# Subtest: daemon pipeline — dry-run mode
+    # Subtest: logs but does not submit in dry-run mode
+    ok 1 - logs but does not submit in dry-run mode
+      ---
+      duration_ms: 54.732121
+      ...
+    1..1
+ok 28 - daemon pipeline — dry-run mode
+  ---
+  duration_ms: 55.03062
+  type: 'suite'
+  ...
+# Subtest: daemon pipeline — DB and onResult wiring
+    # Subtest: inserts a submitted log row and queue resolves without error
+    ok 1 - inserts a submitted log row and queue resolves without error
+      ---
+      duration_ms: 106.461508
+      ...
+    # Subtest: enrichment failure is swallowed and does not submit
+    ok 2 - enrichment failure is swallowed and does not submit
+      ---
+      duration_ms: 55.647454
+      ...
+    1..2
+ok 29 - daemon pipeline — DB and onResult wiring
+  ---
+  duration_ms: 162.739753
+  type: 'suite'
+  ...
+# Subtest: readDepositMinLovelace (daemon → bridge floor source)
+    # Subtest: reads configState.depositMinLovelace from the protocol state
+    ok 1 - reads configState.depositMinLovelace from the protocol state
+      ---
+      duration_ms: 23.532303
+      ...
+    # Subtest: honours a non-default floor set at protocol:init
+    ok 2 - honours a non-default floor set at protocol:init
+      ---
+      duration_ms: 4.286949
+      ...
+    # Subtest: throws a clear error when the field is absent (no hardcoded fallback)
+    ok 3 - throws a clear error when the field is absent (no hardcoded fallback)
+      ---
+      duration_ms: 5.010244
+      ...
+    # Subtest: throws when the protocol state file is missing
+    ok 4 - throws when the protocol state file is missing
+      ---
+      duration_ms: 0.867993
+      ...
+    1..4
+ok 30 - readDepositMinLovelace (daemon → bridge floor source)
+  ---
+  duration_ms: 35.050086
+  type: 'suite'
+  ...
+# Subtest: readDepositMaxPerUpdateFold (daemon → bridge fold-cap source)
+    # Subtest: reads configState.depositMaxPerUpdateFold from the protocol state
+    ok 1 - reads configState.depositMaxPerUpdateFold from the protocol state
+      ---
+      duration_ms: 4.606553
+      ...
+    # Subtest: honours a non-default cap set at protocol:init
+    ok 2 - honours a non-default cap set at protocol:init
+      ---
+      duration_ms: 5.504976
+      ...
+    # Subtest: throws a clear error when the field is absent (no hardcoded fallback)
+    ok 3 - throws a clear error when the field is absent (no hardcoded fallback)
+      ---
+      duration_ms: 4.928012
+      ...
+    # Subtest: throws when the protocol state file is missing
+    ok 4 - throws when the protocol state file is missing
+      ---
+      duration_ms: 1.293597
+      ...
+    1..4
+ok 31 - readDepositMaxPerUpdateFold (daemon → bridge fold-cap source)
+  ---
+  duration_ms: 17.11013
+  type: 'suite'
+  ...
+# Subtest: buildRouterYaml
+    # Subtest: includes all provided pairs
+    ok 1 - includes all provided pairs
+      ---
+      duration_ms: 1.454131
+      ...
+    # Subtest: includes the routerId
+    ok 2 - includes the routerId
+      ---
+      duration_ms: 0.206664
+      ...
+    # Subtest: includes the network
+    ok 3 - includes the network
+      ---
+      duration_ms: 0.151883
+      ...
+    # Subtest: includes client and protocol state paths
+    ok 4 - includes client and protocol state paths
+      ---
+      duration_ms: 0.224621
+      ...
+    # Subtest: includes the key env var
+    ok 5 - includes the key env var
+      ---
+      duration_ms: 0.142517
+      ...
+    # Subtest: enables the cron liveness heartbeat on the destination
+    ok 6 - enables the cron liveness heartbeat on the destination
+      ---
+      duration_ms: 0.136782
+      ...
+    # Subtest: includes the customer_id label
+    ok 7 - includes the customer_id label
+      ---
+      duration_ms: 0.240371
+      ...
+    # Subtest: round-trips into a router object with the shape the config validator requires
+    ok 8 - round-trips into a router object with the shape the config validator requires
+      ---
+      duration_ms: 17.70243
+      ...
+    # Subtest: includes time_threshold and price_deviation
+    ok 9 - includes time_threshold and price_deviation
+      ---
+      duration_ms: 0.246513
+      ...
+    # Subtest: produces a routers: block at the top level
+    ok 10 - produces a routers: block at the top level
+      ---
+      duration_ms: 0.197778
+      ...
+    # Subtest: uses mainnet network correctly
+    ok 11 - uses mainnet network correctly
+      ---
+      duration_ms: 0.124813
+      ...
+    # Subtest: handles a single pair
+    ok 12 - handles a single pair
+      ---
+      duration_ms: 0.212516
+      ...
+    1..12
+ok 32 - buildRouterYaml
+  ---
+  duration_ms: 22.425263
+  type: 'suite'
+  ...
+# Subtest: buildRouterFileStem
+    # Subtest: uses the client-router-name filename convention
+    ok 1 - uses the client-router-name filename convention
+      ---
+      duration_ms: 0.323424
+      ...
+    1..1
+ok 33 - buildRouterFileStem
+  ---
+  duration_ms: 0.4907
+  type: 'suite'
+  ...
+# Subtest: loadExistingPairsFromYaml
+    # Subtest: returns empty array when file does not exist
+    ok 1 - returns empty array when file does not exist
+      ---
+      duration_ms: 3.678523
+      ...
+    # Subtest: extracts pairs from a router YAML file
+    ok 2 - extracts pairs from a router YAML file
+      ---
+      duration_ms: 8.037222
+      ...
+    # Subtest: returns empty array for a YAML with no pairs
+    ok 3 - returns empty array for a YAML with no pairs
+      ---
+      duration_ms: 1.561047
+      ...
+    1..3
+ok 34 - loadExistingPairsFromYaml
+  ---
+  duration_ms: 30.875838
+  type: 'suite'
+  ...
+# Subtest: findConfigClientCandidates
+    # Subtest: returns empty array when stateDir does not exist
+    ok 1 - returns empty array when stateDir does not exist
+      ---
+      duration_ms: 1.483964
+      ...
+    # Subtest: finds client JSON files
+    ok 2 - finds client JSON files
+      ---
+      duration_ms: 4.398471
+      ...
+    # Subtest: does not return clients from wrong-network run dirs
+    ok 3 - does not return clients from wrong-network run dirs
+      ---
+      duration_ms: 3.974777
+      ...
+    # Subtest: ignores non-JSON files in clients dir
+    ok 4 - ignores non-JSON files in clients dir
+      ---
+      duration_ms: 2.126018
+      ...
+    1..4
+ok 35 - findConfigClientCandidates
+  ---
+  duration_ms: 28.472404
+  type: 'suite'
+  ...
+# Subtest: integration: crash recovery (C.19.d)
+    # Subtest: marks pending and submitted rows as failed on restart; leaves confirmed alone
+    ok 1 - marks pending and submitted rows as failed on restart; leaves confirmed alone
+      ---
+      duration_ms: 119.13366
+      ...
+    1..1
+ok 36 - integration: crash recovery (C.19.d)
+  ---
+  duration_ms: 123.072088
+  type: 'suite'
+  ...
+# Subtest: integration: API round-trip over real Db (C.19.h)
+    # Subtest: serves transactions, alerts, and POST ack against a live SQLite Db
+    ok 1 - serves transactions, alerts, and POST ack against a live SQLite Db
+      ---
+      duration_ms: 165.179945
+      ...
+    1..1
+ok 37 - integration: API round-trip over real Db (C.19.h)
+  ---
+  duration_ms: 165.827425
+  type: 'suite'
+  ...
+# Subtest: normalizeAlertmanagerWebhook
+    # Subtest: normalizes a firing alert, using the summary as the message
+    ok 1 - normalizes a firing alert, using the summary as the message
+      ---
+      duration_ms: 2.744064
+      ...
+    # Subtest: marks resolved alerts, defaults severity to warning, falls back to the name as message
+    ok 2 - marks resolved alerts, defaults severity to warning, falls back to the name as message
+      ---
+      duration_ms: 0.302735
+      ...
+    # Subtest: returns an empty list for a payload with no alerts
+    ok 3 - returns an empty list for a payload with no alerts
+      ---
+      duration_ms: 0.656404
+      ...
+    1..3
+ok 38 - normalizeAlertmanagerWebhook
+  ---
+  duration_ms: 5.090339
+  type: 'suite'
+  ...
+# Subtest: ingestNormalizedAlerts
+    # Subtest: records new firing alerts, skips already-active ones, resolves active ones
+    ok 1 - records new firing alerts, skips already-active ones, resolves active ones
+      ---
+      duration_ms: 0.519781
+      ...
+    1..1
+ok 39 - ingestNormalizedAlerts
+  ---
+  duration_ms: 0.68378
+  type: 'suite'
+  ...
+# Subtest: buildAlertsResponse
+    # Subtest: empty array returns {count:0, alerts:[]}
+    ok 1 - empty array returns {count:0, alerts:[]}
+      ---
+      duration_ms: 2.319941
+      ...
+    # Subtest: count matches array length and labelsJson is parsed
+    ok 2 - count matches array length and labelsJson is parsed
+      ---
+      duration_ms: 0.465768
+      ...
+    # Subtest: malformed labelsJson falls back to {} without throwing
+    ok 3 - malformed labelsJson falls back to {} without throwing
+      ---
+      duration_ms: 0.359623
+      ...
+    # Subtest: preserves acknowledged and undefined resolvedAtMs
+    ok 4 - preserves acknowledged and undefined resolvedAtMs
+      ---
+      duration_ms: 0.260033
+      ...
+    1..4
+ok 40 - buildAlertsResponse
+  ---
+  duration_ms: 4.984798
+  type: 'suite'
+  ...
+# Subtest: buildAlertResponse
+    # Subtest: returns null for a null row
+    ok 1 - returns null for a null row
+      ---
+      duration_ms: 0.330903
+      ...
+    # Subtest: maps a valid row to an AlertEntry
+    ok 2 - maps a valid row to an AlertEntry
+      ---
+      duration_ms: 1.740503
+      ...
+    # Subtest: malformed labelsJson falls back to {} (no throw)
+    ok 3 - malformed labelsJson falls back to {} (no throw)
+      ---
+      duration_ms: 0.312415
+      ...
+    1..3
+ok 41 - buildAlertResponse
+  ---
+  duration_ms: 2.757484
+  type: 'suite'
+  ...
+# Subtest: buildPerformanceResponse
+    # Subtest: empty array returns {count:0, metrics:[]}
+    ok 1 - empty array returns {count:0, metrics:[]}
+      ---
+      duration_ms: 0.314666
+      ...
+    # Subtest: count matches length, labels parsed, metricValue stays numeric
+    ok 2 - count matches length, labels parsed, metricValue stays numeric
+      ---
+      duration_ms: 0.305024
+      ...
+    # Subtest: malformed labelsJson falls back to {}
+    ok 3 - malformed labelsJson falls back to {}
+      ---
+      duration_ms: 0.22804
+      ...
+    1..3
+ok 42 - buildPerformanceResponse
+  ---
+  duration_ms: 1.13408
+  type: 'suite'
+  ...
+# Subtest: buildTransactionsResponse
+    # Subtest: empty array returns {count:0, transactions:[]}
+    ok 1 - empty array returns {count:0, transactions:[]}
+      ---
+      duration_ms: 0.261888
+      ...
+    # Subtest: count matches array length and rows pass through
+    ok 2 - count matches array length and rows pass through
+      ---
+      duration_ms: 0.211798
+      ...
+    1..2
+ok 43 - buildTransactionsResponse
+  ---
+  duration_ms: 0.734583
+  type: 'suite'
+  ...
+# Subtest: buildTransactionResponse (against in-memory DB)
+    # Subtest: returns null when no rows share the cardanoTxHash
+    ok 1 - returns null when no rows share the cardanoTxHash
+      ---
+      duration_ms: 108.335346
+      ...
+    # Subtest: aggregates rows sharing a cardanoTxHash, sorted by symbol then intentHash
+    ok 2 - aggregates rows sharing a cardanoTxHash, sorted by symbol then intentHash
+      ---
+      duration_ms: 37.184051
+      ...
+    # Subtest: surfaces every distinct router in a mixed-router batch as routerIds
+    ok 3 - surfaces every distinct router in a mixed-router batch as routerIds
+      ---
+      duration_ms: 7.480207
+      ...
+    1..3
+ok 44 - buildTransactionResponse (against in-memory DB)
+  ---
+  duration_ms: 153.325483
+  type: 'suite'
+  ...
+# Subtest: livenessResult
+    # Subtest: always returns ok
+    ok 1 - always returns ok
+      ---
+      duration_ms: 1.997466
+      ...
+    1..1
+ok 45 - livenessResult
+  ---
+  duration_ms: 2.787075
+  type: 'suite'
+  ...
+# Subtest: readinessResult
+    # Subtest: ok when registry polled recently
+    ok 1 - ok when registry polled recently
+      ---
+      duration_ms: 0.51548
+      ...
+    # Subtest: degraded when registry never polled
+    ok 2 - degraded when registry never polled
+      ---
+      duration_ms: 0.213856
+      ...
+    # Subtest: degraded when registry poll is stale
+    ok 3 - degraded when registry poll is stale
+      ---
+      duration_ms: 0.144884
+      ...
+    # Subtest: confirmation check skipped when maxLastConfirmedAgeMs = 0
+    ok 4 - confirmation check skipped when maxLastConfirmedAgeMs = 0
+      ---
+      duration_ms: 0.118199
+      ...
+    # Subtest: confirmation check passes when last confirmed is recent
+    ok 5 - confirmation check passes when last confirmed is recent
+      ---
+      duration_ms: 0.102144
+      ...
+    # Subtest: confirmation check fails when last confirmed is older than max_last_confirmed_age
+    ok 6 - confirmation check fails when last confirmed is older than max_last_confirmed_age
+      ---
+      duration_ms: 0.163383
+      ...
+    # Subtest: confirmation check passes when lastConfirmedMs = 0 (no submissions yet)
+    ok 7 - confirmation check passes when lastConfirmedMs = 0 (no submissions yet)
+      ---
+      duration_ms: 0.149796
+      ...
+    # Subtest: skips the cardano_provider check when primaryProviderHealthy is undefined
+    ok 8 - skips the cardano_provider check when primaryProviderHealthy is undefined
+      ---
+      duration_ms: 0.533731
+      ...
+    # Subtest: degraded when the primary Cardano provider is unreachable
+    ok 9 - degraded when the primary Cardano provider is unreachable
+      ---
+      duration_ms: 0.453568
+      ...
+    # Subtest: ok when the primary Cardano provider is reachable
+    ok 10 - ok when the primary Cardano provider is reachable
+      ---
+      duration_ms: 0.283765
+      ...
+    1..10
+ok 46 - readinessResult
+  ---
+  duration_ms: 4.18099
+  type: 'suite'
+  ...
+# Subtest: clientLabels
+    # Subtest: emits only client_id + customer_id (NO router_id — a tx can mix routers on one lane)
+    ok 1 - emits only client_id + customer_id (NO router_id — a tx can mix routers on one lane)
+      ---
+      duration_ms: 1.553401
+      ...
+    # Subtest: ignores extra fields on the identity object
+    ok 2 - ignores extra fields on the identity object
+      ---
+      duration_ms: 0.276529
+      ...
+    1..2
+ok 47 - clientLabels
+  ---
+  duration_ms: 3.030443
+  type: 'suite'
+  ...
+# Subtest: routerMembershipLabels
+    # Subtest: adds router_id on top of the client dimensions
+    ok 1 - adds router_id on top of the client dimensions
+      ---
+      duration_ms: 0.451573
+      ...
+    1..1
+ok 48 - routerMembershipLabels
+  ---
+  duration_ms: 0.630108
+  type: 'suite'
+  ...
+# Subtest: createMetrics
+    # Subtest: uses the dia_bridge namespace and applies default labels
+    ok 1 - uses the dia_bridge namespace and applies default labels
+      ---
+      duration_ms: 121.906524
+      ...
+    # Subtest: transaction-fee histogram resolves inside the 500k–1M band
+    ok 2 - transaction-fee histogram resolves inside the 500k–1M band
+      ---
+      duration_ms: 15.194136
+      ...
+    # Subtest: meters operational (management) tx cost by kind and wallet (gauges from DB)
+    ok 3 - meters operational (management) tx cost by kind and wallet (gauges from DB)
+      ---
+      duration_ms: 14.888412
+      ...
+    # Subtest: honours a custom namespace override
+    ok 4 - honours a custom namespace override
+      ---
+      duration_ms: 15.365814
+      ...
+    # Subtest: exports all required Spectra-parity and Cardano-extension metric names
+    ok 5 - exports all required Spectra-parity and Cardano-extension metric names
+      ---
+      duration_ms: 21.175484
+      ...
+    # Subtest: per-symbol metrics carry router_id; tx-level metrics do not
+    ok 6 - per-symbol metrics carry router_id; tx-level metrics do not
+      ---
+      duration_ms: 21.737945
+      ...
+    # Subtest: per-transaction metrics carry the signer wallet label
+    ok 7 - per-transaction metrics carry the signer wallet label
+      ---
+      duration_ms: 12.105791
+      ...
+    # Subtest: does not emit a default 0 for label-less balance gauges until set (no spurious low-balance alert on restart)
+    ok 8 - does not emit a default 0 for label-less balance gauges until set (no spurious low-balance alert on restart)
+      ---
+      duration_ms: 5.667108
+      ...
+    1..8
+ok 49 - createMetrics
+  ---
+  duration_ms: 230.38198
+  type: 'suite'
+  ...
+# Subtest: buildPricesResponse
+    # Subtest: returns empty response for an empty cache
+    ok 1 - returns empty response for an empty cache
+      ---
+      duration_ms: 2.1058
+      ...
+    # Subtest: returns one entry per distinct key
+    ok 2 - returns one entry per distinct key
+      ---
+      duration_ms: 10.91154
+      ...
+    # Subtest: surfaces the customer/client/network identity on each entry
+    ok 3 - surfaces the customer/client/network identity on each entry
+      ---
+      duration_ms: 0.403508
+      ...
+    # Subtest: overwrite: set() twice for same key gives one entry
+    ok 4 - overwrite: set() twice for same key gives one entry
+      ---
+      duration_ms: 0.296826
+      ...
+    # Subtest: sorts by routerId then destinationIndex then symbol
+    ok 5 - sorts by routerId then destinationIndex then symbol
+      ---
+      duration_ms: 0.33122
+      ...
+    # Subtest: keeps separate rows for the same symbol when different routers own the policy state
+    ok 6 - keeps separate rows for the same symbol when different routers own the policy state
+      ---
+      duration_ms: 0.439989
+      ...
+    # Subtest: includes cardanoTxHash when set
+    ok 7 - includes cardanoTxHash when set
+      ---
+      duration_ms: 0.323951
+      ...
+    # Subtest: price and timestamp are serialised as strings (bigint-safe)
+    ok 8 - price and timestamp are serialised as strings (bigint-safe)
+      ---
+      duration_ms: 0.284971
+      ...
+    1..8
+ok 50 - buildPricesResponse
+  ---
+  duration_ms: 17.14059
+  type: 'suite'
+  ...
+# Subtest: resolveProviderRoles
+    # Subtest: defaults to Blockfrost primary / Koios secondary
+    ok 1 - defaults to Blockfrost primary / Koios secondary
+      ---
+      duration_ms: 2.097391
+      ...
+    # Subtest: swaps to Koios primary / Blockfrost secondary when CARDANO_PROVIDER=Koios
+    ok 2 - swaps to Koios primary / Blockfrost secondary when CARDANO_PROVIDER=Koios
+      ---
+      duration_ms: 0.567656
+      ...
+    1..2
+ok 51 - resolveProviderRoles
+  ---
+  duration_ms: 4.417231
+  type: 'suite'
+  ...
+# Subtest: createProviderHealthRecorder
+    # Subtest: on success sets health=1 and bumps the last-ok timestamp (seconds)
+    ok 1 - on success sets health=1 and bumps the last-ok timestamp (seconds)
+      ---
+      duration_ms: 1.082231
+      ...
+    # Subtest: on failure sets health=0 and does NOT touch the last-ok timestamp
+    ok 2 - on failure sets health=0 and does NOT touch the last-ok timestamp
+      ---
+      duration_ms: 0.599577
+      ...
+    # Subtest: uses the provided nowMs over the clock when bumping last-ok
+    ok 3 - uses the provided nowMs over the clock when bumping last-ok
+      ---
+      duration_ms: 0.291281
+      ...
+    1..3
+ok 52 - createProviderHealthRecorder
+  ---
+  duration_ms: 2.366557
+  type: 'suite'
+  ...
+# Subtest: probeProvider
+    # Subtest: Koios: hits /tip and returns true on 2xx
+    ok 1 - Koios: hits /tip and returns true on 2xx
+      ---
+      duration_ms: 2.138239
+      ...
+    # Subtest: Blockfrost: hits /blocks/latest with the project_id header
+    ok 2 - Blockfrost: hits /blocks/latest with the project_id header
+      ---
+      duration_ms: 0.424219
+      ...
+    # Subtest: returns false on a non-2xx response
+    ok 3 - returns false on a non-2xx response
+      ---
+      duration_ms: 1.116799
+      ...
+    # Subtest: returns false (never throws) when the fetch throws
+    ok 4 - returns false (never throws) when the fetch throws
+      ---
+      duration_ms: 2.964731
+      ...
+    # Subtest: returns false when the required endpoint config is missing
+    ok 5 - returns false when the required endpoint config is missing
+      ---
+      duration_ms: 0.391124
+      ...
+    1..5
+ok 53 - probeProvider
+  ---
+  duration_ms: 7.559777
+  type: 'suite'
+  ...
+# Subtest: route table ↔ dispatch consistency
+    # Subtest: every route.kind in the table has a matching dispatch branch
+    ok 1 - every route.kind in the table has a matching dispatch branch
+      ---
+      duration_ms: 1.704572
+      ...
+    # Subtest: every dispatch branch is described in the route table
+    ok 2 - every dispatch branch is described in the route table
+      ---
+      duration_ms: 0.587256
+      ...
+    # Subtest: route kinds are unique
+    ok 3 - route kinds are unique
+      ---
+      duration_ms: 0.523038
+      ...
+    1..3
+ok 54 - route table ↔ dispatch consistency
+  ---
+  duration_ms: 4.46031
+  type: 'suite'
+  ...
+# Subtest: buildOpenApiDocument
+    # Subtest: produces a 3.0.x document with info and paths
+    ok 1 - produces a 3.0.x document with info and paths
+      ---
+      duration_ms: 1.78178
+      ...
+    # Subtest: includes every table path (in OpenAPI {param} form)
+    ok 2 - includes every table path (in OpenAPI {param} form)
+      ---
+      duration_ms: 0.66224
+      ...
+    # Subtest: emits path parameters as required and query parameters with correct location
+    ok 3 - emits path parameters as required and query parameters with correct location
+      ---
+      duration_ms: 8.170807
+      ...
+    # Subtest: attaches a JSON response schema for routes that declare one
+    ok 4 - attaches a JSON response schema for routes that declare one
+      ---
+      duration_ms: 0.772654
+      ...
+    # Subtest: honours baseConfig overrides
+    ok 5 - honours baseConfig overrides
+      ---
+      duration_ms: 0.518847
+      ...
+    # Subtest: merges multiple methods on the same path into one path item
+    ok 6 - merges multiple methods on the same path into one path item
+      ---
+      duration_ms: 1.294716
+      ...
+    1..6
+ok 55 - buildOpenApiDocument
+  ---
+  duration_ms: 21.052596
+  type: 'suite'
+  ...
+# Subtest: createRateLimiter
+    # Subtest: allows the first request from a new address
+    ok 1 - allows the first request from a new address
+      ---
+      duration_ms: 2.954606
+      ...
+    # Subtest: allows up to 60 requests then blocks the 61st within the window
+    ok 2 - allows up to 60 requests then blocks the 61st within the window
+      ---
+      duration_ms: 3.437184
+      ...
+    # Subtest: tracks independent buckets per remote address
+    ok 3 - tracks independent buckets per remote address
+      ---
+      duration_ms: 2.818162
+      ...
+    1..3
+ok 56 - createRateLimiter
+  ---
+  duration_ms: 12.281432
+  type: 'suite'
+  ...
+# Subtest: parseLimit
+    # Subtest: returns the default 50 for null/empty
+    ok 1 - returns the default 50 for null/empty
+      ---
+      duration_ms: 1.094194
+      ...
+    # Subtest: parses a valid positive integer
+    ok 2 - parses a valid positive integer
+      ---
+      duration_ms: 0.487926
+      ...
+    # Subtest: clamps values above 500 to 500
+    ok 3 - clamps values above 500 to 500
+      ---
+      duration_ms: 0.323923
+      ...
+    # Subtest: throws on zero, negative, non-integer, and non-numeric input
+    ok 4 - throws on zero, negative, non-integer, and non-numeric input
+      ---
+      duration_ms: 1.512882
+      ...
+    1..4
+ok 57 - parseLimit
+  ---
+  duration_ms: 4.282895
+  type: 'suite'
+  ...
+# Subtest: createApiServer
+    # Subtest: /health and /health/live return 200
+    ok 1 - /health and /health/live return 200
+      ---
+      duration_ms: 157.087782
+      ...
+    # Subtest: /health/ready returns 503 when registry is stale
+    ok 2 - /health/ready returns 503 when registry is stale
+      ---
+      duration_ms: 102.332465
+      ...
+    # Subtest: /api/v1/prices and /api/v1/prices/:symbol return cached prices
+    ok 3 - /api/v1/prices and /api/v1/prices/:symbol return cached prices
+      ---
+      duration_ms: 80.082602
+      ...
+    # Subtest: /api/v1/symbols returns configured router symbols
+    ok 4 - /api/v1/symbols returns configured router symbols
+      ---
+      duration_ms: 108.151691
+      ...
+    # Subtest: /api/v1/symbols/:symbol/updates returns joined DB rows
+    ok 5 - /api/v1/symbols/:symbol/updates returns joined DB rows
+      ---
+      duration_ms: 91.550272
+      ...
+    # Subtest: /api/v1/transactions/:txHash aggregates transaction updates
+    ok 6 - /api/v1/transactions/:txHash aggregates transaction updates
+      ---
+      duration_ms: 87.717848
+      ...
+    # Subtest: /api/v1/chains and /api/v1/chains/:id/status return runtime + persisted chain state
+    ok 7 - /api/v1/chains and /api/v1/chains/:id/status return runtime + persisted chain state
+      ---
+      duration_ms: 31.336126
+      ...
+    # Subtest: unknown path returns 404 and non-GET returns 405
+    ok 8 - unknown path returns 404 and non-GET returns 405
+      ---
+      duration_ms: 40.115154
+      ...
+    # Subtest: /api/v1/status returns uptime and network info
+    ok 9 - /api/v1/status returns uptime and network info
+      ---
+      duration_ms: 42.153028
+      ...
+    # Subtest: /api/v1/status/components returns component array
+    ok 10 - /api/v1/status/components returns component array
+      ---
+      duration_ms: 20.250378
+      ...
+    # Subtest: /api/v1/events returns processed events list
+    ok 11 - /api/v1/events returns processed events list
+      ---
+      duration_ms: 19.441333
+      ...
+    # Subtest: /api/v1/events/names returns event name list
+    ok 12 - /api/v1/events/names returns event name list
+      ---
+      duration_ms: 15.220933
+      ...
+    # Subtest: /api/v1/events/:hash returns single event or 404
+    ok 13 - /api/v1/events/:hash returns single event or 404
+      ---
+      duration_ms: 25.853311
+      ...
+    # Subtest: /api/v1/transactions returns transaction list
+    ok 14 - /api/v1/transactions returns transaction list
+      ---
+      duration_ms: 51.928989
+      ...
+    # Subtest: /api/v1/alerts returns alerts list
+    ok 15 - /api/v1/alerts returns alerts list
+      ---
+      duration_ms: 15.997622
+      ...
+    # Subtest: /api/v1/alerts/:id returns single alert or 404
+    ok 16 - /api/v1/alerts/:id returns single alert or 404
+      ---
+      duration_ms: 20.565021
+      ...
+    # Subtest: POST /api/v1/alerts/:id/ack acknowledges an alert
+    ok 17 - POST /api/v1/alerts/:id/ack acknowledges an alert
+      ---
+      duration_ms: 28.171806
+      ...
+    # Subtest: GET /api/v1/alerts/:id/ack returns 405
+    ok 18 - GET /api/v1/alerts/:id/ack returns 405
+      ---
+      duration_ms: 27.515786
+      ...
+    # Subtest: /api/v1/performance returns performance metrics
+    ok 19 - /api/v1/performance returns performance metrics
+      ---
+      duration_ms: 26.63599
+      ...
+    # Subtest: /api/v1/pools returns empty pools stub
+    ok 20 - /api/v1/pools returns empty pools stub
+      ---
+      duration_ms: 44.134401
+      ...
+    # Subtest: /api/v1/pools/:router_id/tasks returns stub with router_id
+    ok 21 - /api/v1/pools/:router_id/tasks returns stub with router_id
+      ---
+      duration_ms: 34.635854
+      ...
+    # Subtest: /api/v1/pools returns live pool stats when getPoolStats is provided
+    ok 22 - /api/v1/pools returns live pool stats when getPoolStats is provided
+      ---
+      duration_ms: 29.973458
+      ...
+    # Subtest: /debug returns 404 when debug_enabled is false
+    ok 23 - /debug returns 404 when debug_enabled is false
+      ---
+      duration_ms: 75.474642
+      ...
+    # Subtest: /debug returns 200 when debug_enabled is true
+    ok 24 - /debug returns 200 when debug_enabled is true
+      ---
+      duration_ms: 15.376931
+      ...
+    # Subtest: returns 400 when symbol path param exceeds 64 chars
+    ok 25 - returns 400 when symbol path param exceeds 64 chars
+      ---
+      duration_ms: 28.614275
+      ...
+    # Subtest: returns 400 when txHash path param exceeds 64 chars
+    ok 26 - returns 400 when txHash path param exceeds 64 chars
+      ---
+      duration_ms: 49.568335
+      ...
+    # Subtest: adds CORS headers when enable_cors is true
+    ok 27 - adds CORS headers when enable_cors is true
+      ---
+      duration_ms: 120.549675
+      ...
+    # Subtest: handles OPTIONS preflight when enable_cors is true
+    ok 28 - handles OPTIONS preflight when enable_cors is true
+      ---
+      duration_ms: 140.693983
+      ...
+    # Subtest: /api/v1/openapi.json returns a valid OpenAPI doc covering known routes
+    ok 29 - /api/v1/openapi.json returns a valid OpenAPI doc covering known routes
+      ---
+      duration_ms: 101.285063
+      ...
+    # Subtest: /docs returns 200 HTML referencing the spec and the bundled Swagger UI assets
+    ok 30 - /docs returns 200 HTML referencing the spec and the bundled Swagger UI assets
+      ---
+      duration_ms: 30.876557
+      ...
+    # Subtest: the vendored Swagger UI assets serve with the right content types
+    ok 31 - the vendored Swagger UI assets serve with the right content types
+      ---
+      duration_ms: 239.515084
+      ...
+    # Subtest: an unknown or traversing /public/* path is not served (only the vendored assets)
+    ok 32 - an unknown or traversing /public/* path is not served (only the vendored assets)
+      ---
+      duration_ms: 47.019247
+      ...
+    # Subtest: returns 429 after exceeding rate limit
+    ok 33 - returns 429 after exceeding rate limit
+      ---
+      duration_ms: 133.336531
+      ...
+    1..33
+ok 58 - createApiServer
+  ---
+  duration_ms: 2101.502842
+  type: 'suite'
+  ...
+# Subtest: normalizeConfigKey maps compact spellings to snake_case
+ok 59 - normalizeConfigKey maps compact spellings to snake_case
+  ---
+  duration_ms: 2.081195
+  ...
+# [config] WARNING: skipping router "client_a_mainnet" in /tmp/feeder-routers-JJUI2c/preview/oops-mainnet.yaml — its destination network "Mainnet" does not match the active network "Preview". Move it to routers/preview/.
+# Subtest: loadRouterDirectory — network-scoped
+    # Subtest: loads only the active network's folder and skips a misfiled router
+    ok 1 - loads only the active network's folder and skips a misfiled router
+      ---
+      duration_ms: 73.690796
+      ...
+    # Subtest: returns {} when the network folder does not exist
+    ok 2 - returns {} when the network folder does not exist
+      ---
+      duration_ms: 4.304832
+      ...
+    1..2
+ok 60 - loadRouterDirectory — network-scoped
+  ---
+  duration_ms: 79.694248
+  type: 'suite'
+  ...
+# Subtest: threshold drift — infrastructure.<network>.yaml is the source of truth, per network
+    # Subtest: network preview (monitoring/preview/)
+        # Subtest: every alerting key is consumed by an alert mapping or an auto-remediation threshold (no orphan keys)
+        ok 1 - every alerting key is consumed by an alert mapping or an auto-remediation threshold (no orphan keys)
+          ---
+          duration_ms: 1.808986
+          ...
+        # Subtest: auto-remediation thresholds sit BEYOND their paired alert (alert fires first, automatic follows)
+        ok 2 - auto-remediation thresholds sit BEYOND their paired alert (alert fires first, automatic follows)
+          ---
+          duration_ms: 0.28462
+          ...
+        # Subtest: alerts.yml expr thresholds match alerting.*
+        ok 3 - alerts.yml expr thresholds match alerting.*
+          ---
+          duration_ms: 0.765002
+          ...
+        # Subtest: per-wallet alert expr thresholds match wallet_pool / wallet_shape
+        ok 4 - per-wallet alert expr thresholds match wallet_pool / wallet_shape
+          ---
+          duration_ms: 8.221827
+          ...
+        # Subtest: per-wallet alert prose states the same ADA / count numbers
+        ok 5 - per-wallet alert prose states the same ADA / count numbers
+          ---
+          duration_ms: 1.719578
+          ...
+        # Subtest: alerts.yml prose states the same ADA / percent numbers (operator-facing)
+        ok 6 - alerts.yml prose states the same ADA / percent numbers (operator-facing)
+          ---
+          duration_ms: 0.802202
+          ...
+        # Subtest: Grafana panel thresholds match alerting.*
+        ok 7 - Grafana panel thresholds match alerting.*
+          ---
+          duration_ms: 0.653268
+          ...
+        # Subtest: internals provider-quota panel red line matches the ProviderRequestQuotaHigh* warn level
+        ok 8 - internals provider-quota panel red line matches the ProviderRequestQuotaHigh* warn level
+          ---
+          duration_ms: 0.244289
+          ...
+        1..8
+    ok 1 - network preview (monitoring/preview/)
+      ---
+      duration_ms: 16.051331
+      type: 'suite'
+      ...
+    # Subtest: network mainnet (monitoring/mainnet/)
+        # Subtest: every alerting key is consumed by an alert mapping or an auto-remediation threshold (no orphan keys)
+        ok 1 - every alerting key is consumed by an alert mapping or an auto-remediation threshold (no orphan keys)
+          ---
+          duration_ms: 0.415764
+          ...
+        # Subtest: auto-remediation thresholds sit BEYOND their paired alert (alert fires first, automatic follows)
+        ok 2 - auto-remediation thresholds sit BEYOND their paired alert (alert fires first, automatic follows)
+          ---
+          duration_ms: 0.181605
+          ...
+        # Subtest: alerts.yml expr thresholds match alerting.*
+        ok 3 - alerts.yml expr thresholds match alerting.*
+          ---
+          duration_ms: 0.51369
+          ...
+        # Subtest: per-wallet alert expr thresholds match wallet_pool / wallet_shape
+        ok 4 - per-wallet alert expr thresholds match wallet_pool / wallet_shape
+          ---
+          duration_ms: 0.3559
+          ...
+        # Subtest: per-wallet alert prose states the same ADA / count numbers
+        ok 5 - per-wallet alert prose states the same ADA / count numbers
+          ---
+          duration_ms: 0.34617
+          ...
+        # Subtest: alerts.yml prose states the same ADA / percent numbers (operator-facing)
+        ok 6 - alerts.yml prose states the same ADA / percent numbers (operator-facing)
+          ---
+          duration_ms: 0.285356
+          ...
+        # Subtest: Grafana panel thresholds match alerting.*
+        ok 7 - Grafana panel thresholds match alerting.*
+          ---
+          duration_ms: 0.256341
+          ...
+        # Subtest: internals provider-quota panel red line matches the ProviderRequestQuotaHigh* warn level
+        ok 8 - internals provider-quota panel red line matches the ProviderRequestQuotaHigh* warn level
+          ---
+          duration_ms: 0.13735
+          ...
+        1..8
+    ok 2 - network mainnet (monitoring/mainnet/)
+      ---
+      duration_ms: 3.036335
+      type: 'suite'
+      ...
+    # Subtest: feed-sanity panel verdict colours match the FeedAccuracyFail boundary
+    ok 3 - feed-sanity panel verdict colours match the FeedAccuracyFail boundary
+      ---
+      duration_ms: 0.771136
+      ...
+    # Subtest: dashboard has no dead template variables (every filter var is wired to a panel)
+    ok 4 - dashboard has no dead template variables (every filter var is wired to a panel)
+      ---
+      duration_ms: 1.063784
+      ...
+    # Subtest: transactions dashboard (feeder-tx.json) has no dead template variables
+    ok 5 - transactions dashboard (feeder-tx.json) has no dead template variables
+      ---
+      duration_ms: 1.074674
+      ...
+    # Subtest: wallets dashboard (feeder-wallets.json) has no dead template variables
+    ok 6 - wallets dashboard (feeder-wallets.json) has no dead template variables
+      ---
+      duration_ms: 0.607998
+      ...
+    # Subtest: internals dashboard (feeder-internals.json) has no dead template variables
+    ok 7 - internals dashboard (feeder-internals.json) has no dead template variables
+      ---
+      duration_ms: 0.811775
+      ...
+    # Subtest: count panels show counts (increase), not per-second rates, grouped by the right label
+    ok 8 - count panels show counts (increase), not per-second rates, grouped by the right label
+      ---
+      duration_ms: 1.016279
+      ...
+    1..8
+ok 61 - threshold drift — infrastructure.<network>.yaml is the source of truth, per network
+  ---
+  duration_ms: 26.343765
+  type: 'suite'
+  ...
+# Subtest: validateModularConfig
+    # Subtest: accepts cardano destinations without tx_mode
+    ok 1 - accepts cardano destinations without tx_mode
+      ---
+      duration_ms: 6.871387
+      ...
+    # Subtest: requires every provider alerting threshold (no silent defaults)
+    ok 2 - requires every provider alerting threshold (no silent defaults)
+      ---
+      duration_ms: 4.874007
+      ...
+    # Subtest: rejects a provider warn ratio outside (0, 1]
+    ok 3 - rejects a provider warn ratio outside (0, 1]
+      ---
+      duration_ms: 5.450898
+      ...
+    # Subtest: rejects a non-integer provider daily quota
+    ok 4 - rejects a non-integer provider daily quota
+      ---
+      duration_ms: 0.657141
+      ...
+    # Subtest: accepts multiple routers that share one Cardano client/protocol destination
+    ok 5 - accepts multiple routers that share one Cardano client/protocol destination
+      ---
+      duration_ms: 1.48414
+      ...
+    # Subtest: rejects a router without customer_id
+    ok 6 - rejects a router without customer_id
+      ---
+      duration_ms: 12.955139
+      ...
+    # Subtest: rejects unknown router fields
+    ok 7 - rejects unknown router fields
+      ---
+      duration_ms: 0.796873
+      ...
+    # Subtest: rejects one router whose Cardano destinations point at different clients
+    ok 8 - rejects one router whose Cardano destinations point at different clients
+      ---
+      duration_ms: 0.676225
+      ...
+    # Subtest: rejects one client deployment referenced by multiple customer_id values
+    ok 9 - rejects one client deployment referenced by multiple customer_id values
+      ---
+      duration_ms: 1.28451
+      ...
+    # Subtest: rejects overlapping symbols across routers that share one Cardano lane
+    ok 10 - rejects overlapping symbols across routers that share one Cardano lane
+      ---
+      duration_ms: 1.147111
+      ...
+    # Subtest: accepts one customer that owns two clients on distinct lanes
+    ok 11 - accepts one customer that owns two clients on distinct lanes
+      ---
+      duration_ms: 1.340055
+      ...
+    # Subtest: accepts overlapping symbols when the routers target different clients/lanes
+    ok 12 - accepts overlapping symbols when the routers target different clients/lanes
+      ---
+      duration_ms: 0.956239
+      ...
+    # Subtest: rejects a non-empty processing.transformations block
+    ok 13 - rejects a non-empty processing.transformations block
+      ---
+      duration_ms: 1.652694
+      ...
+    # Subtest: rejects processing.datasource = 'processed'
+    ok 14 - rejects processing.datasource = 'processed'
+      ---
+      duration_ms: 0.578597
+      ...
+    # Subtest: rejects processing.validationenabled = false
+    ok 15 - rejects processing.validationenabled = false
+      ---
+      duration_ms: 0.914444
+      ...
+    # Subtest: accepts an empty transformations array and validationenabled=true (the real config shape)
+    ok 16 - accepts an empty transformations array and validationenabled=true (the real config shape)
+      ---
+      duration_ms: 0.558934
+      ...
+    1..16
+ok 62 - validateModularConfig
+  ---
+  duration_ms: 48.233917
+  type: 'suite'
+  ...
+# Subtest: validateModularConfig — wallet pool
+    # Subtest: accepts a valid wallets block plus funding band
+    ok 1 - accepts a valid wallets block plus funding band
+      ---
+      duration_ms: 1.09444
+      ...
+    # Subtest: rejects a pool without exactly one main and with duplicate ids
+    ok 2 - rejects a pool without exactly one main and with duplicate ids
+      ---
+      duration_ms: 1.185114
+      ...
+    # Subtest: rejects an unknown role
+    ok 3 - rejects an unknown role
+      ---
+      duration_ms: 0.892498
+      ...
+    # Subtest: rejects an empty wallets list
+    ok 4 - rejects an empty wallets list
+      ---
+      duration_ms: 0.598935
+      ...
+    # Subtest: warns on a non-conventional private_key_env name
+    ok 5 - warns on a non-conventional private_key_env name
+      ---
+      duration_ms: 3.165546
+      ...
+    # Subtest: accepts a valid wallet_shape block
+    ok 6 - accepts a valid wallet_shape block
+      ---
+      duration_ms: 0.647747
+      ...
+    # Subtest: rejects a wallet_shape with a non-positive min_usable_utxos
+    ok 7 - rejects a wallet_shape with a non-positive min_usable_utxos
+      ---
+      duration_ms: 0.589276
+      ...
+    # Subtest: rejects a wallet_shape where collateral is not below working size
+    ok 8 - rejects a wallet_shape where collateral is not below working size
+      ---
+      duration_ms: 3.39071
+      ...
+    # Subtest: rejects a funding band where low is not below target
+    ok 9 - rejects a funding band where low is not below target
+      ---
+      duration_ms: 1.106198
+      ...
+    1..9
+ok 63 - validateModularConfig — wallet pool
+  ---
+  duration_ms: 13.852502
+  type: 'suite'
+  ...
+# Subtest: runOneTick
+    # Subtest: emits skipped_uninitialised when no on-chain confirm has happened yet
+    ok 1 - emits skipped_uninitialised when no on-chain confirm has happened yet
+      ---
+      duration_ms: 9.606803
+      ...
+    # Subtest: emits skipped_no_intent when priceCache has data but the latestIntent cache is empty
+    ok 2 - emits skipped_no_intent when priceCache has data but the latestIntent cache is empty
+      ---
+      duration_ms: 0.718551
+      ...
+    # Subtest: emits skipped_already_fresh when the cached intent matches the confirmed one
+    ok 3 - emits skipped_already_fresh when the cached intent matches the confirmed one
+      ---
+      duration_ms: 0.516506
+      ...
+    # Subtest: emits skipped_superseded when the cached intent's nonce does not beat the confirmed nonce
+    ok 4 - emits skipped_superseded when the cached intent's nonce does not beat the confirmed nonce
+      ---
+      duration_ms: 0.463628
+      ...
+    # Subtest: submits when time_threshold elapsed and a newer cached intent exists
+    ok 5 - submits when time_threshold elapsed and a newer cached intent exists
+      ---
+      duration_ms: 0.707349
+      ...
+    # Subtest: does not re-dispatch a pair while its previous heartbeat is still in flight
+    ok 6 - does not re-dispatch a pair while its previous heartbeat is still in flight
+      ---
+      duration_ms: 5.765007
+      ...
+    # Subtest: skips a pair whose event-flow submission is already in flight (consults the shared tracker)
+    ok 7 - skips a pair whose event-flow submission is already in flight (consults the shared tracker)
+      ---
+      duration_ms: 1.473547
+      ...
+    # Subtest: re-dispatches once the in-flight entry times out (a submission that never confirmed)
+    ok 8 - re-dispatches once the in-flight entry times out (a submission that never confirmed)
+      ---
+      duration_ms: 4.7123
+      ...
+    # Subtest: does NOT submit when within the time_threshold window
+    ok 9 - does NOT submit when within the time_threshold window
+      ---
+      duration_ms: 0.712023
+      ...
+    # Subtest: skips destinations where cron is false (opt-in only)
+    ok 10 - skips destinations where cron is false (opt-in only)
+      ---
+      duration_ms: 0.53611
+      ...
+    # Subtest: emits one tick per symbol for multi-symbol in-list routers
+    ok 11 - emits one tick per symbol for multi-symbol in-list routers
+      ---
+      duration_ms: 0.739862
+      ...
+    # Subtest: emits one tick per symbol for enrichment.fullIntent.Symbol in-list routers
+    ok 12 - emits one tick per symbol for enrichment.fullIntent.Symbol in-list routers
+      ---
+      duration_ms: 1.02748
+      ...
+    # Subtest: skips routers with no extractable symbol
+    ok 13 - skips routers with no extractable symbol
+      ---
+      duration_ms: 4.563257
+      ...
+    # Subtest: catches and logs submit errors (fire-and-forget)
+    ok 14 - catches and logs submit errors (fire-and-forget)
+      ---
+      duration_ms: 42.95363
+      ...
+    # Subtest: includes customer_id label in cron metric
+    ok 15 - includes customer_id label in cron metric
+      ---
+      duration_ms: 1.328722
+      ...
+    # Subtest: deviation-only mode (time_threshold=0s): does NOT resubmit within max_staleness
+    ok 16 - deviation-only mode (time_threshold=0s): does NOT resubmit within max_staleness
+      ---
+      duration_ms: 1.055754
+      ...
+    # Subtest: deviation-only mode (time_threshold=0s): resubmits once age exceeds max_staleness
+    ok 17 - deviation-only mode (time_threshold=0s): resubmits once age exceeds max_staleness
+      ---
+      duration_ms: 0.496824
+      ...
+    # Subtest: time_threshold=0s with NO max_staleness: cron has no cadence (skipped)
+    ok 18 - time_threshold=0s with NO max_staleness: cron has no cadence (skipped)
+      ---
+      duration_ms: 0.658515
+      ...
+    # Subtest: time_threshold > 0 takes precedence over max_staleness (heartbeat ceiling)
+    ok 19 - time_threshold > 0 takes precedence over max_staleness (heartbeat ceiling)
+      ---
+      duration_ms: 0.694871
+      ...
+    1..19
+ok 64 - runOneTick
+  ---
+  duration_ms: 81.671941
+  type: 'suite'
+  ...
+# Subtest: runOneTick — aligned_heartbeat
+    # Subtest: resubmits a pair confirmed in the PREVIOUS period (per-pair logic would skip it)
+    ok 1 - resubmits a pair confirmed in the PREVIOUS period (per-pair logic would skip it)
+      ---
+      duration_ms: 1.850612
+      ...
+    # Subtest: does NOT resubmit a pair already updated in the CURRENT period
+    ok 2 - does NOT resubmit a pair already updated in the CURRENT period
+      ---
+      duration_ms: 1.309451
+      ...
+    # Subtest: is ignored in deviation-only mode (no time_threshold) — falls back to per-pair max_staleness
+    ok 3 - is ignored in deviation-only mode (no time_threshold) — falls back to per-pair max_staleness
+      ---
+      duration_ms: 0.525157
+      ...
+    # Subtest: makes all due pairs fire in one tick → a single batch
+    ok 4 - makes all due pairs fire in one tick → a single batch
+      ---
+      duration_ms: 0.733538
+      ...
+    1..4
+ok 65 - runOneTick — aligned_heartbeat
+  ---
+  duration_ms: 4.937621
+  type: 'suite'
+  ...
+# Subtest: createLatestIntentCache
+    # Subtest: stores and retrieves an entry by composite key
+    ok 1 - stores and retrieves an entry by composite key
+      ---
+      duration_ms: 1.725948
+      ...
+    # Subtest: returns undefined for unknown keys
+    ok 2 - returns undefined for unknown keys
+      ---
+      duration_ms: 0.397965
+      ...
+    # Subtest: stamps observedAtMs from the injectable clock
+    ok 3 - stamps observedAtMs from the injectable clock
+      ---
+      duration_ms: 0.317392
+      ...
+    # Subtest: iterates every entry with its composite key reconstructed
+    ok 4 - iterates every entry with its composite key reconstructed
+      ---
+      duration_ms: 0.383079
+      ...
+    # Subtest: handles symbols that contain a colon (preserves them via split-and-join)
+    ok 5 - handles symbols that contain a colon (preserves them via split-and-join)
+      ---
+      duration_ms: 0.286461
+      ...
+    1..5
+ok 66 - createLatestIntentCache
+  ---
+  duration_ms: 5.80905
+  type: 'suite'
+  ...
+# Subtest: classifyError
+    # Subtest: returns Unknown for non-Error values with a clear remediation
+    ok 1 - returns Unknown for non-Error values with a clear remediation
+      ---
+      duration_ms: 3.57166
+      ...
+    # Subtest: detects TxDroppedFromChainError by name (not by message)
+    ok 2 - detects TxDroppedFromChainError by name (not by message)
+      ---
+      duration_ms: 0.463933
+      ...
+    # Subtest: detects WalletUnavailableError by name and maps it to a retryable code
+    ok 3 - detects WalletUnavailableError by name and maps it to a retryable code
+      ---
+      duration_ms: 0.545487
+      ...
+    # Subtest: classifies intent-expired messages
+    ok 4 - classifies intent-expired messages
+      ---
+      duration_ms: 0.252587
+      ...
+    # Subtest: classifies monotonicity violations
+    ok 5 - classifies monotonicity violations
+      ---
+      duration_ms: 0.279924
+      ...
+    # Subtest: classifies BOTH the nonce and the timestamp branch of the build-time monotonicity assertion
+    ok 6 - classifies BOTH the nonce and the timestamp branch of the build-time monotonicity assertion
+      ---
+      duration_ms: 0.303448
+      ...
+    # Subtest: classifies signer-authorisation errors
+    ok 7 - classifies signer-authorisation errors
+      ---
+      duration_ms: 0.294467
+      ...
+    # Subtest: classifies provider-lag errors
+    ok 8 - classifies provider-lag errors
+      ---
+      duration_ms: 0.212133
+      ...
+    # Subtest: classifies wallet insufficient funds
+    ok 9 - classifies wallet insufficient funds
+      ---
+      duration_ms: 0.191114
+      ...
+    # Subtest: classifies receiver insufficient funds (receiver + balance/lovelace pattern)
+    ok 10 - classifies receiver insufficient funds (receiver + balance/lovelace pattern)
+      ---
+      duration_ms: 0.261116
+      ...
+    # Subtest: classifies batch-size-exceeded errors
+    ok 11 - classifies batch-size-exceeded errors
+      ---
+      duration_ms: 0.316815
+      ...
+    # Subtest: falls back to BuilderError for tx-construction-shaped messages
+    ok 12 - falls back to BuilderError for tx-construction-shaped messages
+      ---
+      duration_ms: 3.597268
+      ...
+    # Subtest: every classification result carries a non-empty remediation string
+    ok 13 - every classification result carries a non-empty remediation string
+      ---
+      duration_ms: 0.778626
+      ...
+    1..13
+ok 67 - classifyError
+  ---
+  duration_ms: 14.753363
+  type: 'suite'
+  ...
+# Subtest: isCleanAdaDepositUtxo (deposit-pending probe classification)
+    # Subtest: accepts a pure-ADA UTxO at exactly the floor
+    ok 1 - accepts a pure-ADA UTxO at exactly the floor
+      ---
+      duration_ms: 2.517872
+      ...
+    # Subtest: accepts a pure-ADA UTxO above the floor
+    ok 2 - accepts a pure-ADA UTxO above the floor
+      ---
+      duration_ms: 0.748903
+      ...
+    # Subtest: rejects dust strictly below the floor
+    ok 3 - rejects dust strictly below the floor
+      ---
+      duration_ms: 0.435833
+      ...
+    # Subtest: rejects a UTxO carrying a native token even when its ADA clears the floor
+    ok 4 - rejects a UTxO carrying a native token even when its ADA clears the floor
+      ---
+      duration_ms: 0.309572
+      ...
+    # Subtest: rejects a UTxO with an inline datum (the Receiver-spend path expects Some datum, deposits must be datum-less)
+    ok 5 - rejects a UTxO with an inline datum (the Receiver-spend path expects Some datum, deposits must be datum-less)
+      ---
+      duration_ms: 0.293699
+      ...
+    # Subtest: rejects a UTxO with a datum hash
+    ok 6 - rejects a UTxO with a datum hash
+      ---
+      duration_ms: 0.741118
+      ...
+    # Subtest: coerces a string-encoded lovelace amount before comparing to the floor
+    ok 7 - coerces a string-encoded lovelace amount before comparing to the floor
+      ---
+      duration_ms: 0.217237
+      ...
+    # Subtest: rejects a UTxO with no assets at all (treated as zero lovelace)
+    ok 8 - rejects a UTxO with no assets at all (treated as zero lovelace)
+      ---
+      duration_ms: 0.294318
+      ...
+    # Subtest: honours a non-default floor (a higher floor excludes what a lower one accepts)
+    ok 9 - honours a non-default floor (a higher floor excludes what a lower one accepts)
+      ---
+      duration_ms: 0.260098
+      ...
+    1..9
+ok 68 - isCleanAdaDepositUtxo (deposit-pending probe classification)
+  ---
+  duration_ms: 9.476963
+  type: 'suite'
+  ...
+# Subtest: isStaleInputError
+    # Subtest: classifies stale-input ledger rejections as reconcilable
+    ok 1 - classifies stale-input ledger rejections as reconcilable
+      ---
+      duration_ms: 1.084216
+      ...
+    # Subtest: does NOT classify unrelated errors as stale-input
+    ok 2 - does NOT classify unrelated errors as stale-input
+      ---
+      duration_ms: 0.450751
+      ...
+    # Subtest: inspects a nested cause
+    ok 3 - inspects a nested cause
+      ---
+      duration_ms: 0.783783
+      ...
+    1..3
+ok 69 - isStaleInputError
+  ---
+  duration_ms: 4.780397
+  type: 'suite'
+  ...
+# Subtest: withStaleInputReconcile
+    # Subtest: returns the result on the first try with no reconcile
+    ok 1 - returns the result on the first try with no reconcile
+      ---
+      duration_ms: 3.145133
+      ...
+    # Subtest: reconciles + rebuilds on a stale-input error, then succeeds
+    ok 2 - reconciles + rebuilds on a stale-input error, then succeeds
+      ---
+      duration_ms: 1.118696
+      ...
+    # Subtest: rethrows a non-stale error immediately without reconciling
+    ok 3 - rethrows a non-stale error immediately without reconciling
+      ---
+      duration_ms: 0.789176
+      ...
+    # Subtest: rethrows the last stale error after exhausting attempts
+    ok 4 - rethrows the last stale error after exhausting attempts
+      ---
+      duration_ms: 0.377466
+      ...
+    1..4
+ok 70 - withStaleInputReconcile
+  ---
+  duration_ms: 6.168837
+  type: 'suite'
+  ...
+# Subtest: selectFoldUtxos (which deposits an update folds)
+    # Subtest: selects clean ADA deposits at/above the floor
+    ok 1 - selects clean ADA deposits at/above the floor
+      ---
+      duration_ms: 1.234693
+      ...
+    # Subtest: skips dust below the floor
+    ok 2 - skips dust below the floor
+      ---
+      duration_ms: 0.265818
+      ...
+    # Subtest: skips native-token junk and datum-bearing UTxOs (a griefer cannot force a fold)
+    ok 3 - skips native-token junk and datum-bearing UTxOs (a griefer cannot force a fold)
+      ---
+      duration_ms: 0.262309
+      ...
+    # Subtest: caps the fold at depositMaxPerUpdateFold (smaller than the merge cap)
+    ok 4 - caps the fold at depositMaxPerUpdateFold (smaller than the merge cap)
+      ---
+      duration_ms: 0.403196
+      ...
+    # Subtest: folds nothing when the cap is 0 (fold disabled)
+    ok 5 - folds nothing when the cap is 0 (fold disabled)
+      ---
+      duration_ms: 0.19495
+      ...
+    # Subtest: folds nothing when the cap is negative (defensive)
+    ok 6 - folds nothing when the cap is negative (defensive)
+      ---
+      duration_ms: 0.137897
+      ...
+    1..6
+ok 71 - selectFoldUtxos (which deposits an update folds)
+  ---
+  duration_ms: 4.032672
+  type: 'suite'
+  ...
+# Subtest: runWithFoldFallback (best-effort fold + pure fallback)
+    # Subtest: submits the folded tx when the folded attempt succeeds
+    ok 1 - submits the folded tx when the folded attempt succeeds
+      ---
+      duration_ms: 1.263987
+      ...
+    # Subtest: falls back to a pure update when the folded attempt fails (build/submit error)
+    ok 2 - falls back to a pure update when the folded attempt fails (build/submit error)
+      ---
+      duration_ms: 0.39561
+      ...
+    # Subtest: does not retry (no fold) when there are no deposits to fold
+    ok 3 - does not retry (no fold) when there are no deposits to fold
+      ---
+      duration_ms: 0.867913
+      ...
+    # Subtest: propagates the error when the pure fallback ALSO fails
+    ok 4 - propagates the error when the pure fallback ALSO fails
+      ---
+      duration_ms: 1.138136
+      ...
+    # Subtest: propagates the error when there is no fold and the single attempt fails
+    ok 5 - propagates the error when there is no fold and the single attempt fails
+      ---
+      duration_ms: 0.455777
+      ...
+    1..5
+ok 72 - runWithFoldFallback (best-effort fold + pure fallback)
+  ---
+  duration_ms: 4.670665
+  type: 'suite'
+  ...
+# Subtest: seedDropdownSeriesFromConfig
+    # Subtest: registers the cascade-filter series at value 0 for enabled routers
+    ok 1 - registers the cascade-filter series at value 0 for enabled routers
+      ---
+      duration_ms: 2.782188
+      ...
+    1..1
+ok 73 - seedDropdownSeriesFromConfig
+  ---
+  duration_ms: 4.286351
+  type: 'suite'
+  ...
+# Subtest: submission-state mapping
+    # Subtest: maps Cardano pipeline steps to submit phases
+    ok 1 - maps Cardano pipeline steps to submit phases
+      ---
+      duration_ms: 1.389375
+      ...
+    # Subtest: returns null for unknown steps (no state change)
+    ok 2 - returns null for unknown steps (no state change)
+      ---
+      duration_ms: 0.398013
+      ...
+    # Subtest: submit phase from lane events: only idle + entering build (no accumulating)
+    ok 3 - submit phase from lane events: only idle + entering build (no accumulating)
+      ---
+      duration_ms: 0.441043
+      ...
+    # Subtest: coalescer state from lane events: idle / accumulating / in-flight
+    ok 4 - coalescer state from lane events: idle / accumulating / in-flight
+      ---
+      duration_ms: 0.512877
+      ...
+    # Subtest: exposes the phase codes in increasing order
+    ok 5 - exposes the phase codes in increasing order
+      ---
+      duration_ms: 1.659284
+      ...
+    1..5
+ok 74 - submission-state mapping
+  ---
+  duration_ms: 8.477919
+  type: 'suite'
+  ...
+# Subtest: Db.migrate + close
+    # Subtest: migrate() is idempotent — calling twice does not throw
+    ok 1 - migrate() is idempotent — calling twice does not throw
+      ---
+      duration_ms: 50.811562
+      ...
+    # Subtest: close() resolves without throwing
+    ok 2 - close() resolves without throwing
+      ---
+      duration_ms: 18.907697
+      ...
+    1..2
+ok 75 - Db.migrate + close
+  ---
+  duration_ms: 84.219434
+  type: 'suite'
+  ...
+# Subtest: Db.chain_state
+    # Subtest: initialiseChainState inserts a row with zeroed blocks and healthy=true
+    ok 1 - initialiseChainState inserts a row with zeroed blocks and healthy=true
+      ---
+      duration_ms: 26.597166
+      ...
+    # Subtest: initialiseChainState is idempotent on (chainId, contractId)
+    ok 2 - initialiseChainState is idempotent on (chainId, contractId)
+      ---
+      duration_ms: 14.348237
+      ...
+    # Subtest: a different contractId on the same chain creates a second row
+    ok 3 - a different contractId on the same chain creates a second row
+      ---
+      duration_ms: 6.145787
+      ...
+    # Subtest: setLastProcessedBlock updates the value and round-trips a realistic large block as bigint
+    ok 4 - setLastProcessedBlock updates the value and round-trips a realistic large block as bigint
+      ---
+      duration_ms: 18.330442
+      ...
+    # Subtest: setLastProcessedBlock throws when no chain_state row exists
+    ok 5 - setLastProcessedBlock throws when no chain_state row exists
+      ---
+      duration_ms: 19.02073
+      ...
+    # Subtest: setLastScanBlock updates last_scan_block without touching last_processed_block
+    ok 6 - setLastScanBlock updates last_scan_block without touching last_processed_block
+      ---
+      duration_ms: 8.374227
+      ...
+    # Subtest: setLastScanBlock throws when no chain_state row exists
+    ok 7 - setLastScanBlock throws when no chain_state row exists
+      ---
+      duration_ms: 10.445798
+      ...
+    # Subtest: setChainHealth(healthy=true) sets is_healthy=1
+    ok 8 - setChainHealth(healthy=true) sets is_healthy=1
+      ---
+      duration_ms: 5.584338
+      ...
+    # Subtest: setChainHealth(healthy=false) increments error_count and stores the message
+    ok 9 - setChainHealth(healthy=false) increments error_count and stores the message
+      ---
+      duration_ms: 6.041801
+      ...
+    # Subtest: setChainHealth(healthy=false) with no message stores NULL last_error
+    ok 10 - setChainHealth(healthy=false) with no message stores NULL last_error
+      ---
+      duration_ms: 8.595974
+      ...
+    # Subtest: setChainHealth throws when no chain_state row exists
+    ok 11 - setChainHealth throws when no chain_state row exists
+      ---
+      duration_ms: 8.65078
+      ...
+    # Subtest: getChainState returns null when the row does not exist
+    ok 12 - getChainState returns null when the row does not exist
+      ---
+      duration_ms: 12.703773
+      ...
+    # Subtest: listChainStates returns all rows
+    ok 13 - listChainStates returns all rows
+      ---
+      duration_ms: 11.953512
+      ...
+    1..13
+ok 76 - Db.chain_state
+  ---
+  duration_ms: 160.169594
+  type: 'suite'
+  ...
+# Subtest: Db.processed_events
+    # Subtest: upsertProcessedEvent inserts and hasProcessedEvent finds it
+    ok 1 - upsertProcessedEvent inserts and hasProcessedEvent finds it
+      ---
+      duration_ms: 42.240097
+      ...
+    # Subtest: hasProcessedEvent returns false for an unknown intentHash
+    ok 2 - hasProcessedEvent returns false for an unknown intentHash
+      ---
+      duration_ms: 9.611673
+      ...
+    # Subtest: upsertProcessedEvent is idempotent on intentHash (ON CONFLICT DO NOTHING)
+    ok 3 - upsertProcessedEvent is idempotent on intentHash (ON CONFLICT DO NOTHING)
+      ---
+      duration_ms: 6.04304
+      ...
+    # Subtest: getProcessedEvent returns null when not found and round-trips blockNumber as bigint
+    ok 4 - getProcessedEvent returns null when not found and round-trips blockNumber as bigint
+      ---
+      duration_ms: 10.22118
+      ...
+    # Subtest: listProcessedEvents filters by routerId, status, fromBlock and paginates
+    ok 5 - listProcessedEvents filters by routerId, status, fromBlock and paginates
+      ---
+      duration_ms: 12.149691
+      ...
+    # Subtest: listProcessedEvents returns empty array when filters match nothing
+    ok 6 - listProcessedEvents returns empty array when filters match nothing
+      ---
+      duration_ms: 9.723526
+      ...
+    1..6
+ok 77 - Db.processed_events
+  ---
+  duration_ms: 90.827938
+  type: 'suite'
+  ...
+# Subtest: Db.transaction_log
+    # Subtest: insertTransactionLog stores a submitted row with submittedAtMs set
+    ok 1 - insertTransactionLog stores a submitted row with submittedAtMs set
+      ---
+      duration_ms: 18.984694
+      ...
+    # Subtest: insertTransactionLog stores optional fields as undefined when absent
+    ok 2 - insertTransactionLog stores optional fields as undefined when absent
+      ---
+      duration_ms: 6.185997
+      ...
+    # Subtest: updateTransactionLog moves submitted → confirmed and preserves other fields
+    ok 3 - updateTransactionLog moves submitted → confirmed and preserves other fields
+      ---
+      duration_ms: 8.382655
+      ...
+    # Subtest: updateTransactionLog with an empty patch is a no-op (does not throw)
+    ok 4 - updateTransactionLog with an empty patch is a no-op (does not throw)
+      ---
+      duration_ms: 3.255035
+      ...
+    # Subtest: updateTransactionLog throws when the intentHash does not exist
+    ok 5 - updateTransactionLog throws when the intentHash does not exist
+      ---
+      duration_ms: 3.94339
+      ...
+    # Subtest: getTransactionLog returns [] for an unknown intentHash
+    ok 6 - getTransactionLog returns [] for an unknown intentHash
+      ---
+      duration_ms: 2.798999
+      ...
+    # Subtest: getTransactionsByHash returns all rows sharing a cardanoTxHash (batched tx)
+    ok 7 - getTransactionsByHash returns all rows sharing a cardanoTxHash (batched tx)
+      ---
+      duration_ms: 3.190976
+      ...
+    # Subtest: listTransactions filters by status, symbol and routerId (ANDed)
+    ok 8 - listTransactions filters by status, symbol and routerId (ANDed)
+      ---
+      duration_ms: 11.680884
+      ...
+    # Subtest: listSymbolUpdates returns rows for a symbol newest-first, capped at limit
+    ok 9 - listSymbolUpdates returns rows for a symbol newest-first, capped at limit
+      ---
+      duration_ms: 5.74972
+      ...
+    1..9
+ok 78 - Db.transaction_log
+  ---
+  duration_ms: 65.296896
+  type: 'suite'
+  ...
+# Subtest: Db.contract_symbol_updates
+    # Subtest: first upsert inserts; second increments update_count
+    ok 1 - first upsert inserts; second increments update_count
+      ---
+      duration_ms: 4.433929
+      ...
+    # Subtest: getContractSymbolUpdate returns null when not found
+    ok 2 - getContractSymbolUpdate returns null when not found
+      ---
+      duration_ms: 3.31981
+      ...
+    # Subtest: listContractSymbolUpdates returns all rows ordered
+    ok 3 - listContractSymbolUpdates returns all rows ordered
+      ---
+      duration_ms: 17.793386
+      ...
+    1..3
+ok 79 - Db.contract_symbol_updates
+  ---
+  duration_ms: 26.013748
+  type: 'suite'
+  ...
+# Subtest: Db.performance_metrics
+    # Subtest: recordPerformanceMetric inserts and queryPerformanceMetrics filters by name
+    ok 1 - recordPerformanceMetric inserts and queryPerformanceMetrics filters by name
+      ---
+      duration_ms: 7.0031
+      ...
+    # Subtest: queryPerformanceMetrics filters by since/until range and limit
+    ok 2 - queryPerformanceMetrics filters by since/until range and limit
+      ---
+      duration_ms: 4.75936
+      ...
+    1..2
+ok 80 - Db.performance_metrics
+  ---
+  duration_ms: 12.182502
+  type: 'suite'
+  ...
+# Subtest: Db.alert_log
+    # Subtest: recordAlert returns a positive id; the alert is unresolved + unacknowledged
+    ok 1 - recordAlert returns a positive id; the alert is unresolved + unacknowledged
+      ---
+      duration_ms: 7.228416
+      ...
+    # Subtest: resolveAlert sets resolved_at_ms; the alert moves to active=false
+    ok 2 - resolveAlert sets resolved_at_ms; the alert moves to active=false
+      ---
+      duration_ms: 7.6565
+      ...
+    # Subtest: resolveAlert throws when the id does not exist
+    ok 3 - resolveAlert throws when the id does not exist
+      ---
+      duration_ms: 3.212607
+      ...
+    # Subtest: acknowledgeAlert sets acknowledged=true without resolving
+    ok 4 - acknowledgeAlert sets acknowledged=true without resolving
+      ---
+      duration_ms: 9.900827
+      ...
+    # Subtest: acknowledgeAlert throws when the id does not exist
+    ok 5 - acknowledgeAlert throws when the id does not exist
+      ---
+      duration_ms: 7.514487
+      ...
+    # Subtest: listAlerts returns all when active is undefined and respects limit
+    ok 6 - listAlerts returns all when active is undefined and respects limit
+      ---
+      duration_ms: 10.606207
+      ...
+    # Subtest: getAlertById returns the row by id, or null for an unknown id
+    ok 7 - getAlertById returns the row by id, or null for an unknown id
+      ---
+      duration_ms: 6.691239
+      ...
+    1..7
+ok 81 - Db.alert_log
+  ---
+  duration_ms: 53.923749
+  type: 'suite'
+  ...
+# Subtest: Db.pruneOldRows
+    # Subtest: prunes old processed_events but keeps recent ones
+    ok 1 - prunes old processed_events but keeps recent ones
+      ---
+      duration_ms: 5.364003
+      ...
+    # Subtest: prunes confirmed/failed txs but NEVER pending/submitted regardless of age
+    ok 2 - prunes confirmed/failed txs but NEVER pending/submitted regardless of age
+      ---
+      duration_ms: 7.921501
+      ...
+    # Subtest: prunes resolved alerts but keeps active (unresolved) ones
+    ok 3 - prunes resolved alerts but keeps active (unresolved) ones
+      ---
+      duration_ms: 9.993374
+      ...
+    # Subtest: returns all-zero counts when nothing is old enough
+    ok 4 - returns all-zero counts when nothing is old enough
+      ---
+      duration_ms: 5.134837
+      ...
+    1..4
+ok 82 - Db.pruneOldRows
+  ---
+  duration_ms: 28.9375
+  type: 'suite'
+  ...
+# Subtest: management_tx_totals
+    # Subtest: starts empty
+    ok 1 - starts empty
+      ---
+      duration_ms: 7.851705
+      ...
+    # Subtest: accumulates count and fee per (kind, wallet, outcome)
+    ok 2 - accumulates count and fee per (kind, wallet, outcome)
+      ---
+      duration_ms: 4.472818
+      ...
+    # Subtest: reads totals back from the table on a fresh listing
+    ok 3 - reads totals back from the table on a fresh listing
+      ---
+      duration_ms: 3.245233
+      ...
+    1..3
+ok 83 - management_tx_totals
+  ---
+  duration_ms: 16.142045
+  type: 'suite'
+  ...
+# Subtest: instrumentDb
+    # Subtest: counts + times each mapped db operation and passes the result through
+    ok 1 - counts + times each mapped db operation and passes the result through
+      ---
+      duration_ms: 3.114773
+      ...
+    # Subtest: leaves unmapped methods (migrate/close) un-instrumented
+    ok 2 - leaves unmapped methods (migrate/close) un-instrumented
+      ---
+      duration_ms: 0.52445
+      ...
+    1..2
+ok 84 - instrumentDb
+  ---
+  duration_ms: 7.501432
+  type: 'suite'
+  ...
+# Subtest: createDb — sqlite path traversal validation
+    # Subtest: rejects a relative path that resolves outside state/
+    ok 1 - rejects a relative path that resolves outside state/
+      ---
+      duration_ms: 6.493765
+      ...
+    # Subtest: rejects an absolute path outside the state root
+    ok 2 - rejects an absolute path outside the state root
+      ---
+      duration_ms: 1.714903
+      ...
+    # Subtest: accepts a path that legitimately sits inside state/
+    ok 3 - accepts a path that legitimately sits inside state/
+      ---
+      duration_ms: 86.2769
+      ...
+    # Subtest: respects FEEDER_STATE_ROOT for non-standard deployments
+    ok 4 - respects FEEDER_STATE_ROOT for non-standard deployments
+      ---
+      duration_ms: 56.125674
+      ...
+    # Subtest: accepts :memory: regardless of cwd
+    ok 5 - accepts :memory: regardless of cwd
+      ---
+      duration_ms: 8.178549
+      ...
+    1..5
+ok 85 - createDb — sqlite path traversal validation
+  ---
+  duration_ms: 162.676147
+  type: 'suite'
+  ...
+# Subtest: db-schema-parity
+    # Subtest: both schemas define the same set of tables
+    ok 1 - both schemas define the same set of tables
+      ---
+      duration_ms: 4.523042
+      ...
+    # Subtest: table 'processed_events': every SQLite column appears in Postgres
+    ok 2 - table 'processed_events': every SQLite column appears in Postgres
+      ---
+      duration_ms: 0.585104
+      ...
+    # Subtest: table 'processed_events': no extra columns in Postgres vs SQLite
+    ok 3 - table 'processed_events': no extra columns in Postgres vs SQLite
+      ---
+      duration_ms: 0.54206
+      ...
+    # Subtest: table 'chain_state': every SQLite column appears in Postgres
+    ok 4 - table 'chain_state': every SQLite column appears in Postgres
+      ---
+      duration_ms: 0.606807
+      ...
+    # Subtest: table 'chain_state': no extra columns in Postgres vs SQLite
+    ok 5 - table 'chain_state': no extra columns in Postgres vs SQLite
+      ---
+      duration_ms: 0.369064
+      ...
+    # Subtest: table 'transaction_log': every SQLite column appears in Postgres
+    ok 6 - table 'transaction_log': every SQLite column appears in Postgres
+      ---
+      duration_ms: 0.454943
+      ...
+    # Subtest: table 'transaction_log': no extra columns in Postgres vs SQLite
+    ok 7 - table 'transaction_log': no extra columns in Postgres vs SQLite
+      ---
+      duration_ms: 0.375426
+      ...
+    # Subtest: table 'contract_symbol_updates': every SQLite column appears in Postgres
+    ok 8 - table 'contract_symbol_updates': every SQLite column appears in Postgres
+      ---
+      duration_ms: 0.329
+      ...
+    # Subtest: table 'contract_symbol_updates': no extra columns in Postgres vs SQLite
+    ok 9 - table 'contract_symbol_updates': no extra columns in Postgres vs SQLite
+      ---
+      duration_ms: 0.419623
+      ...
+    # Subtest: table 'performance_metrics': every SQLite column appears in Postgres
+    ok 10 - table 'performance_metrics': every SQLite column appears in Postgres
+      ---
+      duration_ms: 0.451821
+      ...
+    # Subtest: table 'performance_metrics': no extra columns in Postgres vs SQLite
+    ok 11 - table 'performance_metrics': no extra columns in Postgres vs SQLite
+      ---
+      duration_ms: 0.361677
+      ...
+    # Subtest: table 'alert_log': every SQLite column appears in Postgres
+    ok 12 - table 'alert_log': every SQLite column appears in Postgres
+      ---
+      duration_ms: 0.343244
+      ...
+    # Subtest: table 'alert_log': no extra columns in Postgres vs SQLite
+    ok 13 - table 'alert_log': no extra columns in Postgres vs SQLite
+      ---
+      duration_ms: 6.576815
+      ...
+    # Subtest: table 'management_tx_totals': every SQLite column appears in Postgres
+    ok 14 - table 'management_tx_totals': every SQLite column appears in Postgres
+      ---
+      duration_ms: 0.443056
+      ...
+    # Subtest: table 'management_tx_totals': no extra columns in Postgres vs SQLite
+    ok 15 - table 'management_tx_totals': no extra columns in Postgres vs SQLite
+      ---
+      duration_ms: 0.143082
+      ...
+    1..15
+ok 86 - db-schema-parity
+  ---
+  duration_ms: 25.830394
+  type: 'suite'
+  ...
+# Subtest: createTransformer — individual operations
+    # Subtest: slice: extracts a substring at [start, end)
+    ok 1 - slice: extracts a substring at [start, end)
+      ---
+      duration_ms: 1.785341
+      ...
+    # Subtest: concat: joins multiple fields with a separator
+    ok 2 - concat: joins multiple fields with a separator
+      ---
+      duration_ms: 0.410452
+      ...
+    # Subtest: hash: produces keccak256 of the input string
+    ok 3 - hash: produces keccak256 of the input string
+      ---
+      duration_ms: 1.956128
+      ...
+    # Subtest: encode: ABI-encodes fields according to types
+    ok 4 - encode: ABI-encodes fields according to types
+      ---
+      duration_ms: 1.627566
+      ...
+    # Subtest: to_bigint: converts a numeric string to a decimal bigint string
+    ok 5 - to_bigint: converts a numeric string to a decimal bigint string
+      ---
+      duration_ms: 2.055304
+      ...
+    # Subtest: to_address: extracts the last 20 bytes from a bytes32 hex value
+    ok 6 - to_address: extracts the last 20 bytes from a bytes32 hex value
+      ---
+      duration_ms: 8.088026
+      ...
+    # Subtest: to_hex: converts a string value to 0x-prefixed hex
+    ok 7 - to_hex: converts a string value to 0x-prefixed hex
+      ---
+      duration_ms: 0.486035
+      ...
+    # Subtest: to_string: converts a bigint value to its string representation
+    ok 8 - to_string: converts a bigint value to its string representation
+      ---
+      duration_ms: 0.386819
+      ...
+    # Subtest: identity transformer is returned for an empty ops array
+    ok 9 - identity transformer is returned for an empty ops array
+      ---
+      duration_ms: 0.724195
+      ...
+    # Subtest: throws when a required input field is absent
+    ok 10 - throws when a required input field is absent
+      ---
+      duration_ms: 5.953642
+      ...
+    1..10
+ok 87 - createTransformer — individual operations
+  ---
+  duration_ms: 27.775159
+  type: 'suite'
+  ...
+# Subtest: buildTransformContext
+    # Subtest: datasource=event exposes ExtractedEvent fields
+    ok 1 - datasource=event exposes ExtractedEvent fields
+      ---
+      duration_ms: 1.368128
+      ...
+    # Subtest: datasource=enrichment merges OracleIntent fields on top of event fields
+    ok 2 - datasource=enrichment merges OracleIntent fields on top of event fields
+      ---
+      duration_ms: 5.006142
+      ...
+    # Subtest: datasource=processed produces the same merged context as enrichment
+    ok 3 - datasource=processed produces the same merged context as enrichment
+      ---
+      duration_ms: 2.117929
+      ...
+    # Subtest: datasource=enrichment with null intent returns only event fields
+    ok 4 - datasource=enrichment with null intent returns only event fields
+      ---
+      duration_ms: 0.48423
+      ...
+    1..4
+ok 88 - buildTransformContext
+  ---
+  duration_ms: 10.147506
+  type: 'suite'
+  ...
+# Subtest: evaluateCondition
+    # Subtest: undefined condition → true
+    ok 1 - undefined condition → true
+      ---
+      duration_ms: 0.914797
+      ...
+    # Subtest: empty string condition → true
+    ok 2 - empty string condition → true
+      ---
+      duration_ms: 0.413128
+      ...
+    # Subtest: equality: field == value passes when equal
+    ok 3 - equality: field == value passes when equal
+      ---
+      duration_ms: 0.676549
+      ...
+    # Subtest: equality: field == value fails when not equal
+    ok 4 - equality: field == value fails when not equal
+      ---
+      duration_ms: 0.969078
+      ...
+    # Subtest: inequality: field != value passes when different
+    ok 5 - inequality: field != value passes when different
+      ---
+      duration_ms: 0.522297
+      ...
+    # Subtest: inequality: field != value fails when same
+    ok 6 - inequality: field != value fails when same
+      ---
+      duration_ms: 0.499237
+      ...
+    # Subtest: template: ${fieldName} is resolved from context before comparison
+    ok 7 - template: ${fieldName} is resolved from context before comparison
+      ---
+      duration_ms: 0.502794
+      ...
+    # Subtest: template on lhs: ${field} resolves field value
+    ok 8 - template on lhs: ${field} resolves field value
+      ---
+      duration_ms: 0.785383
+      ...
+    # Subtest: unknown condition form → true (pass-through)
+    ok 9 - unknown condition form → true (pass-through)
+      ---
+      duration_ms: 0.381628
+      ...
+    1..9
+ok 89 - evaluateCondition
+  ---
+  duration_ms: 7.231398
+  type: 'suite'
+  ...
+# Subtest: createDedupCache
+    # Subtest: rejects invalid capacity
+    ok 1 - rejects invalid capacity
+      ---
+      duration_ms: 2.186973
+      ...
+    # Subtest: rejects negative ttlMs
+    ok 2 - rejects negative ttlMs
+      ---
+      duration_ms: 0.353791
+      ...
+    # Subtest: returns true (new) then false (duplicate) for the same hash
+    ok 3 - returns true (new) then false (duplicate) for the same hash
+      ---
+      duration_ms: 0.456508
+      ...
+    # Subtest: has() does not mutate counters
+    ok 4 - has() does not mutate counters
+      ---
+      duration_ms: 1.026578
+      ...
+    # Subtest: size() reflects current entry count
+    ok 5 - size() reflects current entry count
+      ---
+      duration_ms: 0.433565
+      ...
+    # Subtest: evicts the oldest entry when capacity is exceeded
+    ok 6 - evicts the oldest entry when capacity is exceeded
+      ---
+      duration_ms: 0.260385
+      ...
+    # Subtest: TTL expires entries
+    ok 7 - TTL expires entries
+      ---
+      duration_ms: 0.224969
+      ...
+    # Subtest: TTL=0 disables expiry
+    ok 8 - TTL=0 disables expiry
+      ---
+      duration_ms: 0.283541
+      ...
+    # Subtest: stats tracks hits and misses
+    ok 9 - stats tracks hits and misses
+      ---
+      duration_ms: 0.399842
+      ...
+    # Subtest: clear() resets all state
+    ok 10 - clear() resets all state
+      ---
+      duration_ms: 0.535507
+      ...
+    # Subtest: multiple items, no false positives
+    ok 11 - multiple items, no false positives
+      ---
+      duration_ms: 0.597637
+      ...
+    1..11
+ok 90 - createDedupCache
+  ---
+  duration_ms: 8.743836
+  type: 'suite'
+  ...
+# Subtest: createDedupCache — composite key
+    # Subtest: blocks a different intentHash that shares (symbol, signer, timestamp)
+    ok 1 - blocks a different intentHash that shares (symbol, signer, timestamp)
+      ---
+      duration_ms: 0.42677
+      ...
+    # Subtest: admits the same composite key after a different symbol
+    ok 2 - admits the same composite key after a different symbol
+      ---
+      duration_ms: 0.346469
+      ...
+    # Subtest: primary intentHash hit takes precedence over composite check
+    ok 3 - primary intentHash hit takes precedence over composite check
+      ---
+      duration_ms: 0.382061
+      ...
+    # Subtest: add without composite still works as before
+    ok 4 - add without composite still works as before
+      ---
+      duration_ms: 0.453364
+      ...
+    1..4
+ok 91 - createDedupCache — composite key
+  ---
+  duration_ms: 2.149824
+  type: 'suite'
+  ...
+# Subtest: EventWorkerPool — daemon parallel-mode wiring
+    # Subtest: delivers every submitted event to onEvent in parallel mode
+    ok 1 - delivers every submitted event to onEvent in parallel mode
+      ---
+      duration_ms: 23.892553
+      ...
+    # Subtest: emits stats so health queue depth wiring stays live
+    ok 2 - emits stats so health queue depth wiring stays live
+      ---
+      duration_ms: 12.609356
+      ...
+    # Subtest: returns false when the queue is saturated (no silent drops)
+    ok 3 - returns false when the queue is saturated (no silent drops)
+      ---
+      duration_ms: 1.278048
+      ...
+    1..3
+ok 92 - EventWorkerPool — daemon parallel-mode wiring
+  ---
+  duration_ms: 39.69276
+  type: 'suite'
+  ...
+# Subtest: createEventWorkerPool — construction validation
+    # Subtest: throws when processingTimeoutMs is 0
+    ok 1 - throws when processingTimeoutMs is 0
+      ---
+      duration_ms: 2.611975
+      ...
+    # Subtest: throws when processingTimeoutMs is negative
+    ok 2 - throws when processingTimeoutMs is negative
+      ---
+      duration_ms: 0.687351
+      ...
+    # Subtest: throws when workerCount < 1
+    ok 3 - throws when workerCount < 1
+      ---
+      duration_ms: 5.076588
+      ...
+    # Subtest: throws when queueSize < 1
+    ok 4 - throws when queueSize < 1
+      ---
+      duration_ms: 0.42439
+      ...
+    # Subtest: constructs successfully with valid positive options
+    ok 5 - constructs successfully with valid positive options
+      ---
+      duration_ms: 0.511524
+      ...
+    1..5
+ok 93 - createEventWorkerPool — construction validation
+  ---
+  duration_ms: 11.563837
+  type: 'suite'
+  ...
+# Subtest: createEventWorkerPool
+    # Subtest: submit returns false and increments dropped when queue is full
+    ok 1 - submit returns false and increments dropped when queue is full
+      ---
+      duration_ms: 26.554981
+      ...
+    # Subtest: processing timeout increments failed counter
+    ok 2 - processing timeout increments failed counter
+      ---
+      duration_ms: 102.787371
+      ...
+    # Subtest: graceful stop drains the queue
+    ok 3 - graceful stop drains the queue
+      ---
+      duration_ms: 49.0521
+      ...
+    # Subtest: received/processed/failed/dropped counts are accurate
+    ok 4 - received/processed/failed/dropped counts are accurate
+      ---
+      duration_ms: 14.063861
+      ...
+    # Subtest: activeWorkers decrements to zero after all tasks complete
+    ok 5 - activeWorkers decrements to zero after all tasks complete
+      ---
+      duration_ms: 23.631133
+      ...
+    # Subtest: avgProcessingMs is non-negative after processing events
+    ok 6 - avgProcessingMs is non-negative after processing events
+      ---
+      duration_ms: 14.555333
+      ...
+    # Subtest: stats reflects received count correctly
+    ok 7 - stats reflects received count correctly
+      ---
+      duration_ms: 16.757926
+      ...
+    1..7
+ok 94 - createEventWorkerPool
+  ---
+  duration_ms: 250.035425
+  type: 'suite'
+  ...
+# Subtest: price-cache: set/get
+    # Subtest: get returns undefined for a missing key before any set
+    ok 1 - get returns undefined for a missing key before any set
+      ---
+      duration_ms: 1.657571
+      ...
+    # Subtest: set then get round-trips the entry
+    ok 2 - set then get round-trips the entry
+      ---
+      duration_ms: 0.622997
+      ...
+    # Subtest: preserves a positive updatedAtMs when hydrating from persisted state
+    ok 3 - preserves a positive updatedAtMs when hydrating from persisted state
+      ---
+      duration_ms: 0.826589
+      ...
+    # Subtest: set overwrites an existing entry for the same key without changing size
+    ok 4 - set overwrites an existing entry for the same key without changing size
+      ---
+      duration_ms: 0.463004
+      ...
+    # Subtest: entries from different (routerId, destinationIndex, symbol) triples do not collide
+    ok 5 - entries from different (routerId, destinationIndex, symbol) triples do not collide
+      ---
+      duration_ms: 0.326585
+      ...
+    1..5
+ok 95 - price-cache: set/get
+  ---
+  duration_ms: 7.241781
+  type: 'suite'
+  ...
+# Subtest: price-cache: all/entries/size
+    # Subtest: all() is empty on a new cache and returns a snapshot
+    ok 1 - all() is empty on a new cache and returns a snapshot
+      ---
+      duration_ms: 6.119706
+      ...
+    # Subtest: size() tracks distinct keys
+    ok 2 - size() tracks distinct keys
+      ---
+      duration_ms: 0.460285
+      ...
+    # Subtest: entries() reconstructs the key, splitting symbols that contain ':'
+    ok 3 - entries() reconstructs the key, splitting symbols that contain ':'
+      ---
+      duration_ms: 0.496845
+      ...
+    # Subtest: entries() yields the same count as size()
+    ok 4 - entries() yields the same count as size()
+      ---
+      duration_ms: 0.485793
+      ...
+    1..4
+ok 96 - price-cache: all/entries/size
+  ---
+  duration_ms: 9.169272
+  type: 'suite'
+  ...
+# Subtest: computePriceDeviationPct
+    # Subtest: returns undefined when oldPrice is 0 (no baseline)
+    ok 1 - returns undefined when oldPrice is 0 (no baseline)
+      ---
+      duration_ms: 2.525334
+      ...
+    # Subtest: returns 0 when the price is unchanged
+    ok 2 - returns 0 when the price is unchanged
+      ---
+      duration_ms: 1.114429
+      ...
+    # Subtest: computes a symmetric absolute deviation (up move)
+    ok 3 - computes a symmetric absolute deviation (up move)
+      ---
+      duration_ms: 1.114378
+      ...
+    # Subtest: computes a symmetric absolute deviation (down move)
+    ok 4 - computes a symmetric absolute deviation (down move)
+      ---
+      duration_ms: 0.735872
+      ...
+    # Subtest: keeps fractional precision below 1%
+    ok 5 - keeps fractional precision below 1%
+      ---
+      duration_ms: 0.720572
+      ...
+    1..5
+ok 97 - computePriceDeviationPct
+  ---
+  duration_ms: 10.684303
+  type: 'suite'
+  ...
+# Subtest: parseDurationMs
+    # Subtest: returns undefined for undefined input
+    ok 1 - returns undefined for undefined input
+      ---
+      duration_ms: 1.35721
+      ...
+    # Subtest: returns undefined for empty string
+    ok 2 - returns undefined for empty string
+      ---
+      duration_ms: 7.914356
+      ...
+    # Subtest: parses seconds
+    ok 3 - parses seconds
+      ---
+      duration_ms: 0.362548
+      ...
+    # Subtest: parses minutes
+    ok 4 - parses minutes
+      ---
+      duration_ms: 0.58624
+      ...
+    # Subtest: parses hours
+    ok 5 - parses hours
+      ---
+      duration_ms: 0.227189
+      ...
+    # Subtest: parses milliseconds
+    ok 6 - parses milliseconds
+      ---
+      duration_ms: 0.183698
+      ...
+    # Subtest: parses compound durations
+    ok 7 - parses compound durations
+      ---
+      duration_ms: 0.446424
+      ...
+    # Subtest: parses fractional seconds
+    ok 8 - parses fractional seconds
+      ---
+      duration_ms: 0.336957
+      ...
+    # Subtest: throws on unrecognised format
+    ok 9 - throws on unrecognised format
+      ---
+      duration_ms: 0.740687
+      ...
+    # Subtest: returns 0 for the '0s' disabled-gate sentinel
+    ok 10 - returns 0 for the '0s' disabled-gate sentinel
+      ---
+      duration_ms: 0.20861
+      ...
+    # Subtest: throws on a negative duration (the regex rejects the leading '-')
+    ok 11 - throws on a negative duration (the regex rejects the leading '-')
+      ---
+      duration_ms: 0.427738
+      ...
+    # Subtest: parses a max_staleness-style long duration
+    ok 12 - parses a max_staleness-style long duration
+      ---
+      duration_ms: 0.382204
+      ...
+    1..12
+ok 98 - parseDurationMs
+  ---
+  duration_ms: 18.141263
+  type: 'suite'
+  ...
+# Subtest: parseDeviationPct
+    # Subtest: returns undefined for undefined input
+    ok 1 - returns undefined for undefined input
+      ---
+      duration_ms: 0.714359
+      ...
+    # Subtest: returns undefined for empty string
+    ok 2 - returns undefined for empty string
+      ---
+      duration_ms: 0.308261
+      ...
+    # Subtest: parses integer percent
+    ok 3 - parses integer percent
+      ---
+      duration_ms: 0.400957
+      ...
+    # Subtest: parses fractional percent
+    ok 4 - parses fractional percent
+      ---
+      duration_ms: 0.269379
+      ...
+    # Subtest: throws when % suffix is absent
+    ok 5 - throws when % suffix is absent
+      ---
+      duration_ms: 0.208295
+      ...
+    # Subtest: throws on negative percent
+    ok 6 - throws on negative percent
+      ---
+      duration_ms: 0.193236
+      ...
+    1..6
+ok 99 - parseDeviationPct
+  ---
+  duration_ms: 2.534524
+  type: 'suite'
+  ...
+# Subtest: createPolicyGate — no thresholds
+    # Subtest: always allows when no thresholds configured
+    ok 1 - always allows when no thresholds configured
+      ---
+      duration_ms: 3.961034
+      ...
+    # Subtest: allows even with a cached entry when no thresholds
+    ok 2 - allows even with a cached entry when no thresholds
+      ---
+      duration_ms: 8.386168
+      ...
+    1..2
+ok 100 - createPolicyGate — no thresholds
+  ---
+  duration_ms: 12.794656
+  type: 'suite'
+  ...
+# Subtest: createPolicyGate — time_threshold
+    # Subtest: allows when no prior entry exists
+    ok 1 - allows when no prior entry exists
+      ---
+      duration_ms: 0.651186
+      ...
+    # Subtest: blocks when elapsed time < threshold
+    ok 2 - blocks when elapsed time < threshold
+      ---
+      duration_ms: 1.121959
+      ...
+    # Subtest: allows when elapsed time >= threshold
+    ok 3 - allows when elapsed time >= threshold
+      ---
+      duration_ms: 0.93193
+      ...
+    1..3
+ok 101 - createPolicyGate — time_threshold
+  ---
+  duration_ms: 3.779232
+  type: 'suite'
+  ...
+# Subtest: createPolicyGate — price_deviation
+    # Subtest: allows when no prior entry exists
+    ok 1 - allows when no prior entry exists
+      ---
+      duration_ms: 5.603455
+      ...
+    # Subtest: blocks when deviation is below threshold
+    ok 2 - blocks when deviation is below threshold
+      ---
+      duration_ms: 13.420446
+      ...
+    # Subtest: allows when deviation meets threshold
+    ok 3 - allows when deviation meets threshold
+      ---
+      duration_ms: 0.331424
+      ...
+    # Subtest: allows when old price is zero (avoids division by zero)
+    ok 4 - allows when old price is zero (avoids division by zero)
+      ---
+      duration_ms: 0.267985
+      ...
+    1..4
+ok 102 - createPolicyGate — price_deviation
+  ---
+  duration_ms: 20.544801
+  type: 'suite'
+  ...
+# Subtest: createPolicyGate — both thresholds (OR-gate)
+    # Subtest: passes when only time passes (price fails)
+    ok 1 - passes when only time passes (price fails)
+      ---
+      duration_ms: 0.341385
+      ...
+    # Subtest: passes when only price passes (time fails)
+    ok 2 - passes when only price passes (time fails)
+      ---
+      duration_ms: 0.27407
+      ...
+    # Subtest: suppresses when BOTH fail — returns time_threshold verdict
+    ok 3 - suppresses when BOTH fail — returns time_threshold verdict
+      ---
+      duration_ms: 0.496674
+      ...
+    # Subtest: passes when both pass
+    ok 4 - passes when both pass
+      ---
+      duration_ms: 0.263271
+      ...
+    1..4
+ok 103 - createPolicyGate — both thresholds (OR-gate)
+  ---
+  duration_ms: 1.607437
+  type: 'suite'
+  ...
+# Subtest: createPolicyGate — deviation-only push mode (max_staleness)
+    # Subtest: passes on deviation while still within the staleness window
+    ok 1 - passes on deviation while still within the staleness window
+      ---
+      duration_ms: 6.294524
+      ...
+    # Subtest: blocks on a flat price within the staleness window (reason max_staleness)
+    ok 2 - blocks on a flat price within the staleness window (reason max_staleness)
+      ---
+      duration_ms: 0.69014
+      ...
+    # Subtest: passes once age exceeds max_staleness even with a flat price
+    ok 3 - passes once age exceeds max_staleness even with a flat price
+      ---
+      duration_ms: 0.567304
+      ...
+    # Subtest: treats time_threshold '0s' the same as absent (deviation-only mode)
+    ok 4 - treats time_threshold '0s' the same as absent (deviation-only mode)
+      ---
+      duration_ms: 6.104076
+      ...
+    # Subtest: blocks within window when no deviation gate is set (max_staleness only)
+    ok 5 - blocks within window when no deviation gate is set (max_staleness only)
+      ---
+      duration_ms: 4.007017
+      ...
+    # Subtest: always passes when no prior entry exists
+    ok 6 - always passes when no prior entry exists
+      ---
+      duration_ms: 0.609222
+      ...
+    # Subtest: is IGNORED when time_threshold > 0 (classic OR-gate preserved)
+    ok 7 - is IGNORED when time_threshold > 0 (classic OR-gate preserved)
+      ---
+      duration_ms: 0.575473
+      ...
+    # Subtest: still enforces timestamp monotonicity before the staleness check
+    ok 8 - still enforces timestamp monotonicity before the staleness check
+      ---
+      duration_ms: 0.681882
+      ...
+    1..8
+ok 104 - createPolicyGate — deviation-only push mode (max_staleness)
+  ---
+  duration_ms: 20.711355
+  type: 'suite'
+  ...
+# Subtest: createPolicyGate — filterReason on suppressed verdicts
+    # Subtest: includes filterReason string on time_threshold verdict
+    ok 1 - includes filterReason string on time_threshold verdict
+      ---
+      duration_ms: 0.73102
+      ...
+    # Subtest: includes filterReason string on price_deviation verdict
+    ok 2 - includes filterReason string on price_deviation verdict
+      ---
+      duration_ms: 0.629682
+      ...
+    1..2
+ok 105 - createPolicyGate — filterReason on suppressed verdicts
+  ---
+  duration_ms: 1.792986
+  type: 'suite'
+  ...
+# Subtest: createPolicyGate — timestamp monotonicity
+    # Subtest: suppresses with timestamp_regression when new < last
+    ok 1 - suppresses with timestamp_regression when new < last
+      ---
+      duration_ms: 3.147204
+      ...
+    # Subtest: suppresses with timestamp_duplicate when new === last
+    ok 2 - suppresses with timestamp_duplicate when new === last
+      ---
+      duration_ms: 0.525078
+      ...
+    # Subtest: allows when newTimestamp > lastTimestamp
+    ok 3 - allows when newTimestamp > lastTimestamp
+      ---
+      duration_ms: 0.551793
+      ...
+    # Subtest: skips timestamp check when newTimestamp is not provided
+    ok 4 - skips timestamp check when newTimestamp is not provided
+      ---
+      duration_ms: 4.055834
+      ...
+    # Subtest: timestamp check runs before OR-gate thresholds
+    ok 5 - timestamp check runs before OR-gate thresholds
+      ---
+      duration_ms: 0.504462
+      ...
+    1..5
+ok 106 - createPolicyGate — timestamp monotonicity
+  ---
+  duration_ms: 9.654068
+  type: 'suite'
+  ...
+# Subtest: createRouterRegistry
+    # Subtest: excludes disabled routers
+    ok 1 - excludes disabled routers
+      ---
+      duration_ms: 1.431239
+      ...
+    # Subtest: forEvent returns routers subscribed to that event
+    ok 2 - forEvent returns routers subscribed to that event
+      ---
+      duration_ms: 0.292894
+      ...
+    # Subtest: one router can subscribe to multiple events
+    ok 3 - one router can subscribe to multiple events
+      ---
+      duration_ms: 0.357962
+      ...
+    # Subtest: returns empty all for empty config
+    ok 4 - returns empty all for empty config
+      ---
+      duration_ms: 0.782544
+      ...
+    1..4
+ok 107 - createRouterRegistry
+  ---
+  duration_ms: 4.156677
+  type: 'suite'
+  ...
+# Subtest: routeIntent — no conditions
+    # Subtest: dispatches when router has no conditions
+    ok 1 - dispatches when router has no conditions
+      ---
+      duration_ms: 1.013817
+      ...
+    # Subtest: returns empty dispatch for unknown event
+    ok 2 - returns empty dispatch for unknown event
+      ---
+      duration_ms: 0.311747
+      ...
+    1..2
+ok 108 - routeIntent — no conditions
+  ---
+  duration_ms: 1.802687
+  type: 'suite'
+  ...
+# Subtest: routeIntent — eq condition
+    # Subtest: passes when field matches
+    ok 1 - passes when field matches
+      ---
+      duration_ms: 0.603981
+      ...
+    # Subtest: filters when field does not match
+    ok 2 - filters when field does not match
+      ---
+      duration_ms: 0.510515
+      ...
+    1..2
+ok 109 - routeIntent — eq condition
+  ---
+  duration_ms: 1.404023
+  type: 'suite'
+  ...
+# Subtest: routeIntent — in condition
+    # Subtest: passes when field is in list
+    ok 1 - passes when field is in list
+      ---
+      duration_ms: 7.412365
+      ...
+    # Subtest: accepts DIA/Spectra fullIntent field paths
+    ok 2 - accepts DIA/Spectra fullIntent field paths
+      ---
+      duration_ms: 1.776997
+      ...
+    1..2
+ok 110 - routeIntent — in condition
+  ---
+  duration_ms: 9.435981
+  type: 'suite'
+  ...
+# Subtest: routeIntent — neq / not_in conditions
+    # Subtest: neq passes when field is not equal
+    ok 1 - neq passes when field is not equal
+      ---
+      duration_ms: 0.569722
+      ...
+    # Subtest: not_in filters when field is in the exclusion list
+    ok 2 - not_in filters when field is in the exclusion list
+      ---
+      duration_ms: 0.523775
+      ...
+    1..2
+ok 111 - routeIntent — neq / not_in conditions
+  ---
+  duration_ms: 1.329847
+  type: 'suite'
+  ...
+# Subtest: routeIntent — gt / lt conditions on numeric fields
+    # Subtest: gt passes when field is greater than value
+    ok 1 - gt passes when field is greater than value
+      ---
+      duration_ms: 0.515484
+      ...
+    1..1
+ok 112 - routeIntent — gt / lt conditions on numeric fields
+  ---
+  duration_ms: 0.702539
+  type: 'suite'
+  ...
+# Subtest: routeIntent — contains condition
+    # Subtest: passes when field contains substring
+    ok 1 - passes when field contains substring
+      ---
+      duration_ms: 0.441242
+      ...
+    1..1
+ok 113 - routeIntent — contains condition
+  ---
+  duration_ms: 0.588632
+  type: 'suite'
+  ...
+# Subtest: routeIntent — policy gating
+    # Subtest: populates policyFiltered when time_threshold blocks
+    ok 1 - populates policyFiltered when time_threshold blocks
+      ---
+      duration_ms: 0.803593
+      ...
+    1..1
+ok 114 - routeIntent — policy gating
+  ---
+  duration_ms: 0.936016
+  type: 'suite'
+  ...
+# Subtest: routeIntent — deviation surfacing
+    # Subtest: attaches deviationPct to a dispatched result when a prior price exists
+    ok 1 - attaches deviationPct to a dispatched result when a prior price exists
+      ---
+      duration_ms: 0.372995
+      ...
+    # Subtest: leaves deviationPct undefined on the first update (empty cache)
+    ok 2 - leaves deviationPct undefined on the first update (empty cache)
+      ---
+      duration_ms: 6.284969
+      ...
+    1..2
+ok 115 - routeIntent — deviation surfacing
+  ---
+  duration_ms: 7.01881
+  type: 'suite'
+  ...
+# Subtest: extractRouterSymbols
+    # Subtest: operator=eq on event.symbol returns the single symbol
+    ok 1 - operator=eq on event.symbol returns the single symbol
+      ---
+      duration_ms: 3.482527
+      ...
+    # Subtest: operator=in on event.symbol returns all symbols in the array
+    ok 2 - operator=in on event.symbol returns all symbols in the array
+      ---
+      duration_ms: 0.426322
+      ...
+    # Subtest: recognises the templated ${enrichment.fullIntent.symbol} field
+    ok 3 - recognises the templated ${enrichment.fullIntent.symbol} field
+      ---
+      duration_ms: 0.248231
+      ...
+    # Subtest: recognises the capital-S enrichment.fullIntent.Symbol field
+    ok 4 - recognises the capital-S enrichment.fullIntent.Symbol field
+      ---
+      duration_ms: 0.254695
+      ...
+    # Subtest: ignores non-symbol field conditions
+    ok 5 - ignores non-symbol field conditions
+      ---
+      duration_ms: 0.494233
+      ...
+    # Subtest: returns [] when the router has no conditions
+    ok 6 - returns [] when the router has no conditions
+      ---
+      duration_ms: 0.249768
+      ...
+    # Subtest: deduplicates a symbol named by multiple conditions
+    ok 7 - deduplicates a symbol named by multiple conditions
+      ---
+      duration_ms: 0.515944
+      ...
+    # Subtest: skips non-string values inside an `in` array
+    ok 8 - skips non-string values inside an `in` array
+      ---
+      duration_ms: 0.23925
+      ...
+    1..8
+ok 116 - extractRouterSymbols
+  ---
+  duration_ms: 8.004765
+  type: 'suite'
+  ...
+# Subtest: clientIdFromStatePath
+    # Subtest: strips the directory and .json suffix
+    ok 1 - strips the directory and .json suffix
+      ---
+      duration_ms: 1.514135
+      ...
+    # Subtest: normalises Windows-style separators
+    ok 2 - normalises Windows-style separators
+      ---
+      duration_ms: 0.469993
+      ...
+    # Subtest: returns the basename unchanged when there is no .json suffix
+    ok 3 - returns the basename unchanged when there is no .json suffix
+      ---
+      duration_ms: 0.795221
+      ...
+    1..3
+ok 117 - clientIdFromStatePath
+  ---
+  duration_ms: 17.229442
+  type: 'suite'
+  ...
+# Subtest: buildRouterIdentity
+    # Subtest: resolves every dimension from the destination plus the router's customer
+    ok 1 - resolves every dimension from the destination plus the router's customer
+      ---
+      duration_ms: 0.769513
+      ...
+    # Subtest: two routers on the same client share clientId and laneKey but keep distinct routerId
+    ok 2 - two routers on the same client share clientId and laneKey but keep distinct routerId
+      ---
+      duration_ms: 0.178425
+      ...
+    1..2
+ok 118 - buildRouterIdentity
+  ---
+  duration_ms: 1.147684
+  type: 'suite'
+  ...
+# Subtest: evaluateFeedSanity
+    # Subtest: PASS when on-chain price matches the source and is fresh
+    ok 1 - PASS when on-chain price matches the source and is fresh
+      ---
+      duration_ms: 2.04858
+      ...
+    # Subtest: PASS when price drift is within tolerance and fresh
+    ok 2 - PASS when price drift is within tolerance and fresh
+      ---
+      duration_ms: 0.325322
+      ...
+    # Subtest: WARN when price drift exceeds tolerance but the feed is still fresh
+    ok 3 - WARN when price drift exceeds tolerance but the feed is still fresh
+      ---
+      duration_ms: 0.355452
+      ...
+    # Subtest: WARN when the price matches but the on-chain value is stale past the freshness window
+    ok 4 - WARN when the price matches but the on-chain value is stale past the freshness window
+      ---
+      duration_ms: 0.361843
+      ...
+    # Subtest: FAIL when the price drifted past tolerance AND the value is stale
+    ok 5 - FAIL when the price drifted past tolerance AND the value is stale
+      ---
+      duration_ms: 0.225552
+      ...
+    # Subtest: FAIL when there is no on-chain Pair UTxO for a configured feed
+    ok 6 - FAIL when there is no on-chain Pair UTxO for a configured feed
+      ---
+      duration_ms: 0.204063
+      ...
+    # Subtest: WARN when no source intent is available to compare against
+    ok 7 - WARN when no source intent is available to compare against
+      ---
+      duration_ms: 0.293295
+      ...
+    # Subtest: WARN (not a deviation failure) when the source price is zero — not comparable
+    ok 8 - WARN (not a deviation failure) when the source price is zero — not comparable
+      ---
+      duration_ms: 0.222994
+      ...
+    # Subtest: PASS and clamps staleness to 0 when the on-chain value is ahead of the source snapshot
+    ok 9 - PASS and clamps staleness to 0 when the on-chain value is ahead of the source snapshot
+      ---
+      duration_ms: 0.287334
+      ...
+    1..9
+ok 119 - evaluateFeedSanity
+  ---
+  duration_ms: 5.995038
+  type: 'suite'
+  ...
+# Subtest: deriveFeedThresholds
+    # Subtest: uses time_threshold as the freshness ceiling when it is set (OR-gate mode)
+    ok 1 - uses time_threshold as the freshness ceiling when it is set (OR-gate mode)
+      ---
+      duration_ms: 0.699851
+      ...
+    # Subtest: uses max_staleness as the ceiling when time_threshold is off (deviation-only mode)
+    ok 2 - uses max_staleness as the ceiling when time_threshold is off (deviation-only mode)
+      ---
+      duration_ms: 0.341297
+      ...
+    # Subtest: has no freshness ceiling when neither time_threshold nor max_staleness is set
+    ok 3 - has no freshness ceiling when neither time_threshold nor max_staleness is set
+      ---
+      duration_ms: 0.286755
+      ...
+    # Subtest: has no price tolerance when price_deviation is not configured
+    ok 4 - has no price tolerance when price_deviation is not configured
+      ---
+      duration_ms: 0.203758
+      ...
+    1..4
+ok 120 - deriveFeedThresholds
+  ---
+  duration_ms: 1.880082
+  type: 'suite'
+  ...
+# Subtest: summarizeFeedSanity
+    # Subtest: counts feeds by status and keeps the per-feed results
+    ok 1 - counts feeds by status and keeps the per-feed results
+      ---
+      duration_ms: 1.996882
+      ...
+    1..1
+ok 121 - summarizeFeedSanity
+  ---
+  duration_ms: 2.146542
+  type: 'suite'
+  ...
+# Subtest: runFeedSanityChecks
+    # Subtest: evaluates each symbol with its readers and thresholds
+    ok 1 - evaluates each symbol with its readers and thresholds
+      ---
+      duration_ms: 0.490395
+      ...
+    1..1
+ok 122 - runFeedSanityChecks
+  ---
+  duration_ms: 0.639622
+  type: 'suite'
+  ...
+# Subtest: formatFeedSanityReport
+    # Subtest: renders a per-feed table and a machine-readable object
+    ok 1 - renders a per-feed table and a machine-readable object
+      ---
+      duration_ms: 0.47008
+      ...
+    1..1
+ok 123 - formatFeedSanityReport
+  ---
+  duration_ms: 0.585119
+  type: 'suite'
+  ...
+# Subtest: pickLatestIntentPerSymbol
+    # Subtest: keeps the newest intent per symbol
+    ok 1 - keeps the newest intent per symbol
+      ---
+      duration_ms: 0.333498
+      ...
+    1..1
+ok 124 - pickLatestIntentPerSymbol
+  ---
+  duration_ms: 0.432625
+  type: 'suite'
+  ...
+# Subtest: sanityStatusCode
+    # Subtest: encodes the status as 0 PASS / 1 WARN / 2 FAIL for the gauge
+    ok 1 - encodes the status as 0 PASS / 1 WARN / 2 FAIL for the gauge
+      ---
+      duration_ms: 1.509897
+      ...
+    1..1
+ok 125 - sanityStatusCode
+  ---
+  duration_ms: 1.710794
+  type: 'suite'
+  ...
+# Subtest: readOnChainPairs
+    # Subtest: decodes pair UTxOs and keys them by symbol, skipping non-pair and datumless utxos
+    ok 1 - decodes pair UTxOs and keys them by symbol, skipping non-pair and datumless utxos
+      ---
+      duration_ms: 0.766068
+      ...
+    1..1
+ok 126 - readOnChainPairs
+  ---
+  duration_ms: 0.921089
+  type: 'suite'
+  ...
+# Subtest: createDbCheckpoint
+    # Subtest: load() returns null when the chain_state row does not exist
+    ok 1 - load() returns null when the chain_state row does not exist
+      ---
+      duration_ms: 39.393541
+      ...
+    # Subtest: save() persists the block and load() returns it as bigint
+    ok 2 - save() persists the block and load() returns it as bigint
+      ---
+      duration_ms: 8.348714
+      ...
+    # Subtest: save() propagates the error when the chain_state row is missing (no silent swallow)
+    ok 3 - save() propagates the error when the chain_state row is missing (no silent swallow)
+      ---
+      duration_ms: 5.355072
+      ...
+    # Subtest: uses the configured chainId/contractId for both load and save
+    ok 4 - uses the configured chainId/contractId for both load and save
+      ---
+      duration_ms: 6.951168
+      ...
+    1..4
+ok 127 - createDbCheckpoint
+  ---
+  duration_ms: 61.726784
+  type: 'suite'
+  ...
+# Subtest: decodeIntentRegisteredLog
+    # Subtest: decodes a well-formed log into ExtractedEvent
+    ok 1 - decodes a well-formed log into ExtractedEvent
+      ---
+      duration_ms: 18.804637
+      ...
+    # Subtest: throws with txHash and logIndex when decoding fails
+    ok 2 - throws with txHash and logIndex when decoding fails
+      ---
+      duration_ms: 1.645776
+      ...
+    1..2
+ok 128 - decodeIntentRegisteredLog
+  ---
+  duration_ms: 22.684303
+  type: 'suite'
+  ...
+# Subtest: createIntentRegisteredDecoder
+    # Subtest: returns a reusable decoder that produces the same result as the direct call
+    ok 1 - returns a reusable decoder that produces the same result as the direct call
+      ---
+      duration_ms: 4.063353
+      ...
+    1..1
+ok 129 - createIntentRegisteredDecoder
+  ---
+  duration_ms: 4.352665
+  type: 'suite'
+  ...
+# Subtest: decodeIntentRegisteredLogs
+    # Subtest: decodes a batch and preserves order
+    ok 1 - decodes a batch and preserves order
+      ---
+      duration_ms: 2.2802
+      ...
+    # Subtest: wraps a bad log error with tx hash and logIndex context
+    ok 2 - wraps a bad log error with tx hash and logIndex context
+      ---
+      duration_ms: 0.781891
+      ...
+    # Subtest: returns empty array for empty input
+    ok 3 - returns empty array for empty input
+      ---
+      duration_ms: 0.43433
+      ...
+    1..3
+ok 130 - decodeIntentRegisteredLogs
+  ---
+  duration_ms: 4.003227
+  type: 'suite'
+  ...
+# Subtest: parseSignedIntent
+    # Subtest: maps a CLI signed-intent into an EnrichedIntent with bigint numerics
+    ok 1 - maps a CLI signed-intent into an EnrichedIntent with bigint numerics
+      ---
+      duration_ms: 3.798266
+      ...
+    # Subtest: takes the intent hash from the witness and leaves source-chain fields empty
+    ok 2 - takes the intent hash from the witness and leaves source-chain fields empty
+      ---
+      duration_ms: 1.394779
+      ...
+    # Subtest: rejects a payload missing the witness intent hash
+    ok 3 - rejects a payload missing the witness intent hash
+      ---
+      duration_ms: 0.705112
+      ...
+    # Subtest: rejects a payload whose numeric field is not an integer string
+    ok 4 - rejects a payload whose numeric field is not an integer string
+      ---
+      duration_ms: 0.499928
+      ...
+    1..4
+ok 131 - parseSignedIntent
+  ---
+  duration_ms: 8.351946
+  type: 'suite'
+  ...
+# Subtest: injectPendingIntents
+    # Subtest: returns zero when the inject directory is absent
+    ok 1 - returns zero when the inject directory is absent
+      ---
+      duration_ms: 19.169121
+      ...
+    # Subtest: feeds each signed-intent file through onEnriched and archives it
+    ok 2 - feeds each signed-intent file through onEnriched and archives it
+      ---
+      duration_ms: 10.434456
+      ...
+    # Subtest: does not reprocess an already-archived file on a second pass
+    ok 3 - does not reprocess an already-archived file on a second pass
+      ---
+      duration_ms: 33.082306
+      ...
+    # Subtest: ignores non-JSON files and the processed subdir
+    ok 4 - ignores non-JSON files and the processed subdir
+      ---
+      duration_ms: 7.452964
+      ...
+    # Subtest: archives a malformed file and reports it, without calling onEnriched
+    ok 5 - archives a malformed file and reports it, without calling onEnriched
+      ---
+      duration_ms: 7.731122
+      ...
+    # Subtest: stops the batch when onEnriched throws, leaving the file for a later pass
+    ok 6 - stops the batch when onEnriched throws, leaving the file for a later pass
+      ---
+      duration_ms: 11.649857
+      ...
+    1..6
+ok 132 - injectPendingIntents
+  ---
+  duration_ms: 91.225143
+  type: 'suite'
+  ...
+# Subtest: composeAuthenticatedWsUrl
+    # Subtest: appends the credential as a path segment and trims trailing slashes
+    ok 1 - appends the credential as a path segment and trims trailing slashes
+      ---
+      duration_ms: 1.430805
+      ...
+    # Subtest: URL-encodes special characters in the credential
+    ok 2 - URL-encodes special characters in the credential
+      ---
+      duration_ms: 0.831034
+      ...
+    # Subtest: throws when the credential env var is missing
+    ok 3 - throws when the credential env var is missing
+      ---
+      duration_ms: 0.588479
+      ...
+    1..3
+ok 133 - composeAuthenticatedWsUrl
+  ---
+  duration_ms: 3.96993
+  type: 'suite'
+  ...
+# Subtest: resolveSourceFromConfig — structural validation
+    # Subtest: throws when infrastructure.source is missing
+    ok 1 - throws when infrastructure.source is missing
+      ---
+      duration_ms: 0.726623
+      ...
+    # Subtest: throws when chain_id is not a number
+    ok 2 - throws when chain_id is not a number
+      ---
+      duration_ms: 0.520714
+      ...
+    # Subtest: throws when rpc_urls is empty
+    ok 3 - throws when rpc_urls is empty
+      ---
+      duration_ms: 0.542761
+      ...
+    1..3
+ok 134 - resolveSourceFromConfig — structural validation
+  ---
+  duration_ms: 2.152995
+  type: 'suite'
+  ...
+# Subtest: processLogBatch — blockTimestamp wiring
+    # Subtest: leaves blockTimestamp at 0n when no resolver is supplied
+    ok 1 - leaves blockTimestamp at 0n when no resolver is supplied
+      ---
+      duration_ms: 10.574239
+      ...
+    # Subtest: populates blockTimestamp from the resolver and caches per-block lookups
+    ok 2 - populates blockTimestamp from the resolver and caches per-block lookups
+      ---
+      duration_ms: 13.718678
+      ...
+    1..2
+ok 135 - processLogBatch — blockTimestamp wiring
+  ---
+  duration_ms: 25.679245
+  type: 'suite'
+  ...
+# Subtest: runHttpScanner — reorg recovery (R10.B.2)
+    # Subtest: rewinds the cursor to re-scan when HEAD drops below the high-water mark
+    ok 1 - rewinds the cursor to re-scan when HEAD drops below the high-water mark
+      ---
+      duration_ms: 2.51639
+      ...
+    1..1
+ok 136 - runHttpScanner — reorg recovery (R10.B.2)
+  ---
+  duration_ms: 3.358737
+  type: 'suite'
+  ...
+# Subtest: runHttpScanner — transient RPC error retry
+    # Subtest: retries on a transient RPC error instead of throwing (does not exit the daemon)
+    ok 1 - retries on a transient RPC error instead of throwing (does not exit the daemon)
+      ---
+      duration_ms: 10.921185
+      ...
+    1..1
+ok 137 - runHttpScanner — transient RPC error retry
+  ---
+  duration_ms: 11.248327
+  type: 'suite'
+  ...
+# Subtest: runHttpScanner — gap recovery (backward_sync catch-up)
+    # Subtest: uses BACKFILL_CHUNK_BLOCKS while gap > maxBlockGap, then switches to blockRange chunks
+    ok 1 - uses BACKFILL_CHUNK_BLOCKS while gap > maxBlockGap, then switches to blockRange chunks
+      ---
+      duration_ms: 40.315011
+      ...
+    # Subtest: does NOT use backfill mode when backwardSync is disabled — uses blockRange chunks
+    ok 2 - does NOT use backfill mode when backwardSync is disabled — uses blockRange chunks
+      ---
+      duration_ms: 17.402937
+      ...
+    # Subtest: retries head-fetch RPC errors (counts them, does not throw)
+    ok 3 - retries head-fetch RPC errors (counts them, does not throw)
+      ---
+      duration_ms: 50.696173
+      ...
+    1..3
+ok 138 - runHttpScanner — gap recovery (backward_sync catch-up)
+  ---
+  duration_ms: 109.30859
+  type: 'suite'
+  ...
+# Subtest: runHttpScanner — backfillChunkBlocks option
+    # Subtest: uses the provided backfillChunkBlocks instead of the BACKFILL_CHUNK_BLOCKS constant
+    ok 1 - uses the provided backfillChunkBlocks instead of the BACKFILL_CHUNK_BLOCKS constant
+      ---
+      duration_ms: 40.592394
+      ...
+    1..1
+ok 139 - runHttpScanner — backfillChunkBlocks option
+  ---
+  duration_ms: 40.949525
+  type: 'suite'
+  ...
+# Subtest: runHttpScanner — health: a head-fetch error is counted (drives is_healthy=false), not thrown
+    # Subtest: increments the rpcErrors counter on a head-fetch failure and keeps retrying instead of exiting
+    ok 1 - increments the rpcErrors counter on a head-fetch failure and keeps retrying instead of exiting
+      ---
+      duration_ms: 50.900879
+      ...
+    1..1
+ok 140 - runHttpScanner — health: a head-fetch error is counted (drives is_healthy=false), not thrown
+  ---
+  duration_ms: 51.320529
+  type: 'suite'
+  ...
+# Subtest: nextDelay — WS reconnect backoff
+    # Subtest: delay grows exponentially across attempts
+    ok 1 - delay grows exponentially across attempts
+      ---
+      duration_ms: 0.690682
+      ...
+    # Subtest: nextDelay is capped at MAX_RECONNECT_MS
+    ok 2 - nextDelay is capped at MAX_RECONNECT_MS
+      ---
+      duration_ms: 0.352442
+      ...
+    # Subtest: nextDelay(0) equals the base delay
+    ok 3 - nextDelay(0) equals the base delay
+      ---
+      duration_ms: 0.241403
+      ...
+    1..3
+ok 141 - nextDelay — WS reconnect backoff
+  ---
+  duration_ms: 1.676345
+  type: 'suite'
+  ...
+# Subtest: toRegistryLog
+    # Subtest: passes a fully-mined log through unchanged
+    ok 1 - passes a fully-mined log through unchanged
+      ---
+      duration_ms: 1.877209
+      ...
+    # Subtest: throws when blockNumber is null (pending tx) instead of defaulting to 0n
+    ok 2 - throws when blockNumber is null (pending tx) instead of defaulting to 0n
+      ---
+      duration_ms: 0.746884
+      ...
+    # Subtest: throws when transactionHash is null instead of defaulting to 0x
+    ok 3 - throws when transactionHash is null instead of defaulting to 0x
+      ---
+      duration_ms: 0.39802
+      ...
+    # Subtest: throws when logIndex is null instead of defaulting to 0
+    ok 4 - throws when logIndex is null instead of defaulting to 0
+      ---
+      duration_ms: 0.483932
+      ...
+    1..4
+ok 142 - toRegistryLog
+  ---
+  duration_ms: 5.45647
+  type: 'suite'
+  ...
+# Subtest: shouldAutoMergeDeposits
+    # Subtest: merges when the Receiver balance is low and deposits are pending (lane idle)
+    ok 1 - merges when the Receiver balance is low and deposits are pending (lane idle)
+      ---
+      duration_ms: 1.24951
+      ...
+    # Subtest: merges when pending deposits reach the threshold (Receiver balance healthy)
+    ok 2 - merges when pending deposits reach the threshold (Receiver balance healthy)
+      ---
+      duration_ms: 0.244992
+      ...
+    # Subtest: skips when balance is healthy and pending is below the threshold
+    ok 3 - skips when balance is healthy and pending is below the threshold
+      ---
+      duration_ms: 0.197884
+      ...
+    # Subtest: does NOT enqueue a second merge while one is already enqueued/running for the lane
+    ok 4 - does NOT enqueue a second merge while one is already enqueued/running for the lane
+      ---
+      duration_ms: 0.141474
+      ...
+    # Subtest: skips when there are no pending deposits even though the Receiver is low
+    ok 5 - skips when there are no pending deposits even though the Receiver is low
+      ---
+      duration_ms: 0.103015
+      ...
+    # Subtest: treats an undefined pending value as nothing to merge
+    ok 6 - treats an undefined pending value as nothing to merge
+      ---
+      duration_ms: 0.205045
+      ...
+    # Subtest: disables the pending-high arm when the threshold is undefined
+    ok 7 - disables the pending-high arm when the threshold is undefined
+      ---
+      duration_ms: 0.116615
+      ...
+    # Subtest: still merges on the low-balance arm when the pending threshold is undefined
+    ok 8 - still merges on the low-balance arm when the pending threshold is undefined
+      ---
+      duration_ms: 0.088108
+      ...
+    # Subtest: does not evaluate the low-balance arm when the receiver balance is unknown
+    ok 9 - does not evaluate the low-balance arm when the receiver balance is unknown
+      ---
+      duration_ms: 0.110039
+      ...
+    1..9
+ok 143 - shouldAutoMergeDeposits
+  ---
+  duration_ms: 3.549341
+  type: 'suite'
+  ...
+# Subtest: shouldAutoSettle
+    # Subtest: acts when accrued reaches the threshold
+    ok 1 - acts when accrued reaches the threshold
+      ---
+      duration_ms: 3.871032
+      ...
+    # Subtest: does NOT act below the threshold
+    ok 2 - does NOT act below the threshold
+      ---
+      duration_ms: 0.658015
+      ...
+    # Subtest: is disabled when the threshold is undefined
+    ok 3 - is disabled when the threshold is undefined
+      ---
+      duration_ms: 17.20317
+      ...
+    # Subtest: skips while one is already in progress (dedup)
+    ok 4 - skips while one is already in progress (dedup)
+      ---
+      duration_ms: 0.59141
+      ...
+    1..4
+ok 144 - shouldAutoSettle
+  ---
+  duration_ms: 51.115558
+  type: 'suite'
+  ...
+# Subtest: shouldAutoWithdraw
+    # Subtest: acts when hook accrued reaches the threshold and returns the full drain amount
+    ok 1 - acts when hook accrued reaches the threshold and returns the full drain amount
+      ---
+      duration_ms: 1.271285
+      ...
+    # Subtest: does NOT act below the threshold
+    ok 2 - does NOT act below the threshold
+      ---
+      duration_ms: 0.613973
+      ...
+    # Subtest: is disabled when undefined and skips when in progress
+    ok 3 - is disabled when undefined and skips when in progress
+      ---
+      duration_ms: 0.692664
+      ...
+    1..3
+ok 145 - shouldAutoWithdraw
+  ---
+  duration_ms: 4.583981
+  type: 'suite'
+  ...
+# Subtest: shouldAutoConsolidate
+    # Subtest: acts when the largest UTxO falls BELOW the floor (the real outage shape)
+    ok 1 - acts when the largest UTxO falls BELOW the floor (the real outage shape)
+      ---
+      duration_ms: 1.612642
+      ...
+    # Subtest: does NOT act when a fat UTxO is present (healthy)
+    ok 2 - does NOT act when a fat UTxO is present (healthy)
+      ---
+      duration_ms: 1.43986
+      ...
+    # Subtest: does not act blind when the wallet reading is unknown
+    ok 3 - does not act blind when the wallet reading is unknown
+      ---
+      duration_ms: 0.856228
+      ...
+    # Subtest: is disabled when the threshold is undefined and skips when in progress
+    ok 4 - is disabled when the threshold is undefined and skips when in progress
+      ---
+      duration_ms: 0.925936
+      ...
+    1..4
+ok 146 - shouldAutoConsolidate
+  ---
+  duration_ms: 6.076679
+  type: 'suite'
+  ...
+# Subtest: shouldAutoSplit
+    # Subtest: acts purely on the usable-UTxO count, with no balance gate
+    ok 1 - acts purely on the usable-UTxO count, with no balance gate
+      ---
+      duration_ms: 1.48575
+      ...
+    # Subtest: does NOT act when usable UTxOs already meet the minimum
+    ok 2 - does NOT act when usable UTxOs already meet the minimum
+      ---
+      duration_ms: 2.798673
+      ...
+    # Subtest: does not act blind when the usable-UTxO reading is unknown
+    ok 3 - does not act blind when the usable-UTxO reading is unknown
+      ---
+      duration_ms: 0.738936
+      ...
+    # Subtest: is disabled when not enabled and skips when in progress
+    ok 4 - is disabled when not enabled and skips when in progress
+      ---
+      duration_ms: 2.175724
+      ...
+    1..4
+ok 147 - shouldAutoSplit
+  ---
+  duration_ms: 19.740119
+  type: 'suite'
+  ...
+# Subtest: createCardanoWriteClient
+    # Subtest: records single-submit steps and transaction summary on success
+    ok 1 - records single-submit steps and transaction summary on success
+      ---
+      duration_ms: 3.21655
+      ...
+    # Subtest: maps batch results by intent hash and preserves request order
+    ok 2 - maps batch results by intent hash and preserves request order
+      ---
+      duration_ms: 3.074354
+      ...
+    # Subtest: maps a skipped (superseded) batch entry to a benign NonMonotonicNonce result, keeping the built one confirmed
+    ok 3 - maps a skipped (superseded) batch entry to a benign NonMonotonicNonce result, keeping the built one confirmed
+      ---
+      duration_ms: 1.549529
+      ...
+    # Subtest: fans out a batch failure to every request with structured errors
+    ok 4 - fans out a batch failure to every request with structured errors
+      ---
+      duration_ms: 2.321128
+      ...
+    # Subtest: populates feePaidLovelace on success when bridge returns it
+    ok 5 - populates feePaidLovelace on success when bridge returns it
+      ---
+      duration_ms: 0.798541
+      ...
+    # Subtest: leaves feePaidLovelace undefined when bridge omits it
+    ok 6 - leaves feePaidLovelace undefined when bridge omits it
+      ---
+      duration_ms: 1.464798
+      ...
+    # Subtest: uses the single path when submitBatch receives exactly one request
+    ok 7 - uses the single path when submitBatch receives exactly one request
+      ---
+      duration_ms: 0.786667
+      ...
+    1..7
+ok 148 - createCardanoWriteClient
+  ---
+  duration_ms: 15.520057
+  type: 'suite'
+  ...
+# Subtest: coalescer reflush loop
+    # Subtest: processes a long run of in-flight reflushes without stack overflow
+    ok 1 - processes a long run of in-flight reflushes without stack overflow
+      ---
+      duration_ms: 62.795382
+      ...
+    1..1
+ok 149 - coalescer reflush loop
+  ---
+  duration_ms: 65.048921
+  type: 'suite'
+  ...
+# Subtest: createCoalescerManager
+    # Subtest: marks a symbol in-flight at flush and clears it after the result resolves
+    ok 1 - marks a symbol in-flight at flush and clears it after the result resolves
+      ---
+      duration_ms: 26.756372
+      ...
+    # Subtest: flushes multiple buffered symbols through one queueManager.submitBatch call
+    ok 2 - flushes multiple buffered symbols through one queueManager.submitBatch call
+      ---
+      duration_ms: 20.369821
+      ...
+    # Subtest: splits an oversized batch when size fallback is enabled
+    ok 3 - splits an oversized batch when size fallback is enabled
+      ---
+      duration_ms: 25.548885
+      ...
+    # Subtest: respects maxBatchSize by splitting one flush into multiple queue batches
+    ok 4 - respects maxBatchSize by splitting one flush into multiple queue batches
+      ---
+      duration_ms: 19.988066
+      ...
+    # Subtest: keeps a buffered higher-nonce intent when a fresher-timestamp but lower-nonce one arrives
+    ok 5 - keeps a buffered higher-nonce intent when a fresher-timestamp but lower-nonce one arrives
+      ---
+      duration_ms: 21.669032
+      ...
+    # Subtest: supersedes a buffered intent only when the incoming beats it on both timestamp and nonce
+    ok 6 - supersedes a buffered intent only when the incoming beats it on both timestamp and nonce
+      ---
+      duration_ms: 23.712452
+      ...
+    # Subtest: includes intent and current timestamps when a buffered intent ages out
+    ok 7 - includes intent and current timestamps when a buffered intent ages out
+      ---
+      duration_ms: 23.616766
+      ...
+    1..7
+ok 150 - createCoalescerManager
+  ---
+  duration_ms: 163.833336
+  type: 'suite'
+  ...
+# Subtest: createInflightTable
+    # Subtest: isLocked returns false when empty
+    ok 1 - isLocked returns false when empty
+      ---
+      duration_ms: 1.751002
+      ...
+    # Subtest: isLocked returns true after add
+    ok 2 - isLocked returns true after add
+      ---
+      duration_ms: 0.392711
+      ...
+    # Subtest: isLocked returns false after remove
+    ok 3 - isLocked returns false after remove
+      ---
+      duration_ms: 0.256755
+      ...
+    # Subtest: isLocked auto-expires when timeout passes
+    ok 4 - isLocked auto-expires when timeout passes
+      ---
+      duration_ms: 0.486857
+      ...
+    # Subtest: evictExpired removes timed-out entries and returns count
+    ok 5 - evictExpired removes timed-out entries and returns count
+      ---
+      duration_ms: 0.556054
+      ...
+    # Subtest: remove is a no-op for unknown txHash
+    ok 6 - remove is a no-op for unknown txHash
+      ---
+      duration_ms: 0.235735
+      ...
+    # Subtest: all() returns a snapshot
+    ok 7 - all() returns a snapshot
+      ---
+      duration_ms: 0.145087
+      ...
+    # Subtest: second add for same receiverUnit: last write wins in the lock index
+    ok 8 - second add for same receiverUnit: last write wins in the lock index
+      ---
+      duration_ms: 0.144627
+      ...
+    1..8
+ok 151 - createInflightTable
+  ---
+  duration_ms: 5.81908
+  type: 'suite'
+  ...
+# Subtest: laneKey
+    # Subtest: keeps the raw technical lock key unchanged
+    ok 1 - keeps the raw technical lock key unchanged
+      ---
+      duration_ms: 0.944555
+      ...
+    1..1
+ok 152 - laneKey
+  ---
+  duration_ms: 2.083916
+  type: 'suite'
+  ...
+# Subtest: laneId
+    # Subtest: returns a stable observability id without raw state paths
+    ok 1 - returns a stable observability id without raw state paths
+      ---
+      duration_ms: 1.157993
+      ...
+    # Subtest: changes when the underlying lane changes
+    ok 2 - changes when the underlying lane changes
+      ---
+      duration_ms: 0.333406
+      ...
+    1..2
+ok 153 - laneId
+  ---
+  duration_ms: 1.924963
+  type: 'suite'
+  ...
+# Subtest: createQueueManager
+    # Subtest: routes requests to correct client
+    ok 1 - routes requests to correct client
+      ---
+      duration_ms: 2.398061
+      ...
+    # Subtest: reuses the same queue for identical (clientState, protocolState)
+    ok 2 - reuses the same queue for identical (clientState, protocolState)
+      ---
+      duration_ms: 0.717126
+      ...
+    # Subtest: reuses the same queue across different routers when the lane matches
+    ok 3 - reuses the same queue across different routers when the lane matches
+      ---
+      duration_ms: 1.172119
+      ...
+    # Subtest: queueKeys returns one key per distinct destination
+    ok 4 - queueKeys returns one key per distinct destination
+      ---
+      duration_ms: 0.967092
+      ...
+    # Subtest: totalPending returns 0 after all settle
+    ok 5 - totalPending returns 0 after all settle
+      ---
+      duration_ms: 8.873754
+      ...
+    # Subtest: propagates submit errors without crashing the manager
+    ok 6 - propagates submit errors without crashing the manager
+      ---
+      duration_ms: 0.737422
+      ...
+    # Subtest: submitBatch uses one queue lane and preserves input order
+    ok 7 - submitBatch uses one queue lane and preserves input order
+      ---
+      duration_ms: 0.673303
+      ...
+    # Subtest: submitBatch throws when requests target different lanes (R10.C.17)
+    ok 8 - submitBatch throws when requests target different lanes (R10.C.17)
+      ---
+      duration_ms: 0.757509
+      ...
+    # Subtest: serializes an update and a merge task on the same lane (mutual exclusion)
+    ok 9 - serializes an update and a merge task on the same lane (mutual exclusion)
+      ---
+      duration_ms: 5.51122
+      ...
+    # Subtest: runs merge tasks on different lanes in parallel
+    ok 10 - runs merge tasks on different lanes in parallel
+      ---
+      duration_ms: 6.43246
+      ...
+    # Subtest: submitBatch with an empty array returns [] without creating a queue
+    ok 11 - submitBatch with an empty array returns [] without creating a queue
+      ---
+      duration_ms: 0.382326
+      ...
+    1..11
+ok 154 - createQueueManager
+  ---
+  duration_ms: 30.719036
+  type: 'suite'
+  ...
+# Subtest: createSubmissionQueue
+    # Subtest: resolves with ok result from client
+    ok 1 - resolves with ok result from client
+      ---
+      duration_ms: 6.682774
+      ...
+    # Subtest: resolves with err result when client returns error
+    ok 2 - resolves with err result when client returns error
+      ---
+      duration_ms: 0.728152
+      ...
+    # Subtest: catches thrown errors and wraps them as SubmitResultErr
+    ok 3 - catches thrown errors and wraps them as SubmitResultErr
+      ---
+      duration_ms: 0.914233
+      ...
+    # Subtest: processes requests serially — order is preserved
+    ok 4 - processes requests serially — order is preserved
+      ---
+      duration_ms: 17.375633
+      ...
+    # Subtest: calls onResult callback for each processed item
+    ok 5 - calls onResult callback for each processed item
+      ---
+      duration_ms: 0.679926
+      ...
+    # Subtest: pending count decrements after processing
+    ok 6 - pending count decrements after processing
+      ---
+      duration_ms: 1.057398
+      ...
+    # Subtest: enqueueBatch preserves request order and returns one result per request
+    ok 7 - enqueueBatch preserves request order and returns one result per request
+      ---
+      duration_ms: 0.355821
+      ...
+    # Subtest: never overlaps a merge task with an in-flight update on the same lane
+    ok 8 - never overlaps a merge task with an in-flight update on the same lane
+      ---
+      duration_ms: 0.944307
+      ...
+    # Subtest: runs an enqueued merge task before a later update on the same lane (FIFO)
+    ok 9 - runs an enqueued merge task before a later update on the same lane (FIFO)
+      ---
+      duration_ms: 1.048659
+      ...
+    # Subtest: propagates a thrown merge-task error to the enqueueTask caller without wedging the lane
+    ok 10 - propagates a thrown merge-task error to the enqueueTask caller without wedging the lane
+      ---
+      duration_ms: 0.748787
+      ...
+    # Subtest: calls onRetry once per retry decision (drives worker_task_retries)
+    ok 11 - calls onRetry once per retry decision (drives worker_task_retries)
+      ---
+      duration_ms: 23.057944
+      ...
+    1..11
+ok 155 - createSubmissionQueue
+  ---
+  duration_ms: 56.546739
+  type: 'suite'
+  ...
+# Subtest: recoverSubmittedTx
+    # Subtest: confirms a submitted tx that is still on-chain
+    ok 1 - confirms a submitted tx that is still on-chain
+      ---
+      duration_ms: 9.437568
+      ...
+    # Subtest: fails a submitted tx that is not on-chain
+    ok 2 - fails a submitted tx that is not on-chain
+      ---
+      duration_ms: 0.227205
+      ...
+    # Subtest: fails (conservatively) when the on-chain check throws — re-process instead of false-confirm
+    ok 3 - fails (conservatively) when the on-chain check throws — re-process instead of false-confirm
+      ---
+      duration_ms: 0.175118
+      ...
+    # Subtest: fails when the row has no Cardano tx hash
+    ok 4 - fails when the row has no Cardano tx hash
+      ---
+      duration_ms: 0.191624
+      ...
+    1..4
+ok 156 - recoverSubmittedTx
+  ---
+  duration_ms: 11.519752
+  type: 'suite'
+  ...
+# Subtest: createSymbolInflightTracker
+    # Subtest: has() is false for a tuple that was never marked
+    ok 1 - has() is false for a tuple that was never marked
+      ---
+      duration_ms: 1.058614
+      ...
+    # Subtest: has() is true after mark()
+    ok 2 - has() is true after mark()
+      ---
+      duration_ms: 0.30992
+      ...
+    # Subtest: has() is false after clear()
+    ok 3 - has() is false after clear()
+      ---
+      duration_ms: 0.211253
+      ...
+    # Subtest: distinguishes router, destination index, and symbol
+    ok 4 - distinguishes router, destination index, and symbol
+      ---
+      duration_ms: 0.2022
+      ...
+    # Subtest: auto-expires an entry once the TTL elapses (leak safeguard)
+    ok 5 - auto-expires an entry once the TTL elapses (leak safeguard)
+      ---
+      duration_ms: 0.260781
+      ...
+    # Subtest: re-marking refreshes the expiry
+    ok 6 - re-marking refreshes the expiry
+      ---
+      duration_ms: 0.268685
+      ...
+    # Subtest: clear() of an unmarked tuple is a no-op (does not throw)
+    ok 7 - clear() of an unmarked tuple is a no-op (does not throw)
+      ---
+      duration_ms: 0.298309
+      ...
+    # Subtest: rejects a non-positive ttlMs (no silent default)
+    ok 8 - rejects a non-positive ttlMs (no silent default)
+      ---
+      duration_ms: 0.578555
+      ...
+    1..8
+ok 157 - createSymbolInflightTracker
+  ---
+  duration_ms: 4.744466
+  type: 'suite'
+  ...
+# Subtest: isTransactionRepresentative — one tx counts once
+    # Subtest: a single (non-batch) result is its own representative
+    ok 1 - a single (non-batch) result is its own representative
+      ---
+      duration_ms: 8.130706
+      ...
+    # Subtest: only the first batch member represents the tx
+    ok 2 - only the first batch member represents the tx
+      ---
+      duration_ms: 1.134574
+      ...
+    # Subtest: a superseded member excluded from batch.members is never the representative
+    ok 3 - a superseded member excluded from batch.members is never the representative
+      ---
+      duration_ms: 0.313659
+      ...
+    1..3
+ok 158 - isTransactionRepresentative — one tx counts once
+  ---
+  duration_ms: 11.888311
+  type: 'suite'
+  ...
+# Subtest: isNoTransactionFailure — condemned intents are not failed txs
+    # Subtest: NonMonotonicNonce means no tx was broadcast
+    ok 1 - NonMonotonicNonce means no tx was broadcast
+      ---
+      duration_ms: 0.248702
+      ...
+    # Subtest: real submission failures count as failed txs
+    ok 2 - real submission failures count as failed txs
+      ---
+      duration_ms: 0.198594
+      ...
+    1..2
+ok 159 - isNoTransactionFailure — condemned intents are not failed txs
+  ---
+  duration_ms: 0.649523
+  type: 'suite'
+  ...
+# Subtest: routerIdsForTransaction — a mixed-router batch credits every router once
+    # Subtest: a single (non-batch) result resolves to its own router
+    ok 1 - a single (non-batch) result resolves to its own router
+      ---
+      duration_ms: 0.481577
+      ...
+    # Subtest: a batch mixing two routers returns both, deduped and sorted
+    ok 2 - a batch mixing two routers returns both, deduped and sorted
+      ---
+      duration_ms: 0.385628
+      ...
+    # Subtest: members whose router cannot be resolved are skipped, not invented
+    ok 3 - members whose router cannot be resolved are skipped, not invented
+      ---
+      duration_ms: 0.257026
+      ...
+    # Subtest: falls back to the caller's router only when nothing resolves
+    ok 4 - falls back to the caller's router only when nothing resolves
+      ---
+      duration_ms: 0.376318
+      ...
+    1..4
+ok 160 - routerIdsForTransaction — a mixed-router batch credits every router once
+  ---
+  duration_ms: 2.120932
+  type: 'suite'
+  ...
+# Subtest: isProcessRecoverableWasmError
+    # Subtest: matches the detached-ArrayBuffer signature
+    ok 1 - matches the detached-ArrayBuffer signature
+      ---
+      duration_ms: 1.075045
+      ...
+    # Subtest: matches a bare 'detached' message and the %TypedArray% form
+    ok 2 - matches a bare 'detached' message and the %TypedArray% form
+      ---
+      duration_ms: 0.278864
+      ...
+    # Subtest: matches the hard WASM trap 'RuntimeError: unreachable' (the real outage signature)
+    ok 3 - matches the hard WASM trap 'RuntimeError: unreachable' (the real outage signature)
+      ---
+      duration_ms: 0.269313
+      ...
+    # Subtest: does NOT match unrelated errors
+    ok 4 - does NOT match unrelated errors
+      ---
+      duration_ms: 0.263144
+      ...
+    1..4
+ok 161 - isProcessRecoverableWasmError
+  ---
+  duration_ms: 3.358286
+  type: 'suite'
+  ...
+# Subtest: nextWasmFailureCount
+    # Subtest: increments on a WASM-signature failure (detached AND unreachable)
+    ok 1 - increments on a WASM-signature failure (detached AND unreachable)
+      ---
+      duration_ms: 0.662648
+      ...
+    # Subtest: RESETS to 0 on any successful submission
+    ok 2 - RESETS to 0 on any successful submission
+      ---
+      duration_ms: 0.43921
+      ...
+    # Subtest: leaves the WASM count UNCHANGED on a non-WASM failure
+    ok 3 - leaves the WASM count UNCHANGED on a non-WASM failure
+      ---
+      duration_ms: 0.219651
+      ...
+    1..3
+ok 162 - nextWasmFailureCount
+  ---
+  duration_ms: 1.801293
+  type: 'suite'
+  ...
+# Subtest: shouldExitOnWasmFailures
+    # Subtest: returns false below the threshold
+    ok 1 - returns false below the threshold
+      ---
+      duration_ms: 0.230959
+      ...
+    # Subtest: returns true at or above the threshold
+    ok 2 - returns true at or above the threshold
+      ---
+      duration_ms: 0.192469
+      ...
+    1..2
+ok 163 - shouldExitOnWasmFailures
+  ---
+  duration_ms: 1.696582
+  type: 'suite'
+  ...
+# Subtest: consecutive-WASM tracker — end-to-end counter transitions
+    # Subtest: counts only consecutive WASM failures and triggers exit at threshold
+    ok 1 - counts only consecutive WASM failures and triggers exit at threshold
+      ---
+      duration_ms: 0.803827
+      ...
+    1..1
+ok 164 - consecutive-WASM tracker — end-to-end counter transitions
+  ---
+  duration_ms: 0.953852
+  type: 'suite'
+  ...
+# Subtest: resolveWalletPoolSigners
+    # Subtest: resolves a multi-wallet block, inferring the signer kind from the env var name
+    ok 1 - resolves a multi-wallet block, inferring the signer kind from the env var name
+      ---
+      duration_ms: 2.643105
+      ...
+    # Subtest: throws when a declared wallet's env var is missing
+    ok 2 - throws when a declared wallet's env var is missing
+      ---
+      duration_ms: 0.52874
+      ...
+    # Subtest: degenerates to a single main wallet from the network seed env var when no block is set
+    ok 3 - degenerates to a single main wallet from the network seed env var when no block is set
+      ---
+      duration_ms: 0.17042
+      ...
+    # Subtest: uses the private-key env var for the single-wallet default when no seed is set
+    ok 4 - uses the private-key env var for the single-wallet default when no seed is set
+      ---
+      duration_ms: 0.127022
+      ...
+    # Subtest: throws when neither the wallets block nor the default env vars are set
+    ok 5 - throws when neither the wallets block nor the default env vars are set
+      ---
+      duration_ms: 0.701642
+      ...
+    1..5
+ok 165 - resolveWalletPoolSigners
+  ---
+  duration_ms: 5.481944
+  type: 'suite'
+  ...
+# Subtest: shouldFundPoolWallet
+    # Subtest: funds a pool wallet below the low band up to the target, when the main can cover it
+    ok 1 - funds a pool wallet below the low band up to the target, when the main can cover it
+      ---
+      duration_ms: 2.840558
+      ...
+    # Subtest: does nothing when the wallet is at or above the low band
+    ok 2 - does nothing when the wallet is at or above the low band
+      ---
+      duration_ms: 0.443728
+      ...
+    # Subtest: refuses to fund when it would drop the main below its reserve
+    ok 3 - refuses to fund when it would drop the main below its reserve
+      ---
+      duration_ms: 0.243025
+      ...
+    # Subtest: funds when the main has exactly enough to keep its reserve
+    ok 4 - funds when the main has exactly enough to keep its reserve
+      ---
+      duration_ms: 0.341223
+      ...
+    # Subtest: does not start a second funding while one is in progress
+    ok 5 - does not start a second funding while one is in progress
+      ---
+      duration_ms: 0.310944
+      ...
+    # Subtest: respects the per-wallet cooldown after a recent funding
+    ok 6 - respects the per-wallet cooldown after a recent funding
+      ---
+      duration_ms: 0.663097
+      ...
+    # Subtest: funds again once the cooldown has elapsed
+    ok 7 - funds again once the cooldown has elapsed
+      ---
+      duration_ms: 0.878497
+      ...
+    1..7
+ok 166 - shouldFundPoolWallet
+  ---
+  duration_ms: 8.257673
+  type: 'suite'
+  ...
+# Subtest: UtxoLockTable
+    # Subtest: locks an outRef for a wallet and reports it locked
+    ok 1 - locks an outRef for a wallet and reports it locked
+      ---
+      duration_ms: 1.310765
+      ...
+    # Subtest: keeps locks per (walletId, outRef): the same outRef on another wallet is independent
+    ok 2 - keeps locks per (walletId, outRef): the same outRef on another wallet is independent
+      ---
+      duration_ms: 0.339259
+      ...
+    # Subtest: lockedOutRefs returns only the live locks for a wallet
+    ok 3 - lockedOutRefs returns only the live locks for a wallet
+      ---
+      duration_ms: 1.318853
+      ...
+    # Subtest: releases a single outRef without touching the rest
+    ok 4 - releases a single outRef without touching the rest
+      ---
+      duration_ms: 0.444752
+      ...
+    # Subtest: releaseReservation frees every outRef locked under one reservation
+    ok 5 - releaseReservation frees every outRef locked under one reservation
+      ---
+      duration_ms: 0.423125
+      ...
+    # Subtest: reads an expired lock as free (lazy expiry on isLocked / lockedOutRefs)
+    ok 6 - reads an expired lock as free (lazy expiry on isLocked / lockedOutRefs)
+      ---
+      duration_ms: 0.259721
+      ...
+    # Subtest: evictExpired sweeps timed-out locks and returns the count
+    ok 7 - evictExpired sweeps timed-out locks and returns the count
+      ---
+      duration_ms: 0.425832
+      ...
+    # Subtest: makeUtxoLockEntry rejects a non-positive timeout
+    ok 8 - makeUtxoLockEntry rejects a non-positive timeout
+      ---
+      duration_ms: 0.768207
+      ...
+    1..8
+ok 167 - UtxoLockTable
+  ---
+  duration_ms: 7.370013
+  type: 'suite'
+  ...
+# Subtest: wallet arbiter — emulator integration
+    # Subtest: two concurrent lanes on a one-wallet pool both confirm when pinned to disjoint reservations
+    ok 1 - two concurrent lanes on a one-wallet pool both confirm when pinned to disjoint reservations
+      ---
+      duration_ms: 104.639433
+      ...
+    # Subtest: a split wallet backs N parallel lanes — all N pinned txs confirm
+    ok 2 - a split wallet backs N parallel lanes — all N pinned txs confirm
+      ---
+      duration_ms: 67.934363
+      ...
+    # Subtest: control: two UNPINNED lanes collide — proving the arbiter pin is what prevents the double-spend
+    ok 3 - control: two UNPINNED lanes collide — proving the arbiter pin is what prevents the double-spend
+      ---
+      duration_ms: 91.501692
+      ...
+    1..3
+ok 168 - wallet arbiter — emulator integration
+  ---
+  duration_ms: 265.006401
+  type: 'suite'
+  ...
+# Subtest: createWalletArbiter
+    # Subtest: acquires a free wallet and locks exactly RESERVED_UTXOS_PER_TX utxos including a collateral-capable one
+    ok 1 - acquires a free wallet and locks exactly RESERVED_UTXOS_PER_TX utxos including a collateral-capable one
+      ---
+      duration_ms: 3.324865
+      ...
+    # Subtest: prefers a pool wallet over the main wallet when both are free
+    ok 2 - prefers a pool wallet over the main wallet when both are free
+      ---
+      duration_ms: 0.477193
+      ...
+    # Subtest: uses two different free wallets for two concurrent acquires
+    ok 3 - uses two different free wallets for two concurrent acquires
+      ---
+      duration_ms: 0.620697
+      ...
+    # Subtest: falls back to free UTxOs of a busy wallet (single-wallet pool stays parallel)
+    ok 4 - falls back to free UTxOs of a busy wallet (single-wallet pool stays parallel)
+      ---
+      duration_ms: 0.838068
+      ...
+    # Subtest: returns unavailable when no wallet has enough free utxos
+    ok 5 - returns unavailable when no wallet has enough free utxos
+      ---
+      duration_ms: 1.040913
+      ...
+    # Subtest: skips a wallet with no collateral-capable utxo
+    ok 6 - skips a wallet with no collateral-capable utxo
+      ---
+      duration_ms: 0.23612
+      ...
+    # Subtest: skips a wallet that is mid-consolidation
+    ok 7 - skips a wallet that is mid-consolidation
+      ---
+      duration_ms: 0.292297
+      ...
+    # Subtest: release returns capacity and refreshes the cache with produced change
+    ok 8 - release returns capacity and refreshes the cache with produced change
+      ---
+      duration_ms: 0.723783
+      ...
+    # Subtest: acquireWalletForAmount reserves enough largest-first UTxOs to cover a value transfer
+    ok 9 - acquireWalletForAmount reserves enough largest-first UTxOs to cover a value transfer
+      ---
+      duration_ms: 0.455826
+      ...
+    # Subtest: acquireWalletForAmount returns unavailable when spendable UTxOs can't cover the amount
+    ok 10 - acquireWalletForAmount returns unavailable when spendable UTxOs can't cover the amount
+      ---
+      duration_ms: 0.370804
+      ...
+    # Subtest: stats expose per-wallet largest-UTxO and usable-UTxO count (for the shape triggers)
+    ok 11 - stats expose per-wallet largest-UTxO and usable-UTxO count (for the shape triggers)
+      ---
+      duration_ms: 0.520932
+      ...
+    # Subtest: treats a double release as a no-op (active count never under-counts)
+    ok 12 - treats a double release as a no-op (active count never under-counts)
+      ---
+      duration_ms: 0.285702
+      ...
+    # Subtest: reuses a wallet's utxos once their lock TTL has elapsed
+    ok 13 - reuses a wallet's utxos once their lock TTL has elapsed
+      ---
+      duration_ms: 0.267936
+      ...
+    # Subtest: reserves the smallest collateral-capable utxo and the largest remaining for the fee
+    ok 14 - reserves the smallest collateral-capable utxo and the largest remaining for the fee
+      ---
+      duration_ms: 0.187262
+      ...
+    # Subtest: honours a reservedUtxosPerTx override of 1
+    ok 15 - honours a reservedUtxosPerTx override of 1
+      ---
+      duration_ms: 0.204472
+      ...
+    # Subtest: prefers a free main wallet over a busy pool wallet (free beats busy)
+    ok 16 - prefers a free main wallet over a busy pool wallet (free beats busy)
+      ---
+      duration_ms: 0.154268
+      ...
+    # Subtest: acquireWallet reserves a specific wallet by id, bypassing the priority
+    ok 17 - acquireWallet reserves a specific wallet by id, bypassing the priority
+      ---
+      duration_ms: 0.186697
+      ...
+    # Subtest: acquireWallet returns unavailable for an unknown, exhausted, or consolidating wallet
+    ok 18 - acquireWallet returns unavailable for an unknown, exhausted, or consolidating wallet
+      ---
+      duration_ms: 0.244474
+      ...
+    # Subtest: acquireSpecificUtxos reserves exactly the requested utxos, verbatim and without a collateral requirement
+    ok 19 - acquireSpecificUtxos reserves exactly the requested utxos, verbatim and without a collateral requirement
+      ---
+      duration_ms: 0.302627
+      ...
+    # Subtest: acquireSpecificUtxos returns unavailable when a requested utxo is already locked by another lane
+    ok 20 - acquireSpecificUtxos returns unavailable when a requested utxo is already locked by another lane
+      ---
+      duration_ms: 0.168365
+      ...
+    # Subtest: acquireSpecificUtxos rejects a duplicated out-ref without locking it (no partial-lock leak)
+    ok 21 - acquireSpecificUtxos rejects a duplicated out-ref without locking it (no partial-lock leak)
+      ---
+      duration_ms: 0.316294
+      ...
+    # Subtest: acquireSpecificUtxos returns unavailable for an unknown id, a missing out-ref, or a consolidating wallet
+    ok 22 - acquireSpecificUtxos returns unavailable for an unknown id, a missing out-ref, or a consolidating wallet
+      ---
+      duration_ms: 0.192293
+      ...
+    # Subtest: acquireSpecificUtxos + release split outputs let a single wallet back two concurrent lanes
+    ok 23 - acquireSpecificUtxos + release split outputs let a single wallet back two concurrent lanes
+      ---
+      duration_ms: 0.263939
+      ...
+    # Subtest: round-robins across free wallets on repeated acquire/release
+    ok 24 - round-robins across free wallets on repeated acquire/release
+      ---
+      duration_ms: 0.198785
+      ...
+    1..24
+ok 169 - createWalletArbiter
+  ---
+  duration_ms: 15.696049
+  type: 'suite'
+  ...
+# Subtest: createWalletPool
+    # Subtest: exposes the registry and resolves wallets by id
+    ok 1 - exposes the registry and resolves wallets by id
+      ---
+      duration_ms: 1.934269
+      ...
+    # Subtest: requires exactly one main wallet
+    ok 2 - requires exactly one main wallet
+      ---
+      duration_ms: 0.865447
+      ...
+    # Subtest: rejects an empty pool and duplicate ids
+    ok 3 - rejects an empty pool and duplicate ids
+      ---
+      duration_ms: 0.322563
+      ...
+    # Subtest: stores and returns a per-wallet UTxO cache (empty until set)
+    ok 4 - stores and returns a per-wallet UTxO cache (empty until set)
+      ---
+      duration_ms: 0.360362
+      ...
+    # Subtest: tracks a per-wallet consolidation flag
+    ok 5 - tracks a per-wallet consolidation flag
+      ---
+      duration_ms: 0.204077
+      ...
+    1..5
+ok 170 - createWalletPool
+  ---
+  duration_ms: 5.090379
+  type: 'suite'
+  ...
+# Subtest: resolveWalletShapeProfile
+    # Subtest: falls back to the DEFAULT_* constants when no config is given
+    ok 1 - falls back to the DEFAULT_* constants when no config is given
+      ---
+      duration_ms: 1.467359
+      ...
+    # Subtest: overrides each field from config and widens lovelace numbers to bigint
+    ok 2 - overrides each field from config and widens lovelace numbers to bigint
+      ---
+      duration_ms: 0.20502
+      ...
+    # Subtest: fills only the omitted fields from defaults (partial config)
+    ok 3 - fills only the omitted fields from defaults (partial config)
+      ---
+      duration_ms: 0.183367
+      ...
+    1..3
+ok 171 - resolveWalletShapeProfile
+  ---
+  duration_ms: 3.165097
+  type: 'suite'
+  ...
+# Subtest: createUpdateWorkerPoolManager
+    # Subtest: getOrCreatePool returns the same pool on subsequent calls
+    ok 1 - getOrCreatePool returns the same pool on subsequent calls
+      ---
+      duration_ms: 1.048834
+      ...
+    # Subtest: getOrCreatePool creates independent pools per routerId
+    ok 2 - getOrCreatePool creates independent pools per routerId
+      ---
+      duration_ms: 0.376831
+      ...
+    # Subtest: submit returns false and task is dropped when queue is full
+    ok 3 - submit returns false and task is dropped when queue is full
+      ---
+      duration_ms: 8.277754
+      ...
+    # Subtest: listAllStats returns one entry per created pool
+    ok 4 - listAllStats returns one entry per created pool
+      ---
+      duration_ms: 1.126445
+      ...
+    # Subtest: stats reflects maxWorkers and queueCapacity from options
+    ok 5 - stats reflects maxWorkers and queueCapacity from options
+      ---
+      duration_ms: 0.252176
+      ...
+    # Subtest: startAll starts every created pool and tasks are processed
+    ok 6 - startAll starts every created pool and tasks are processed
+      ---
+      duration_ms: 5.836419
+      ...
+    # Subtest: stopAll resolves when all workers finish
+    ok 7 - stopAll resolves when all workers finish
+      ---
+      duration_ms: 23.518691
+      ...
+    # Subtest: listPendingTasks returns a snapshot of the queue
+    ok 8 - listPendingTasks returns a snapshot of the queue
+      ---
+      duration_ms: 0.555238
+      ...
+    # Subtest: task timeout increments via onTask rejection caught silently
+    ok 9 - task timeout increments via onTask rejection caught silently
+      ---
+      duration_ms: 101.010768
+      ...
+    # Subtest: calls onTaskError when a task throws (drives worker_tasks_failed)
+    ok 10 - calls onTaskError when a task throws (drives worker_tasks_failed)
+      ---
+      duration_ms: 21.011303
+      ...
+    1..10
+ok 172 - createUpdateWorkerPoolManager
+  ---
+  duration_ms: 164.870554
+  type: 'suite'
+  ...
+1..172
+# tests 790
+# suites 173
+# pass 790
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 16300.369001

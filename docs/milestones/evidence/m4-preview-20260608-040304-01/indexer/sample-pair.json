@@ -1,0 +1,17 @@
+{
+  "symbol": "ADA/USD",
+  "pairId": "4144412f555344",
+  "pairPolicyId": "def5c14be6bceefb95769110a0c8c7d5362e58bf8f17b6ee1c1bd902",
+  "price": "751000000",
+  "timestamp": "1780895736",
+  "nonce": "1780895736000",
+  "signer": "2b1c7eff297766569966b630a6862947a8e5285a",
+  "intentHash": "016c2f4a6c1767cbc205729d2f6b702d30a65266643a8372e72ebef277de07a9",
+  "minUtxoLovelace": "5000000",
+  "utxoRef": {
+    "txHash": "1d5ff45dc5342d31346e62c7e2dd013f93117f0ee6f5de5f4ab78677656a32ee",
+    "outputIndex": 0
+  },
+  "ageSeconds": 3325270,
+  "clientId": "client-test-01"
+}

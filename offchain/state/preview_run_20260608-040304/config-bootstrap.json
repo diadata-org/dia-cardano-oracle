@@ -61,9 +61,9 @@
   },
   "paymentHookState": {
     "withdrawAddress": "addr_test1qpgpsm75w7l9u6au7shqzsaulrtxz2gp6xw9zhun70es6tt4t3wsjavx26kmh586erf8xxhqc2y7urq5az32sjv56nyqquxj3j",
-    "accruedFeesLovelace": "92700000",
-    "lifetimeCollectedLovelace": "4338400000",
-    "lifetimeWithdrawnLovelace": "4245700000",
+    "accruedFeesLovelace": "125400000",
+    "lifetimeCollectedLovelace": "4495850000",
+    "lifetimeWithdrawnLovelace": "4370450000",
     "minUtxoLovelace": "5000000"
   },
   "compiledScripts": {
@@ -107,7 +107,7 @@
   },
   "datum": {
     "configCbor": "d8799f9f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dff9f582102d78ade9f8a9c064c8c588dba903df0cc0118596b9ec65f665dea1b448519f531582103aafe60df69602d2600363bf9830b9ba09f199e7c1c1bda7c0be88a3ed341b807582103c7d448ea95104a628945f43745f177f1e9895c6d4c8e43614d7b1c0395469b2dffd8799f4a444941204f7261636c6543312e3019274254f8c614a483a0427a13512f52ac72a576678be317ff1a000927c01a0003d090d8799fd8799f581c70bf934df3daefb7c19d20d06641528765bd02b761bb1e818f633bf6504449415f5041594d454e545f484f4f4bffffd8799fd87a9f581c583b9e5278b1bf6af1ab6da98f2ab123e3a402526f5087fee46970eeffff19012c1a004c4b40ff",
-    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a05867d601b000000010296bb001afd103da01a004c4b40ff"
+    "paymentHookCbor": "d8799fd8799fd8799f581c50186fd477be5e6bbcf42e0143bcf8d6612901d19c515f93f3f30d2dffd8799fd8799fd8799f581c755c5d09758656adbbd0fac8d2731ae0c289ee0c14e8a2a84994d4c8ffffffff1a077973c01b000000010bf93a101b00000001047fc6501a004c4b40ff"
   },
   "transactions": [
     {
@@ -573,6 +573,31 @@
     {
       "step": "preview:settle",
       "submittedTxHash": "12379a44dd797db0498a7555eedf9c6bcc707bccd39387ee75a6fe629d070ad9",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "403c576e9551f484ca1c65ba8f139b6e5b23fc8532910564189087af799ba7a1",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "3e7c3aaa13defa207992cf8bd26e8ba9414342d2e3c72858db4f7cd3dcbbe61c",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "13e18ba70968b5e19b252a54d19737fdaff823bc7ba27aa6aa82a411fdaca405",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "7a7e7ca1fbd1bc77b5c097a44269d5aca9930c96c8aa9178ded7842348d1619b",
+      "confirmed": true
+    },
+    {
+      "step": "preview:settle",
+      "submittedTxHash": "5dd672b9c5876b4c2fcf2adb2700fdffdca86aa1a89203498eb26300d69f61d2",
       "confirmed": true
     }
   ]

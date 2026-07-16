@@ -1,0 +1,18 @@
+Feed sanity check — Preview
+Router   : client_test_01_router_a_majors (5 feeds)
+Registry : 0xF8c614A483A0427A13512F52ac72A576678bE317
+Window   : last 5000 blocks
+
+# Feed sanity check — Preview
+
+5 feeds: 5 PASS · 0 WARN · 0 FAIL.
+
+| Symbol | Status | Deviation % | Staleness (s) | Reasons |
+|--------|--------|-------------|---------------|---------|
+| BTC/USD | PASS | 0.025469 | 333 | — |
+| ETH/USD | PASS | 0.008081 | 333 | — |
+| USDC/USD | PASS | 0.000427 | 188 | — |
+| USDT/USD | PASS | 0.000864 | 217 | — |
+| DOGE/USD | PASS | 0.018727 | 143 | — |
+
+[sanity] report written: docs/milestones/evidence/m4-preview-20260608-040304-01/sanity/
