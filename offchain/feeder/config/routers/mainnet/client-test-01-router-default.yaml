@@ -37,7 +37,7 @@ routers:
         price_deviation: "0.5%"
         # The cron heartbeat guarantees an update at least this often (the max
         # staleness for the pair), even when the price is flat. Needs cron: true below.
-        time_threshold: 30m
+        time_threshold: 1h
         # Enable the cron liveness heartbeat for this destination (Spectra parity);
         # without it, a flat pair would only update on price deviation and could
         # stay stale past time_threshold.
