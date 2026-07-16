@@ -9,8 +9,8 @@
 > indexer, deployment scripts, developer documentation, sample feeds) are
 > complete and verifiable now. The items still marked `[PLACEHOLDER]` are the
 > externally-produced deliverables — the final close-out report, the close-out
-> video, and publication on DIA's developer documentation website — to be filled
-> in at submission.
+> video, the end-to-end install/access demo, and publication on DIA's developer
+> documentation website — to be filled in at submission.
 
 Primary evidence:
 
@@ -79,16 +79,20 @@ monitoring configuration, and developer documentation are public in the
 repository above. All transaction hashes are verifiable on Cardano explorers
 (Cardanoscan).
 
-Over the captured mainnet window — **2026-07-13 09:45 → 2026-07-14 18:01 UTC** —
-the feeder published **40 confirmed** on-chain `ARS/USDT` oracle updates on its
-hourly cadence, with **no downtime gaps** and **0 chain reorgs**. Two events at the
-very start of the window (2026-07-13 ~12:00) were recovered by the next heartbeat —
-one condemned intent (`NonMonotonicNonce`; no transaction broadcast, no fee) and one
-failed transaction (`IntentAgedOut`) — after which the run stayed clean:
-**34 consecutive confirmed updates, 0 failed, 0 reorgs, no gaps over ~29 h**.
-Per-feed accuracy held throughout (each on-chain value within tolerance of the DIA
-source). Full tallies and the machine-readable totals are in the mainnet evidence
-pack.
+Over the captured mainnet window — **2026-07-13 09:45 → 2026-07-14 18:01 UTC**
+(~32.27 h) — the feeder published **40 confirmed** on-chain `ARS/USDT` oracle
+updates on its hourly cadence, measuring **99.78% uptime** against the 99.99% bar:
+on-chain staleness never exceeded the feeder's own 1-hour freshness ceiling by more
+than routine cron-tick and confirmation-depth latency, totalling ~4.3 minutes of
+excess staleness across the whole window (see the mainnet evidence pack for the
+gap-by-gap derivation). **0 chain reorgs** and **0 real on-chain transaction
+failures.** Two intents at the very start of the window (2026-07-13 ~12:00) never
+reached the chain and were recovered by the next heartbeat — one superseded by a
+newer on-chain value (`NonMonotonicNonce`) and one that aged out of the submission
+buffer two seconds past its limit (`IntentAgedOut`); neither broadcast a
+transaction or paid a fee. Per-feed accuracy held throughout (each on-chain value
+within tolerance of the DIA source). Full tallies and the machine-readable totals
+are in the mainnet evidence pack.
 
 ---
 
@@ -104,7 +108,7 @@ below.
 
 | Evidence | Where |
 | --- | --- |
-| Live mainnet deployment — confirmed on-chain oracle updates (0 reorgs; start-of-window failures itemized) over the observed window | [mainnet pack](evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md) — 40 confirmed, 0 reorgs; [`SUMMARY.json`](evidence/m4-mainnet-20260616-074413/SUMMARY.json) |
+| Live mainnet deployment — confirmed on-chain oracle updates (0 reorgs, 0 real failures; the 2 start-of-window pre-submission drops itemized) over the observed window | [mainnet pack](evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md) — 40 confirmed, 0 reorgs; [`SUMMARY.json`](evidence/m4-mainnet-20260616-074413/SUMMARY.json) |
 | Measured uptime + per-feed accuracy (on-chain value vs DIA source) over the window | [uptime narrative](evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md) + [feed sanity](evidence/m4-mainnet-20260616-074413/sanity/feed-sanity.md) — `ARS/USDT` PASS |
 | Monitoring stack tracking the live deployment in real time (the M3 library) | [`offchain/feeder/monitoring/`](../../offchain/feeder/monitoring/), [`docs/architecture/grafana-dashboards.md`](../architecture/grafana-dashboards.md) |
 
@@ -144,9 +148,12 @@ Headline mainnet transaction for immediate verification:
 > documentation is published via the DIA main developer documentation website. The
 > documentation must include clear instructions for the configuration of the
 > oracle, all relevant smart contracts for accessing the oracle, and usage
-> instructions … specific instructions for how any developer on Cardano can
-> request any of the 2,500+ price feeds … and 10,000+ real-world asset price
-> feeds."*
+> instructions as to how to access the DIA oracle on Cardano. The contract
+> addresses and supporting developer documentation will demonstrate DIA's oracle
+> integration on Cardano by deploying a live oracle smart contract which includes
+> 10 asset price feeds. This documentation will also provide specific
+> instructions for how any developer on Cardano can request any of the 2,500+
+> price feeds supported by DIA, and 10,000+ real-world asset price feeds."*
 
 The substantive documentation is **complete and publicly available in the GitHub
 repository** at submission time; the **publication on DIA's developer
@@ -160,11 +167,33 @@ documentation website** is the external step tracked below.
 | Paying for the service (fee/deposit system) | [`indexer README — paying for the service`](../../offchain/indexer/README.md#for-client-dapps-paying-for-the-service) |
 | **How to request any of the 2,500+ / 10,000+ DIA feeds + timeline** | [`indexer README — requesting a new feed`](../../offchain/indexer/README.md#requesting-a-new-feed) |
 | Contract addresses for the live feeds | [`indexer README — published contract addresses`](../../offchain/indexer/README.md#published-contract-addresses) |
+| **Live deployment of 10 asset price feeds** | Preview pack [`Indexer — live queries`](evidence/m4-preview-20260608-040304/milestone-4-preview-evidence.md#indexer--live-queries) — 16 distinct symbols |
+
+A note for the reviewer on feed count, in the same spirit as M2's: the milestone
+text asks for a live deployment of 10 asset price feeds. Mainnet carries DIA's one
+continuously-published mainnet registry feed (`ARS/USDT`) — the sustained-uptime
+deployment AC#1 measures. Preview carries **16 distinct live feeds** — `ADA/USD`,
+`ARB/USD`, `BNB/USD`, `BTC/USD`, `DAI/USD`, `DOGE/USD`, `ETH/USD`, `LTC/USD`,
+`MATIC/USD`, `NEIRO/USD`, `SHIB/USD`, `SOL/USD`, `USDC/USD`, `USDT/USD`, `XRP/USD`,
+`XVG/USD` — satisfying the 10-feed requirement with margin, exercised through the
+same contracts, indexer, and consumer path as mainnet. This is why the preview
+pack is load-bearing evidence for M4, not a redundant copy of the mainnet pack.
 
 **Publication on the DIA main developer documentation website:**
 `[PLACEHOLDER: link to the published DIA documentation]` — the consolidated
 publication deferred from M1/M2/M3 (per the accepted M1 PoA), published once
 against the final stable M4 surface.
+
+The publication date itself is DIA's decision, not a gap in delivered work: DIA
+has indicated it prefers to publish the documentation once the integration is
+fully finalized, pairing the documentation call-to-action with a coordinated
+marketing announcement of the oracles going live on Cardano, rather than
+publishing in isolation ahead of that announcement. That announcement timeline is
+DIA's own external communications process, independent of the engineering
+deliverables in this milestone — all of which (contracts, feeders, monitoring,
+indexer, deployment scripts, and the documentation content itself) are complete,
+tested, and public in the repository today. The documentation is ready to publish
+the moment DIA schedules that announcement.
 
 ---
 

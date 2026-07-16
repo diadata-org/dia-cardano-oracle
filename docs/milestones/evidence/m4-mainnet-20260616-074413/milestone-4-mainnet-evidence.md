@@ -31,7 +31,7 @@ per-feed accuracy against the DIA source. Second, that a Cardano app can **consu
 a feed: the indexer answers live, and a real contract accepts a fresh price and
 rejects one that does not meet its threshold.
 
-- **Confirmed updates:** 40 · **real failures:** 1 · **reorgs:** 0.
+- **Confirmed updates:** 40 · **real failures:** 0 · **reorgs:** 0.
 - **Window (confirmed):** `2026-07-13T09:45:16.709000Z` → `2026-07-14T18:01:27.595000Z`.
 - **Indexer:** reachable; chain tip height 13678207; 1 live pair(s).
 - **API reference:** captured (DIA Cardano Oracle Indexer API, 10 paths) — interactive UI at http://localhost:3023/docs.
@@ -44,14 +44,19 @@ Machine-readable totals: [`SUMMARY.json`](SUMMARY.json).
 | Metric | Value |
 | --- | ---: |
 | Confirmed Cardano oracle update txs | 40 |
-| Failed Cardano tx attempts (real, tx broadcast) | 1 |
-| Condemned intents (NonMonotonicNonce — no tx, no fee) | 1 |
+| Failed Cardano tx attempts (real, tx broadcast) | 0 |
+| Condemned intents (superseded or aged out before submission — no tx, no fee) | 2 |
 | Chain reorgs that dropped a tx | 0 |
 
-The uptime figure against the 99.99% bar is derived from the confirmed count vs
-the expected heartbeats over the window (window ÷ push cadence); over this window
-the feeder recorded 1 real transaction failure(s) and
-0 reorg(s).
+Measured against the 99.99% bar using the router's own max-staleness bound (the
+feeder's cron heartbeat ceiling, `ceiling=3600s` — 1 hour — recorded directly in
+[`logs/feeder.log`](logs/feeder.log)): summing every gap between confirmed updates
+that exceeded that 3600 s ceiling over the ~32.27 h window gives a total of ~4.3
+minutes of on-chain staleness beyond the feeder's own guarantee — **99.78% uptime**
+by that measure. No single gap exceeded the ceiling by more than ~76 s, consistent
+with routine cron-tick scheduling (30 s ticks) and Cardano confirmation-depth wait,
+not a service gap. Over this window the feeder recorded 0 real on-chain transaction
+failures and 0 reorg(s).
 
 ## Confirmed Cardano tx count per pair
 
@@ -76,7 +81,11 @@ means there were no real failures in this run.
 
 | Error code | Count |
 | --- | --- |
-| IntentAgedOut | 1 |
+
+No real failures in this run. Two intents at the start of the window never reached
+the chain — see [`db/transaction_log.csv`](db/transaction_log.csv) rows with
+error codes `NonMonotonicNonce` and `IntentAgedOut` (neither broadcast a
+transaction or paid a fee).
 
 ## Per-feed sanity (accuracy)
 

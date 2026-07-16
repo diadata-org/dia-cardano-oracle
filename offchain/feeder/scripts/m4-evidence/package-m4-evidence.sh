@@ -176,9 +176,11 @@ fi
 # definitions as the M2/M3 packs:
 #   confirmed — a Cardano tx that landed on-chain.
 #   failed    — a broadcast tx that failed on-chain (excludes NonMonotonicNonce
-#               = superseded before submission, and CrashRecovery = force-failed
-#               on a restart: neither is a broadcast that failed).
-#   condemned — NonMonotonicNonce (no tx, no fee).
+#               and IntentAgedOut = both dropped before any tx was ever built or
+#               broadcast, and CrashRecovery = force-failed on a restart: none of
+#               the three is a broadcast that failed).
+#   condemned — NonMonotonicNonce (superseded on-chain) or IntentAgedOut (aged out
+#               of the submission buffer before the lane flushed) — no tx, no fee.
 #   reorgs    — already-confirmed txs dropped by a chain reorg (from the metric).
 # ---------------------------------------------------------------------------
 echo "[package-m4] A3 — computing reliability tallies"
@@ -195,8 +197,8 @@ ERROR_COUNTS="$OUT_DIR/stats/error-counts.tsv"
 
 if [[ "$DB_PRESENT" == 1 ]]; then
   stat_total_confirmed=$(sqlite3 "$SQLITE_FILE" "SELECT COUNT(*) FROM transaction_log WHERE status='confirmed';" 2>/dev/null || echo 0)
-  stat_total_failed=$(sqlite3 "$SQLITE_FILE" "SELECT COUNT(*) FROM transaction_log WHERE status='failed' AND COALESCE(error_code,'') NOT IN ('NonMonotonicNonce','CrashRecovery','');" 2>/dev/null || echo 0)
-  stat_total_condemned=$(sqlite3 "$SQLITE_FILE" "SELECT COUNT(*) FROM transaction_log WHERE status='failed' AND error_code='NonMonotonicNonce';" 2>/dev/null || echo 0)
+  stat_total_failed=$(sqlite3 "$SQLITE_FILE" "SELECT COUNT(*) FROM transaction_log WHERE status='failed' AND COALESCE(error_code,'') NOT IN ('NonMonotonicNonce','IntentAgedOut','CrashRecovery','');" 2>/dev/null || echo 0)
+  stat_total_condemned=$(sqlite3 "$SQLITE_FILE" "SELECT COUNT(*) FROM transaction_log WHERE status='failed' AND error_code IN ('NonMonotonicNonce','IntentAgedOut');" 2>/dev/null || echo 0)
 
   # Window from confirmed txs (falls back to created_at_ms if no confirmed_at).
   first_ms=$(sqlite3 "$SQLITE_FILE" "SELECT MIN(COALESCE(confirmed_at_ms,created_at_ms)) FROM transaction_log WHERE status='confirmed';" 2>/dev/null || echo "")
@@ -216,7 +218,7 @@ if [[ "$DB_PRESENT" == 1 ]]; then
 
   # Real failures grouped by error_code.
   sqlite3 -separator $'\t' "$SQLITE_FILE" \
-    "SELECT error_code, COUNT(*) FROM transaction_log WHERE status='failed' AND COALESCE(error_code,'') NOT IN ('NonMonotonicNonce','CrashRecovery','') GROUP BY error_code ORDER BY COUNT(*) DESC;" \
+    "SELECT error_code, COUNT(*) FROM transaction_log WHERE status='failed' AND COALESCE(error_code,'') NOT IN ('NonMonotonicNonce','IntentAgedOut','CrashRecovery','') GROUP BY error_code ORDER BY COUNT(*) DESC;" \
     > "$ERROR_COUNTS" 2>/dev/null || true
 fi
 
@@ -537,7 +539,7 @@ Machine-readable totals: [\`SUMMARY.json\`](SUMMARY.json).
 | --- | ---: |
 | Confirmed Cardano oracle update txs | ${stat_total_confirmed} |
 | Failed Cardano tx attempts (real, tx broadcast) | ${stat_total_failed} |
-| Condemned intents (NonMonotonicNonce — no tx, no fee) | ${stat_total_condemned} |
+| Condemned intents (superseded or aged out before submission — no tx, no fee) | ${stat_total_condemned} |
 | Chain reorgs that dropped a tx | ${stat_total_reorgs} |
 
 The uptime figure against the 99.99% bar is derived from the confirmed count vs

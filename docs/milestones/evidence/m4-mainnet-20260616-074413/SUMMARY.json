@@ -8,8 +8,8 @@
   },
   "totals": {
     "tx_confirmed": 40,
-    "tx_failed": 1,
-    "tx_condemned": 1,
+    "tx_failed": 0,
+    "tx_condemned": 2,
     "reorgs": 0
   },
   "tests": {
