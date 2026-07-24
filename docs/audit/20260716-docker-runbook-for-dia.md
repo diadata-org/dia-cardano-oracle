@@ -51,6 +51,44 @@ The default public service ports are feeder `8080`, indexer `3001`, Grafana
 `3000`, Prometheus `9090`, and Alertmanager `9093`. Change only the
 `*_HOST_PORT` values in `offchain/feeder/.env` if those ports are occupied.
 
+## Credentials and Variables
+
+The public data points — Blockfrost/Koios API URLs, DIA RPC/WebSocket URLs, DIA
+registry addresses and source chain ids, the DIA authorized *public* keys, the
+EIP-712 domain, and the explorer URLs — ship already filled in the two
+`.env.example` files. Only the secrets below start blank and must be supplied.
+Each `*_TESTNET` value is for Preview and each `*_MAINNET` value for Mainnet; fill
+only the active network's block.
+
+| Variable | Set in | What it is | Source |
+| --- | --- | --- | --- |
+| `BLOCKFROST_PROJECT_ID_TESTNET` / `_MAINNET` | `feeder/.env` + `cli/.env` | Cardano chain-provider project id for the network | a Blockfrost account (blockfrost.io) |
+| `CARDANO_WALLET_SEED_TESTNET` / `_MAINNET` | `feeder/.env` + `cli/.env` | seed phrase of the operator wallet that pays every oracle-update transaction | create with `make wallet`; fund from the Preview faucet (Preview) or with real ADA (Mainnet) |
+| `DIA_WS_CREDENTIAL_TESTNET` / `_MAINNET` | `feeder/.env` + `cli/.env` | DIA price-feed WebSocket credential | DIA |
+| `DIA_AUTHORIZED_PRIVATE_KEY_TESTNET` | `cli/.env` only | local Preview-only demo signer that self-signs demonstration intents | create with `make cli CMD="ethereum-wallet:create"` |
+| `DIA_AUTHORIZED_PRIVATE_KEY_MAINNET` | `cli/.env` only | private half of an authorized Mainnet signer; its public key must be in the deployed Config's authorized set | DIA — see the Mainnet Deployment Boundary section |
+
+`CARDANO_WALLET_SEED_*` and `CARDANO_PRIVATE_KEY_*` are two ways to give the same
+operator wallet — set the seed phrase or the raw private key, not both. The
+`DIA_AUTHORIZED_PRIVATE_KEY_*` keys are used only by the CLI to self-sign demo
+intents; the running feeder relays intents already signed by DIA and does not
+need them. Keep the provider, wallet, and WebSocket values identical in both
+`.env` files.
+
+Optional, in `feeder/.env` only: the `*_HOST_PORT` values (remap the published
+ports), `GRAFANA_ADMIN_PASSWORD` (read only on first Grafana boot), and the
+`ALERTMANAGER_*` notification secrets (only when a channel is enabled in the
+infrastructure YAML).
+
+When you reuse a verified deployment, the Blockfrost account, DIA WebSocket
+credential, and DIA authorized signer keys are your own and are entered
+directly. The wallet is not interchangeable: the deployment's admin wallet
+address is compiled into the PaymentHook contract as its withdraw address (and is
+referenced by the client/receiver configuration), so reusing those contracts
+requires that exact wallet (`CARDANO_WALLET_SEED_*`) — a freshly created wallet
+does not match the deployed contracts and cannot administer or withdraw from
+them. Obtain that wallet from the prior operator to run the reused deployment.
+
 ## New Preview Deployment
 
 This path creates new on-chain contracts and spends Preview test ADA. It is the
