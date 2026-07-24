@@ -65,4 +65,16 @@ describe("resolveWalletPoolSigners", () => {
       /No wallet pool configured/,
     );
   });
+
+  it("throws when both the seed and the private key are set for the single-wallet default", () => {
+    const env = {
+      CARDANO_WALLET_SEED_TESTNET: "the seed",
+      CARDANO_PRIVATE_KEY_TESTNET: "ed25519_sk...",
+    } as NodeJS.ProcessEnv;
+
+    assert.throws(
+      () => resolveWalletPoolSigners({ wallets: undefined, networkSuffix: "TESTNET", env }),
+      /Both "CARDANO_WALLET_SEED_TESTNET" and "CARDANO_PRIVATE_KEY_TESTNET" are set/,
+    );
+  });
 });

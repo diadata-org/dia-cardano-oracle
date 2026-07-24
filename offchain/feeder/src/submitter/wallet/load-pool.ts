@@ -57,6 +57,11 @@ export function resolveWalletPoolSigners(args: {
     const keyVar = `CARDANO_PRIVATE_KEY_${networkSuffix}`;
     const seed = env[seedVar]?.trim();
     const key = env[keyVar]?.trim();
+    if (seed && key) {
+      throw new Error(
+        `Both "${seedVar}" and "${keyVar}" are set — configure exactly one for the single-wallet default (a seed phrase or a raw private key, not both).`,
+      );
+    }
     if (seed) return [{ id: "main", role: "main", signer: { kind: "seed", value: seed } }];
     if (key) return [{ id: "main", role: "main", signer: { kind: "privateKey", value: key } }];
     throw new Error(

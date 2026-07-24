@@ -122,6 +122,14 @@ export function getCliConfig(): CliConfig {
   );
   const suffix = suffixForNetwork(cardanoNetwork);
 
+  const cardanoWalletSeed = pickNetworkEnv(suffix, "CARDANO_WALLET_SEED");
+  const cardanoPrivateKey = pickNetworkEnv(suffix, "CARDANO_PRIVATE_KEY");
+  if (cardanoWalletSeed && cardanoPrivateKey) {
+    throw new Error(
+      `Both "CARDANO_WALLET_SEED_${suffix}" and "CARDANO_PRIVATE_KEY_${suffix}" are set — configure exactly one (a seed phrase or a raw private key, not both).`,
+    );
+  }
+
   return {
     cardanoNetwork,
     networkSuffix: suffix,
@@ -132,8 +140,8 @@ export function getCliConfig(): CliConfig {
     blockfrostProjectId: requireNetworkEnv(suffix, "BLOCKFROST_PROJECT_ID"),
     blockfrostApiUrl: requireNetworkEnv(suffix, "BLOCKFROST_API_URL"),
     koiosApiUrl: requireNetworkEnv(suffix, "KOIOS_API_URL"),
-    cardanoWalletSeed: pickNetworkEnv(suffix, "CARDANO_WALLET_SEED"),
-    cardanoPrivateKey: pickNetworkEnv(suffix, "CARDANO_PRIVATE_KEY"),
+    cardanoWalletSeed,
+    cardanoPrivateKey,
     authorizedDiaPrivateKey: pickNetworkEnv(suffix, "DIA_AUTHORIZED_PRIVATE_KEY"),
     authorizedDiaPublicKeys: parseHexList(pickNetworkEnv(suffix, "DIA_AUTHORIZED_PUBLIC_KEYS")),
     diaWsCredential: pickNetworkEnv(suffix, "DIA_WS_CREDENTIAL"),

@@ -110,6 +110,7 @@ async function run(name: string, fn: () => unknown): Promise<void> {
 await run("testCardanoWalletCreate", testCardanoWalletCreate);
 await run("testEthereumWalletCreate", testEthereumWalletCreate);
 await run("testCliConfigAllowsCardanoOnlyModeWithoutDiaSourceEnv", testCliConfigAllowsCardanoOnlyModeWithoutDiaSourceEnv);
+await run("testCliConfigRejectsBothSeedAndPrivateKey", testCliConfigRejectsBothSeedAndPrivateKey);
 await run("testIntentSigning", testIntentSigning);
 await run("testBatchSnapshotRefresh", testBatchSnapshotRefresh);
 await run("testCompatibleBatchRules", testCompatibleBatchRules);
@@ -709,6 +710,29 @@ function testCliConfigAllowsCardanoOnlyModeWithoutDiaSourceEnv(): void {
     assert.equal(config.dia, null);
     assert.equal(typeof config.blockfrostApiUrl, "string");
     assert.equal(typeof config.koiosApiUrl, "string");
+  } finally {
+    for (const [key, value] of original.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+function testCliConfigRejectsBothSeedAndPrivateKey(): void {
+  const keys = ["CARDANO_WALLET_SEED_TESTNET", "CARDANO_PRIVATE_KEY_TESTNET"] as const;
+  const original = new Map(keys.map((key) => [key, process.env[key]] as const));
+
+  try {
+    process.env.CARDANO_WALLET_SEED_TESTNET = "the seed";
+    process.env.CARDANO_PRIVATE_KEY_TESTNET = "ed25519_sk...";
+
+    assert.throws(
+      () => getCliConfig(),
+      /Both "CARDANO_WALLET_SEED_TESTNET" and "CARDANO_PRIVATE_KEY_TESTNET" are set/,
+    );
   } finally {
     for (const [key, value] of original.entries()) {
       if (value === undefined) {
