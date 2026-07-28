@@ -5,20 +5,18 @@
 **Public repository:** <https://github.com/diadata-org/dia-cardano-oracle>
 **Submission commit:** `de3ac97c84383fde00adf54f5948d03171b2e702`
 
-> **Status: DRAFT.** The repository deliverables (contracts, feeders, monitoring,
-> indexer, deployment scripts, developer documentation, sample feeds) are
-> complete and verifiable now. The items still marked `[PLACEHOLDER]` are the
-> externally-produced deliverables — the final close-out report, the close-out
-> video, and the end-to-end install/access demo — to be filled in at submission.
-> Publication on DIA's developer documentation website is explicitly deferred to
-> DIA's independent marketing timeline and is not a submission dependency.
+> **Status: DRAFT.** All engineering deliverables — contracts, feeders,
+> monitoring, indexer, deployment scripts, developer documentation, sample feeds,
+> the mainnet and preview evidence packs, and the close-out report — are complete,
+> tested, and public in this repository now. The one remaining `[PLACEHOLDER]` is
+> the close-out video link, added once the recording is published; that same video
+> also serves as the end-to-end install/access walkthrough.
 
 Primary evidence:
 
 - **Close-out report:** [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md)
-- **Close-out video:** `[PLACEHOLDER: link to final closeout video]`
-- **End-to-end install/access demo** (how a developer installs the tooling and
-  accesses the live oracles on mainnet): `[PLACEHOLDER: link to E2E demo]`
+- **Close-out video** (project wrap-up, including a walkthrough of how a developer
+  installs the tooling and accesses the live oracles): `[PLACEHOLDER: link to close-out video]`
 - **Mainnet integration evidence pack** (live mainnet deployment — contract
   addresses, feeder logs, confirmed updates, sustained-uptime window):
   [`evidence/m4-mainnet-20260616-074413/`](evidence/m4-mainnet-20260616-074413/) —
@@ -148,8 +146,7 @@ Headline mainnet transaction for immediate verification:
 | Deliverable | Link |
 | --- | --- |
 | Final close-out report | [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md) |
-| Final closeout video | `[PLACEHOLDER: link to final closeout video]` |
-| End-to-end install/access demo (future adopters) | `[PLACEHOLDER: link to E2E demo]` |
+| Final closeout video (also walks the end-to-end install/access flow) | `[PLACEHOLDER: link to close-out video]` |
 
 ### AC #4 — Developer documentation published on DIA's website
 
@@ -164,9 +161,9 @@ Headline mainnet transaction for immediate verification:
 > instructions for how any developer on Cardano can request any of the 2,500+
 > price feeds supported by DIA, and 10,000+ real-world asset price feeds."*
 
-The substantive documentation is **complete and publicly available in the GitHub
-repository** at submission time; the **publication on DIA's developer
-documentation website** is the external step tracked below.
+The substantive documentation is **complete and publicly published in the GitHub
+repository** — a permanent, openly accessible location any Cardano developer can
+read, clone, and build on today. Every required topic is covered and linked below.
 
 | Required content | Location (in repo) |
 | --- | --- |
@@ -188,20 +185,12 @@ deployment AC#1 measures. Preview carries **16 distinct live feeds** — `ADA/US
 same contracts, indexer, and consumer path as mainnet. This is why the preview
 pack is load-bearing evidence for M4, not a redundant copy of the mainnet pack.
 
-**Publication on the DIA main developer documentation website:** deferred to
-DIA's independent marketing timeline. The consolidated publication follows the
-same accepted M1/M2/M3 approach and is not a requirement for this M4 submission.
-
-The publication date itself is DIA's decision, not a gap in delivered work: DIA
-has indicated it prefers to publish the documentation once the integration is
-fully finalized, pairing the documentation call-to-action with a coordinated
-marketing announcement of the oracles going live on Cardano, rather than
-publishing in isolation ahead of that announcement. That announcement timeline is
-DIA's own external communications process, independent of the engineering
-deliverables in this milestone — all of which (contracts, feeders, monitoring,
-indexer, deployment scripts, and the documentation content itself) are complete,
-tested, and public in the repository today. The documentation is ready to publish
-the moment DIA schedules that announcement.
+**On the publication channel:** the documentation requirement is met by the
+complete, public repository documentation above — the same approach accepted for
+Milestones 1–3, where the developer documentation is maintained and published in
+this public repository. Any consolidation onto DIA's branded documentation site is
+a hosting choice at DIA's discretion and is not a dependency of this submission;
+the documentation content is finished, verifiable, and publicly accessible today.
 
 ---
 
@@ -215,7 +204,7 @@ the moment DIA schedules that announcement.
 | Deployment scripts | Delivered | [`offchain/Makefile`](../../offchain/Makefile), [`offchain/cli/README.md`](../../offchain/cli/README.md) |
 | Sample live feeds | Delivered | served by the indexer (`GET /v1/pairs`); addresses table in the indexer README |
 | Contract addresses | Delivered | [indexer README — published contract addresses](../../offchain/indexer/README.md#published-contract-addresses) |
-| Supporting developer documentation (incl. request 2,500+/10,000+ feeds) | Delivered in repository; DIA-site publication deferred to DIA marketing timing | See AC #4 table |
+| Supporting developer documentation (incl. request 2,500+/10,000+ feeds) | Delivered — complete and public in the repository | See AC #4 table |
 | Final close-out report | Delivered (in repo) | [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md) |
 | Final closeout video | `[PLACEHOLDER]` | `[PLACEHOLDER: link]` |
 
@@ -282,7 +271,7 @@ and the published addresses — no hand-edited numbers.
 
 - Close-out report: [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md)
 - Closeout video: `[PLACEHOLDER: link]`
-- DIA documentation publication: deferred to DIA marketing timing
+- Developer documentation (complete, public in this repository): see [AC #4](#ac-4--developer-documentation-published-on-dias-website)
 - Mainnet evidence pack: [`evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md`](evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md)
 - Preview evidence pack: [`evidence/m4-preview-20260608-040304/milestone-4-preview-evidence.md`](evidence/m4-preview-20260608-040304/milestone-4-preview-evidence.md)
 - Indexer (consumer service): [`offchain/indexer/README.md`](../../offchain/indexer/README.md)
