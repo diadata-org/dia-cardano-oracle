@@ -3,7 +3,7 @@
 **Project:** DIA Oracles on Cardano
 **Milestone:** 4 — End-to-End Integration and Deployment on Cardano Mainnet
 **Public repository:** <https://github.com/diadata-org/dia-cardano-oracle>
-**Submission commit:** `[PLACEHOLDER: submission commit hash]`
+**Submission commit:** `de3ac97c84383fde00adf54f5948d03171b2e702`
 
 > **Status: DRAFT.** The repository deliverables (contracts, feeders, monitoring,
 > indexer, deployment scripts, developer documentation, sample feeds) are
@@ -15,7 +15,7 @@
 
 Primary evidence:
 
-- **Close-out report:** `[PLACEHOLDER: link to final close-out report]`
+- **Close-out report:** [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md)
 - **Close-out video:** `[PLACEHOLDER: link to final closeout video]`
 - **End-to-end install/access demo** (how a developer installs the tooling and
   accesses the live oracles on mainnet): `[PLACEHOLDER: link to E2E demo]`
@@ -147,7 +147,7 @@ Headline mainnet transaction for immediate verification:
 
 | Deliverable | Link |
 | --- | --- |
-| Final close-out report | `[PLACEHOLDER: link to final close-out report]` |
+| Final close-out report | [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md) |
 | Final closeout video | `[PLACEHOLDER: link to final closeout video]` |
 | End-to-end install/access demo (future adopters) | `[PLACEHOLDER: link to E2E demo]` |
 
@@ -216,7 +216,7 @@ the moment DIA schedules that announcement.
 | Sample live feeds | Delivered | served by the indexer (`GET /v1/pairs`); addresses table in the indexer README |
 | Contract addresses | Delivered | [indexer README — published contract addresses](../../offchain/indexer/README.md#published-contract-addresses) |
 | Supporting developer documentation (incl. request 2,500+/10,000+ feeds) | Delivered in repository; DIA-site publication deferred to DIA marketing timing | See AC #4 table |
-| Final close-out report | `[PLACEHOLDER]` | `[PLACEHOLDER: link]` |
+| Final close-out report | Delivered (in repo) | [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md) |
 | Final closeout video | `[PLACEHOLDER]` | `[PLACEHOLDER: link]` |
 
 ---
@@ -256,7 +256,7 @@ make start-feeder
 
 ```bash
 git clone https://github.com/diadata-org/dia-cardano-oracle.git
-cd dia-cardano-oracle && git checkout [PLACEHOLDER: submission commit]
+cd dia-cardano-oracle && git checkout de3ac97c84383fde00adf54f5948d03171b2e702
 
 ( cd contracts/aiken  && aiken check )
 ( cd offchain/feeder  && npm ci && npm test )
@@ -280,7 +280,7 @@ and the published addresses — no hand-edited numbers.
 
 ## 5. Pointers (one-stop links)
 
-- Close-out report: `[PLACEHOLDER: link]`
+- Close-out report: [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md)
 - Closeout video: `[PLACEHOLDER: link]`
 - DIA documentation publication: deferred to DIA marketing timing
 - Mainnet evidence pack: [`evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md`](evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md)
