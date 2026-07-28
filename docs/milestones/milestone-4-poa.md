@@ -139,7 +139,7 @@ Headline mainnet transaction for immediate verification:
 | Deliverable | Link |
 | --- | --- |
 | Final close-out report | [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md) |
-| Final closeout video (also walks the end-to-end install/access flow) | `[PLACEHOLDER: link to close-out video]` |
+| Final closeout video (also walks the end-to-end install/access flow) | <https://youtu.be/iPOC-Ojb5k8> |
 
 ### AC #4 — Developer documentation published on DIA's website
 
@@ -263,7 +263,7 @@ and the published addresses — no hand-edited numbers.
 ## 5. Pointers (one-stop links)
 
 - Close-out report: [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md)
-- Closeout video: `[PLACEHOLDER: link]`
+- Closeout video: <https://youtu.be/iPOC-Ojb5k8>
 - Developer documentation (complete, public in this repository): see [AC #4](#ac-4--developer-documentation-published-on-dias-website)
 - Mainnet evidence pack: [`evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md`](evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md)
 - Preview evidence pack: [`evidence/m4-preview-20260608-040304/milestone-4-preview-evidence.md`](evidence/m4-preview-20260608-040304/milestone-4-preview-evidence.md)

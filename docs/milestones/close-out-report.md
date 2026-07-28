@@ -134,7 +134,7 @@ if available — none are asserted here that are not directly measured above.]`
 
 ## Pointers
 
-- Close-out video: `[PLACEHOLDER: link]`
+- Close-out video: <https://youtu.be/iPOC-Ojb5k8>
 - Milestone 4 PoA: [`milestone-4-poa.md`](milestone-4-poa.md)
 - Milestone 1-3 PoAs: [`milestone-1-poa.md`](milestone-1-poa.md), [`milestone-2-poa.md`](milestone-2-poa.md), [`milestone-3-poa.md`](milestone-3-poa.md)
 - Architecture: [`docs/architecture/cardano-oracle-architecture.md`](../architecture/cardano-oracle-architecture.md)
