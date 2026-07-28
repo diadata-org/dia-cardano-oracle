@@ -2,6 +2,20 @@
 
 Implementation repository for the DIA oracle integration on Cardano.
 
+It delivers a complete, end-to-end DIA price oracle on Cardano:
+
+- **On-chain price contracts** — [`contracts/aiken/`](contracts/aiken/README.md): the
+  Pair / Receiver / Config validators that hold and update each feed on-chain.
+- **Feeder daemon** — [`offchain/feeder/`](offchain/feeder/README.md): publishes DIA
+  prices to Cardano on a live cadence.
+- **Monitoring stack** — [Grafana dashboards + alerts](docs/architecture/grafana-dashboards.md):
+  tracks the deployment in real time.
+- **Consumer-facing indexer** — [`offchain/indexer/`](offchain/indexer/README.md): a
+  read-only HTTP service any Cardano dApp queries for the live on-chain feeds.
+- **Example consumer contract** — [`example_oracle_consumer.ak`](contracts/aiken/validators/example_oracle_consumer.ak):
+  an Aiken validator that reads a feed and accepts/rejects a spend on price, with an
+  end-to-end demo.
+
 ## Contents
 
 - [DIA Cardano Oracle](#dia-cardano-oracle)

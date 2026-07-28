@@ -5,18 +5,11 @@
 **Public repository:** <https://github.com/diadata-org/dia-cardano-oracle>
 **Submission commit:** `de3ac97c84383fde00adf54f5948d03171b2e702`
 
-> **Status: DRAFT.** All engineering deliverables — contracts, feeders,
-> monitoring, indexer, deployment scripts, developer documentation, sample feeds,
-> the mainnet and preview evidence packs, and the close-out report — are complete,
-> tested, and public in this repository now. The one remaining `[PLACEHOLDER]` is
-> the close-out video link, added once the recording is published; that same video
-> also serves as the end-to-end install/access walkthrough.
-
 Primary evidence:
 
 - **Close-out report:** [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md)
 - **Close-out video** (project wrap-up, including a walkthrough of how a developer
-  installs the tooling and accesses the live oracles): `[PLACEHOLDER: link to close-out video]`
+  installs the tooling and accesses the live oracles): <https://youtu.be/iPOC-Ojb5k8>
 - **Mainnet integration evidence pack** (live mainnet deployment — contract
   addresses, feeder logs, confirmed updates, sustained-uptime window):
   [`evidence/m4-mainnet-20260616-074413/`](evidence/m4-mainnet-20260616-074413/) —
@@ -206,7 +199,7 @@ the documentation content is finished, verifiable, and publicly accessible today
 | Contract addresses | Delivered | [indexer README — published contract addresses](../../offchain/indexer/README.md#published-contract-addresses) |
 | Supporting developer documentation (incl. request 2,500+/10,000+ feeds) | Delivered — complete and public in the repository | See AC #4 table |
 | Final close-out report | Delivered (in repo) | [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md) |
-| Final closeout video | `[PLACEHOLDER]` | `[PLACEHOLDER: link]` |
+| Final closeout video | Delivered | <https://youtu.be/iPOC-Ojb5k8> |
 
 ---
 
