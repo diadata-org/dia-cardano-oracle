@@ -3,9 +3,9 @@
 **Project:** Integration of DIA Price Oracles on Cardano
 **Catalyst Fund:** Fund 14 — Cardano Use Cases: Concepts
 **Project number:** 1400073
-**Project Manager:** `[PLACEHOLDER: project manager name]`
+**Project Manager:** Dillon Hanson (dillon.hanson@diadata.org)
 **Start date:** 2026-04-14
-**Completion date:** `[PLACEHOLDER: date of M4 approval]`
+**Completion date:** 2026-08-10
 **Repository:** <https://github.com/diadata-org/dia-cardano-oracle> (MIT License)
 
 ## Contents
@@ -78,11 +78,9 @@ read a price:
    [example consumer contract](../../contracts/aiken/validators/example_oracle_consumer.ak)
    as a working reference implementation.
 
-`[PLACEHOLDER: DIA to confirm any current or committed dApp integrations /
-integration requests, if there are any to report.]` No user-count or
-transaction-volume adoption figures are reported here because none have been
-measured yet at submission time — the system has been live on Mainnet only
-since 2026-06-16.
+No integrations are confirmed yet, as the oracle has just gone live. DIA is in active outreach and preliminary discussions with a number of Cardano-ecosystem protocols, including Liqwid Finance, Indigo Protocol, Djed Alliance, Fluid Tokens, Surf Lending, Ascend, Dano Finance, Strike Finance, Minswap, Sundaeswap, Muesliswap, WingRiders, and VyFinance. 
+DIA will continue connecting with partner prospects across the Cardano ecosystem and is now beginning support in the live production environment. 
+No user-count or transaction-volume adoption figures are reported here because none have been measured yet at submission time — the system has been live on Mainnet only since 2026-06-16.
 
 ## 3. Impact
 
@@ -102,8 +100,7 @@ Measurable, verified results as of this report:
   gives any Cardano dApp a documented path to any of DIA's 2,500+ price feeds
   and 10,000+ real-world-asset feeds.
 
-`[PLACEHOLDER: DIA to add any TVL, partnership, or ecosystem-adoption figures,
-if available — none are asserted here that are not directly measured above.]`
+No TVL or ecosystem-adoption figures are reported yet, as the oracle has just gone live. DIA is now initiating the onboarding process with protocols across the ecosystem.
 
 ## 4. Sustainability
 
@@ -115,8 +112,8 @@ if available — none are asserted here that are not directly measured above.]`
 - Requesting a new feed is a standing, documented process — see
   [indexer README — requesting a new feed](../../offchain/indexer/README.md#requesting-a-new-feed) —
   not a one-off integration effort.
-- `[PLACEHOLDER: DIA's committed maintenance/support arrangement and revenue
-  model for the deployed integration, if decided.]`
+- DIA will fund the ongoing infrastructure and maintenance costs for the deployed price oracles.
+  Costs tied to custom NAV oracle requests, or additional features outside the scope of the original grant, will be discussed   and negotiated directly with the requesting protocol, or proposed as a follow-up Catalyst submission.
 
 **Forking / permanent availability (in case the project is not continued):**
 
