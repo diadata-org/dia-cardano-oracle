@@ -3,11 +3,11 @@
 **Project:** DIA Oracles on Cardano
 **Milestone:** 4 — End-to-End Integration and Deployment on Cardano Mainnet
 **Public repository:** <https://github.com/diadata-org/dia-cardano-oracle>
-**Submission commit:** `de3ac97c84383fde00adf54f5948d03171b2e702`
+**Submission tag:** `catalyst-m4-closeout`
 
 Primary evidence:
 
-- **Close-out report:** [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md)
+- **Close-out report:** [close-out-report.pdf](https://github.com/diadata-org/dia-cardano-oracle/blob/catalyst-m4-closeout/docs/milestones/close-out-report.pdf)
 - **Close-out video** (project wrap-up, including a walkthrough of how a developer
   installs the tooling and accesses the live oracles): <https://youtu.be/iPOC-Ojb5k8>
 - **Mainnet integration evidence pack** (live mainnet deployment — contract
@@ -138,7 +138,7 @@ Headline mainnet transaction for immediate verification:
 
 | Deliverable | Link |
 | --- | --- |
-| Final close-out report | [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md) |
+| Final close-out report | [close-out-report.pdf](https://github.com/diadata-org/dia-cardano-oracle/blob/catalyst-m4-closeout/docs/milestones/close-out-report.pdf) |
 | Final closeout video (also walks the end-to-end install/access flow) | <https://youtu.be/iPOC-Ojb5k8> |
 
 ### AC #4 — Developer documentation published on DIA's website
@@ -198,7 +198,7 @@ the documentation content is finished, verifiable, and publicly accessible today
 | Sample live feeds | Delivered | served by the indexer (`GET /v1/pairs`); addresses table in the indexer README |
 | Contract addresses | Delivered | [indexer README — published contract addresses](../../offchain/indexer/README.md#published-contract-addresses) |
 | Supporting developer documentation (incl. request 2,500+/10,000+ feeds) | Delivered — complete and public in the repository | See AC #4 table |
-| Final close-out report | Delivered (in repo) | [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md) |
+| Final close-out report | Delivered (in repo) | [close-out-report.pdf](https://github.com/diadata-org/dia-cardano-oracle/blob/catalyst-m4-closeout/docs/milestones/close-out-report.pdf) |
 | Final closeout video | Delivered | <https://youtu.be/iPOC-Ojb5k8> |
 
 ---
@@ -238,7 +238,7 @@ make start-feeder
 
 ```bash
 git clone https://github.com/diadata-org/dia-cardano-oracle.git
-cd dia-cardano-oracle && git checkout de3ac97c84383fde00adf54f5948d03171b2e702
+cd dia-cardano-oracle && git checkout catalyst-m4-closeout
 
 ( cd contracts/aiken  && aiken check )
 ( cd offchain/feeder  && npm ci && npm test )
@@ -262,7 +262,7 @@ and the published addresses — no hand-edited numbers.
 
 ## 5. Pointers (one-stop links)
 
-- Close-out report: [close-out-report.md](https://github.com/diadata-org/dia-cardano-oracle/blob/main/docs/milestones/close-out-report.md)
+- Close-out report: [close-out-report.pdf](https://github.com/diadata-org/dia-cardano-oracle/blob/catalyst-m4-closeout/docs/milestones/close-out-report.pdf)
 - Closeout video: <https://youtu.be/iPOC-Ojb5k8>
 - Developer documentation (complete, public in this repository): see [AC #4](#ac-4--developer-documentation-published-on-dias-website)
 - Mainnet evidence pack: [`evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md`](evidence/m4-mainnet-20260616-074413/milestone-4-mainnet-evidence.md)
